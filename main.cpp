@@ -30,7 +30,7 @@ int main() {
 
 	Thot::Network GlobalModel;
 
-	GlobalModel.Sequence(16, 8, model1, model2, Thot::Link::UMAP); // PCA, t-sne, UMAP
+	GlobalModel.ConnectBlock(16, 8, model1, model2, Thot::Link::UMAP); // PCA, t-sne, UMAP
 	GlobalModel.summary();
 	GlobalModel.train(__data__);
 
