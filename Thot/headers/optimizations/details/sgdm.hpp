@@ -1,4 +1,5 @@
 #pragma once
+#include "../../../cuda/cuh/optimizations/sgdm.cuh"
 
 #include "../../tensor.hpp"
 #include <memory>
@@ -8,7 +9,6 @@
 #include <sstream>
 #include <type_traits>
 
-#include "../../../cuda/cuh/optimizations/sgdm.cuh"
 
 
 namespace Thot {
@@ -41,7 +41,7 @@ namespace Thot {
 
             Utils::Tensor& velocity = velocity_map_[tensor_id];
 
-            launchSGDMUpdate(
+            cuda::optimizations::launchSGDMUpdate(
                 static_cast<float*>(weights.data()),
                 static_cast<float*>(velocity.data()),
                 static_cast<const float*>(gradients.data()),
