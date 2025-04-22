@@ -14,7 +14,7 @@ int main() {
 	model1.add(Thot::Layer::RBM(64, 16, Thot::Activation::LeakyReLU, Thot::Initialization::LeCun));
 	
 	model1.add(16, 16, Thot::Normalization::SoftMax, Thot::Penalization::ADF);
-	model2.set_optimizer(Thot::optimizations::Adam(0.01f, 0.9f));
+	model1.set_optimizer(Thot::optimizations::Adam(0.01f, 0.9f));
 	model1.summary();
 
 
