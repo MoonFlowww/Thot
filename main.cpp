@@ -37,7 +37,7 @@ int main() {
 
 	GlobalModel.predict(__data2__);
 	GlobalModel.Eval(Thot::Metric::WQL, Thot::Metric::MSE, Thot::Metric::F1, Thot::Metric::ELO);
-	GlobalModel.BlockFeaturesAnalysis(Thot::Analysis::DimReduction::PartialDependence);
+	GlobalModel.BlockFeaturesAnalysis(Thot::Analysis::Feature::PartialDependence);
 	
 
 	GlobalModel.save(__PATH__);
