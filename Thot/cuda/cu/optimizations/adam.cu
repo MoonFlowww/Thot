@@ -3,8 +3,8 @@
 #include <device_launch_parameters.h>
 #include <math.h>
 
-namespace cuda {
-    namespace optimizations {
+namespace cuda{
+    namespace optimizations{
         const int blockSize = 256;
         
         __global__ void adam_update(float* weights, float* m, float* v, const float* gradients, float learning_rate, float beta1, float beta2, float epsilon, float correction1, float correction2, int size) {
@@ -20,7 +20,6 @@ namespace cuda {
                 // Compute bias-corrected learning rate
                 float corrected_lr = learning_rate * sqrtf(correction2) / correction1;
 
-                // Update parameters
                 weights[idx] -= corrected_lr * m[idx] / (sqrtf(v[idx]) + epsilon);
             }
         }
