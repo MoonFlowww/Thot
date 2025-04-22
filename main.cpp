@@ -9,7 +9,7 @@ int main() {
 	
 	model1.add(Thot::Layer::RBM(768, 256, Thot::Activation::LeakyReLU, Thot::Initialization::Xavier));
 	model1.add(256, 256, Thot::Attention::MLA.layer(1))
-	model1.add(Thot::Layer::RBM(256, 64, Thot::Activation::LeakyReLU, Thot::Initialization::Uniform));
+	model1.add(Thot::Layer::RBM(256, 64, Thot::Activation::LeakyReLU, Thot::Initialization::Ones));
 	model1.add(256, 256, Thot::Attention::MLA.layer(1))
 	model1.add(Thot::Layer::RBM(64, 16, Thot::Activation::LeakyReLU, Thot::Initialization::LeCun));
 	
