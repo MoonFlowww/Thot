@@ -18,6 +18,12 @@ namespace Thot {
 
         float get_learning_rate() const { return learning_rate_; }
         void set_learning_rate(float lr) { learning_rate_ = lr; }
+
+        // Static factory methods for creating optimizers
+        static std::shared_ptr<Optimizer> SGD(float learning_rate = 0.01f);
+        static std::shared_ptr<Optimizer> SGDM(float learning_rate = 0.01f, float momentum = 0.9f);
+        static std::shared_ptr<Optimizer> Adam(float learning_rate = 0.001f, float beta1 = 0.9f,
+            float beta2 = 0.999f, float epsilon = 1e-8f);
     };
 
     class SGD;
@@ -28,21 +34,17 @@ namespace Thot {
 #include "details/sgdm.hpp"
 #include "details/adam.hpp"
 
-    namespace optimizations {
-        // Create SGD optimizer
-        inline std::shared_ptr<Optimizer> SGD(float learning_rate = 0.01f) {
-            return std::shared_ptr<Optimizer>(new Thot::SGD(learning_rate));
-        }
-
-        // Create SGDM optimizer
-        inline std::shared_ptr<Optimizer> SGDM(float learning_rate = 0.01f, float momentum = 0.9f) {
-            return std::shared_ptr<Optimizer>(new Thot::SGDM(learning_rate, momentum));
-        }
-
-        // Create Adam optimizer
-        inline std::shared_ptr<Optimizer> Adam(float learning_rate = 0.001f, float beta1 = 0.9f,
-            float beta2 = 0.999f, float epsilon = 1e-8f) {
-            return std::shared_ptr<Optimizer>(new Thot::Adam(learning_rate, beta1, beta2, epsilon));
-        }
+    inline std::shared_ptr<Optimizer> Optimizer::SGD(float learning_rate) {
+        return std::shared_ptr<Optimizer>(new Thot::SGD(learning_rate));
     }
+
+    inline std::shared_ptr<Optimizer> Optimizer::SGDM(float learning_rate, float momentum) {
+        return std::shared_ptr<Optimizer>(new Thot::SGDM(learning_rate, momentum));
+    }
+
+    inline std::shared_ptr<Optimizer> Optimizer::Adam(float learning_rate, float beta1, float beta2, float epsilon) {
+        return std::shared_ptr<Optimizer>(new Thot::Adam(learning_rate, beta1, beta2, epsilon));
+    }
+
+    
 }

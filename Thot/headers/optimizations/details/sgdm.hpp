@@ -30,10 +30,9 @@ namespace Thot {
         }
 
         inline void update(Utils::Tensor& weights, const Utils::Tensor& gradients) override {
-            // Ensure dimensions match
-            if (weights.size() != gradients.size()) {
+            if (weights.size() != gradients.size())
                 throw std::invalid_argument("Weight and gradient dimensions don't match in SGDM optimizations");
-            }
+            
 
             std::string tensor_id = generate_tensor_id(weights);
             if (velocity_map_.find(tensor_id) == velocity_map_.end()) {
