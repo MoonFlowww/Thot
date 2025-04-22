@@ -20,7 +20,7 @@ namespace Thot {
                 throw std::invalid_argument("Weight and gradient dimensions don't match in SGD optimizer");
             }
 
-            cuda::optimizations::launchSGDUpdate(
+            launchSGDUpdate(
                 static_cast<float*>(weights.data()),
                 static_cast<const float*>(gradients.data()),
                 this->learning_rate_,

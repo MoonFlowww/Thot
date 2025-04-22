@@ -15,3 +15,6 @@ namespace cuda {
             cudaStream_t stream = 0);
     }
 }
+
+
+using cuda::optimizations::launchAdamUpdate;

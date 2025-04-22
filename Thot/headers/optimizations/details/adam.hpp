@@ -59,7 +59,7 @@ namespace Thot {
             float correction1 = 1.0f - std::pow(beta1_, t_);
             float correction2 = 1.0f - std::pow(beta2_, t_);
 
-            cuda::optimizations::launchAdamUpdate(
+            launchAdamUpdate(
                 static_cast<float*>(weights.data()),
                 static_cast<float*>(m.data()),
                 static_cast<float*>(v.data()),

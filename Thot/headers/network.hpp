@@ -12,20 +12,20 @@
 
 
 namespace Thot {
-	class BaseLayer;
+	class Layer;
 	class Optimizer;
 
 	class Network {
 	private:
 		std::string name_;
-		std::vector<std::shared_ptr<BaseLayer>> layers_;
+		std::vector<std::shared_ptr<Layer>> layers_;
 		bool Istraining_;
 		std::shared_ptr<Optimizer> optimizer_;
 
 	public:
 		Network(const std::string& name = "Thot_Network") : name_(name), Istraining_(true) {};
 
-		inline void add(std::shared_ptr<BaseLayer> layer) {
+		inline void add(std::shared_ptr<Layer> layer) {
 			layers_.push_back(layer);
 		}
 
@@ -44,7 +44,6 @@ namespace Thot {
 			size_t size = input.size() * sizeof(float);
 			::cudaMemcpy(dst_ptr, src_ptr, size, cudaMemcpyDeviceToDevice);
 
-			// Pass data through each layer
 			for (auto& L : layers_) {
 				output = L->forward(output);
 			}
@@ -73,7 +72,6 @@ namespace Thot {
 			}
 		}
 
-		// Set training mode
 		inline void train() {
 			Istraining_ = true;
 			for (auto& layer : layers_) {
@@ -81,7 +79,6 @@ namespace Thot {
 			}
 		}
 
-		// Set evaluation mode
 		inline void eval() {
 			Istraining_ = false;
 			for (auto& layer : layers_) {

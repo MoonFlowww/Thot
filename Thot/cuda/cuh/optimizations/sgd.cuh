@@ -10,3 +10,4 @@ namespace cuda {
         void launchSGDUpdate(float* weights, const float* gradients, float learning_rate, int size, cudaStream_t stream = 0);
     }
 }
+using cuda::optimizations::launchSGDUpdate;

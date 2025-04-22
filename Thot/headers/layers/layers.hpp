@@ -8,6 +8,7 @@
 namespace Thot {
 
 	class Optimizer;
+	class FCLayer;
 
 	class Layer {
 	protected:
@@ -31,13 +32,16 @@ namespace Thot {
 
 		void set_optimizer(std::shared_ptr<Optimizer> optimizer) { optimizer_ = optimizer; }
 
-		static inline std::shared_ptr<Layer> FC(int input_size, int output_size, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "fc") {
-			return std::make_shared<FCLayer>(input_size, output_size, activation_type, weight_init, name);
-		}
+		static std::shared_ptr<Layer> FC(int input_size, int output_size, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "fc");
 	};
-
-
 
 }
 
 #include "../layers/details/fc.hpp"
+
+// Define the FC static method after including FCLayer definition
+namespace Thot {
+	inline std::shared_ptr<Layer> Layer::FC(int input_size, int output_size, Activation activation_type, Initialization weight_init, const std::string& name) {
+		return std::make_shared<FCLayer>(input_size, output_size, activation_type, weight_init, name);
+	}
+}

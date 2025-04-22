@@ -42,7 +42,7 @@ namespace Thot {
 
             Utils::Tensor& velocity = velocity_map_[tensor_id];
 
-            cuda::optimizations::launchSGDMUpdate(
+            launchSGDMUpdate(
                 static_cast<float*>(weights.data()),
                 static_cast<float*>(velocity.data()),
                 static_cast<const float*>(gradients.data()),
