@@ -4,10 +4,38 @@
 #include "Thot/Thot.hpp"
 
 int main() {
-	Thot::Network model;
+	Thot::Network model1;
+	model2.add(Thot::Layer::RBM(768, 256, Thot::Activation::LeakyReLU, Thot::Initialization::LeCun));
+	model2.add(Thot::Layer::RBM(256, 64, Thot::Activation::LeakyReLU, Thot::Initialization::LeCun));
+	model2.add(Thot::Layer::RBM(64, 16, Thot::Activation::LeakyReLU, Thot::Initialization::LeCun));
+	model2.add(16, 16, Thot::Normalization::SoftMax, Thot::Penalization::ADF);
+	
+	model1.summary();
 
-	model.add(Thot::Layer::FC(2, 4, Thot::Activation::ReLU, Thot::Initialization::Xavier));
-	model.set_optimizer(Thot::optimizations::SGDM(0.01f, 0.9f));
 
+	Thot::Network model2;
+	model2.add(Thot::Transformer::Titan(Thot::Module::MoE, Thot::Normalization::DyT, Thot::Attention::MLA, Thot::Normalization::RMSE);
+	model2.add(Thot::Layer::FC(8, 8, Thot::Activation::ReLU, Thot::Initialization::Xavier));
+	model2.add(Thot::Layer::Conv2D(8, 4, Thot::Activation::Sigmoid, Thot::Initialization::He));
+
+	model2.add(Thot::Module::Finetune(4, 2, 5, Thot::Activation::ELU, Thot::Activation::SoftMax, THot::Initialization::Uniform)); // will be train in block-wise
+	model2.set_optimizer(Thot::optimizations::SGDM(0.01f, 0.9f));
+
+	
+	model2.summary();
+
+	Thot::Network GlobalModel;
+
+	GlobalModel.Sequence(16, 8, model1, model2, Thot::Link::UMAP); // PCA, t-sne, UMAP
+	GlobalModel.summary();
+	GlobalModel.train(__data__);
+
+
+	GlobalModel.predict(__data2__);
+	GlobalModel.Eval(Thot::Metric::WQL, Thot::Metric::MSE, Thot::Metric::F1, Thot::Metric::ELO);
+	
+
+	
+	
 	return 0;
 }
