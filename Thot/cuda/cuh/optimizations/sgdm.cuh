@@ -14,4 +14,3 @@ namespace cuda {
 }
 
 
-using cuda::optimizations::launchSGDMUpdate;
