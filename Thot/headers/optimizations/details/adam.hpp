@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../../../cuda/cuh/optimizations/adam.cuh"
+
 #include "../../tensor.hpp"
 #include <memory>
 #include <unordered_map>
@@ -7,9 +9,6 @@
 #include <sstream>
 #include <cmath>
 #include <type_traits>
-
-// Include CUDA implementation
-#include "../../../cuda/cuh/optimizations/adam.cuh"
 
 
 namespace Thot {
@@ -59,7 +58,7 @@ namespace Thot {
             float correction1 = 1.0f - std::pow(beta1_, t_);
             float correction2 = 1.0f - std::pow(beta2_, t_);
 
-            launchAdamUpdate(
+            cuda::optimizations::launchAdamUpdate(
                 static_cast<float*>(weights.data()),
                 static_cast<float*>(m.data()),
                 static_cast<float*>(v.data()),
