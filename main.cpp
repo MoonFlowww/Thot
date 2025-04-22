@@ -19,7 +19,7 @@ int main() {
 
 
 	Thot::Network model2;
-	model2.add(Thot::Layer::FC(8, 8, Thot::Activation::ReLU, Thot::Initialization::Xavier));
+	model2.add(Thot::Layer::FC(8, 8, Thot::Activation::ReLU));
 	model2.add(Thot::Layer::Conv2D(8, 4, Thot::Activation::Sigmoid, Thot::Initialization::He));
 
 	model2.add(Thot::Module::Finetune(4, 2, 5, Thot::Activation::ELU, Thot::Activation::SoftMax, THot::Initialization::Uniform)); // will be train in block-wise
