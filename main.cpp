@@ -40,6 +40,7 @@ int main() {
 	GlobalModel.BlockFeaturesAnalysis(Thot::Analysis::DimReduction::PartialDependence);
 	
 
+	GlobalModel.save(__PATH__);
 	
 	
 	return 0;
