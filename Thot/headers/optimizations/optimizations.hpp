@@ -19,7 +19,6 @@ namespace Thot {
         float get_learning_rate() const { return learning_rate_; }
         void set_learning_rate(float lr) { learning_rate_ = lr; }
 
-        // Static factory methods for creating optimizers
         static std::shared_ptr<Optimizer> SGD(float learning_rate = 0.01f);
         static std::shared_ptr<Optimizer> SGDM(float learning_rate = 0.01f, float momentum = 0.9f);
         static std::shared_ptr<Optimizer> Adam(float learning_rate = 0.001f, float beta1 = 0.9f,
