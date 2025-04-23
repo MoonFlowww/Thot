@@ -181,5 +181,18 @@ namespace Thot {
         inline void lecun(Utils::Tensor& tensor, int fan_in = 0) {
             initialize_tensor(tensor, Initialization::LeCun, fan_in);
         }
+
+        inline std::string to_string(Initialization init) {
+            switch (init) {
+            case Initialization::Zeros: return "Zeros";
+            case Initialization::Ones: return "Ones";
+            case Initialization::Uniform: return "Uniform";
+            case Initialization::Normal: return "Normal";
+            case Initialization::Xavier: return "Xavier";
+            case Initialization::He: return "He";
+            case Initialization::LeCun: return "LeCun";
+            default: return "Unknown";
+            }
+        }
     } // namespace Initializers
 } // namespace Thot

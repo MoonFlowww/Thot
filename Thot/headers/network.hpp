@@ -3,6 +3,8 @@
 #include <vector>
 #include <memory>
 #include <iostream>
+#include <iomanip>
+
 
 #include "tensor.hpp"
 #include "layers/layers.hpp"
@@ -90,9 +92,36 @@ namespace Thot {
 			std::cout << "Network: " << name_ << std::endl;
 			std::cout << "Layers:" << std::endl;
 
+			size_t total_flops = 0;
+			size_t batch_size = 1;
+
+			std::cout << "+---------------+----------------------+----------------------+----------------------+---------------+" << std::endl;
+			std::cout << "| Layer         | Type                 | Activation           | Initialization       | FLOPs         |" << std::endl;
+			std::cout << "+---------------+----------------------+----------------------+----------------------+---------------+" << std::endl;
+
 			for (size_t i = 0; i < layers_.size(); ++i) {
-				std::cout << "  " << i << ": " << layers_[i]->get_name() << std::endl;
+				auto& layer = layers_[i];
+				std::string layer_name = layer->get_name();
+				std::string activation_name = Thot::Activations::to_string(layer->get_activation_type());
+				std::string init_name = Thot::Initializers::to_string(layer->get_initialization_type());
+
+				size_t layer_flops = layer->get_flops(batch_size);
+				total_flops += layer_flops;
+
+				if (layer_name.length() > 20) layer_name = layer_name.substr(0, 17) + "...";
+				if (activation_name.length() > 20) activation_name = activation_name.substr(0, 17) + "...";
+				if (init_name.length() > 20) init_name = init_name.substr(0, 17) + "...";
+
+				std::cout << "| " << std::left << std::setw(13) << i + 1
+					<< " | " << std::left << std::setw(20) << "FC"
+					<< " | " << std::left << std::setw(20) << activation_name
+					<< " | " << std::left << std::setw(20) << init_name
+					<< " | " << std::right << std::setw(13) << layer_flops << " |" << std::endl;
 			}
+
+			std::cout << "+---------------+----------------------+----------------------+----------------------+---------------+" << std::endl;
+			std::cout << "| Thot Model    |                                                                            " << std::right << std::setw(7) << total_flops << " |" << std::endl;
+			std::cout << "+---------------+------------------------------------------------------------------------------------+" << std::endl;
 		}
 	};
 }

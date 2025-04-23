@@ -22,6 +22,8 @@ namespace Thot {
         int input_size_;
         int output_size_;
         Activation activation_type_;
+        Initialization initialization_type_;
+
 
         Utils::Tensor weights_;
         Utils::Tensor bias_;
@@ -32,7 +34,9 @@ namespace Thot {
         Utils::Tensor activation_output_; // Storage for output after activation
 
     public:
-        FCLayer(int input_size, int output_size, Activation activation_type = Activation::Linear, Initialization weight_init = Initialization::Xavier, const std::string& name = "fc") : Layer(name), input_size_(input_size), output_size_(output_size), activation_type_(activation_type) {
+        FCLayer(int input_size, int output_size, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "FC") : Layer(name), input_size_(input_size), output_size_(output_size), activation_type_(activation_type), initialization_type_(weight_init) {
+
+
 
             weights_ = Utils::Tensor({ output_size, input_size });
 
@@ -173,6 +177,11 @@ namespace Thot {
             }
 
             return std::move(grad_input);
+        }
+        size_t get_flops(int batch_size = 1) const {
+            // Matrix multiplication: 2 * input_size * output_size FLOPs per sample
+            // Bias addition: output_size FLOPs per sample
+            return batch_size * (2 * input_size_ * output_size_ + output_size_);
         }
     };
 } // namespace Thot

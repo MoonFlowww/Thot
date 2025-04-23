@@ -25,6 +25,10 @@ namespace Thot {
 		virtual Utils::Tensor backward(const Utils::Tensor& gradient_output, float learning_rate) = 0;
 
 		std::string get_name() const { return name_; }
+		virtual size_t get_flops(int batch_size = 1) const = 0;
+		virtual Activation get_activation_type() const { return Activation::ReLU; }
+		virtual Initialization get_initialization_type() const { return Initialization::Xavier; }
+
 
 		void set_training(bool training) { IsTraining = training; }
 
@@ -32,7 +36,7 @@ namespace Thot {
 
 		void set_optimizer(std::shared_ptr<Optimizer> optimizer) { optimizer_ = optimizer; }
 
-		static std::shared_ptr<Layer> FC(int input_size, int output_size, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "fc");
+		static std::shared_ptr<Layer> FC(int input_size, int output_size, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "FC");
 	};
 
 }

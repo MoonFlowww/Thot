@@ -99,6 +99,19 @@ namespace Thot {
                 ::cuda::activations::launchSoftmaxBackward(grad_output_ptr, output_ptr, grad_input_ptr, batch_size, feature_dim);
                 break;
             }
+
+
+        }
+        inline std::string to_string(Activation act) {
+            switch (act) {
+            case Activation::Linear: return "Linear";
+            case Activation::ReLU: return "ReLU";
+            case Activation::Sigmoid: return "Sigmoid";
+            case Activation::Tanh: return "Tanh";
+            case Activation::Softmax: return "Softmax";
+            case Activation::LeakyReLU: return "LeakyReLU";
+            default: return "Unknown";
+            }
         }
     } // namespace Activations
 } // namespace Thot 
