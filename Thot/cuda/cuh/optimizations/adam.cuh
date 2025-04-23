@@ -17,4 +17,3 @@ namespace cuda {
 }
 
 
-using cuda::optimizations::launchAdamUpdate;

@@ -3,7 +3,7 @@
 #include <device_launch_parameters.h>
 #include <math.h>
 
-namespace cuda {
+namespace cuda{
     namespace optimizations {
         const int blockSize = 256;
         
@@ -20,7 +20,6 @@ namespace cuda {
                 // Compute bias-corrected learning rate
                 float corrected_lr = learning_rate * sqrtf(correction2) / correction1;
 
-                // Update parameters
                 weights[idx] -= corrected_lr * m[idx] / (sqrtf(v[idx]) + epsilon);
             }
         }

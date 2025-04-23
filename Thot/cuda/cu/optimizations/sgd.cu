@@ -19,5 +19,5 @@ namespace cuda {
             sgd_update<<<numBlocks, blockSize, 0, stream>>>(weights, gradients, learning_rate, size);
         }
 
-    } // namespace optimizations
-} // namespace cuda
+    } // optimizations
+} // cuda
