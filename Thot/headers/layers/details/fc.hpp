@@ -50,6 +50,7 @@ namespace Thot {
             grad_bias_ = Utils::Tensor({ output_size }, true); // Init to zeros
         }
 
+
         Utils::Tensor forward(const Utils::Tensor& input) override {
             this->input_cache_ = Utils::Tensor(input.shape());
 
@@ -182,6 +183,13 @@ namespace Thot {
             // Matrix multiplication: 2 * input_size * output_size FLOPs per sample
             // Bias addition: output_size FLOPs per sample
             return batch_size * (2 * input_size_ * output_size_ + output_size_);
+        }
+        Activation get_activation() const override {
+            return activation_type_;
+        }
+
+        Initialization get_initialization() const override {
+            return initialization_type_;
         }
     };
 } // namespace Thot

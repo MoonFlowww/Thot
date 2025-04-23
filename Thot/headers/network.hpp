@@ -102,8 +102,8 @@ namespace Thot {
 			for (size_t i = 0; i < layers_.size(); ++i) {
 				auto& layer = layers_[i];
 				std::string layer_name = layer->get_name();
-				std::string activation_name = Thot::Activations::to_string(layer->get_activation_type());
-				std::string init_name = Thot::Initializers::to_string(layer->get_initialization_type());
+				std::string activation_name = Thot::Activations::to_string(layer->get_activation());
+				std::string init_name = Thot::Initializers::to_string(layer->get_initialization());
 
 				size_t layer_flops = layer->get_flops(batch_size);
 				total_flops += layer_flops;

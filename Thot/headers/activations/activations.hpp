@@ -108,8 +108,10 @@ namespace Thot {
             case Activation::ReLU: return "ReLU";
             case Activation::Sigmoid: return "Sigmoid";
             case Activation::Tanh: return "Tanh";
-            case Activation::Softmax: return "Softmax";
             case Activation::LeakyReLU: return "LeakyReLU";
+            case Activation::ELU: return "ELU";
+            case Activation::GELU: return "GELU";
+            case Activation::Softmax: return "Softmax";
             default: return "Unknown";
             }
         }

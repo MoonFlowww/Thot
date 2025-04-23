@@ -26,8 +26,9 @@ namespace Thot {
 
 		std::string get_name() const { return name_; }
 		virtual size_t get_flops(int batch_size = 1) const = 0;
-		virtual Activation get_activation_type() const { return Activation::ReLU; }
-		virtual Initialization get_initialization_type() const { return Initialization::Xavier; }
+		virtual Activation get_activation() const { return static_cast<const Layer*>(this)->get_activation(); }
+
+		virtual Initialization get_initialization() const { return static_cast<const Layer*>(this)->get_initialization(); }
 
 
 		void set_training(bool training) { IsTraining = training; }
