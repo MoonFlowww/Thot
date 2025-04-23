@@ -10,7 +10,6 @@
 #include <type_traits>
 
 
-
 namespace Thot {
 
     class SGDM : public Optimizer {

@@ -25,25 +25,28 @@ namespace Thot {
             float beta2 = 0.999f, float epsilon = 1e-8f);
     };
 
+    // Forward declare the optimizer classes
     class SGD;
     class SGDM;
     class Adam;
+}
 
+// Include the implementations AFTER the namespace
 #include "details/sgd.hpp"
 #include "details/sgdm.hpp"
 #include "details/adam.hpp"
 
+// Define the factory methods AFTER including implementations
+namespace Thot {
     inline std::shared_ptr<Optimizer> Optimizer::SGD(float learning_rate) {
-        return std::shared_ptr<Optimizer>(new Thot::SGD(learning_rate));
+        return std::make_shared<Thot::SGD>(learning_rate);
     }
 
     inline std::shared_ptr<Optimizer> Optimizer::SGDM(float learning_rate, float momentum) {
-        return std::shared_ptr<Optimizer>(new Thot::SGDM(learning_rate, momentum));
+        return std::make_shared<Thot::SGDM>(learning_rate, momentum);
     }
 
     inline std::shared_ptr<Optimizer> Optimizer::Adam(float learning_rate, float beta1, float beta2, float epsilon) {
-        return std::shared_ptr<Optimizer>(new Thot::Adam(learning_rate, beta1, beta2, epsilon));
+        return std::make_shared<Thot::Adam>(learning_rate, beta1, beta2, epsilon);
     }
-
-    
 }
