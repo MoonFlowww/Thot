@@ -113,7 +113,7 @@ namespace Thot {
 				if (init_name.length() > 20) init_name = init_name.substr(0, 17) + "...";
 
 				std::cout << "| " << std::left << std::setw(13) << i + 1
-					<< " | " << std::left << std::setw(20) << "FC"
+					<< " | " << std::left << std::setw(20) << layer_name
 					<< " | " << std::left << std::setw(20) << activation_name
 					<< " | " << std::left << std::setw(20) << init_name
 					<< " | " << std::right << std::setw(13) << layer_flops << " |" << std::endl;

@@ -93,7 +93,6 @@ namespace Thot {
                 break;
 
             case Activation::Softmax:
-                std::cout << "CUDA: Computing Softmax activation gradient" << std::endl;
                 int batch_size = input.shape()[0];
                 int feature_dim = size / batch_size;
                 ::cuda::activations::launchSoftmaxBackward(grad_output_ptr, output_ptr, grad_input_ptr, batch_size, feature_dim);

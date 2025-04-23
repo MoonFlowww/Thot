@@ -112,24 +112,8 @@ namespace Thot {
 
             tensor.upload(host_data);
 
-            std::cout << "Initialized tensor with shape [";
-            for (size_t i = 0; i < shape.size(); ++i) {
-                std::cout << shape[i];
-                if (i < shape.size() - 1) std::cout << ", ";
-            }
-            std::cout << "] using ";
 
-            switch (method) {
-            case Initialization::Zeros: std::cout << "Zeros"; break;
-            case Initialization::Ones: std::cout << "Ones"; break;
-            case Initialization::Uniform: std::cout << "Uniform"; break;
-            case Initialization::Normal: std::cout << "Normal"; break;
-            case Initialization::Xavier: std::cout << "Xavier/Glorot"; break;
-            case Initialization::He: std::cout << "He"; break;
-            case Initialization::LeCun: std::cout << "LeCun"; break;
-            }
 
-            std::cout << " initialization" << std::endl;
         }
 
         inline void zeros(Utils::Tensor& tensor) {
@@ -152,7 +136,6 @@ namespace Thot {
             }
 
             tensor.upload(host_data);
-            std::cout << "Initialized tensor with Uniform distribution [" << low << ", " << high << "]" << std::endl;
         }
 
         inline void normal(Utils::Tensor& tensor, float mean = 0.0, float stddev = 0.01) {
@@ -167,7 +150,6 @@ namespace Thot {
             }
 
             tensor.upload(host_data);
-            std::cout << "Initialized tensor with Normal distribution (mean=" << mean << ", stddev=" << stddev << ")" << std::endl;
         }
 
         inline void xavier(Utils::Tensor& tensor, int fan_in = 0, int fan_out = 0) {
