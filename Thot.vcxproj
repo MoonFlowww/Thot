@@ -12,7 +12,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Thot\cuda\cuh\activations\activations.cuh" />
+    <ClInclude Include="Thot\cuda\cuh\layers\conv2d.cuh" />
     <ClInclude Include="Thot\cuda\cuh\layers\fc.cuh" />
+    <ClInclude Include="Thot\cuda\cuh\layers\rbm.cuh" />
+    <ClInclude Include="Thot\cuda\cuh\layers\rnn.cuh" />
     <ClInclude Include="Thot\cuda\cuh\losses\loss.cuh" />
     <ClInclude Include="Thot\cuda\cuh\LowRankCuda\lowrank.cuh" />
     <ClInclude Include="Thot\cuda\cuh\optimizations\adam.cuh" />
@@ -20,8 +23,13 @@
     <ClInclude Include="Thot\cuda\cuh\optimizations\sgdm.cuh" />
     <ClInclude Include="Thot\headers\activations\activations.hpp" />
     <ClInclude Include="Thot\headers\initializations\initializations.hpp" />
+    <ClInclude Include="Thot\headers\layers\details\conv2d.hpp" />
     <ClInclude Include="Thot\headers\layers\details\fc.hpp" />
+    <ClInclude Include="Thot\headers\layers\details\rbm.hpp" />
+    <ClInclude Include="Thot\headers\layers\details\rnn.hpp" />
     <ClInclude Include="Thot\headers\layers\layers.hpp" />
+    <ClInclude Include="Thot\headers\losses\losses.hpp" />
+    <ClInclude Include="Thot\headers\metrics\metrics.hpp" />
     <ClInclude Include="Thot\headers\network.hpp" />
     <ClInclude Include="Thot\headers\optimizations\details\adam.hpp" />
     <ClInclude Include="Thot\headers\optimizations\details\sgd.hpp" />
@@ -32,7 +40,10 @@
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="Thot\cuda\cu\activations\activations.cu" />
+    <CudaCompile Include="Thot\cuda\cu\layers\conv2d.cu" />
     <CudaCompile Include="Thot\cuda\cu\layers\fc.cu" />
+    <CudaCompile Include="Thot\cuda\cu\layers\rbm.cu" />
+    <CudaCompile Include="Thot\cuda\cu\layers\rnn.cu" />
     <CudaCompile Include="Thot\cuda\cu\losses\loss.cu" />
     <CudaCompile Include="Thot\cuda\cu\LowRankCuda\lowrank.cu" />
     <CudaCompile Include="Thot\cuda\cu\optimizations\adam.cu" />
@@ -45,6 +56,7 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{197C5A96-51A7-7745-F00F-6A0511FA2043}</ProjectGuid>
     <RootNamespace>Thot</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -79,6 +91,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;WIN64;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>

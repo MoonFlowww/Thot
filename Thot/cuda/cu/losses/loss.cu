@@ -88,7 +88,7 @@ namespace cudathot {
         }
 
         // Sparse Categorical Cross-Entropy
-        __global__ void sparseCategoricalCrossEntropy(const float* predictions, const int* targets, float* loss, int batch_size, int num_classes, float epsilon) {
+        __global__ void sparseCategoricalCrossEntropy(const float* predictions, const float* targets, float* loss, int batch_size, int num_classes, float epsilon) {
             int idx = blockIdx.x * blockDim.x + threadIdx.x;
             if (idx < batch_size) {
                 int target_class = targets[idx];
@@ -102,7 +102,7 @@ namespace cudathot {
             }
         }
 
-        __global__ void sparseCategoricalCrossEntropyGradient(const float* predictions, const int* targets, float* gradients, int batch_size, int num_classes, float epsilon) {
+        __global__ void sparseCategoricalCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int batch_size, int num_classes, float epsilon) {
             int idx = blockIdx.x * blockDim.x + threadIdx.x;
             if (idx < batch_size * num_classes) {
                 int b = idx / num_classes;
@@ -225,13 +225,13 @@ namespace cudathot {
             categoricalCrossEntropyGradient << <numBlocks, blockSize, 0, stream >> > (predictions, targets, gradients, batch_size, num_classes, epsilon);
         }
 
-        void launchSparseCategoricalCrossEntropy(const float* predictions, const int* targets, float* loss, int batch_size, int num_classes, float epsilon, cudaStream_t stream) {
+        void launchSparseCategoricalCrossEntropy(const float* predictions, const float* targets, float* loss, int batch_size, int num_classes, float epsilon, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (batch_size + blockSize - 1) / blockSize;
             sparseCategoricalCrossEntropy << <numBlocks, blockSize, 0, stream >> > (predictions, targets, loss, batch_size, num_classes, epsilon);
         }
 
-        void launchSparseCategoricalCrossEntropyGradient(const float* predictions, const int* targets, float* gradients, int batch_size, int num_classes, float epsilon, cudaStream_t stream) {
+        void launchSparseCategoricalCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int batch_size, int num_classes, float epsilon, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (batch_size * num_classes + blockSize - 1) / blockSize;
             sparseCategoricalCrossEntropyGradient << <numBlocks, blockSize, 0, stream >> > (predictions, targets, gradients, batch_size, num_classes, epsilon);

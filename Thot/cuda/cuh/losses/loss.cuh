@@ -5,7 +5,6 @@
 namespace cuda {
 	namespace losses {
 
-		// Forward declarations of CUDA s
 		__global__ void mse(const float* predictions, const float* targets, float* loss, int size);
 		__global__ void mseGradient(const float* predictions, const float* targets, float* gradients, int size);
 
@@ -18,8 +17,8 @@ namespace cuda {
 		__global__ void categoricalCrossEntropy(const float* predictions, const float* targets, float* loss, int batch_size, int num_classes, float epsilon);
 		__global__ void categoricalCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int batch_size, int num_classes, float epsilon);
 
-		__global__ void sparseCategoricalCrossEntropy(const float* predictions, const int* targets, float* loss, int batch_size, int num_classes, float epsilon);
-		__global__ void sparseCategoricalCrossEntropyGradient(const float* predictions, const int* targets, float* gradients, int batch_size, int num_classes, float epsilon);
+		__global__ void sparseCategoricalCrossEntropy(const float* predictions, const float* targets, float* loss, int batch_size, int num_classes, float epsilon);
+		__global__ void sparseCategoricalCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int batch_size, int num_classes, float epsilon);
 
 		__global__ void hinge(const float* predictions, const float* targets, float* loss, int size);
 		__global__ void hingeGradient(const float* predictions, const float* targets, float* gradients, int size);
@@ -31,7 +30,6 @@ namespace cuda {
 		__global__ void klDivergenceGradient(const float* predictions, const float* targets, float* gradients, int size, float epsilon);
 
 
-		// CUDA wrapper functions
 		void launchMSE(const float* predictions, const float* targets, float* loss, int size, cudaStream_t stream = nullptr);
 		void launchMSEGradient(const float* predictions, const float* targets, float* gradients, int size, cudaStream_t stream = nullptr);
 
@@ -44,8 +42,8 @@ namespace cuda {
 		void launchCategoricalCrossEntropy(const float* predictions, const float* targets, float* loss, int batch_size, int num_classes, float epsilon, cudaStream_t stream = nullptr);
 		void launchCategoricalCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int batch_size, int num_classes, float epsilon, cudaStream_t stream = nullptr);
 
-		void launchSparseCategoricalCrossEntropy(const float* predictions, const int* targets, float* loss, int batch_size, int num_classes, float epsilon, cudaStream_t stream = nullptr);
-		void launchSparseCategoricalCrossEntropyGradient(const float* predictions, const int* targets, float* gradients, int batch_size, int num_classes, float epsilon, cudaStream_t stream = nullptr);
+		void launchSparseCategoricalCrossEntropy(const float* predictions, const float* targets, float* loss, int batch_size, int num_classes, float epsilon, cudaStream_t stream = nullptr);
+		void launchSparseCategoricalCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int batch_size, int num_classes, float epsilon, cudaStream_t stream = nullptr);
 
 		void launchHinge(const float* predictions, const float* targets, float* loss, int size, cudaStream_t stream = nullptr);
 		void launchHingeGradient(const float* predictions, const float* targets, float* gradients, int size, cudaStream_t stream = nullptr);
@@ -57,5 +55,5 @@ namespace cuda {
 		void launchKLDivergenceGradient(const float* predictions, const float* targets, float* gradients, int size, float epsilon, cudaStream_t stream = nullptr);
 
 
-	}  // namespace losses
+	}  //  losses
 }  // namespace cuda 
