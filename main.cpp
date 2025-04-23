@@ -41,7 +41,7 @@ int main() {
 
 	std::cout << "\nTraining XOR function...\n" << std::endl;
 
-	model.fit(x_train, y_train, 1000, 1, 0.01f, 50);
+	model.train(x_train, y_train, 1000, 1, 0.01f, 50);
 
 	std::cout << "\nTesting XOR function:\n" << std::endl;
 

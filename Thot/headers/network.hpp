@@ -275,7 +275,7 @@ namespace Thot {
 
 		
 
-		void fit( const std::vector<std::vector<float>>& inputs, const std::vector<std::vector<float>>& targets, int epochs, int batch_size = 1, float learning_rate = 0.01f, int log_interval = 100 ) {
+		void train( const std::vector<std::vector<float>>& inputs, const std::vector<std::vector<float>>& targets, int epochs, int batch_size = 1, float learning_rate = 0.01f, int log_interval = 100 ) {
 			auto total_start = std::chrono::high_resolution_clock::now();
 			std::vector<float> epoch_times;
 			bool zero_hit = false;
