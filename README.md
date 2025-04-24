@@ -177,38 +177,42 @@ model.evaluate(
 ### Example: Building a Simple Network
 
 ```cpp
-Thot::Network model("XOR Network");
-
-// Add layers
-model.add(Thot::Layer::FC(2, 4, Thot::Activation::Sigmoid, Thot::Initialization::He));
-model.add(Thot::Layer::FC(4, 1, Thot::Activation::Sigmoid, Thot::Initialization::He));
-
-// Set optimizer
-model.set_optimizer(Thot::Optimizer::Adam(0.1f));
-
-// Print model summary
-model.summary();
-
-// XOR training data
-std::vector<std::vector<float>> x_train = {
-    {0.0f, 0.0f},
-    {0.0f, 1.0f},
-    {1.0f, 0.0f},
-    {1.0f, 1.0f}
-};
-
-std::vector<std::vector<float>> y_train = {
-    {0.0f},
-    {1.0f},
-    {1.0f},
-    {0.0f}
-};
-
-// Train the model
-model.train(x_train, y_train, 1000, 4, 100);
-
-// Evaluate
-model.evaluate(x_train, y_train, Thot::Evaluation::Binary);
+#include "Thot"
+#include <vector>
+int main(){
+    Thot::Network model("XOR Network");
+    
+    // Add layers
+    model.add(Thot::Layer::FC(2, 4, Thot::Activation::Sigmoid, Thot::Initialization::He));
+    model.add(Thot::Layer::FC(4, 1, Thot::Activation::Sigmoid, Thot::Initialization::He));
+    
+    // Set optimizer
+    model.set_optimizer(Thot::Optimizer::Adam(0.1f));
+    
+    // Print model summary
+    model.summary();
+    
+    // XOR training data
+    std::vector<std::vector<float>> x_train = {
+        {0.0f, 0.0f},
+        {0.0f, 1.0f},
+        {1.0f, 0.0f},
+        {1.0f, 1.0f}
+    };
+    
+    std::vector<std::vector<float>> y_train = {
+        {0.0f},
+        {1.0f},
+        {1.0f},
+        {0.0f}
+    };
+    
+    // Train the model
+    model.train(x_train, y_train, 1000, 4, 100);
+    
+    // Evaluate
+    model.evaluate(x_train, y_train, Thot::Evaluation::Binary);
+}
 ```
 
 
