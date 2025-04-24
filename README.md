@@ -14,17 +14,8 @@
 ## Installation
 
 ### Prerequisites
-- CUDA Toolkit (version 11.0 or higher)
+- CUDA Toolkit (version 12.5 or higher)
 - C++17 compatible compiler
-- CMake (version 3.10 or higher)
-
-### Building
-```bash
-mkdir build
-cd build
-cmake ..
-cmake --build .
-```
 
 ## Usage
 
