@@ -260,7 +260,6 @@ namespace Thot {
 
 			auto total_start = std::chrono::high_resolution_clock::now();
 			std::vector<float> epoch_times;
-			bool zero_hit = false;
 			for (int epoch = 0; epoch < epochs; ++epoch) {
 				auto epoch_start = std::chrono::high_resolution_clock::now();
 
@@ -272,12 +271,8 @@ namespace Thot {
 
 				if (epoch % log_interval == 0 || epoch == epochs - 1) {
 					std::cout << "Epoch " << epoch << " - Average Loss: " << epoch_loss << std::endl;
-				} if (epoch_loss < 1e-15) {
-					zero_hit = true;
-					break;
-				}
+				} 
 			}
-			if (zero_hit) std::cout << " -> [ADMIN]" << name_ << " loss <1e-15, not necessary to continue" << std::endl;
 			auto total_end = std::chrono::high_resolution_clock::now();
 			float total_time = std::chrono::duration<float>(total_end - total_start).count();
 
