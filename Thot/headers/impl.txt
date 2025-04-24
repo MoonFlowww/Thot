@@ -16,6 +16,10 @@ Model Technologies
 
 	Layers
 	- Reservoirs
+	- Dilated Convolution
+	- Pooling
+	- Pool of Markov
+	- Pool of HM
 	
 	Norm-Layers
 	- RMSE
@@ -33,6 +37,12 @@ Model Technologies
 	Attentions Technologies
 	- RoPE
 	- KV cache
+
+	Memory
+	- LSTM
+	- xLSTM
+	- rLSTM
+	- sLSTM
 
 
 	
@@ -71,11 +81,14 @@ Training
 	- LSD stable-rank
 	- dropout
 	- L2
+	- Informed Mechanism
 
 	Data
 	- Lorenz 74
 	- API to hugging face
 	- MNIST
+	- csv reader
+	- SQL collector
 
 	Loss
 	- Meta Learning
@@ -93,7 +106,7 @@ Post-Training
 	- JS/Bhattacharyya... Div
 	- SETOL
 	- Entropy (Aleatory/Epistemic)
-	- VPT (model vs input)
+	- VPT (model vs input dy)
 
 
 
