@@ -209,13 +209,6 @@ model.train(x_train, y_train, 1000, 4, 100);
 
 // Evaluate
 model.evaluate(x_train, y_train, Thot::Evaluation::Binary);
-
-// Test predictions
-std::cout << "\nTesting XOR function:\n";
-for (const auto& input : x_train) {
-    std::vector<float> output = model.forward(input, {1, 2});
-    std::cout << "Input: [" << input[0] << ", " << input[1] << "] -> Output: " << output[0] << "\n";
-}
 ```
 
 
