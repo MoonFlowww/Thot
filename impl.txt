@@ -1,0 +1,116 @@
+TODO
+
+
+Model Technologies
+	Learning
+	- RL
+	- IRL
+
+	Transformers
+	- classic
+	- Titan
+
+	Module
+	- MoE
+	- MoRE
+
+	Layers
+	- Reservoirs
+	- Dilated Convolution
+	- Pooling
+	- Pool of Markov
+	- Pool of HM
+	
+	Norm-Layers
+	- RMSE
+	- DyT
+	- PreLN
+	- Batch Norm
+
+	Attentions
+	- Multi head attention
+	- Multi head latent attention
+	- Flash attention
+	- Causal attention
+	- SE Block
+
+	Attentions Technologies
+	- RoPE
+	- KV cache
+
+	Memory
+	- LSTM
+	- xLSTM
+	- rLSTM
+	- sLSTM
+
+
+	
+Pre-Training
+
+	Normalization
+	- Zscore
+	- DePre
+	- MinMax
+	- Log
+
+	Transformation
+	- Wavelet
+	- Fourier
+	- Elher loops
+
+	Dim reduction/Feature Selection
+	- PCA
+	- UMAP
+	- t-sne
+		+ Partial Dependence
+
+
+
+
+Training
+
+	Data during Training:
+	- kfold
+	- timeserie kfold
+	- Bayesian Active Learning
+	- LWoL (home made BAL)
+
+	Penalizations:
+	- Tikhonov
+	- LSD stable-rank
+	- dropout
+	- L2
+	- Informed Mechanism
+
+	Data
+	- Lorenz 74
+	- API to hugging face
+	- MNIST
+	- csv reader
+	- SQL collector
+
+	Loss
+	- Meta Learning
+	- Time-flow loss (SUNDIAL)
+
+	Others
+	- Path Shadowing MC
+
+
+
+Post-Training
+	Metrics
+	- ADF
+	- Ljung box
+	- JS/Bhattacharyya... Div
+	- SETOL
+	- Entropy (Aleatory/Epistemic)
+	- VPT (model vs input dy)
+
+
+
+
+
+
+
