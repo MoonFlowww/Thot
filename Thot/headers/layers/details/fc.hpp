@@ -86,7 +86,7 @@ namespace Thot {
             return std::move(output);
         }
 
-        Utils::Tensor backward(const Utils::Tensor& grad_output, float learning_rate) override {
+        Utils::Tensor backward(const Utils::Tensor& grad_output) override {
             int batch_size = grad_output.shape()[0];
 
             Utils::Tensor grad_pre_activation({ batch_size, output_size_ });
@@ -167,18 +167,21 @@ namespace Thot {
                 for (int i = 0; i < weights_size; ++i) {
                     float* w_ptr = static_cast<float*>(weights_.data());
                     float* gw_ptr = static_cast<float*>(grad_weights_.data());
-                    w_ptr[i] -= learning_rate * gw_ptr[i];
+                    w_ptr[i] -= this->optimizer_->get_learning_rate() * gw_ptr[i];
                 }
 
                 for (int i = 0; i < bias_size; ++i) {
                     float* b_ptr = static_cast<float*>(bias_.data());
                     float* gb_ptr = static_cast<float*>(grad_bias_.data());
-                    b_ptr[i] -= learning_rate * gb_ptr[i];
+                    b_ptr[i] -= this->optimizer_->get_learning_rate() * gb_ptr[i];
                 }
             }
 
             return std::move(grad_input);
         }
+
+
+
         size_t get_flops(int batch_size = 1) const {
             // Matrix multiplication: 2 * input_size * output_size FLOPs per sample
             // Bias addition: output_size FLOPs per sample

@@ -128,7 +128,7 @@ namespace Thot {
             return std::move(output_);
         }
 
-        Utils::Tensor backward(const Utils::Tensor& grad_output, float learning_rate) override {
+        Utils::Tensor backward(const Utils::Tensor& grad_output) override {
             int batch_size = grad_output.shape()[0];
 
             // Create tensors for gradients
@@ -191,7 +191,7 @@ namespace Thot {
                 for (int i = 0; i < weights_ih_size; ++i) {
                     float* w_ptr = static_cast<float*>(weights_ih_.data());
                     float* gw_ptr = static_cast<float*>(grad_weights_ih_.data());
-                    w_ptr[i] -= learning_rate * gw_ptr[i];
+                    w_ptr[i] -= this->optimizer_->get_learning_rate() * gw_ptr[i];
                 }
 
                 // Update hidden-to-hidden weights
@@ -199,7 +199,7 @@ namespace Thot {
                 for (int i = 0; i < weights_hh_size; ++i) {
                     float* w_ptr = static_cast<float*>(weights_hh_.data());
                     float* gw_ptr = static_cast<float*>(grad_weights_hh_.data());
-                    w_ptr[i] -= learning_rate * gw_ptr[i];
+                    w_ptr[i] -= this->optimizer_->get_learning_rate() * gw_ptr[i];
                 }
 
                 // Update bias
@@ -207,7 +207,7 @@ namespace Thot {
                 for (int i = 0; i < bias_size; ++i) {
                     float* b_ptr = static_cast<float*>(bias_.data());
                     float* gb_ptr = static_cast<float*>(grad_bias_.data());
-                    b_ptr[i] -= learning_rate * gb_ptr[i];
+                    b_ptr[i] -= this->optimizer_->get_learning_rate() * gb_ptr[i];
                 }
             }
 

@@ -25,7 +25,7 @@ namespace Thot {
 
 		virtual Utils::Tensor forward(const Utils::Tensor& input) = 0;
 
-		virtual Utils::Tensor backward(const Utils::Tensor& gradient_output, float learning_rate) = 0;
+		virtual Utils::Tensor backward(const Utils::Tensor& gradient_output) = 0;
 
 		std::string get_name() const { return name_; }
 		virtual size_t get_flops(int batch_size = 1) const = 0;

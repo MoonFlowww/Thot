@@ -14,15 +14,15 @@ void print_vector(const std::vector<float>& vec) {
 int main() {
 	Thot::Network model("Thot Network [Squared]");
 
-	model.add(Thot::Layer::FC(1, 16, Thot::Activation::Sigmoid, Thot::Initialization::He));
-	model.add(Thot::Layer::FC(16, 16, Thot::Activation::ReLU, Thot::Initialization::He));
-	model.add(Thot::Layer::FC(16, 16, Thot::Activation::ReLU, Thot::Initialization::He));
-	model.add(Thot::Layer::FC(16, 8, Thot::Activation::ReLU, Thot::Initialization::He));
+	model.add(Thot::Layer::FC(1, 16, Thot::Activation::LeakyReLU, Thot::Initialization::He));
+	model.add(Thot::Layer::FC(16, 16, Thot::Activation::LeakyReLU, Thot::Initialization::He));
+	model.add(Thot::Layer::FC(16, 16, Thot::Activation::LeakyReLU, Thot::Initialization::He));
+	model.add(Thot::Layer::FC(16, 8, Thot::Activation::LeakyReLU, Thot::Initialization::He));
 	model.add(Thot::Layer::FC(8, 1, Thot::Activation::Linear, Thot::Initialization::He));
 
 
 
-	model.set_optimizer(Thot::Optimizer::Adam(0.001f));
+	model.set_optimizer(Thot::Optimizer::SGDM(0.0000001f));
 
 	model.summary();
 
@@ -31,13 +31,13 @@ int main() {
 	std::vector<std::vector<float>> y_train = { {0.01}, {0.04}, {0.09}, {0.16}, {0.25}, {0.36}, {0.49}, {0.64}, {0.81} };
 
 
-	std::cout << "\nTraining XOR function...\n" << std::endl;
+	std::cout << "\nTraining:\n" << std::endl;
 
-	model.train(x_train, y_train, 1000, 5, 0.01f, 50);
+	model.train(x_train, y_train, 1000, 5, 50);
 
-	std::cout << "\nTesting XOR function:\n" << std::endl;
+	std::cout << "\nTesting:\n" << std::endl;
 
-	model.evaluate(x_train, y_train);
+	model.evaluate(x_train, y_train, Thot::Evaluation::Regression);
 
 	return 0;
 }

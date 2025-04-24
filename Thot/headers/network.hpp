@@ -11,9 +11,9 @@
 
 #include "activations/activations.hpp"
 #include "optimizations/optimizations.hpp"
-#include "losses\losses.hpp"
-#include "metrics\metrics.hpp"
-
+#include "losses/losses.hpp"
+#include "metrics/metrics.hpp"
+#include "evaluations/evaluation.hpp"
 
 namespace Thot {
 	class Layer;
@@ -42,7 +42,7 @@ namespace Thot {
 		}
 
 
-		float train_batch(const std::vector<std::vector<float>>& inputs, const std::vector<std::vector<float>>& targets, float learning_rate ) {
+		float train_batch(const std::vector<std::vector<float>>& inputs, const std::vector<std::vector<float>>& targets) {
 			float total_loss = 0.0f;
 
 			for (size_t i = 0; i < inputs.size(); ++i) {
@@ -63,7 +63,7 @@ namespace Thot {
 				Utils::Tensor grad_tensor({ 1, static_cast<int>(output.size()) });
 				grad_tensor.upload(grad_output);
 
-				backward(grad_tensor, learning_rate);
+				backward(grad_tensor);
 			}
 
 			return total_loss / inputs.size();
@@ -160,7 +160,7 @@ namespace Thot {
 			return output_tensor.download(); // GPU -> CPU
 		}
 
-		inline void backward(const Utils::Tensor& grad_output, float learning_rate) {
+		inline void backward(const Utils::Tensor& grad_output) {
 			Utils::Tensor current_gradient(grad_output.shape());
 
 			float* src_ptr = static_cast<float*>(grad_output.data());
@@ -169,23 +169,11 @@ namespace Thot {
 			::cudaMemcpy(dst_ptr, src_ptr, size, cudaMemcpyDeviceToDevice);
 
 			for (int i = layers_.size() - 1; i >= 0; --i) {
-				current_gradient = layers_[i]->backward(current_gradient, learning_rate);
+				current_gradient = layers_[i]->backward(current_gradient);
 			}
 		}
 
-		inline void train() {
-			Istraining_ = true;
-			for (auto& layer : layers_) {
-				layer->set_training(true);
-			}
-		}
 
-		inline void eval() {
-			Istraining_ = false;
-			for (auto& layer : layers_) {
-				layer->set_training(false);
-			}
-		}
 		size_t get_flops(int batch_size = 1) const {
 			size_t total_flops = 0;
 			for (const auto& layer : layers_) {
@@ -194,10 +182,9 @@ namespace Thot {
 			return total_flops;
 		}
 
-		void evaluate( const std::vector<std::vector<float>>& inputs, const std::vector<std::vector<float>>& targets, bool verbose = true ) {
+		void evaluate(const std::vector<std::vector<float>>& inputs, const std::vector<std::vector<float>>& targets, Evaluation type = Evaluation::Regression, bool verbose = true) {
 			std::vector<std::vector<float>> predictions;
 			std::vector<float> latencies;
-
 
 			for (size_t i = 0; i < inputs.size(); ++i) {
 				auto start = std::chrono::high_resolution_clock::now();
@@ -207,21 +194,9 @@ namespace Thot {
 				float latency = std::chrono::duration<float>(end - start).count();
 				latencies.push_back(latency);
 				predictions.push_back(output);
-
-				if (verbose) {
-					std::cout << "Input: [";
-					for (float x : inputs[i]) std::cout << x << " ";
-					std::cout << "] -> Output: [";
-					for (float y : output) std::cout << y << " ";
-					std::cout << "] -> Expected: [";
-					for (float t : targets[i]) std::cout << t << " ";
-					std::cout << "]\n";
-				}
 			}
 
-			auto metrics = Metrics::compute_metrics(predictions, targets, latencies, get_flops());
-			auto frontier = Metrics::compute_pareto_frontier(predictions, targets, latencies, get_flops());
-			Metrics::print_metrics(metrics, frontier);
+			Evaluations::evaluate(predictions, targets, latencies, get_flops(), type, verbose);
 		}
 
 		void set_loss(Loss type, float epsilon = 1e-8f, float delta = 1.0f) {
@@ -273,16 +248,23 @@ namespace Thot {
 		}
 
 
-		
 
-		void train( const std::vector<std::vector<float>>& inputs, const std::vector<std::vector<float>>& targets, int epochs, int batch_size = 1, float learning_rate = 0.01f, int log_interval = 100 ) {
+
+		void train(const std::vector<std::vector<float>>& inputs, const std::vector<std::vector<float>>& targets, int epochs, int batch_size = 1, int log_interval = 100) {
+			if (!optimizer_) {
+				optimizer_ = Thot::Optimizer::SGD(0.01f);
+				for (auto& L : layers_) {
+					L->set_optimizer(optimizer_);
+				}
+			}
+
 			auto total_start = std::chrono::high_resolution_clock::now();
 			std::vector<float> epoch_times;
 			bool zero_hit = false;
 			for (int epoch = 0; epoch < epochs; ++epoch) {
 				auto epoch_start = std::chrono::high_resolution_clock::now();
 
-				double epoch_loss = train_batch(inputs, targets, learning_rate);
+				double epoch_loss = train_batch(inputs, targets);
 
 				auto epoch_end = std::chrono::high_resolution_clock::now();
 				float epoch_time = std::chrono::duration<float>(epoch_end - epoch_start).count();

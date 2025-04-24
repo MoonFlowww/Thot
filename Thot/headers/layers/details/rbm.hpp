@@ -124,7 +124,7 @@ namespace Thot {
             return std::move(output);
         }
 
-        Utils::Tensor backward(const Utils::Tensor& grad_output, float learning_rate) override {
+        Utils::Tensor backward(const Utils::Tensor& grad_output) override {
             int batch_size = this->input_cache_.shape()[0];
 
             // Note: For RBMs, we typically don't use the grad_output for training
@@ -176,7 +176,7 @@ namespace Thot {
                 for (int i = 0; i < weights_size; ++i) {
                     float* w_ptr = static_cast<float*>(weights_.data());
                     float* gw_ptr = static_cast<float*>(grad_weights_.data());
-                    w_ptr[i] -= learning_rate * gw_ptr[i];
+                    w_ptr[i] -= this->optimizer_->get_learning_rate() * gw_ptr[i];
                 }
 
                 // Update visible b
@@ -184,7 +184,7 @@ namespace Thot {
                 for (int i = 0; i < visible_bias_size; ++i) {
                     float* b_ptr = static_cast<float*>(visible_bias_.data());
                     float* gb_ptr = static_cast<float*>(grad_visible_bias_.data());
-                    b_ptr[i] -= learning_rate * gb_ptr[i];
+                    b_ptr[i] -= this->optimizer_->get_learning_rate() * gb_ptr[i];
                 }
 
                 // Update hidden b
@@ -192,7 +192,7 @@ namespace Thot {
                 for (int i = 0; i < hidden_bias_size; ++i) {
                     float* b_ptr = static_cast<float*>(hidden_bias_.data());
                     float* gb_ptr = static_cast<float*>(grad_hidden_bias_.data());
-                    b_ptr[i] -= learning_rate * gb_ptr[i];
+                    b_ptr[i] -= this->optimizer_->get_learning_rate() * gb_ptr[i];
                 }
             }
 
