@@ -1,6 +1,5 @@
 ﻿# Thot - Neural Network Library
 
-Thot is a high-performance neural network library built with CUDA support for efficient deep learning computations.
 
 ## Features
 
@@ -15,17 +14,8 @@ Thot is a high-performance neural network library built with CUDA support for ef
 ## Installation
 
 ### Prerequisites
-- CUDA Toolkit (version 11.0 or higher)
+- CUDA Toolkit (version 12.5 or higher)
 - C++17 compatible compiler
-- CMake (version 3.10 or higher)
-
-### Building
-```bash
-mkdir build
-cd build
-cmake ..
-cmake --build .
-```
 
 ## Usage
 
@@ -187,44 +177,41 @@ model.evaluate(
 ### Example: Building a Simple Network
 
 ```cpp
-Thot::Network model("XOR Network");
-
-// Add layers
-model.add(Thot::Layer::FC(2, 4, Thot::Activation::Sigmoid, Thot::Initialization::He));
-model.add(Thot::Layer::FC(4, 1, Thot::Activation::Sigmoid, Thot::Initialization::He));
-
-// Set optimizer
-model.set_optimizer(Thot::Optimizer::Adam(0.1f));
-
-// Print model summary
-model.summary();
-
-// XOR training data
-std::vector<std::vector<float>> x_train = {
-    {0.0f, 0.0f},
-    {0.0f, 1.0f},
-    {1.0f, 0.0f},
-    {1.0f, 1.0f}
-};
-
-std::vector<std::vector<float>> y_train = {
-    {0.0f},
-    {1.0f},
-    {1.0f},
-    {0.0f}
-};
-
-// Train the model
-model.train(x_train, y_train, 1000, 4, 100);
-
-// Evaluate
-model.evaluate(x_train, y_train, Thot::Evaluation::Binary);
-
-// Test predictions
-std::cout << "\nTesting XOR function:\n";
-for (const auto& input : x_train) {
-    std::vector<float> output = model.forward(input, {1, 2});
-    std::cout << "Input: [" << input[0] << ", " << input[1] << "] -> Output: " << output[0] << "\n";
+#include "Thot"
+#include <vector>
+int main(){
+    Thot::Network model("XOR Network");
+    
+    // Add layers
+    model.add(Thot::Layer::FC(2, 4, Thot::Activation::Sigmoid, Thot::Initialization::He));
+    model.add(Thot::Layer::FC(4, 1, Thot::Activation::Sigmoid, Thot::Initialization::He));
+    
+    // Set optimizer
+    model.set_optimizer(Thot::Optimizer::Adam(0.1f));
+    
+    // Print model summary
+    model.summary();
+    
+    // XOR training data
+    std::vector<std::vector<float>> x_train = {
+        {0.0f, 0.0f},
+        {0.0f, 1.0f},
+        {1.0f, 0.0f},
+        {1.0f, 1.0f}
+    };
+    
+    std::vector<std::vector<float>> y_train = {
+        {0.0f},
+        {1.0f},
+        {1.0f},
+        {0.0f}
+    };
+    
+    // Train the model
+    model.train(x_train, y_train, 1000, 4, 100);
+    
+    // Evaluate
+    model.evaluate(x_train, y_train, Thot::Evaluation::Binary);
 }
 ```
 
