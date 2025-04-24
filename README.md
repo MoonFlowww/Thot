@@ -1,6 +1,5 @@
 ﻿# Thot - Neural Network Library
 
-Thot is a high-performance neural network library built with CUDA support for efficient deep learning computations.
 
 ## Features
 
