@@ -6,75 +6,76 @@
 #include <cmath>
 #include <iostream>
 #include <iomanip>
+#include <unordered_map>
 
 namespace Evaluations {
-    inline void evaluate_classification(const std::vector<std::vector<float>>& predictions, const std::vector<std::vector<float>>& targets, const  std::vector<float>& latencies, size_t flops, bool verbose) {
+    inline void evaluate_classification(const std::vector<std::vector<float>>& predictions, const std::vector<std::vector<float>>& targets, const std::vector<float>& latencies, size_t flops, bool verbose) {
         if (verbose) {
             std::cout << "\nMulti-class Classification Evaluation:\n";
             std::cout << "------------------------------------\n";
         }
 
-        float accuracy = 0.0f;
-        std::vector<float> class_precision;
-        std::vector<float> class_recall;
-        std::vector<float> class_f1;
-
         size_t num_classes = predictions[0].size();
-        class_precision.resize(num_classes, 0.0f);
-        class_recall.resize(num_classes, 0.0f);
-        class_f1.resize(num_classes, 0.0f);
+        std::vector<float> class_precision(num_classes, 0.0f);
+        std::vector<float> class_recall(num_classes, 0.0f);
+        std::vector<float> class_f1(num_classes, 0.0f);
+
+        std::vector<int> true_positives(num_classes, 0);
+        std::vector<int> false_positives(num_classes, 0);
+        std::vector<int> false_negatives(num_classes, 0);
+        std::vector<int> support(num_classes, 0); // count of samples per class
+
+        int correct = 0;
 
         for (size_t i = 0; i < predictions.size(); ++i) {
-            if (verbose) {
-                std::cout << "Sample " << i << ":\n";
-                std::cout << "   Predicted: [";
-                for (float x : predictions[i]) std::cout << x << " ";
-                std::cout << "]\n   Actual: [";
-                for (float y : targets[i]) std::cout << y << " ";
-                std::cout << "]\n" << std::endl;
-            }
-
             size_t pred_class = std::distance(predictions[i].begin(),
                 std::max_element(predictions[i].begin(), predictions[i].end()));
             size_t actual_class = std::distance(targets[i].begin(),
                 std::max_element(targets[i].begin(), targets[i].end()));
 
+            support[actual_class]++;
+
             if (pred_class == actual_class) {
-                accuracy += 1.0f;
+                correct++;
+                true_positives[actual_class]++;
             }
-
-            for (size_t c = 0; c < num_classes; ++c) {
-                float true_positives = 0.0f;
-                float false_positives = 0.0f;
-                float false_negatives = 0.0f;
-
-                if (pred_class == c && actual_class == c) true_positives += 1.0f;
-                else if (pred_class == c && actual_class != c) false_positives += 1.0f;
-                else if (pred_class != c && actual_class == c) false_negatives += 1.0f;
-
-                float precision = true_positives / (true_positives + false_positives + 1e-10f);
-                float recall = true_positives / (true_positives + false_negatives + 1e-10f);
-                float f1 = 2.0f * (precision * recall) / (precision + recall + 1e-10f);
-
-                class_precision[c] += precision;
-                class_recall[c] += recall;
-                class_f1[c] += f1;
+            else {
+                false_positives[pred_class]++;
+                false_negatives[actual_class]++;
             }
         }
 
-        accuracy /= predictions.size();
+        // Compute per-class metrics
         for (size_t c = 0; c < num_classes; ++c) {
-            class_precision[c] /= predictions.size();
-            class_recall[c] /= predictions.size();
-            class_f1[c] /= predictions.size();
+            float prec = true_positives[c] / float(true_positives[c] + false_positives[c] + 1e-10f);
+            float rec = true_positives[c] / float(true_positives[c] + false_negatives[c] + 1e-10f);
+            float f1 = 2.0f * prec * rec / (prec + rec + 1e-10f);
+
+            class_precision[c] = prec;
+            class_recall[c] = rec;
+            class_f1[c] = f1;
         }
 
+        // Global (micro-averaged) metrics
+        int total_tp = std::accumulate(true_positives.begin(), true_positives.end(), 0);
+        int total_fp = std::accumulate(false_positives.begin(), false_positives.end(), 0);
+        int total_fn = std::accumulate(false_negatives.begin(), false_negatives.end(), 0);
+
+        float global_precision = total_tp / float(total_tp + total_fp + 1e-10f);
+        float global_recall = total_tp / float(total_tp + total_fn + 1e-10f);
+        float global_f1 = 2.0f * global_precision * global_recall / (global_precision + global_recall + 1e-10f);
+
+        float accuracy = float(correct) / predictions.size();
         float avg_latency = std::accumulate(latencies.begin(), latencies.end(), 0.0f) / latencies.size();
         float throughput = 1.0f / avg_latency;
 
         if (verbose) {
             std::cout << "\nMetrics:\n";
             std::cout << "Overall Accuracy: " << accuracy * 100.0f << "%\n";
+            std::cout << "Global Precision: " << global_precision * 100.0f << "%\n";
+            std::cout << "Global Recall:    " << global_recall * 100.0f << "%\n";
+            std::cout << "Global F1 Score:  " << global_f1 * 100.0f << "%\n";
+
             std::cout << "\nPer-class Metrics:\n";
             for (size_t c = 0; c < num_classes; ++c) {
                 std::cout << "Class " << c << ":\n";
@@ -82,6 +83,7 @@ namespace Evaluations {
                 std::cout << "  Recall: " << class_recall[c] * 100.0f << "%\n";
                 std::cout << "  F1 Score: " << class_f1[c] * 100.0f << "%\n";
             }
+
             std::cout << "Average Latency: " << avg_latency << " ms\n";
             std::cout << "Throughput: " << throughput << " FLOPS\n";
         }

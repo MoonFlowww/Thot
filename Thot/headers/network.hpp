@@ -44,6 +44,7 @@ namespace Thot {
 
 		float train_batch(const std::vector<std::vector<float>>& inputs, const std::vector<std::vector<float>>& targets) {
 			float total_loss = 0.0f;
+			auto start = std::chrono::high_resolution_clock::now();
 
 			for (size_t i = 0; i < inputs.size(); ++i) {
 				std::vector<int> input_shape = { 1, static_cast<int>(inputs[i].size()) };
@@ -64,7 +65,25 @@ namespace Thot {
 				grad_tensor.upload(grad_output);
 
 				backward(grad_tensor);
+
+				if (i % 25 == 0 || i == inputs.size() - 1) {
+					auto now = std::chrono::high_resolution_clock::now();
+					double elapsed = std::chrono::duration<double>(now - start).count();
+					double progress = (i + 1) / static_cast<double>(inputs.size());
+					double eta = elapsed / progress - elapsed;
+
+					std::ostringstream oss;
+					oss << std::fixed << std::setprecision(2);
+					oss << "\rProgress: "
+						<< std::setw(3) << int(progress * 100) << "% | "
+						<< "Elapsed: " << std::setw(6) << elapsed << "s | "
+						<< "ETA: " << std::setw(6) << eta << "s";
+
+					std::cout << oss.str() << std::flush;
+				}
 			}
+
+			std::cout << "\r" << std::string(80, ' ') << "\r" << std::flush;
 
 			return total_loss / inputs.size();
 		}
@@ -243,14 +262,40 @@ namespace Thot {
 			}
 
 			std::cout << "+---------------+----------------------+----------------------+----------------------+---------------+" << std::endl;
-			std::cout << "| Thot Model    |                                                                            " << std::right << std::setw(7) << total_flops << " |" << std::endl;
+			std::cout << "| Thot Model    |                                                                    " << std::right << std::setw(15) << total_flops << " |" << std::endl;
 			std::cout << "+---------------+------------------------------------------------------------------------------------+" << std::endl;
 		}
 
+		void k_fold_split(const std::vector<std::vector<float>>& inputs,
+			const std::vector<std::vector<float>>& targets,
+			int k, int fold,
+			std::vector<std::vector<float>>& train_inputs,
+			std::vector<std::vector<float>>& train_targets,
+			std::vector<std::vector<float>>& val_inputs,
+			std::vector<std::vector<float>>& val_targets) {
+			size_t fold_size = inputs.size() / k;
+			size_t start_idx = fold * fold_size;
+			size_t end_idx = (fold == k - 1) ? inputs.size() : (fold + 1) * fold_size;
+
+			train_inputs.clear();
+			train_targets.clear();
+			val_inputs.clear();
+			val_targets.clear();
+
+			for (size_t i = 0; i < inputs.size(); ++i) {
+				if (i >= start_idx && i < end_idx) {
+					val_inputs.push_back(inputs[i]);
+					val_targets.push_back(targets[i]);
+				}
+				else {
+					train_inputs.push_back(inputs[i]);
+					train_targets.push_back(targets[i]);
+				}
+			}
+		}
 
 
-
-		void train(const std::vector<std::vector<float>>& inputs, const std::vector<std::vector<float>>& targets, int epochs, int batch_size = 1, int log_interval = 100) {
+		void train(const std::vector<std::vector<float>>& inputs, const std::vector<std::vector<float>>& targets, int epochs, int batch_size = 1, int log_interval = 100, int folds = 1) {
 			if (!optimizer_) {
 				optimizer_ = Thot::Optimizer::SGD(0.01f);
 				for (auto& L : layers_) {
@@ -260,32 +305,69 @@ namespace Thot {
 
 			auto total_start = std::chrono::high_resolution_clock::now();
 			std::vector<float> epoch_times;
-			for (int epoch = 0; epoch < epochs; ++epoch) {
-				auto epoch_start = std::chrono::high_resolution_clock::now();
+			std::vector<float> fold_losses;
 
-				double epoch_loss = train_batch(inputs, targets);
+			// K-fold cross-validation
+			for (int fold = 0; fold < folds; ++fold) {
+				if (folds > 1) {
+					std::cout << "\nTraining Fold " << fold + 1 << "/" << folds << std::endl;
+				}
 
-				auto epoch_end = std::chrono::high_resolution_clock::now();
-				float epoch_time = std::chrono::duration<float>(epoch_end - epoch_start).count();
-				epoch_times.push_back(epoch_time);
+				// Split data into training and validation sets
+				std::vector<std::vector<float>> train_inputs, train_targets, val_inputs, val_targets;
+				k_fold_split(inputs, targets, folds, fold, train_inputs, train_targets, val_inputs, val_targets);
 
-				if (epoch % log_interval == 0 || epoch == epochs - 1) {
-					std::cout << "Epoch " << epoch << " - Average Loss: " << epoch_loss << std::endl;
-				} 
+				for (int epoch = 0; epoch < epochs; ++epoch) {
+					auto epoch_start = std::chrono::high_resolution_clock::now();
+
+					double epoch_loss = train_batch(train_inputs, train_targets);
+
+					auto epoch_end = std::chrono::high_resolution_clock::now();
+					float epoch_time = std::chrono::duration<float>(epoch_end - epoch_start).count();
+					epoch_times.push_back(epoch_time);
+
+					if (epoch % log_interval == 0 || epoch == epochs - 1) {
+						std::cout << "Epoch " << epoch << " - Average Loss: " << epoch_loss;
+
+						if (folds > 1) {
+							double val_loss = 0.0;
+							for (size_t i = 0; i < val_inputs.size(); ++i) {
+								std::vector<float> output = forward(val_inputs[i], { 1, static_cast<int>(val_inputs[i].size()) });
+								for (size_t j = 0; j < output.size(); ++j) {
+									float error = output[j] - val_targets[i][j];
+									val_loss += error * error;
+								}
+							}
+							val_loss = val_loss / (2.0 * val_inputs.size());
+							std::cout << " - Validation Loss: " << val_loss;
+							fold_losses.push_back(val_loss);
+						}
+						std::cout << std::endl;
+					}
+				}
 			}
+
 			auto total_end = std::chrono::high_resolution_clock::now();
 			float total_time = std::chrono::duration<float>(total_end - total_start).count();
 
-			float avg_epoch_time = std::accumulate(epoch_times.begin(), epoch_times.end(), 0.0f) / epochs;
+			float avg_epoch_time = std::accumulate(epoch_times.begin(), epoch_times.end(), 0.0f) / (epochs * folds);
 			float min_epoch_time = *std::min_element(epoch_times.begin(), epoch_times.end());
 			float max_epoch_time = *std::max_element(epoch_times.begin(), epoch_times.end());
-			float samples_per_second = (inputs.size() * epochs) / total_time;
+			float samples_per_second = (inputs.size() * epochs * folds) / total_time;
 
 			std::cout << std::fixed << std::setprecision(2);
 
 			std::cout << "\nTraining Summary:\n";
 			std::cout << "----------------\n";
-			std::cout << "Total Epochs: " << epochs << "\n";
+			std::cout << "Total Epochs: " << epochs * folds << "\n";
+			if (folds > 1) {
+				float avg_fold_loss = std::accumulate(fold_losses.begin(), fold_losses.end(), 0.0f) / fold_losses.size();
+				float min_fold_loss = *std::min_element(fold_losses.begin(), fold_losses.end());
+				float max_fold_loss = *std::max_element(fold_losses.begin(), fold_losses.end());
+				std::cout << "Average Validation Loss: " << avg_fold_loss << "\n";
+				std::cout << "Min Validation Loss: " << min_fold_loss << "\n";
+				std::cout << "Max Validation Loss: " << max_fold_loss << "\n";
+			}
 			std::cout << "Total Training Time: " << format_time(total_time) << "\n";
 			std::cout << "Average Epoch Time: " << format_time(avg_epoch_time) << "\n";
 			std::cout << "Min Epoch Time: " << format_time(min_epoch_time) << "\n";
@@ -294,7 +376,6 @@ namespace Thot {
 
 			std::cout.unsetf(std::ios_base::floatfield);
 			std::cout << std::setprecision(6);
-
 		}
 	};
 }
