@@ -31,11 +31,11 @@ namespace Thot {
         inline void update(Utils::Tensor& weights, const Utils::Tensor& gradients) override {
             if (weights.size() != gradients.size())
                 throw std::invalid_argument("Weight and gradient dimensions don't match in SGDM optimizations");
-            
+
 
             std::string tensor_id = generate_tensor_id(weights);
             if (velocity_map_.find(tensor_id) == velocity_map_.end()) {
-                velocity_map_[tensor_id] = Utils::Tensor(weights.shape(), true); // true for init_zero
+                velocity_map_[tensor_id] = Utils::Tensor(weights.shape(), true); 
             }
 
             Utils::Tensor& velocity = velocity_map_[tensor_id];
@@ -52,6 +52,12 @@ namespace Thot {
 
         float get_momentum() const { return momentum_; }
         void set_momentum(float momentum) { momentum_ = momentum; }
+
+        std::string get_name() const override { return "SGDM"; }
+        std::string get_params() const override {
+            return "learning_rate=" + std::to_string(learning_rate_) +
+                ", momentum=" + std::to_string(momentum_);
+        }
 
         static std::shared_ptr<Optimizer> create(float learning_rate = 0.01f, float momentum = 0.9f) {
             return std::make_shared<SGDM>(learning_rate, momentum);

@@ -15,6 +15,8 @@ namespace Thot {
         virtual ~Optimizer() = default;
 
         virtual void update(Utils::Tensor& weights, const Utils::Tensor& gradients) = 0;
+        virtual std::string get_name() const = 0;
+        virtual std::string get_params() const = 0;
 
         float get_learning_rate() const { return learning_rate_; }
         void set_learning_rate(float lr) { learning_rate_ = lr; }
@@ -25,18 +27,15 @@ namespace Thot {
             float beta2 = 0.999f, float epsilon = 1e-8f);
     };
 
-    // Forward declare the optimizer classes
     class SGD;
     class SGDM;
     class Adam;
 }
 
-// Include the implementations AFTER the namespace
 #include "details/sgd.hpp"
 #include "details/sgdm.hpp"
 #include "details/adam.hpp"
 
-// Define the factory methods AFTER including implementations
 namespace Thot {
     inline std::shared_ptr<Optimizer> Optimizer::SGD(float learning_rate) {
         return std::make_shared<Thot::SGD>(learning_rate);

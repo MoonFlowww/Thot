@@ -2,6 +2,9 @@
 #include <random>
 #include <cmath>
 #include <vector>
+#include <iostream>
+#include <limits>
+#include <algorithm>
 #include "details/mnist.hpp"
 
 #ifndef M_PI
@@ -29,7 +32,88 @@ namespace Thot {
             return gen;
         }
 
-        inline std::pair<std::vector<float>, std::vector<float>> generate_data(DataType type, int samples, float noise = 0.1) {
+        inline std::string to_string(DataType type) {
+            switch (type) {
+            case DataType::Linear: return "Linear";
+            case DataType::Quadratic: return "Quadratic";
+            case DataType::Sine: return "Sine";
+            case DataType::Circle: return "Circle";
+            case DataType::Spiral: return "Spiral";
+            case DataType::XOR: return "XOR";
+            case DataType::Blobs: return "Blobs";
+            case DataType::MNIST: return "MNIST";
+            default: return "Unknown";
+            }
+        }
+
+        inline void print_data_stats(const std::vector<std::vector<float>>& X, const std::vector<std::vector<float>>& y) {
+            if (X.empty() || y.empty()) {
+                std::cout << "Empty dataset\n";
+                return;
+            }
+
+            std::cout << "\nDataset Statistics:\n";
+            std::cout << "------------------\n";
+            std::cout << "Number of samples: " << X.size() << "\n";
+            std::cout << "Number of features: " << X[0].size() << "\n";
+            std::cout << "Number of targets: " << y[0].size() << "\n\n";
+
+            std::cout << "Features Statistics:\n";
+            for (size_t feature = 0; feature < X[0].size(); ++feature) {
+                float min_val = std::numeric_limits<float>::max();
+                float max_val = std::numeric_limits<float>::lowest();
+                float sum = 0.0f;
+                float sum_sq = 0.0f;
+
+                for (const auto& sample : X) {
+                    float val = sample[feature];
+                    min_val = std::min(min_val, val);
+                    max_val = std::max(max_val, val);
+                    sum += val;
+                    sum_sq += val * val;
+                }
+
+                float mean = sum / X.size();
+                float variance = (sum_sq / X.size()) - (mean * mean);
+                float std_dev = std::sqrt(variance);
+
+                std::cout << "Feature " << feature + 1 << ":\n";
+                std::cout << "  Min: " << min_val << "\n";
+                std::cout << "  Max: " << max_val << "\n";
+                std::cout << "  Mean: " << mean << "\n";
+                std::cout << "  Std Dev: " << std_dev << "\n";
+                std::cout << "  Range: " << max_val - min_val << "\n\n";
+            }
+
+            std::cout << "Target Statistics:\n";
+            for (size_t target = 0; target < y[0].size(); ++target) {
+                float min_val = std::numeric_limits<float>::max();
+                float max_val = std::numeric_limits<float>::lowest();
+                float sum = 0.0f;
+                float sum_sq = 0.0f;
+
+                for (const auto& sample : y) {
+                    float val = sample[target];
+                    min_val = std::min(min_val, val);
+                    max_val = std::max(max_val, val);
+                    sum += val;
+                    sum_sq += val * val;
+                }
+
+                float mean = sum / y.size();
+                float variance = (sum_sq / y.size()) - (mean * mean);
+                float std_dev = std::sqrt(variance);
+
+                std::cout << "Target " << target + 1 << ":\n";
+                std::cout << "  Min: " << min_val << "\n";
+                std::cout << "  Max: " << max_val << "\n";
+                std::cout << "  Mean: " << mean << "\n";
+                std::cout << "  Std Dev: " << std_dev << "\n";
+                std::cout << "  Range: " << max_val - min_val << "\n\n";
+            }
+        }
+
+        inline std::pair<std::vector<std::vector<float>>, std::vector<std::vector<float>>> generate_data(DataType type, int samples, float noise = 0.1, bool verbose = true) {
             std::vector<float> X;
             std::vector<float> y;
             auto& gen = get_random_generator();
@@ -140,21 +224,23 @@ namespace Thot {
             }
             }
 
-            return { X, y };
-        }
+            std::vector<std::vector<float>> X_reshaped;
+            std::vector<std::vector<float>> y_reshaped;
 
-        inline std::string to_string(DataType type) {
-            switch (type) {
-            case DataType::Linear: return "Linear";
-            case DataType::Quadratic: return "Quadratic";
-            case DataType::Sine: return "Sine";
-            case DataType::Circle: return "Circle";
-            case DataType::Spiral: return "Spiral";
-            case DataType::XOR: return "XOR";
-            case DataType::Blobs: return "Blobs";
-            case DataType::MNIST: return "MNIST";
-            default: return "Unknown";
+            for (size_t i = 0; i < X.size(); ++i) {
+                X_reshaped.push_back({ X[i] });
             }
+
+            for (size_t i = 0; i < y.size(); ++i) {
+                y_reshaped.push_back({ y[i] });
+            }
+
+            if (verbose) {
+                std::cout << "\nGenerated " << to_string(type) << " dataset with " << samples << " samples\n";
+                print_data_stats(X_reshaped, y_reshaped);
+            }
+
+            return { X_reshaped, y_reshaped };
         }
     }
 }

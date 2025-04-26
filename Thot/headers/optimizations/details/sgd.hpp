@@ -4,9 +4,7 @@
 #include "../../tensor.hpp"
 #include <memory>
 #include <type_traits>
-
-
-
+#include <string>
 
 namespace Thot {
 
@@ -25,6 +23,11 @@ namespace Thot {
                 this->learning_rate_,
                 weights.size()
             );
+        }
+
+        std::string get_name() const override { return "SGD"; }
+        std::string get_params() const override {
+            return "learning_rate=" + std::to_string(learning_rate_);
         }
 
         static std::shared_ptr<Optimizer> create(float learning_rate = 0.01f) {

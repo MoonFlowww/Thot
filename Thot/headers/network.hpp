@@ -5,6 +5,10 @@
 #include <iostream>
 #include <iomanip>
 #include <chrono>
+#include <thread>
+#include <mutex>
+#include <future>
+#include <algorithm>
 
 #include "tensor.hpp"
 #include "layers/layers.hpp"
@@ -26,11 +30,13 @@ namespace Thot {
 		bool Istraining_;
 		std::shared_ptr<Optimizer> optimizer_;
 		std::shared_ptr<Losses> loss_function_;
+		std::mutex mutex_;
 
 		std::vector<float> latencies_;
 		std::vector<std::vector<float>> model_parameters_;
 
-
+		size_t max_gpu_batches_;
+		std::vector<cudaStream_t> cuda_streams_;
 
 		void print_vector(const std::vector<float>& vec) {
 			std::cout << "[";
@@ -41,10 +47,36 @@ namespace Thot {
 			std::cout << "]";
 		}
 
+		void k_fold_split(const std::vector<std::vector<float>>& inputs,
+			const std::vector<std::vector<float>>& targets,
+			int k, int fold,
+			std::vector<std::vector<float>>& train_inputs,
+			std::vector<std::vector<float>>& train_targets,
+			std::vector<std::vector<float>>& val_inputs,
+			std::vector<std::vector<float>>& val_targets) {
+			size_t fold_size = inputs.size() / k;
+			size_t start_idx = fold * fold_size;
+			size_t end_idx = (fold == k - 1) ? inputs.size() : (fold + 1) * fold_size;
+
+			train_inputs.clear();
+			train_targets.clear();
+			val_inputs.clear();
+			val_targets.clear();
+
+			for (size_t i = 0; i < inputs.size(); ++i) {
+				if (i >= start_idx && i < end_idx) {
+					val_inputs.push_back(inputs[i]);
+					val_targets.push_back(targets[i]);
+				}
+				else {
+					train_inputs.push_back(inputs[i]);
+					train_targets.push_back(targets[i]);
+				}
+			}
+		}
 
 		float train_batch(const std::vector<std::vector<float>>& inputs, const std::vector<std::vector<float>>& targets) {
 			float total_loss = 0.0f;
-			auto start = std::chrono::high_resolution_clock::now();
 
 			for (size_t i = 0; i < inputs.size(); ++i) {
 				std::vector<int> input_shape = { 1, static_cast<int>(inputs[i].size()) };
@@ -65,27 +97,37 @@ namespace Thot {
 				grad_tensor.upload(grad_output);
 
 				backward(grad_tensor);
-
-				if (i % 25 == 0 || i == inputs.size() - 1) {
-					auto now = std::chrono::high_resolution_clock::now();
-					double elapsed = std::chrono::duration<double>(now - start).count();
-					double progress = (i + 1) / static_cast<double>(inputs.size());
-					double eta = elapsed / progress - elapsed;
-
-					std::ostringstream oss;
-					oss << std::fixed << std::setprecision(2);
-					oss << "\rProgress: "
-						<< std::setw(3) << int(progress * 100) << "% | "
-						<< "Elapsed: " << std::setw(6) << elapsed << "s | "
-						<< "ETA: " << std::setw(6) << eta << "s";
-
-					std::cout << oss.str() << std::flush;
-				}
 			}
 
-			std::cout << "\r" << std::string(80, ' ') << "\r" << std::flush;
-
 			return total_loss / inputs.size();
+		}
+
+		float train_batch_threaded(const std::vector<std::vector<float>>& inputs, const std::vector<std::vector<float>>& targets, size_t start_idx, size_t end_idx) {
+			float total_loss = 0.0f;
+
+			for (size_t i = start_idx; i < end_idx; ++i) {
+				std::vector<int> input_shape = { 1, static_cast<int>(inputs[i].size()) };
+				std::vector<float> output = forward(inputs[i], input_shape);
+
+				float loss = 0.0f;
+				std::vector<float> grad_output(output.size(), 0.0f);
+
+				for (size_t j = 0; j < output.size(); ++j) {
+					float error = output[j] - targets[i][j];
+					loss += error * error;
+					grad_output[j] = 2.0f * error;
+				}
+				loss *= 0.5f;
+				total_loss += loss;
+
+				Utils::Tensor grad_tensor({ 1, static_cast<int>(output.size()) });
+				grad_tensor.upload(grad_output);
+
+				std::lock_guard<std::mutex> lock(mutex_);
+				backward(grad_tensor);
+			}
+
+			return total_loss / (end_idx - start_idx);
 		}
 
 		std::string format_time(float seconds) {
@@ -141,6 +183,121 @@ namespace Thot {
 			return oss.str();
 		}
 
+		int get_safe_thread_count(int requested_threads) {
+			int max_threads = std::thread::hardware_concurrency();
+			int safe_threads = static_cast<int>(max_threads * 0.7);
+			return std::min(requested_threads, safe_threads);
+		}
+
+		size_t calculate_max_gpu_batches(size_t single_batch_size) {
+			// Get available GPU memory
+			size_t free_memory, total_memory;
+			cudaMemGetInfo(&free_memory, &total_memory);
+
+			// Calculate memory needed per batch
+			size_t memory_per_batch = 0;
+			for (const auto& layer : layers_) {
+				memory_per_batch += layer->get_memory_requirements(single_batch_size);
+			}
+
+			// Use 70% of available memory as safety margin
+			size_t safe_memory = static_cast<size_t>(free_memory * 0.7);
+			return std::max(size_t(1), safe_memory / memory_per_batch);
+		}
+
+		void initialize_cuda_streams(size_t num_streams) {
+			cuda_streams_.resize(num_streams);
+			for (auto& stream : cuda_streams_) {
+				cudaStreamCreate(&stream);
+			}
+		}
+
+		void cleanup_cuda_streams() {
+			for (auto& stream : cuda_streams_) {
+				cudaStreamSynchronize(stream);
+				cudaStreamDestroy(stream);
+			}
+			cuda_streams_.clear();
+		}
+
+		float train_epoch_parallel(const std::vector<std::vector<float>>& inputs,
+			const std::vector<std::vector<float>>& targets,
+			size_t batch_size) {
+			float total_loss = 0.0f;
+			size_t num_batches = (inputs.size() + batch_size - 1) / batch_size;
+			size_t max_parallel_batches = calculate_max_gpu_batches(batch_size);
+
+			// Initialize CUDA streams for parallel processing
+			initialize_cuda_streams(max_parallel_batches);
+
+			// Process batches in parallel groups
+			for (size_t batch_group = 0; batch_group < num_batches; batch_group += max_parallel_batches) {
+				size_t current_group_size = std::min(max_parallel_batches,
+					num_batches - batch_group);
+
+				std::vector<Utils::Tensor> batch_gradients(current_group_size);
+
+				// Launch parallel batch processing
+				for (size_t i = 0; i < current_group_size; i++) {
+					size_t batch_idx = batch_group + i;
+					size_t start_idx = batch_idx * batch_size;
+					size_t end_idx = std::min(start_idx + batch_size, inputs.size());
+
+					// Process batch using CUDA stream
+					cudaStream_t& stream = cuda_streams_[i];
+
+					// Forward pass with stream
+					std::vector<float> batch_loss = forward_batch_async(
+						inputs, targets, start_idx, end_idx, stream);
+
+					// Backward pass with stream
+					batch_gradients[i] = backward_batch_async(stream);
+
+					total_loss += std::accumulate(batch_loss.begin(), batch_loss.end(), 0.0f);
+				}
+
+				// Synchronize all streams in this group
+				for (size_t i = 0; i < current_group_size; i++) {
+					cudaStreamSynchronize(cuda_streams_[i]);
+				}
+
+				// Accumulate gradients from all batches in this group
+				accumulate_gradients(batch_gradients);
+			}
+
+			// Apply optimizer updates once for the entire epoch
+			if (optimizer_) {
+				for (auto& layer : layers_) {
+					layer->apply_accumulated_gradients(optimizer_);
+				}
+			}
+
+			cleanup_cuda_streams();
+			return total_loss / inputs.size();
+		}
+
+		Utils::Tensor forward_batch_async(const std::vector<std::vector<float>>& inputs,
+			const std::vector<std::vector<float>>& targets,
+			size_t start_idx, size_t end_idx,
+			cudaStream_t& stream) {
+			// Implement async forward pass using the specified CUDA stream
+			Utils::Tensor batch_input = prepare_batch(inputs, start_idx, end_idx);
+			Utils::Tensor output = forward_gpu_async(batch_input, stream);
+			return output;
+		}
+
+		Utils::Tensor backward_batch_async(cudaStream_t& stream) {
+			// Implement async backward pass using the specified CUDA stream
+			// This should store gradients but not apply them
+			return compute_gradients_async(stream);
+		}
+
+		void accumulate_gradients(const std::vector<Utils::Tensor>& batch_gradients) {
+			// Sum up gradients from all batches
+			for (auto& layer : layers_) {
+				layer->accumulate_gradients(batch_gradients);
+			}
+		}
 
 	public:
 		Network(const std::string& name = "Thot_Network") : name_(name), Istraining_(true) {};
@@ -172,11 +329,11 @@ namespace Thot {
 
 		inline std::vector<float> forward(const std::vector<float>& input, const std::vector<int>& input_shape) {
 			Utils::Tensor input_tensor(input_shape);
-			input_tensor.upload(input); // CPU -> GPU
+			input_tensor.upload(input);
 
 			Utils::Tensor output_tensor = forward_gpu(input_tensor);
 
-			return output_tensor.download(); // GPU -> CPU
+			return output_tensor.download();
 		}
 
 		inline void backward(const Utils::Tensor& grad_output) {
@@ -191,7 +348,6 @@ namespace Thot {
 				current_gradient = layers_[i]->backward(current_gradient);
 			}
 		}
-
 
 		size_t get_flops(int batch_size = 1) const {
 			size_t total_flops = 0;
@@ -262,38 +418,32 @@ namespace Thot {
 			}
 
 			std::cout << "+---------------+----------------------+----------------------+----------------------+---------------+" << std::endl;
-			std::cout << "| Thot Model    |                                                                    " << std::right << std::setw(15) << total_flops << " |" << std::endl;
+			std::cout << "| Thot Model    |                                                                            " << std::right << std::setw(7) << total_flops << " |" << std::endl;
 			std::cout << "+---------------+------------------------------------------------------------------------------------+" << std::endl;
+
+			std::cout << "\nTraining Configuration:" << std::endl;
+			std::cout << "+----------------------+----------------------+----------------------+" << std::endl;
+			std::cout << "| Optimizer           | Parameters           | Loss Function        |" << std::endl;
+			std::cout << "+----------------------+----------------------+----------------------+" << std::endl;
+
+			std::string optimizer_name = optimizer_ ? optimizer_->get_name() : "None";
+			std::string optimizer_params = optimizer_ ? optimizer_->get_params() : "None";
+			std::string loss_name = loss_function_ ? Thot::Losses::to_string(loss_function_->get_type()) : "None";
+			std::string loss_params = loss_function_ ? loss_function_->get_params() : "None";
+
+			if (optimizer_name.length() > 20) optimizer_name = optimizer_name.substr(0, 17) + "...";
+			if (optimizer_params.length() > 20) optimizer_params = optimizer_params.substr(0, 17) + "...";
+			if (loss_name.length() > 20) loss_name = loss_name.substr(0, 17) + "...";
+			if (loss_params.length() > 20) loss_params = loss_params.substr(0, 17) + "...";
+
+			std::cout << "| " << std::left << std::setw(20) << optimizer_name
+				<< " | " << std::left << std::setw(20) << optimizer_params
+				<< " | " << std::left << std::setw(20) << loss_name << " |" << std::endl;
+			std::cout << "| " << std::left << std::setw(20) << ""
+				<< " | " << std::left << std::setw(20) << ""
+				<< " | " << std::left << std::setw(20) << loss_params << " |" << std::endl;
+			std::cout << "+----------------------+----------------------+----------------------+" << std::endl;
 		}
-
-		void k_fold_split(const std::vector<std::vector<float>>& inputs,
-			const std::vector<std::vector<float>>& targets,
-			int k, int fold,
-			std::vector<std::vector<float>>& train_inputs,
-			std::vector<std::vector<float>>& train_targets,
-			std::vector<std::vector<float>>& val_inputs,
-			std::vector<std::vector<float>>& val_targets) {
-			size_t fold_size = inputs.size() / k;
-			size_t start_idx = fold * fold_size;
-			size_t end_idx = (fold == k - 1) ? inputs.size() : (fold + 1) * fold_size;
-
-			train_inputs.clear();
-			train_targets.clear();
-			val_inputs.clear();
-			val_targets.clear();
-
-			for (size_t i = 0; i < inputs.size(); ++i) {
-				if (i >= start_idx && i < end_idx) {
-					val_inputs.push_back(inputs[i]);
-					val_targets.push_back(targets[i]);
-				}
-				else {
-					train_inputs.push_back(inputs[i]);
-					train_targets.push_back(targets[i]);
-				}
-			}
-		}
-
 
 		void train(const std::vector<std::vector<float>>& inputs, const std::vector<std::vector<float>>& targets, int epochs, int batch_size = 1, int log_interval = 100, int folds = 1) {
 			if (!optimizer_) {
@@ -313,7 +463,6 @@ namespace Thot {
 					std::cout << "\nTraining Fold " << fold + 1 << "/" << folds << std::endl;
 				}
 
-				// Split data into training and validation sets
 				std::vector<std::vector<float>> train_inputs, train_targets, val_inputs, val_targets;
 				k_fold_split(inputs, targets, folds, fold, train_inputs, train_targets, val_inputs, val_targets);
 

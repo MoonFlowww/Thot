@@ -8,7 +8,7 @@
 #include <iomanip>
 
 namespace Evaluations {
-    inline void evaluate_timeseries(const std::vector<std::vector<float>>& predictions, const std::vector<std::vector<float>>& targets, const  std::vector<float>& latencies, size_t flops, bool verbose ) {
+    inline void evaluate_timeseries(const std::vector<std::vector<float>>& predictions, const std::vector<std::vector<float>>& targets, const  std::vector<float>& latencies, size_t flops, bool verbose = false ) {
         if (verbose) {
             std::cout << "\nTime Series Evaluation:\n";
             std::cout << "----------------------\n";
@@ -19,14 +19,6 @@ namespace Evaluations {
         float r2 = 0.0f;
 
         for (size_t i = 0; i < predictions.size(); ++i) {
-            if (verbose) {
-                std::cout << "Time Step " << i << ":\n";
-                std::cout << "   Predicted: [";
-                for (float x : predictions[i]) std::cout << x << " ";
-                std::cout << "]\n   Actual: [";
-                for (float y : targets[i]) std::cout << y << " ";
-                std::cout << "]\n" << std::endl;
-            }
 
             float sum_squared_error = 0.0f;
             float sum_absolute_error = 0.0f;

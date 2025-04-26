@@ -43,11 +43,11 @@ namespace Thot {
 
             std::string tensor_id = generate_tensor_id(weights);
 
-            if (m_map_.find(tensor_id) == m_map_.end()) 
+            if (m_map_.find(tensor_id) == m_map_.end())
                 m_map_[tensor_id] = Utils::Tensor(weights.shape(), true);
 
 
-            if (v_map_.find(tensor_id) == v_map_.end()) 
+            if (v_map_.find(tensor_id) == v_map_.end())
                 v_map_[tensor_id] = Utils::Tensor(weights.shape(), true);
 
 
@@ -81,6 +81,14 @@ namespace Thot {
 
         float get_epsilon() const { return epsilon_; }
         void set_epsilon(float epsilon) { epsilon_ = epsilon; }
+
+        std::string get_name() const override { return "Adam"; }
+        std::string get_params() const override {
+            return "learning_rate=" + std::to_string(learning_rate_) +
+                ", beta1=" + std::to_string(beta1_) +
+                ", beta2=" + std::to_string(beta2_) +
+                ", epsilon=" + std::to_string(epsilon_);
+        }
 
         static std::shared_ptr<Optimizer> create(float learning_rate = 0.001f, float beta1 = 0.9f,
             float beta2 = 0.999f, float epsilon = 1e-8f) {

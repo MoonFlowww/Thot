@@ -23,12 +23,7 @@ namespace Thot {
     };
 
     namespace Evaluations {
-        inline void evaluate(const std::vector<std::vector<float>>& predictions,
-            const std::vector<std::vector<float>>& targets,
-            const std::vector<float>& latencies,
-            size_t flops,
-            Evaluation type,
-            bool verbose = true) {
+        inline void evaluate(const std::vector<std::vector<float>>& predictions, const std::vector<std::vector<float>>& targets, const std::vector<float>& latencies, size_t flops, Evaluation type, bool verbose = false) {
             switch (type) {
             case Evaluation::Binary:
                 ::Evaluations::evaluate_binary(predictions, targets, latencies, flops, verbose);
