@@ -84,10 +84,10 @@ namespace Thot {
 
         std::string get_name() const override { return "Adam"; }
         std::string get_params() const override {
-            return "learning_rate=" + std::to_string(learning_rate_) +
-                ", beta1=" + std::to_string(beta1_) +
-                ", beta2=" + std::to_string(beta2_) +
-                ", epsilon=" + std::to_string(epsilon_);
+            return "Lr=" + std::to_string(learning_rate_) +
+                ", Beta1=" + std::to_string(beta1_) +
+                ", Beta2=" + std::to_string(beta2_) +
+                ", Eps=" + std::to_string(epsilon_);
         }
 
         static std::shared_ptr<Optimizer> create(float learning_rate = 0.001f, float beta1 = 0.9f,

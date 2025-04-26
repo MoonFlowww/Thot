@@ -27,7 +27,7 @@ namespace Thot {
 
         std::string get_name() const override { return "SGD"; }
         std::string get_params() const override {
-            return "learning_rate=" + std::to_string(learning_rate_);
+            return "Lr=" + std::to_string(learning_rate_);
         }
 
         static std::shared_ptr<Optimizer> create(float learning_rate = 0.01f) {

@@ -2,6 +2,7 @@
 
 #include "../tensor.hpp"
 #include "../../cuda/cuh/losses/loss.cuh"
+#include <sstream>
 
 namespace Thot {
     enum class Loss {
@@ -26,6 +27,33 @@ namespace Thot {
     public:
         Losses(Loss Loss = Loss::MSE, float epsilon = 1e-8f, float delta = 1.0f)
             : Loss_(Loss), epsilon_(epsilon), delta_(delta) {
+        }
+
+        Loss get_type() const {
+            return Loss_;
+        }
+
+        std::string get_params() const {
+            std::ostringstream oss;
+            oss << "Eps=" << epsilon_;
+            if (Loss_ == Loss::Huber) {
+                oss << ", Delta=" << delta_;
+            }
+            return oss.str();
+        }
+
+        static std::string to_string(Loss type) {
+            switch (type) {
+            case Loss::MSE: return "MSE";
+            case Loss::MAE: return "MAE";
+            case Loss::BinaryCrossEntropy: return "BCE";
+            case Loss::CategoricalCrossEntropy: return "CCE";
+            case Loss::SparseCategoricalCrossEntropy: return "SCCE";
+            case Loss::Hinge: return "Hinge";
+            case Loss::Huber: return "Huber";
+            case Loss::KLDivergence: return "KL div";
+            default: return "Unknown";
+            }
         }
 
         float compute(const Utils::Tensor& predictions, const Utils::Tensor& targets) {

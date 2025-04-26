@@ -23,8 +23,7 @@ namespace Thot {
 
         static std::shared_ptr<Optimizer> SGD(float learning_rate = 0.01f);
         static std::shared_ptr<Optimizer> SGDM(float learning_rate = 0.01f, float momentum = 0.9f);
-        static std::shared_ptr<Optimizer> Adam(float learning_rate = 0.001f, float beta1 = 0.9f,
-            float beta2 = 0.999f, float epsilon = 1e-8f);
+        static std::shared_ptr<Optimizer> Adam(float learning_rate = 0.001f, float beta1 = 0.9f, float beta2 = 0.999f, float epsilon = 1e-8f);
     };
 
     class SGD;
