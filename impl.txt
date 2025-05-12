@@ -106,7 +106,8 @@ Post-Training
 	- JS/Bhattacharyya... Div
 	- SETOL
 	- Entropy (Aleatory/Epistemic)
-	- VPT (model vs input dy)
+	- VPT (model vs input dy) SCVAR (SCvariance)
+	- LTA/LTU
 
 
 
