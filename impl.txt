@@ -77,7 +77,6 @@ Training
 	- LWoL (home made BAL)
 
 	Penalizations:
-	- Tikhonov
 	- LSD stable-rank
 	- dropout
 	- L2
