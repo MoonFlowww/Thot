@@ -25,8 +25,11 @@ int main() {
 	std::string mnist_path = "C:\\Users\\PC\\Downloads\\MNIST";
 	//auto [train_images, train_labels] = Thot::Data::load_mnist_train(mnist_path, 0.001f); // 10%
 	auto [x, y] = Thot::Data::generate_data(Thot::DataType::Sine, 200, 0.1, true);
-	model.train(x, y, 200, 16, 20, 1);
-	model.evaluate(x, y, Thot::Evaluation::Timeseries, true);
+    model.train(x, y,
+        Thot::Batch::Classic(16, 200),
+        Thot::KFold::Classic(1),
+        20, true);
+    model.evaluate(x, y, Thot::Evaluation::Timeseries, true);
 
 
 	return 0;

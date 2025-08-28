@@ -9,3 +9,6 @@
 
 #include "headers/data/data.hpp"
 
+#include "headers/LearningProcess/batch.hpp"
+#include "headers/LearningProcess/kfold.hpp"
+

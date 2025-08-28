@@ -11,6 +11,7 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include <numeric>
 
 
 #include "layers/layers.hpp"
@@ -24,6 +25,11 @@
 
 #include "utils/translators.h"
 #include "utils/progressbar.h"
+
+#include "LearningProcess/batch.hpp"
+#include "LearningProcess/kfold.hpp"
+
+
 class Layer;
 class Optimizer;
 
@@ -54,79 +60,6 @@ private:
         std::cout << "]";
     }
 
-    void k_fold_split(const std::vector<std::vector<float>> &inputs,
-                      const std::vector<std::vector<float>> &targets, int k,
-                      int fold, std::vector<std::vector<float>> &train_inputs,
-                      std::vector<std::vector<float>> &train_targets,
-                      std::vector<std::vector<float>> &val_inputs,
-                      std::vector<std::vector<float>> &val_targets) {
-        size_t fold_size = inputs.size() / k;
-        size_t start_idx = fold * fold_size;
-        size_t end_idx = (fold == k - 1) ? inputs.size() : (fold + 1) * fold_size;
-
-        train_inputs.clear();
-        train_targets.clear();
-        val_inputs.clear();
-        val_targets.clear();
-
-        for (size_t i = 0; i < inputs.size(); ++i) {
-            if (i >= start_idx && i < end_idx) {
-                val_inputs.push_back(inputs[i]);
-                val_targets.push_back(targets[i]);
-            } else {
-                train_inputs.push_back(inputs[i]);
-                train_targets.push_back(targets[i]);
-            }
-        }
-    }
-
-    float train_batch(const std::vector<std::vector<float>> &inputs,
-                      const std::vector<std::vector<float>> &targets) {
-        float total_loss = 0.0f;
-        auto start = std::chrono::high_resolution_clock::now();
-
-        for (size_t i = 0; i < inputs.size(); ++i) {
-            std::vector<int> input_shape = {1, static_cast<int>(inputs[i].size())};
-            std::vector<float> output = forward(inputs[i], input_shape);
-
-            Utils::Tensor prediction_tensor({1, static_cast<int>(output.size())});
-            prediction_tensor.upload(output);
-
-            Utils::Tensor target_tensor({1, static_cast<int>(targets[i].size())});
-            target_tensor.upload(targets[i]);
-
-            float loss = loss_function_ ? loss_function_->compute(prediction_tensor,
-                                                                  target_tensor)
-                                        : 0.0f;
-            total_loss += loss;
-
-            Utils::Tensor grad_tensor =
-                loss_function_ ? loss_function_->compute_gradients(prediction_tensor,
-                                                                   target_tensor)
-                               : Utils::Tensor({1, static_cast<int>(output.size())});
-
-            backward(std::move(grad_tensor));
-
-            if (i % 100 == 0 || i == inputs.size() - 1) {
-                auto now = std::chrono::high_resolution_clock::now();
-                double elapsed = std::chrono::duration<double>(now - start).count();
-                double progress = (i + 1) / static_cast<double>(inputs.size());
-                double eta = elapsed / progress - elapsed;
-
-                std::ostringstream oss;
-                oss << std::fixed << std::setprecision(2);
-                oss << "\rProgress: " << std::setw(3) << int(progress * 100) << "% | "
-                    << "Elapsed: " << std::setw(6) << elapsed << "s | "
-                    << "ETA: " << std::setw(6) << eta << "s";
-
-                std::cout << oss.str() << std::flush;
-            }
-        }
-
-        std::cout << "\r" << std::string(80, ' ') << "\r" << std::flush;
-
-        return total_loss / inputs.size();
-    }
 
 
 
@@ -302,10 +235,14 @@ public:
                      "--------+"
                   << std::endl;
     }
-
+    template <typename BatchMethod, typename KFoldMethod>
     void train(const std::vector<std::vector<float>> &inputs,
-               const std::vector<std::vector<float>> &targets, int epochs,
-               int batch_size = 1, int log_interval = 100, int folds = 1) {
+                const std::vector<std::vector<float>> &targets,
+                const BatchMethod &batch_method,
+                const KFoldMethod &kfold_method,
+                int log_interval = 100,
+                bool verbose = true) {
+
         if (!optimizer_) {
             optimizer_ = Thot::Optimizer::SGD(0.01f);
             for (auto &L : layers_) {
@@ -317,35 +254,37 @@ public:
         std::vector<float> epoch_times;
         std::vector<float> fold_losses;
 
+        int folds = kfold_method.get_folds();
+
         for (int fold = 0; fold < folds; ++fold) {
-            if (folds > 1) {
+            if (folds > 1 && verbose) {
                 std::cout << "\nTraining Fold " << fold + 1 << "/" << folds
                           << std::endl;
             }
 
             std::vector<std::vector<float>> train_inputs, train_targets, val_inputs,
                 val_targets;
-            k_fold_split(inputs, targets, folds, fold, train_inputs, train_targets,
-                         val_inputs, val_targets);
+            kfold_method.split(inputs, targets, fold, train_inputs, train_targets,
+                   val_inputs, val_targets);
 
-            for (int epoch = 0; epoch < epochs; ++epoch) {
+            for (int epoch = 0; epoch < batch_method.get_epochs(); ++epoch) {
                 auto epoch_start = std::chrono::high_resolution_clock::now();
 
-                double epoch_loss = train_batch(train_inputs, train_targets);
+                double epoch_loss = batch_method.template train_epoch<Network>(*this, train_inputs, train_targets, log_interval, verbose);
 
                 auto epoch_end = std::chrono::high_resolution_clock::now();
                 float epoch_time =
                     std::chrono::duration<float>(epoch_end - epoch_start).count();
                 epoch_times.push_back(epoch_time);
 
-                if (epoch % log_interval == 0 || epoch == epochs - 1) {
-                    std::cout << "Epoch " << epoch << " - Average Loss: " << epoch_loss;
+                if (epoch % log_interval == 0 || epoch == batch_method.get_epochs() - 1) {
+                    std::cout << "Epoch " << epoch << " - Average Loss: "
+                              << epoch_loss;
 
                     if (folds > 1) {
                         double val_loss = 0.0;
                         for (size_t i = 0; i < val_inputs.size(); ++i) {
-                            std::vector<float> output = forward(
-                                val_inputs[i], {1, static_cast<int>(val_inputs[i].size())});
+                            std::vector<float> output = forward(val_inputs[i], {1, static_cast<int>(val_inputs[i].size())});
 
                             Utils::Tensor prediction_tensor(
                                 {1, static_cast<int>(output.size())});
@@ -355,8 +294,7 @@ public:
                                 {1, static_cast<int>(val_targets[i].size())});
                             target_tensor.upload(val_targets[i]);
 
-                            val_loss +=
-                                loss_function_->compute(prediction_tensor, target_tensor);
+                            val_loss += loss_function_->compute(prediction_tensor, target_tensor);
                         }
                         val_loss /= val_inputs.size();
                         std::cout << " - Validation Loss: " << val_loss;
@@ -372,19 +310,21 @@ public:
             std::chrono::duration<float>(total_end - total_start).count();
 
         float avg_epoch_time =
-            std::accumulate(epoch_times.begin(), epoch_times.end(), 0.0f) /
-            (epochs * folds);
+            std::accumulate(epoch_times.begin(), epoch_times.end(), 0.0f) / (batch_method.get_epochs() * folds);
+
         float min_epoch_time =
             *std::min_element(epoch_times.begin(), epoch_times.end());
+
         float max_epoch_time =
             *std::max_element(epoch_times.begin(), epoch_times.end());
-        float samples_per_second = (inputs.size() * epochs * folds) / total_time;
+
+        float samples_per_second = (inputs.size() * batch_method.get_epochs() * folds) / total_time;
 
         std::cout << std::fixed << std::setprecision(2);
 
         std::cout << "\nTraining Summary:\n";
         std::cout << "----------------\n";
-        std::cout << "Total Epochs: " << epochs * folds << "\n";
+        std::cout << "Total Epochs: " << batch_method.get_epochs() * folds << "\n";
         if (folds > 1) {
             float avg_fold_loss =
                 std::accumulate(fold_losses.begin(), fold_losses.end(), 0.0f) /
@@ -401,8 +341,10 @@ public:
         std::cout << "Average Epoch Time: " << format_time(avg_epoch_time) << "\n";
         std::cout << "Min Epoch Time: " << format_time(min_epoch_time) << "\n";
         std::cout << "Max Epoch Time: " << format_time(max_epoch_time) << "\n";
-        std::cout << "Throughput: " << format_samples_per_second(samples_per_second)
-                  << "\n";
+        std::cout << "Throughput: " << format_samples_per_second(samples_per_second) << "\n";
+
+        std::cout.unsetf(std::ios_base::floatfield);
+        std::cout << std::setprecision(6);
 
         std::cout.unsetf(std::ios_base::floatfield);
         std::cout << std::setprecision(6);
