@@ -14,18 +14,18 @@ int main() {
 	*/
 	model.add(Thot::Layer::RNN(1, 8, 4, Thot::Activation::Tanh));
 	model.add(Thot::Layer::RNN(8, 16, 4, Thot::Activation::Tanh));
-	model.add(Thot::Layer::RNN(16, 8, 4, Thot::Activation::Tanh));
+	model.add(Thot::Layer::FC(16, 8, Thot::Activation::LeakyReLU, Thot::Initialization::LeCun));
 	model.add(Thot::Layer::RNN(8, 4, 4, Thot::Activation::Tanh));
 	model.add(Thot::Layer::RNN(4, 1, 4, Thot::Activation::Tanh));
 	model.set_optimizer(Thot::Optimizer::Adam(0.001f));
-	model.set_loss(Thot::Loss::MSE); 
+	model.set_loss(Thot::Loss::MSE);
 	model.summary();
 
 
 	std::string mnist_path = "C:\\Users\\PC\\Downloads\\MNIST";
 	//auto [train_images, train_labels] = Thot::Data::load_mnist_train(mnist_path, 0.001f); // 10%
 	auto [x, y] = Thot::Data::generate_data(Thot::DataType::Sine, 200, 0.1, true);
-	model.train(x, y, 200, 16, 20, 5);
+	model.train(x, y, 200, 16, 20, 1);
 	model.evaluate(x, y, Thot::Evaluation::Timeseries, true);
 
 

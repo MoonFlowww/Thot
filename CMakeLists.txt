@@ -55,6 +55,8 @@ set(HEADERS
     Thot/headers/optimizations/optimizations.hpp
     Thot/headers/tensor.hpp
     Thot/Thot.hpp
+        Thot/headers/utils/progressbar.h
+        Thot/headers/utils/translators.h
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})

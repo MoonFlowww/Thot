@@ -9,6 +9,7 @@ Model Technologies
 	Transformers
 	- classic
 	- Titan
+	- Atlas
 
 	Module
 	- MoE
@@ -20,6 +21,10 @@ Model Technologies
 	- Pooling
 	- Pool of Markov
 	- Pool of HM
+	- Graphs
+
+	Blocks
+	- TCB
 	
 	Norm-Layers
 	- RMSE
@@ -33,6 +38,8 @@ Model Technologies
 	- Flash attention
 	- Causal attention
 	- SE Block
+	- 2Simplicials
+	- Multi-Channel Att
 
 	Attentions Technologies
 	- RoPE
@@ -50,13 +57,15 @@ Pre-Training
 
 	Normalization
 	- Zscore
+	- Uscore
 	- DePre
 	- MinMax
 	- Log
 
 	Transformation
-	- Wavelet
-	- Fourier
+	- FFT
+	- WT
+	- SWT
 	- Elher loops
 
 	Dim reduction/Feature Selection
@@ -75,6 +84,7 @@ Training
 	- timeserie kfold
 	- Bayesian Active Learning
 	- LWoL (home made BAL)
+	- Curriculum
 
 	Penalizations:
 	- LSD stable-rank
@@ -107,6 +117,8 @@ Post-Training
 	- Entropy (Aleatory/Epistemic)
 	- VPT (model vs input dy) SCVAR (SCvariance)
 	- LTA/LTU
+	- SHAP
+	- Average Mutual Informations
 
 
 
