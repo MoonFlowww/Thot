@@ -308,4 +308,4 @@ namespace cuda {
         }
 
     }  // namespace activations
-}  // namespace KernelThot
+}  // namespace Cuda

@@ -26,8 +26,7 @@ namespace cuda {
 
         void launchRNNForward(const float* input, const float* weights_ih, const float* weights_hh,
             const float* bias, const float* prev_hidden_state, float* hidden_state, float* output,
-            int batch_size, int seq_length, int input_size, int hidden_size,
-            cudaStream_t stream = 0);
+            int batch_size, int seq_length, int input_size, int hidden_size);
 
         void launchRNNBackwardInput(const float* grad_output, const float* weights_ih,
             float* grad_input, int batch_size, int seq_length, int input_size, int hidden_size,

@@ -33,9 +33,10 @@ namespace cuda {
             }
 
             // recurrent contribution (fix: include batch_idx offset)
+            const float* prev_row = prev_hidden_state + batch_idx * hidden_size;
+            const float* w_hh_row = weights_hh + hidden_idx * hidden_size;
             for (int h = 0; h < hidden_size; ++h) {
-                sum += prev_hidden_state[batch_idx * hidden_size + h] *
-                       weights_hh[hidden_idx * hidden_size + h];
+                sum += prev_row[h] * w_hh_row[h];
             }
 
             if (bias != nullptr) sum += bias[hidden_idx];
@@ -110,7 +111,7 @@ namespace cuda {
 
             float sum = 0.0f;
             for (int b = 0; b < batch_size; ++b) {
-                sum += hidden_state[h2_idx] * grad_hidden[b * hidden_size + h1_idx];
+                sum += hidden_state[b * hidden_size + h2_idx] * grad_hidden[b * hidden_size + h1_idx];
             }
 
             grad_weights_hh[idx] += sum;  // Accumulate gradient
@@ -174,6 +175,9 @@ namespace cuda {
                 printf("Kernel launch error in RNN: %s\n", cudaGetErrorString(err));
             }
             cudaDeviceSynchronize();
+            float host_first = 0.0f;
+            cudaMemcpy(&host_first, output, sizeof(float), cudaMemcpyDeviceToHost);
+            printf("rnn_forward output[0] = %f\n", host_first);
         }
 
 
