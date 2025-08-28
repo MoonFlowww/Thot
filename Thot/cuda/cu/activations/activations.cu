@@ -2,6 +2,7 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <math.h>
+#include <stdio.h>
 
 #include "../../cuh/activations/activations.cuh"
 
@@ -171,69 +172,139 @@ namespace cuda {
         void launchReluForward(const float* input, float* output, int size, cudaStream_t stream) {
             int num_blocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
             relu_forward << <num_blocks, BLOCK_SIZE, 0, stream >> > (input, output, size);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchReluForward: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchReluBackward(const float* grad_output, const float* input, float* grad_input, int size, cudaStream_t stream) {
             int num_blocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
             relu_backward << <num_blocks, BLOCK_SIZE, 0, stream >> > (grad_output, input, grad_input, size);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchReluBackward: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchSigmoidForward(const float* input, float* output, int size, cudaStream_t stream) {
             int num_blocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
             sigmoid_forward << <num_blocks, BLOCK_SIZE, 0, stream >> > (input, output, size);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchSigmoidForward: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchSigmoidBackward(const float* grad_output, const float* output, float* grad_input, int size, cudaStream_t stream) {
             int num_blocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
             sigmoid_backward << <num_blocks, BLOCK_SIZE, 0, stream >> > (grad_output, output, grad_input, size);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchSigmoidBackward: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchTanhForward(const float* input, float* output, int size, cudaStream_t stream) {
             int num_blocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
             tanh_forward << <num_blocks, BLOCK_SIZE, 0, stream >> > (input, output, size);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchTanhForward: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchTanhBackward(const float* grad_output, const float* output, float* grad_input, int size, cudaStream_t stream) {
             int num_blocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
             tanh_backward << <num_blocks, BLOCK_SIZE, 0, stream >> > (grad_output, output, grad_input, size);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchTanhBackward: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchLeakyReluForward(const float* input, float* output, float negative_slope, int size, cudaStream_t stream) {
             int num_blocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
             leaky_relu_forward << <num_blocks, BLOCK_SIZE, 0, stream >> > (input, output, negative_slope, size);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchLeakyReluForward: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchLeakyReluBackward(const float* grad_output, const float* input, float* grad_input, float negative_slope, int size, cudaStream_t stream) {
             int num_blocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
             leaky_relu_backward << <num_blocks, BLOCK_SIZE, 0, stream >> > (grad_output, input, grad_input, negative_slope, size);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchLeakyReluBackward: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchEluForward(const float* input, float* output, float alpha, int size, cudaStream_t stream) {
             int num_blocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
             elu_forward << <num_blocks, BLOCK_SIZE, 0, stream >> > (input, output, alpha, size);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchEluForward: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchEluBackward(const float* grad_output, const float* output, const float* input, float* grad_input, float alpha, int size, cudaStream_t stream) {
             int num_blocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
             elu_backward << <num_blocks, BLOCK_SIZE, 0, stream >> > (grad_output, output, input, grad_input, alpha, size);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchEluBackward: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchGeluForward(const float* input, float* output, int size, cudaStream_t stream) {
             int num_blocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
             gelu_forward << <num_blocks, BLOCK_SIZE, 0, stream >> > (input, output, size);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchGeluForward: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchGeluBackward(const float* grad_output, const float* input, float* grad_input, int size, cudaStream_t stream) {
             int num_blocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
             gelu_backward << <num_blocks, BLOCK_SIZE, 0, stream >> > (grad_output, input, grad_input, size);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchGeluBackward: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchSoftmaxForward(const float* input, float* output, int batch_size, int feature_dim, cudaStream_t stream) {
             softmax_forward << <batch_size, 1, 0, stream >> > (input, output, batch_size, feature_dim);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchSoftmaxForward: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchSoftmaxBackward(const float* grad_output, const float* output, float* grad_input, int batch_size, int feature_dim, cudaStream_t stream) {
             softmax_backward << <batch_size, 1, 0, stream >> > (grad_output, output, grad_input, batch_size, feature_dim);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchSoftmaxBackward: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
     }  // namespace activations
