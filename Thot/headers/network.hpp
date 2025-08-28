@@ -75,52 +75,51 @@ namespace Thot {
 			}
 		}
 
-		float train_batch(const std::vector<std::vector<float>>& inputs, const std::vector<std::vector<float>>& targets) {
-			float total_loss = 0.0f;
-			auto start = std::chrono::high_resolution_clock::now();
+float train_batch(const std::vector<std::vector<float>>& inputs, const std::vector<std::vector<float>>& targets) {
+float total_loss = 0.0f;
+auto start = std::chrono::high_resolution_clock::now();
 
-			for (size_t i = 0; i < inputs.size(); ++i) {
-				std::vector<int> input_shape = { 1, static_cast<int>(inputs[i].size()) };
-				std::vector<float> output = forward(inputs[i], input_shape);
+for (size_t i = 0; i < inputs.size(); ++i) {
+std::vector<int> input_shape = { 1, static_cast<int>(inputs[i].size()) };
+std::vector<float> output = forward(inputs[i], input_shape);
 
-				float loss = 0.0f;
-				std::vector<float> grad_output(output.size(), 0.0f);
+Utils::Tensor prediction_tensor({ 1, static_cast<int>(output.size()) });
+prediction_tensor.upload(output);
 
-				for (size_t j = 0; j < output.size(); ++j) {
-					float error = output[j] - targets[i][j];
-					loss += error * error;
-					grad_output[j] = 2.0f * error;
-				}
-				loss *= 0.5f;
-				total_loss += loss;
+Utils::Tensor target_tensor({ 1, static_cast<int>(targets[i].size()) });
+target_tensor.upload(targets[i]);
 
-				Utils::Tensor grad_tensor({ 1, static_cast<int>(output.size()) });
-				grad_tensor.upload(grad_output);
+float loss = loss_function_ ? loss_function_->compute(prediction_tensor, target_tensor) : 0.0f;
+total_loss += loss;
 
-				backward(grad_tensor);
+Utils::Tensor grad_tensor = loss_function_ ?
+loss_function_->compute_gradients(prediction_tensor, target_tensor) :
+Utils::Tensor({ 1, static_cast<int>(output.size()) });
 
-				if (i % 100 == 0 || i == inputs.size() - 1) {
-					auto now = std::chrono::high_resolution_clock::now();
-					double elapsed = std::chrono::duration<double>(now - start).count();
-					double progress = (i + 1) / static_cast<double>(inputs.size());
-					double eta = elapsed / progress - elapsed;
+backward(grad_tensor);
 
-					std::ostringstream oss;
-					oss << std::fixed << std::setprecision(2);
-					oss << "\rProgress: "
-						<< std::setw(3) << int(progress * 100) << "% | "
-						<< "Elapsed: " << std::setw(6) << elapsed << "s | "
-						<< "ETA: " << std::setw(6) << eta << "s";
+if (i % 100 == 0 || i == inputs.size() - 1) {
+auto now = std::chrono::high_resolution_clock::now();
+double elapsed = std::chrono::duration<double>(now - start).count();
+double progress = (i + 1) / static_cast<double>(inputs.size());
+double eta = elapsed / progress - elapsed;
 
-					std::cout << oss.str() << std::flush;
-				}
-			}
+std::ostringstream oss;
+oss << std::fixed << std::setprecision(2);
+oss << "\rProgress: "
+<< std::setw(3) << int(progress * 100) << "% | "
+<< "Elapsed: " << std::setw(6) << elapsed << "s | "
+<< "ETA: " << std::setw(6) << eta << "s";
 
-			// Clear the progress line before return
-			std::cout << "\r" << std::string(80, ' ') << "\r" << std::flush;
+std::cout << oss.str() << std::flush;
+}
+}
 
-			return total_loss / inputs.size();
-		}
+// Clear the progress line before return
+std::cout << "\r" << std::string(80, ' ') << "\r" << std::flush;
+
+return total_loss / inputs.size();
+}
 
 		
 
@@ -358,19 +357,23 @@ namespace Thot {
 					if (epoch % log_interval == 0 || epoch == epochs - 1) {
 						std::cout << "Epoch " << epoch << " - Average Loss: " << epoch_loss;
 
-						if (folds > 1) {
-							double val_loss = 0.0;
-							for (size_t i = 0; i < val_inputs.size(); ++i) {
-								std::vector<float> output = forward(val_inputs[i], { 1, static_cast<int>(val_inputs[i].size()) });
-								for (size_t j = 0; j < output.size(); ++j) {
-									float error = output[j] - val_targets[i][j];
-									val_loss += error * error;
-								}
-							}
-							val_loss = val_loss / (2.0 * val_inputs.size());
-							std::cout << " - Validation Loss: " << val_loss;
-							fold_losses.push_back(val_loss);
-						}
+if (folds > 1) {
+double val_loss = 0.0;
+for (size_t i = 0; i < val_inputs.size(); ++i) {
+std::vector<float> output = forward(val_inputs[i], { 1, static_cast<int>(val_inputs[i].size()) });
+
+Utils::Tensor prediction_tensor({ 1, static_cast<int>(output.size()) });
+prediction_tensor.upload(output);
+
+Utils::Tensor target_tensor({ 1, static_cast<int>(val_targets[i].size()) });
+target_tensor.upload(val_targets[i]);
+
+val_loss += loss_function_->compute(prediction_tensor, target_tensor);
+}
+val_loss /= val_inputs.size();
+std::cout << " - Validation Loss: " << val_loss;
+fold_losses.push_back(val_loss);
+}
 						std::cout << std::endl;
 					}
 				}
