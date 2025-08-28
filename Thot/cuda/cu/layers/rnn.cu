@@ -7,36 +7,49 @@
 namespace cuda {
     namespace layers {
 
-        __global__ void rnn_forward(const float* input, const float* weights_ih, const float* weights_hh,
-            const float* bias, float* hidden_state, float* output,
-            int batch_size, int seq_length, int input_size, int hidden_size) {
-
+        __global__ void rnn_forward(const float* input,
+                            const float* weights_ih,
+                            const float* weights_hh,
+                            const float* bias,
+                            const float* prev_hidden_state,
+                            float* hidden_state,
+                            float* output,
+                            int batch_size,
+                            int seq_length,
+                            int input_size,
+                            int hidden_size) {
             int idx = blockIdx.x * blockDim.x + threadIdx.x;
             if (idx >= batch_size * hidden_size) return;
 
-            int batch_idx = idx / hidden_size;
+            int batch_idx  = idx / hidden_size;
             int hidden_idx = idx % hidden_size;
 
-            float prev_h = hidden_state[hidden_idx];
-
             float sum = 0.0f;
+
+            // input contribution
             for (int i = 0; i < input_size; ++i) {
-                sum += input[batch_idx * input_size + i] * weights_ih[hidden_idx * input_size + i];
+                sum += input[batch_idx * input_size + i] *
+                       weights_ih[hidden_idx * input_size + i];
             }
 
+            // recurrent contribution (fix: include batch_idx offset)
             for (int h = 0; h < hidden_size; ++h) {
-                sum += prev_h * weights_hh[hidden_idx * hidden_size + h];
+                sum += prev_hidden_state[batch_idx * hidden_size + h] *
+                       weights_hh[hidden_idx * hidden_size + h];
             }
 
             if (bias != nullptr) sum += bias[hidden_idx];
-            
 
-            float activated = tanh(sum); // TODO: pass within rnn.hpp for modularity
+            float activated = tanhf(sum);
 
-            hidden_state[hidden_idx] = activated;
-
+            // fix: include batch offset when writing state
+            hidden_state[batch_idx * hidden_size + hidden_idx] = activated;
             output[batch_idx * hidden_size + hidden_idx] = activated;
+
         }
+
+
+
 
         // Backward pass kernels
         __global__ void rnn_backward_input(const float* grad_output, const float* weights_ih, float* grad_input, int batch_size, int seq_length, int input_size, int hidden_size) {
@@ -116,16 +129,55 @@ namespace cuda {
             grad_bias[hidden_idx] += sum;  // Accumulate gradient
         }
 
-        void launchRNNForward(const float* input, const float* weights_ih, const float* weights_hh, const float* bias, float* hidden_state, float* output, int batch_size, int seq_length, int input_size, int hidden_size, cudaStream_t stream) {
-
+        void launchRNNForward(const float* input,
+                      const float* weights_ih,
+                      const float* weights_hh,
+                      const float* bias,
+                      const float* prev_hidden_state,
+                      float* hidden_state,
+                      float* output,
+                      int batch_size,
+                      int seq_length,
+                      int input_size,
+                      int hidden_size,
+                      cudaStream_t stream) {
             const int blockSize = 256;
             const int numBlocks = (batch_size * hidden_size + blockSize - 1) / blockSize;
 
-            rnn_forward << <numBlocks, blockSize, 0, stream >> > (
-                input, weights_ih, weights_hh, bias, hidden_state, output,
-                batch_size, seq_length, input_size, hidden_size
-                );
+            rnn_forward<<<numBlocks, blockSize, 0, stream>>>(
+                input, weights_ih, weights_hh, bias,
+                prev_hidden_state, hidden_state, output,
+                batch_size, seq_length, input_size, hidden_size);
+
+            // Do NOT sync here, caller may manage stream
         }
+
+        // Default-stream variant (what RNNLayer::forward should call)
+        void launchRNNForward(const float* input,
+                              const float* weights_ih,
+                              const float* weights_hh,
+                              const float* bias,
+                              const float* prev_hidden_state,
+                              float* hidden_state,
+                              float* output,
+                              int batch_size,
+                              int seq_length,
+                              int input_size,
+                              int hidden_size) {
+            launchRNNForward(input, weights_ih, weights_hh, bias,
+                             prev_hidden_state, hidden_state, output,
+                             batch_size, seq_length, input_size, hidden_size,
+                             0); // legacy default stream
+
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in RNN: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
+        }
+
+
+
 
         void launchRNNBackwardInput(const float* grad_output, const float* weights_ih,
             float* grad_input, int batch_size, int seq_length, int input_size, int hidden_size,

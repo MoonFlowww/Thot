@@ -80,6 +80,10 @@ namespace cuda {
 
             fc_forward << <numBlocks, blockSize, 0, stream >> > (input, weights, bias, output, batch_size, input_size, output_size);
 
+            cudaError_t err = cudaDeviceSynchronize();
+            if (err != cudaSuccess) {
+                printf("CUDA error after FC forward: %s\n", cudaGetErrorString(err));
+            }
 
         }
 

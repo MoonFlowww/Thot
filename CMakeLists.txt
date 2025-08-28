@@ -8,6 +8,12 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
+
+
+enable_testing()
+
+
+
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/Thot/cuda/cuh
     ${CMAKE_CURRENT_SOURCE_DIR}/Thot/headers
@@ -107,3 +113,32 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
     CUDA_ARCHITECTURES 60-real;70-real;75-real;80-real;86-real;89-real;90
 )
+
+
+
+
+add_executable(rnn_sequence_test
+        tests/rnn_sequence_test.cpp
+        Thot/cuda/cu/layers/rnn.cu)
+
+target_include_directories(rnn_sequence_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/Thot/cuda/cuh
+        ${CMAKE_CURRENT_SOURCE_DIR}/Thot/headers
+)
+
+if(WIN32)
+    target_link_libraries(rnn_sequence_test PRIVATE
+            cudart_static)
+else()
+    target_include_directories(rnn_sequence_test PRIVATE ${CUDAToolkit_INCLUDE_DIRS})
+    target_link_libraries(rnn_sequence_test PRIVATE
+            CUDA::cudart
+            pthread
+            dl)
+endif()
+
+set_target_properties(rnn_sequence_test PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+        CUDA_ARCHITECTURES 60-real;70-real;75-real;80-real;86-real;89-real;90)
+
+add_test(NAME rnn_sequence_test COMMAND rnn_sequence_test)

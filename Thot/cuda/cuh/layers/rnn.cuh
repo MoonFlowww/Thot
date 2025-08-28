@@ -5,7 +5,7 @@
 namespace cuda {
     namespace layers {
         __global__ void rnn_forward(const float* input, const float* weights_ih, const float* weights_hh,
-            const float* bias, float* hidden_state, float* output,
+            const float* bias, const float* prev_hidden_state, float* hidden_state, float* output,
             int batch_size, int seq_length, int input_size, int hidden_size);
 
         // Backward pass kernels
@@ -25,7 +25,7 @@ namespace cuda {
             int batch_size, int hidden_size);
 
         void launchRNNForward(const float* input, const float* weights_ih, const float* weights_hh,
-            const float* bias, float* hidden_state, float* output,
+            const float* bias, const float* prev_hidden_state, float* hidden_state, float* output,
             int batch_size, int seq_length, int input_size, int hidden_size,
             cudaStream_t stream = 0);
 

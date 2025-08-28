@@ -176,6 +176,11 @@ namespace cuda {
                 out_channels, kernel_size, stride, padding,
                 out_height, out_width
                 );
+
+            cudaError_t err = cudaDeviceSynchronize();
+            if (err != cudaSuccess) {
+                printf("CUDA error after Conv2D forward: %s\n", cudaGetErrorString(err));
+            }
         }
 
         void launchConv2DBackwardInput(const float* grad_output, const float* weights,
