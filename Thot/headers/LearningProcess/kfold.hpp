@@ -27,6 +27,14 @@ public:
         std::vector<std::vector<float>> &train_targets,
         std::vector<std::vector<float>> &val_inputs,
         std::vector<std::vector<float>> &val_targets) const {
+        if (folds_ <= 1) {
+            train_inputs = inputs;
+            train_targets = targets;
+            val_inputs.clear();
+            val_targets.clear();
+            return;
+        }
+
         size_t fold_size = inputs.size() / folds_;
         size_t start_idx = fold * fold_size;
         size_t end_idx = (fold == folds_ - 1) ? inputs.size() : (fold + 1) * fold_size;

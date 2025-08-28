@@ -90,6 +90,11 @@ inline float Classic::train_epoch(
         std::cout << "\r" << std::string(80, ' ') << "\r" << std::flush;
     }
 
+    if (inputs.empty()) {
+        std::__throw_logic_error("inputs is empty");
+        return 0.0f;
+    }
+
     return total_loss / inputs.size();
 }
 

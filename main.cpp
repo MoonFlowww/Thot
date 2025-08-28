@@ -12,12 +12,12 @@ int main() {
 	model.add(Thot::Layer::FC(128 * 28 * 28, 10, Thot::Activation::Softmax, Thot::Initialization::LeCun));
 
 	*/
-	model.add(Thot::Layer::RNN(1, 8, 4, Thot::Activation::Tanh));
+	model.add(Thot::Layer::RNN(5, 8, 4, Thot::Activation::Tanh));
 	model.add(Thot::Layer::RNN(8, 16, 4, Thot::Activation::Tanh));
-	model.add(Thot::Layer::RNN(16, 8, 4, Thot::Activation::Tanh));
-	model.add(Thot::Layer::RNN(8, 4, 4, Thot::Activation::Tanh));
-	model.add(Thot::Layer::RNN(4, 1, 4, Thot::Activation::Tanh));
-	model.set_optimizer(Thot::Optimizer::Adam(0.01f));
+	model.add(Thot::Layer::RNN(16, 32, 4, Thot::Activation::Tanh));
+	model.add(Thot::Layer::RNN(32, 16, 4, Thot::Activation::Tanh));
+	model.add(Thot::Layer::RNN(16, 1, 4, Thot::Activation::Tanh));
+	model.set_optimizer(Thot::Optimizer::Adam(0.001f));
 	model.set_loss(Thot::Loss::MSE);
 	model.summary();
 
