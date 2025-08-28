@@ -116,7 +116,8 @@ namespace Thot {
 
 
 
-            Utils::Tensor output({ batch_size, hidden_size_ });
+            output_ = Utils::Tensor({ batch_size, hidden_size_ });
+            Utils::Tensor output_copy({ batch_size, hidden_size_ });
 
 
             float* h_src_ptr = static_cast<float*>(hidden_state_.data());
@@ -131,7 +132,7 @@ namespace Thot {
             float* bias_ptr = static_cast<float*>(bias_.data());
             float* prev_hidden_ptr = static_cast<float*>(prev_hidden_state_.data());
             float* hidden_ptr = static_cast<float*>(hidden_state_.data());
-            float* output_ptr = static_cast<float*>(output.data());
+            float* output_ptr = static_cast<float*>(output_.data());
 
             // TODO: comment debug
             auto h_input = input.download();
@@ -149,8 +150,12 @@ namespace Thot {
                 prev_hidden_ptr, hidden_ptr, output_ptr,
                 batch_size, seq_length_, input_size_, hidden_size_);
 
-            output_ = std::move(output);
-            return std::move(output_);
+            float* out_src_ptr = static_cast<float*>(output_.data());
+            float* out_dst_ptr = static_cast<float*>(output_copy.data());
+            size_t out_size = output_.size() * sizeof(float);
+            ::cudaMemcpy(out_dst_ptr, out_src_ptr, out_size, ::cudaMemcpyDeviceToDevice);
+
+            return output_copy;
         }
 
         Utils::Tensor backward(const Utils::Tensor& grad_output) override {
