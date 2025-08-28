@@ -42,11 +42,11 @@ namespace Thot {
 
 		static std::shared_ptr<Layer> FC(int input_size, int output_size, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "FeedForward");
 
-		static std::shared_ptr<Layer> Layer::RNN(int input_size, int hidden_size, int seq_length, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "Recurrent Layer");
+		static std::shared_ptr<Layer> RNN(int input_size, int hidden_size, int seq_length, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "Recurrent Layer");
 
-		static std::shared_ptr<Layer> Layer::Conv2D(int in_channels, int in_height, int in_width, int out_channels, int kernel_size, int stride, int padding, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "Conv2D");
+		static std::shared_ptr<Layer> Conv2D(int in_channels, int in_height, int in_width, int out_channels, int kernel_size, int stride, int padding, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "Conv2D");
 
-		static std::shared_ptr<Layer> Layer::RBM(int visible_size, int hidden_size, int cd_steps, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "Restriced Boltzman Layer");
+		static std::shared_ptr<Layer> RBM(int visible_size, int hidden_size, int cd_steps, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "Restriced Boltzman Layer");
 	};
 
 }

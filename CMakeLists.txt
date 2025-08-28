@@ -83,10 +83,16 @@ if(WIN32)
             odbccp32
     )
 else() # Linux
-    find_package(CUDA REQUIRED)
+    find_package(CUDAToolkit REQUIRED)
+
+    target_include_directories(${PROJECT_NAME}
+            PRIVATE
+            ${CUDAToolkit_INCLUDE_DIRS}
+    )
+
     target_link_libraries(${PROJECT_NAME}
-        PRIVATE
-            cudart
+            PRIVATE
+            CUDA::cudart
             pthread
             dl
     )

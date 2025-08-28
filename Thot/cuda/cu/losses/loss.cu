@@ -5,10 +5,9 @@
 
 #include "../../cuh/losses/loss.cuh"
 
-namespace cudathot {
+namespace cuda {
     namespace losses {
 
-        const int BLOCK_SIZE = 256;
 
 
         // Mean Squared Error (MSE)
