@@ -26,6 +26,7 @@ set(KERNEL_SOURCES
         Thot/cuda/cu/optimizations/adam.cu
         Thot/cuda/cu/optimizations/sgd.cu
         Thot/cuda/cu/optimizations/sgdm.cu
+        Thot/cuda/cu/layers/rnn_kernels.cu
 )
 
 set(HEADERS
@@ -59,6 +60,7 @@ set(HEADERS
         Thot/headers/utils/translators.h
         Thot/headers/LearningProcess/batch.hpp
         Thot/headers/LearningProcess/kfold.hpp
+        Thot/cuda/cuh/layers/rnn_kernels.cuh
 )
 
 # ------------------------------
