@@ -198,16 +198,16 @@ namespace cuda {
             int blockSize = 256;
             int numBlocks = (size + blockSize - 1) / blockSize;
             mae << <numBlocks, blockSize, 0, stream >> > (predictions, targets, loss, size);
-            //cudaError_t err = cudaGetLastError();
-            //if (err != cudaSuccess) printf("Kernel launch error in MAE Gradient: %s\n", cudaGetErrorString(err));
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) printf("Kernel launch error in MAE Gradient: %s\n", cudaGetErrorString(err));
         }
 
         void launchMAEGradient(const float* predictions, const float* targets, float* gradients, int size, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (size + blockSize - 1) / blockSize;
             maeGradient << <numBlocks, blockSize, 0, stream >> > (predictions, targets, gradients, size);
-            //cudaError_t err = cudaGetLastError();
-            //if (err != cudaSuccess) printf("Kernel launch error in MAE Gradient: %s\n", cudaGetErrorString(err));
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) printf("Kernel launch error in MAE Gradient: %s\n", cudaGetErrorString(err));
         }
 
         void launchBinaryCrossEntropy(const float* predictions, const float* targets, float* loss, int size, float epsilon, cudaStream_t stream) {

@@ -7,7 +7,6 @@
 
 int main() {
     using namespace Thot;
-    std::cout << "Running RNN sequence test" << std::endl;
 
     RNNLayer rnn(1, 1, 1, Activation::Tanh, Initialization::Ones);
     rnn.reset_hidden_state();
