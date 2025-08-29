@@ -176,11 +176,11 @@ namespace cuda {
                 out_channels, kernel_size, stride, padding,
                 out_height, out_width
                 );
-
-            cudaError_t err = cudaDeviceSynchronize();
+            cudaError_t err = cudaGetLastError();
             if (err != cudaSuccess) {
-                printf("CUDA error after Conv2D forward: %s\n", cudaGetErrorString(err));
+                printf("Kernel launch error in launchConv2DForward: %s\n", cudaGetErrorString(err));
             }
+            cudaDeviceSynchronize();
         }
 
         void launchConv2DBackwardInput(const float* grad_output, const float* weights,
@@ -198,6 +198,11 @@ namespace cuda {
                 out_channels, kernel_size, stride, padding,
                 out_height, out_width
                 );
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchConv2DBackwardInput: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchConv2DBackwardWeights(const float* input, const float* grad_output,
@@ -215,6 +220,11 @@ namespace cuda {
                 out_channels, kernel_size, stride, padding,
                 out_height, out_width
                 );
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchConv2DBackwardWeights: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchConv2DBackwardBias(const float* grad_output, float* grad_bias,
@@ -228,6 +238,11 @@ namespace cuda {
                 grad_output, grad_bias,
                 batch_size, out_channels, out_height, out_width
                 );
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchConv2DBackwardBias: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
     }
 }

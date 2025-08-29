@@ -79,11 +79,11 @@ namespace cuda {
 
 
             fc_forward << <numBlocks, blockSize, 0, stream >> > (input, weights, bias, output, batch_size, input_size, output_size);
-
-            cudaError_t err = cudaDeviceSynchronize();
+            cudaError_t err = cudaGetLastError();
             if (err != cudaSuccess) {
-                printf("CUDA error after FC forward: %s\n", cudaGetErrorString(err));
+                printf("Kernel launch error in launchFCForward: %s\n", cudaGetErrorString(err));
             }
+            cudaDeviceSynchronize();
 
         }
 
@@ -95,7 +95,11 @@ namespace cuda {
 
 
             fc_backward_input << <numBlocks, blockSize, 0, stream >> > (grad_output, weights, grad_input, batch_size, input_size, output_size);
-
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchFCBackwardInput: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchFCBackwardWeights(const float* input, const float* grad_output,
@@ -106,7 +110,11 @@ namespace cuda {
 
 
             fc_backward_weights << <numBlocks, blockSize, 0, stream >> > (input, grad_output, grad_weights, batch_size, input_size, output_size);
-
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchFCBackwardWeights: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchFCBackwardBias(const float* grad_output, float* grad_bias, int batch_size, int output_size, cudaStream_t stream) {
@@ -114,7 +122,11 @@ namespace cuda {
             const int numBlocks = (output_size + blockSize - 1) / blockSize;
 
             fc_backward_bias << <numBlocks, blockSize, 0, stream >> > (grad_output, grad_bias, batch_size, output_size);
-
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchFCBackwardBias: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
 

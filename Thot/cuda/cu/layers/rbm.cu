@@ -125,7 +125,11 @@ namespace cuda {
                 visible, weights, hidden_bias, hidden_activations,
                 batch_size, visible_size, hidden_size
                 );
-
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchRBMVisibleToHidden: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
             // Note: activation function and sampling will be applied in the RBMLayer class
         }
 
@@ -141,7 +145,11 @@ namespace cuda {
                 hidden_states, weights, visible_bias, visible_activations,
                 batch_size, visible_size, hidden_size
                 );
-
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchRBMHiddenToVisible: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchRBMSampleStates(const float* probs, float* states, int size, cudaStream_t stream) {
@@ -149,6 +157,11 @@ namespace cuda {
             const int numBlocks = (size + blockSize - 1) / blockSize;
 
             rbm_sample_states << <numBlocks, blockSize, 0, stream >> > (probs, states, size);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchRBMSampleStates: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
 
         void launchRBMComputeGradients(const float* visible_data, const float* visible_recon,
@@ -167,6 +180,11 @@ namespace cuda {
                 grad_weights, grad_visible_bias, grad_hidden_bias,
                 batch_size, visible_size, hidden_size
                 );
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("Kernel launch error in launchRBMComputeGradients: %s\n", cudaGetErrorString(err));
+            }
+            cudaDeviceSynchronize();
         }
     }
 }

@@ -183,7 +183,8 @@ namespace cuda {
             int numBlocks = (size + blockSize - 1) / blockSize;
             mse << <numBlocks, blockSize, 0, stream >> > (predictions, targets, loss, size);
             cudaError_t err = cudaGetLastError();
-            if (err != cudaSuccess) printf("Kernel launch error in MSE: %s\n", cudaGetErrorString(err));
+            if (err != cudaSuccess) printf("Kernel launch error in launchMSE: %s\n", cudaGetErrorString(err));
+            cudaDeviceSynchronize();
         }
 
         void launchMSEGradient(const float* predictions, const float* targets, float* gradients, int size, cudaStream_t stream) {
@@ -191,7 +192,8 @@ namespace cuda {
             int numBlocks = (size + blockSize - 1) / blockSize;
             mseGradient << <numBlocks, blockSize, 0, stream >> > (predictions, targets, gradients, size);
             cudaError_t err = cudaGetLastError();
-            if (err != cudaSuccess) printf("Kernel launch error in MSE Gradient: %s\n", cudaGetErrorString(err));
+            if (err != cudaSuccess) printf("Kernel launch error in launchMSEGradient: %s\n", cudaGetErrorString(err));
+            cudaDeviceSynchronize();
         }
 
         void launchMAE(const float* predictions, const float* targets, float* loss, int size, cudaStream_t stream) {
@@ -199,7 +201,8 @@ namespace cuda {
             int numBlocks = (size + blockSize - 1) / blockSize;
             mae << <numBlocks, blockSize, 0, stream >> > (predictions, targets, loss, size);
             cudaError_t err = cudaGetLastError();
-            if (err != cudaSuccess) printf("Kernel launch error in MAE Gradient: %s\n", cudaGetErrorString(err));
+            if (err != cudaSuccess) printf("Kernel launch error in launchMAE: %s\n", cudaGetErrorString(err));
+            cudaDeviceSynchronize();
         }
 
         void launchMAEGradient(const float* predictions, const float* targets, float* gradients, int size, cudaStream_t stream) {
@@ -207,79 +210,116 @@ namespace cuda {
             int numBlocks = (size + blockSize - 1) / blockSize;
             maeGradient << <numBlocks, blockSize, 0, stream >> > (predictions, targets, gradients, size);
             cudaError_t err = cudaGetLastError();
-            if (err != cudaSuccess) printf("Kernel launch error in MAE Gradient: %s\n", cudaGetErrorString(err));
+            if (err != cudaSuccess) printf("Kernel launch error in launchMAEGradient: %s\n", cudaGetErrorString(err));
+            cudaDeviceSynchronize();
         }
 
         void launchBinaryCrossEntropy(const float* predictions, const float* targets, float* loss, int size, float epsilon, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (size + blockSize - 1) / blockSize;
             binaryCrossEntropy << <numBlocks, blockSize, 0, stream >> > (predictions, targets, loss, size, epsilon);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) printf("Kernel launch error in launchBinaryCrossEntropy: %s\n", cudaGetErrorString(err));
+            cudaDeviceSynchronize();
         }
 
         void launchBinaryCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int size, float epsilon, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (size + blockSize - 1) / blockSize;
             binaryCrossEntropyGradient << <numBlocks, blockSize, 0, stream >> > (predictions, targets, gradients, size, epsilon);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) printf("Kernel launch error in launchBinaryCrossEntropyGradient: %s\n", cudaGetErrorString(err));
+            cudaDeviceSynchronize();
         }
 
         void launchCategoricalCrossEntropy(const float* predictions, const float* targets, float* loss, int batch_size, int num_classes, float epsilon, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (batch_size + blockSize - 1) / blockSize;
             categoricalCrossEntropy << <numBlocks, blockSize, 0, stream >> > (predictions, targets, loss, batch_size, num_classes, epsilon);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) printf("Kernel launch error in launchCategoricalCrossEntropy: %s\n", cudaGetErrorString(err));
+            cudaDeviceSynchronize();
         }
 
         void launchCategoricalCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int batch_size, int num_classes, float epsilon, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (batch_size * num_classes + blockSize - 1) / blockSize;
             categoricalCrossEntropyGradient << <numBlocks, blockSize, 0, stream >> > (predictions, targets, gradients, batch_size, num_classes, epsilon);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) printf("Kernel launch error in launchCategoricalCrossEntropyGradient: %s\n", cudaGetErrorString(err));
+            cudaDeviceSynchronize();
         }
 
         void launchSparseCategoricalCrossEntropy(const float* predictions, const float* targets, float* loss, int batch_size, int num_classes, float epsilon, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (batch_size + blockSize - 1) / blockSize;
             sparseCategoricalCrossEntropy << <numBlocks, blockSize, 0, stream >> > (predictions, targets, loss, batch_size, num_classes, epsilon);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) printf("Kernel launch error in launchSparseCategoricalCrossEntropy: %s\n", cudaGetErrorString(err));
+            cudaDeviceSynchronize();
         }
 
         void launchSparseCategoricalCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int batch_size, int num_classes, float epsilon, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (batch_size * num_classes + blockSize - 1) / blockSize;
             sparseCategoricalCrossEntropyGradient << <numBlocks, blockSize, 0, stream >> > (predictions, targets, gradients, batch_size, num_classes, epsilon);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) printf("Kernel launch error in launchSparseCategoricalCrossEntropyGradient: %s\n", cudaGetErrorString(err));
+            cudaDeviceSynchronize();
         }
 
         void launchHinge(const float* predictions, const float* targets, float* loss, int size, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (size + blockSize - 1) / blockSize;
             hinge << <numBlocks, blockSize, 0, stream >> > (predictions, targets, loss, size);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) printf("Kernel launch error in launchHinge: %s\n", cudaGetErrorString(err));
+            cudaDeviceSynchronize();
         }
 
         void launchHingeGradient(const float* predictions, const float* targets, float* gradients, int size, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (size + blockSize - 1) / blockSize;
             hingeGradient << <numBlocks, blockSize, 0, stream >> > (predictions, targets, gradients, size);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) printf("Kernel launch error in launchHingeGradient: %s\n", cudaGetErrorString(err));
+            cudaDeviceSynchronize();
         }
 
         void launchHuber(const float* predictions, const float* targets, float* loss, int size, float delta, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (size + blockSize - 1) / blockSize;
             huber << <numBlocks, blockSize, 0, stream >> > (predictions, targets, loss, size, delta);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) printf("Kernel launch error in launchHuber: %s\n", cudaGetErrorString(err));
+            cudaDeviceSynchronize();
         }
 
         void launchHuberGradient(const float* predictions, const float* targets, float* gradients, int size, float delta, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (size + blockSize - 1) / blockSize;
             huberGradient << <numBlocks, blockSize, 0, stream >> > (predictions, targets, gradients, size, delta);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) printf("Kernel launch error in launchHuberGradient: %s\n", cudaGetErrorString(err));
+            cudaDeviceSynchronize();
         }
 
         void launchKLDivergence(const float* predictions, const float* targets, float* loss, int size, float epsilon, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (size + blockSize - 1) / blockSize;
             klDivergence << <numBlocks, blockSize, 0, stream >> > (predictions, targets, loss, size, epsilon);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) printf("Kernel launch error in launchKLDivergence: %s\n", cudaGetErrorString(err));
+            cudaDeviceSynchronize();
         }
 
         void launchKLDivergenceGradient(const float* predictions, const float* targets, float* gradients, int size, float epsilon, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (size + blockSize - 1) / blockSize;
             klDivergenceGradient << <numBlocks, blockSize, 0, stream >> > (predictions, targets, gradients, size, epsilon);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) printf("Kernel launch error in launchKLDivergenceGradient: %s\n", cudaGetErrorString(err));
+            cudaDeviceSynchronize();
         }
 
 

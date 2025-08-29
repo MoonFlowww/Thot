@@ -132,9 +132,10 @@ namespace cuda::layers {
             input, weights_ih, weights_hh, bias,
             prev_hidden_state, hidden_state, output,
             batch_size, seq_length, input_size, hidden_size);
-
-        //cudaError_t err = cudaGetLastError();
-        //if (err != cudaSuccess) printf("Kernel launch error in RNN: %s\n", cudaGetErrorString(err));
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("Kernel launch error in launchRNNForward: %s\n", cudaGetErrorString(err));
+        }
         cudaDeviceSynchronize();
         float host_first = 0.0f;
         cudaMemcpy(&host_first, output, sizeof(float), cudaMemcpyDeviceToHost);
@@ -155,6 +156,11 @@ namespace cuda::layers {
             grad_output, weights_ih, grad_input,
             batch_size, seq_length, input_size, hidden_size
         );
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("Kernel launch error in launchRNNBackwardInput: %s\n", cudaGetErrorString(err));
+        }
+        cudaDeviceSynchronize();
     }
 
     void launchRNNBackwardHidden(const float* grad_output, const float* weights_hh,
@@ -168,6 +174,11 @@ namespace cuda::layers {
             grad_output, weights_hh, grad_hidden,
             batch_size, hidden_size
         );
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("Kernel launch error in launchRNNBackwardHidden: %s\n", cudaGetErrorString(err));
+        }
+        cudaDeviceSynchronize();
     }
 
     void launchRNNBackwardWeightsIH(const float* input, const float* grad_hidden,
@@ -181,6 +192,11 @@ namespace cuda::layers {
             input, grad_hidden, grad_weights_ih,
             batch_size, seq_length, input_size, hidden_size
         );
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("Kernel launch error in launchRNNBackwardWeightsIH: %s\n", cudaGetErrorString(err));
+        }
+        cudaDeviceSynchronize();
     }
 
     void launchRNNBackwardWeightsHH(const float* hidden_state, const float* grad_hidden,
@@ -194,6 +210,11 @@ namespace cuda::layers {
             hidden_state, grad_hidden, grad_weights_hh,
             batch_size, hidden_size
         );
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("Kernel launch error in launchRNNBackwardWeightsHH: %s\n", cudaGetErrorString(err));
+        }
+        cudaDeviceSynchronize();
     }
 
     void launchRNNBackwardBias(const float* grad_hidden, float* grad_bias,
@@ -207,5 +228,10 @@ namespace cuda::layers {
             grad_hidden, grad_bias,
             batch_size, hidden_size
         );
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("Kernel launch error in launchRNNBackwardBias: %s\n", cudaGetErrorString(err));
+        }
+        cudaDeviceSynchronize();
     }
 }
