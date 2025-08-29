@@ -1,8 +1,12 @@
 #pragma once
 
+
+#include <sstream>
+#include <thrust/device_ptr.h>
+#include <thrust/reduce.h>
 #include "../tensor.hpp"
 #include "../../cuda/cuh/losses/loss.cuh"
-#include <sstream>
+
 
 namespace Thot {
     enum class Loss {
@@ -57,8 +61,9 @@ namespace Thot {
         }
 
         float compute(const Utils::Tensor& predictions, const Utils::Tensor& targets) {
+            size_t buffer_size = predictions.size();
             float* loss = nullptr;
-            cudaMalloc(&loss, sizeof(float));
+            cudaMalloc(&loss, buffer_size * sizeof(float));
 
             switch (Loss_) {
             case Loss::MSE:
@@ -141,10 +146,25 @@ namespace Thot {
                 break;
             }
 
+            size_t reduce_size = predictions.size();
+            if (Loss_ == Loss::CategoricalCrossEntropy || Loss_ == Loss::SparseCategoricalCrossEntropy) {
+                reduce_size = predictions.shape()[0];
+            }
+
             float result;
             cudaMemcpy(&result, loss, sizeof(float), cudaMemcpyDeviceToHost);
             cudaFree(loss);
-            return result;
+            int normalizer = 0;
+            switch (Loss_) {
+                case Loss::CategoricalCrossEntropy:
+                case Loss::SparseCategoricalCrossEntropy:
+                    normalizer = predictions.shape()[0];
+                    break;
+                default:
+                    normalizer = predictions.size();
+                    break;
+            }
+            return result / static_cast<float>(normalizer);
         }
 
         Utils::Tensor compute_gradients(const Utils::Tensor& predictions, const Utils::Tensor& targets) {
