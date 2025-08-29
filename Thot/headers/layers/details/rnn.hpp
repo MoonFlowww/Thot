@@ -135,6 +135,7 @@ namespace Thot {
             float* output_ptr = static_cast<float*>(output_.data());
 
             // TODO: comment debug
+            /*
             auto h_input = input.download();
             std::cout << "Input[0] host after upload: " << h_input[0] << std::endl;
 
@@ -143,7 +144,7 @@ namespace Thot {
 
             auto h_wih = weights_ih_.download();
             std::cout << "W_ih[0]: " << h_wih[0] << std::endl;
-
+            */
 
             ::cuda::layers::launchRNNForward(
                 input_ptr, weights_ih_ptr, weights_hh_ptr, bias_ptr,

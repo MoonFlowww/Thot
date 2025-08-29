@@ -17,6 +17,7 @@ namespace cuda {
                 float diff = predictions[idx] - targets[idx];
                 loss[idx] = 0.5f * diff * diff;
             }
+            printf("Error MSE: %f/n", loss[idx]);
         }
 
         __global__ void mseGradient(const float* predictions, const float* targets, float* gradients, int size) {
@@ -24,6 +25,7 @@ namespace cuda {
             if (idx < size) {
                 gradients[idx] = predictions[idx] - targets[idx];
             }
+            printf("Gradient: %f\n", gradients[idx]);
         }
 
         // Mean Absolute Error (MAE)
@@ -180,24 +182,32 @@ namespace cuda {
             int blockSize = 256;
             int numBlocks = (size + blockSize - 1) / blockSize;
             mse << <numBlocks, blockSize, 0, stream >> > (predictions, targets, loss, size);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) printf("Kernel launch error in MSE: %s\n", cudaGetErrorString(err));
         }
 
         void launchMSEGradient(const float* predictions, const float* targets, float* gradients, int size, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (size + blockSize - 1) / blockSize;
             mseGradient << <numBlocks, blockSize, 0, stream >> > (predictions, targets, gradients, size);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) printf("Kernel launch error in MSE Gradient: %s\n", cudaGetErrorString(err));
         }
 
         void launchMAE(const float* predictions, const float* targets, float* loss, int size, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (size + blockSize - 1) / blockSize;
             mae << <numBlocks, blockSize, 0, stream >> > (predictions, targets, loss, size);
+            //cudaError_t err = cudaGetLastError();
+            //if (err != cudaSuccess) printf("Kernel launch error in MAE Gradient: %s\n", cudaGetErrorString(err));
         }
 
         void launchMAEGradient(const float* predictions, const float* targets, float* gradients, int size, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (size + blockSize - 1) / blockSize;
             maeGradient << <numBlocks, blockSize, 0, stream >> > (predictions, targets, gradients, size);
+            //cudaError_t err = cudaGetLastError();
+            //if (err != cudaSuccess) printf("Kernel launch error in MAE Gradient: %s\n", cudaGetErrorString(err));
         }
 
         void launchBinaryCrossEntropy(const float* predictions, const float* targets, float* loss, int size, float epsilon, cudaStream_t stream) {

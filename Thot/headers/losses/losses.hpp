@@ -37,7 +37,7 @@ namespace Thot {
             std::ostringstream oss;
             oss << "Eps=" << epsilon_;
             if (Loss_ == Loss::Huber) {
-                oss << ", Delta=" << delta_;
+                oss << "\nDelta=" << delta_;
             }
             return oss.str();
         }

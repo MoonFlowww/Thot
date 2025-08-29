@@ -66,18 +66,18 @@ set(HEADERS
 # ------------------------------
 # Kernel static library
 # ------------------------------
-add_library(thot_kernels STATIC ${KERNEL_SOURCES})
+add_library(ThotLib STATIC ${KERNEL_SOURCES})
 
-set_target_properties(thot_kernels PROPERTIES
+set_target_properties(ThotLib PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
-        CUDA_ARCHITECTURES 60-real;70-real;75-real;80-real;86-real;89-real;90
+        CUDA_ARCHITECTURES 60-real;70-real;75-real;80-real;86-real;89-real;90;
 )
 
 # ------------------------------
 # Main executable
 # ------------------------------
 add_executable(${PROJECT_NAME} main.cpp ${HEADERS})
-target_link_libraries(${PROJECT_NAME} PRIVATE thot_kernels)
+target_link_libraries(${PROJECT_NAME} PRIVATE ThotLib)
 
 target_compile_definitions(${PROJECT_NAME}
         PRIVATE
@@ -115,7 +115,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 # rnn_sequence_test
 # ------------------------------
 add_executable(rnn_sequence_test tests/rnn_sequence_test.cpp)
-target_link_libraries(rnn_sequence_test PRIVATE thot_kernels)
+target_link_libraries(rnn_sequence_test PRIVATE ThotLib)
 
 if(WIN32)
     target_link_libraries(rnn_sequence_test PRIVATE cudart_static cudadevrt)

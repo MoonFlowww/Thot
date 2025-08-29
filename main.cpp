@@ -18,7 +18,7 @@ int main() {
 	model.add(Thot::Layer::RNN(32, 16, 4, Thot::Activation::Tanh));
 	model.add(Thot::Layer::RNN(16, 1, 4, Thot::Activation::Tanh));
 	model.set_optimizer(Thot::Optimizer::Adam(0.001f));
-	model.set_loss(Thot::Loss::MSE);
+	model.set_loss(Thot::Loss::MAE);
 	model.summary();
 
 

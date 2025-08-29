@@ -21,14 +21,12 @@ namespace cuda::layers {
             prev_hidden_state, hidden_state, output,
             batch_size, seq_length, input_size, hidden_size);
 
-        cudaError_t err = cudaGetLastError();
-        if (err != cudaSuccess) {
-            printf("Kernel launch error in RNN: %s\n", cudaGetErrorString(err));
-        }
+        //cudaError_t err = cudaGetLastError();
+        //if (err != cudaSuccess) printf("Kernel launch error in RNN: %s\n", cudaGetErrorString(err));
         cudaDeviceSynchronize();
         float host_first = 0.0f;
         cudaMemcpy(&host_first, output, sizeof(float), cudaMemcpyDeviceToHost);
-        printf("rnn_forward output[0] = %f\n", host_first);
+        //printf("rnn_forward output[0] = %f\n", host_first);
     }
 
 
