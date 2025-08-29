@@ -87,75 +87,16 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 )
 
 ######################TESTs######################
-#RNN tests
-add_executable(rnn_test tests/rnn_test.cpp)
-target_link_libraries(rnn_test PRIVATE
+
+add_executable(cuda_tests tests/cuda_tests.cpp)
+target_link_libraries(cuda_tests PRIVATE
         -Wl,--whole-archive thot_kernels -Wl,--no-whole-archive
         CUDA::cudart
-        pthread dl
+        pthread
+        dl
 )
-set_target_properties(rnn_test PROPERTIES
+set_target_properties(cuda_tests PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
 )
 
-add_test(NAME rnn_test COMMAND rnn_test)
-
-# FC tests
-add_executable(fc_test tests/fc_test.cpp)
-target_link_libraries(fc_test PRIVATE
-        -Wl,--whole-archive thot_kernels -Wl,--no-whole-archive
-        CUDA::cudart
-        pthread dl
-)
-set_target_properties(fc_test PROPERTIES
-        CUDA_SEPARABLE_COMPILATION ON
-)
-add_test(NAME fc_test COMMAND fc_test)
-
-# Conv2D tests
-add_executable(conv2d_test tests/conv2d_test.cpp)
-target_link_libraries(conv2d_test PRIVATE
-        -Wl,--whole-archive thot_kernels -Wl,--no-whole-archive
-        CUDA::cudart
-        pthread dl
-)
-set_target_properties(conv2d_test PROPERTIES
-        CUDA_SEPARABLE_COMPILATION ON
-)
-add_test(NAME conv2d_test COMMAND conv2d_test)
-
-# RBM tests
-add_executable(rbm_test tests/rbm_test.cpp)
-target_link_libraries(rbm_test PRIVATE
-        -Wl,--whole-archive thot_kernels -Wl,--no-whole-archive
-        CUDA::cudart
-        pthread dl
-)
-set_target_properties(rbm_test PROPERTIES
-        CUDA_SEPARABLE_COMPILATION ON
-)
-add_test(NAME rbm_test COMMAND rbm_test)
-
-# Activation tests
-add_executable(activations_test tests/activations_test.cpp)
-target_link_libraries(activations_test PRIVATE
-        -Wl,--whole-archive thot_kernels -Wl,--no-whole-archive
-        CUDA::cudart
-        pthread dl
-)
-set_target_properties(activations_test PROPERTIES
-        CUDA_SEPARABLE_COMPILATION ON
-)
-add_test(NAME activations_test COMMAND activations_test)
-
-# Loss tests
-add_executable(loss_test tests/loss_test.cpp)
-target_link_libraries(loss_test PRIVATE
-        -Wl,--whole-archive thot_kernels -Wl,--no-whole-archive
-        CUDA::cudart
-        pthread dl
-)
-set_target_properties(loss_test PROPERTIES
-        CUDA_SEPARABLE_COMPILATION ON
-)
-add_test(NAME loss_test COMMAND loss_test)
+add_test(NAME cuda_tests COMMAND cuda_tests)
