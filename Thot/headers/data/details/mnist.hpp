@@ -98,8 +98,8 @@ namespace Thot {
             float ratio = 1.0f
         ) {
             std::cout << "Loading MNIST Training Set...\n";
-            std::string images_path = base_path + "\\train-images.idx3-ubyte";
-            std::string labels_path = base_path + "\\train-labels.idx1-ubyte";
+            std::string images_path = base_path + "/train-images.idx3-ubyte";
+            std::string labels_path = base_path + "/train-labels.idx1-ubyte";
             return load_mnist(images_path, labels_path, 10, ratio);
         }
 
@@ -108,8 +108,8 @@ namespace Thot {
             float ratio = 1.0f
         ) {
             std::cout << "Loading MNIST Test Set...\n";
-            std::string images_path = base_path + "\\t10k-images.idx3-ubyte";
-            std::string labels_path = base_path + "\\t10k-labels.idx1-ubyte";
+            std::string images_path = base_path + "/t10k-images.idx3-ubyte";
+            std::string labels_path = base_path + "/t10k-labels.idx1-ubyte";
             return load_mnist(images_path, labels_path, 10, ratio);
         }
     }

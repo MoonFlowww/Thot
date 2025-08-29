@@ -24,6 +24,10 @@ namespace Thot {
 
             switch (type) {
 
+            case Activation::Linear:
+                ::cudaMemcpy(output_ptr, input_ptr, size * sizeof(float), ::cudaMemcpyDeviceToDevice);
+                break;
+
             case Activation::ReLU:
                 ::cuda::activations::launchReluForward(input_ptr, output_ptr, size);
                 break;
