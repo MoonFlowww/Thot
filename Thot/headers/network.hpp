@@ -24,7 +24,6 @@
 #include "optimizations/optimizations.hpp"
 
 #include "utils/translators.h"
-#include "utils/progressbar.h"
 
 #include "LearningProcess/batch.hpp"
 #include "LearningProcess/kfold.hpp"

@@ -60,7 +60,6 @@ set(HEADERS
         Thot/headers/optimizations/optimizations.hpp
         Thot/headers/tensor.hpp
         Thot/Thot.hpp
-        Thot/headers/utils/progressbar.h
         Thot/headers/utils/translators.h
         Thot/headers/LearningProcess/batch.hpp
         Thot/headers/LearningProcess/kfold.hpp
