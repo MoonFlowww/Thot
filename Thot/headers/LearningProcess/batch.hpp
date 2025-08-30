@@ -23,9 +23,10 @@ public:
 
     template <typename Net>
     float train_epoch(Net &net,
-                      const std::vector<std::vector<float>> &inputs,
-                      const std::vector<std::vector<float>> &targets,
-                      int log_interval, bool verbose) const;
+                    const std::vector<std::vector<float>> &inputs,
+                    const std::vector<std::vector<float>> &targets,
+                    int log_interval, bool verbose,
+                    int current_epoch, int total_epochs) const;
 
 private:
     int batch_size_;
@@ -39,12 +40,15 @@ namespace Thot {
 namespace Batch {
 
 template <typename Net>
-inline float Classic::train_epoch(
-    Net &net,
-    const std::vector<std::vector<float>> &inputs,
-    const std::vector<std::vector<float>> &targets,
-    int log_interval,
-    bool verbose) const {
+    inline float Classic::train_epoch(
+        Net &net,
+        const std::vector<std::vector<float>> &inputs,
+        const std::vector<std::vector<float>> &targets,
+        int log_interval,
+        bool verbose,
+        int current_epoch,
+        int total_epochs) const {
+
     float total_loss = 0.0f;
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -76,10 +80,12 @@ inline float Classic::train_epoch(
 
                 std::ostringstream oss;
                 oss << std::fixed << std::setprecision(2);
-                oss << "\rProgress: " << std::setw(3) << int(progress * 100)
+                oss << "\r[" << current_epoch << "] -> "
+                    << "Progress: " << std::setw(3) << int(progress * 100)
                     << "% | "
                     << "Elapsed: " << std::setw(6) << elapsed << "s | "
-                    << "ETA: " << std::setw(6) << eta << "s";
+                    << "ETA: " << std::setw(6) << eta << "s | "
+                    ;
 
                 std::cout << oss.str() << std::flush;
             }

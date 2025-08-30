@@ -32,7 +32,7 @@ int main() {
 	model.add(Thot::Layer::RNN(64, 64, 4, Thot::Activation::Tanh, Thot::Initialization::Uniform));
 	model.add(Thot::Layer::RNN(64, 32, 4, Thot::Activation::Tanh, Thot::Initialization::Uniform));
 	model.add(Thot::Layer::RNN(32, 16, 4, Thot::Activation::Tanh, Thot::Initialization::Uniform));
-	model.add(Thot::Layer::RNN(8, 1, 4, Thot::Activation::Sigmoid, Thot::Initialization::Uniform));
+	model.add(Thot::Layer::RNN(16, 1, 4, Thot::Activation::Sigmoid, Thot::Initialization::Uniform));
 
 
     model.set_optimizer(Thot::Optimizer::Adam(0.001f));

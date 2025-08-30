@@ -50,7 +50,7 @@ namespace cuda {
             for (int b = 0; b < batch_size; ++b) {
                 sum += input[b * input_size + input_idx] * grad_output[b * output_size + output_idx];
             }
-            grad_weights[idx] = sum;
+            grad_weights[idx] = sum / static_cast<float>(batch_size);
         }
 
         __global__ void fc_backward_bias(const float* grad_output, float* grad_bias,
@@ -62,7 +62,7 @@ namespace cuda {
             for (int b = 0; b < batch_size; ++b) {
                 sum += grad_output[b * output_size + output_idx];
             }
-            grad_bias[output_idx] = sum;
+            grad_bias[output_idx] = sum / static_cast<float>(batch_size);
         }
 
 

@@ -82,7 +82,7 @@ namespace cuda {
                     negative_phase += visible_recon[b * visible_size + v] * hidden_recon_probs[b * hidden_size + h];
                 }
 
-                grad_weights[idx] = (positive_phase - negative_phase) / batch_size;
+                grad_weights[idx] = (positive_phase - negative_phase) / static_cast<float>(batch_size);
             }
             else if (idx < hidden_size * visible_size + visible_size) {
                 int v = idx - (hidden_size * visible_size);
@@ -95,7 +95,7 @@ namespace cuda {
                     negative_phase += visible_recon[b * visible_size + v];
                 }
 
-                grad_visible_bias[v] = (positive_phase - negative_phase) / batch_size;
+                grad_visible_bias[v] = (positive_phase - negative_phase) / static_cast<float>(batch_size);
             }
             else if (idx < hidden_size * visible_size + visible_size + hidden_size) {
                 int h = idx - (hidden_size * visible_size + visible_size);

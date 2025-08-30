@@ -134,7 +134,7 @@ namespace cuda {
                 }
             }
 
-            grad_weights[idx] = sum;
+            grad_weights[idx] = sum / static_cast<float>(batch_size);
         }
 
         __global__ void conv2d_backward_bias(const float* grad_output, float* grad_bias,
@@ -158,7 +158,7 @@ namespace cuda {
                 }
             }
 
-            grad_bias[oc] = sum;
+            grad_bias[oc] = sum / static_cast<float>(batch_size);
         }
 
         void launchConv2DForward(const float* input, const float* weights, const float* bias,

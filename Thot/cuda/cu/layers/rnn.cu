@@ -56,7 +56,7 @@ namespace cuda::layers {
             sum += grad_output[batch_idx * hidden_size + h] * weights_ih[h * input_size + input_idx];
         }
 
-        grad_input[idx] = sum;
+        grad_input[idx] = sum / static_cast<float>(batch_size);
     }
 
     __global__ void rnn_backward_hidden(const float* grad_output, const float* weights_hh, float* grad_hidden, int batch_size, int hidden_size) {
@@ -72,7 +72,7 @@ namespace cuda::layers {
             sum += grad_output[batch_idx * hidden_size + h] * weights_hh[h * hidden_size + hidden_idx];
         }
 
-        grad_hidden[idx] = sum;
+        grad_hidden[idx] = sum / static_cast<float>(batch_size);
     }
 
     __global__ void rnn_backward_weights_ih(const float* input, const float* grad_hidden, float* grad_weights_ih, int batch_size, int seq_length, int input_size, int hidden_size) {

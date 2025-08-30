@@ -60,6 +60,22 @@ private:
         std::cout << "]";
     }
 
+    bool verify_layer_dimensions() {
+        for (size_t i = 0; i + 1 < layers_.size(); ++i) {
+            int expected = layers_[i]->get_output_size();
+            int actual = layers_[i + 1]->get_input_size();
+            if (expected > 0 && actual > 0 && expected != actual) {
+                std::cout << "Layer dimension mismatch between layer n" << i
+                          << " (" << layers_[i]->get_name() << ") output size "
+                          << expected << " and layer n" << i + 1
+                          << " (" << layers_[i + 1]->get_name() << ") input size "
+                          << actual << std::endl;
+                return false;
+            }
+        }
+        return true;
+    }
+
 
 
 
@@ -85,6 +101,9 @@ public:
 
     inline std::vector<float> forward(const std::vector<float> &input,
                                       const std::vector<int> &input_shape) {
+        if (!verify_layer_dimensions()) {
+            throw std::runtime_error("Invalid layer dimensions");
+        }
         if (!layers_.empty()) {
             int NetworkInput = layers_.front()->get_input_size();
             if (NetworkInput > 0 && input.size() != static_cast<size_t>(NetworkInput)) {
@@ -294,7 +313,9 @@ public:
             for (int epoch = 0; epoch < batch_method.get_epochs(); ++epoch) {
                 auto epoch_start = std::chrono::high_resolution_clock::now();
 
-                double epoch_loss = batch_method.template train_epoch<Network>(*this, train_inputs, train_targets, log_interval, verbose);
+                double epoch_loss = batch_method.template train_epoch<Network>(
+                        *this, train_inputs, train_targets, log_interval, verbose,
+                        epoch + 1, batch_method.get_epochs());
 
                 auto epoch_end = std::chrono::high_resolution_clock::now();
                 float epoch_time =
