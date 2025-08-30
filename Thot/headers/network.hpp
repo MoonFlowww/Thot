@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 #include <numeric>
+#include <stdexcept>
 
 
 #include "layers/layers.hpp"
@@ -84,6 +85,13 @@ public:
 
     inline std::vector<float> forward(const std::vector<float> &input,
                                       const std::vector<int> &input_shape) {
+        if (!layers_.empty()) {
+            int NetworkInput = layers_.front()->get_input_size();
+            if (NetworkInput > 0 && input.size() != static_cast<size_t>(NetworkInput)) {
+                throw std::invalid_argument("Input size does not match network input layer size\n - [Input] Network: " + std::to_string(NetworkInput) + "  ||  Data: " + std::to_string(input.size()));
+            }
+        }
+
         Utils::Tensor input_tensor(input_shape);
         input_tensor.upload(input);
 
@@ -109,6 +117,23 @@ public:
     void evaluate(const std::vector<std::vector<float>> &inputs,
                   const std::vector<std::vector<float>> &targets,
                   Evaluation type = Evaluation::Regression, bool verbose = true) {
+
+        if (inputs.size() != targets.size()) {
+            throw std::invalid_argument("Inputs and targets must have the same number of samples (x:" + std::to_string(inputs.size()) + " || z: " + std::to_string(targets.size()));
+        }
+        if (!layers_.empty()) {
+            int expected_input = layers_.front()->get_input_size();
+            int expected_output = layers_.back()->get_output_size();
+            for (size_t i = 0; i < inputs.size(); ++i) {
+                if (expected_input > 0 && inputs[i].size() != static_cast<size_t>(expected_input)) {
+                    throw std::invalid_argument("Input size mismatch at sample " + std::to_string(i));
+                }
+                if (expected_output > 0 && targets[i].size() != static_cast<size_t>(expected_output)) {
+                    throw std::invalid_argument("Target size mismatch at sample " + std::to_string(i));
+                }
+            }
+        }
+
         std::vector<std::vector<float>> predictions;
         std::vector<float> latencies;
 

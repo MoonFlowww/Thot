@@ -5,6 +5,7 @@
 #include <iostream>
 #include <limits>
 #include <algorithm>
+#include <utility>
 #include "details/mnist.hpp"
 
 #ifndef M_PI
@@ -227,11 +228,13 @@ namespace Thot {
             std::vector<std::vector<float>> X_reshaped;
             std::vector<std::vector<float>> y_reshaped;
 
-            for (size_t i = 0; i < X.size(); ++i) {
-                X_reshaped.push_back({ X[i] });
-            }
-
-            for (size_t i = 0; i < y.size(); ++i) {
+            int feature_count = samples > 0 ? static_cast<int>(X.size() / samples) : 0;
+            for (int i = 0; i < samples; ++i) {
+                std::vector<float> sample(feature_count);
+                for (int f = 0; f < feature_count; ++f) {
+                    sample[f] = X[i * feature_count + f];
+                }
+                X_reshaped.push_back(std::move(sample));
                 y_reshaped.push_back({ y[i] });
             }
 

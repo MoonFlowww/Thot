@@ -244,5 +244,8 @@ namespace Thot {
 
             return std::move(grad_input);
         }
+
+        int get_input_size() const override { return input_size_; }
+        int get_output_size() const override { return hidden_size_; }
     };
 } // namespace Thot

@@ -5,6 +5,8 @@
 namespace cuda {
 	namespace losses {
 
+	    extern __device__ bool verbose;
+
 		__global__ void mse(const float* predictions, const float* targets, float* loss, int size);
 		__global__ void mseGradient(const float* predictions, const float* targets, float* gradients, int size);
 

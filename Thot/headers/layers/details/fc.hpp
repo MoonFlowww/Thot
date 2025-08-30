@@ -194,5 +194,8 @@ namespace Thot {
         Initialization get_initialization() const override {
             return initialization_type_;
         }
+
+        int get_input_size() const override { return input_size_; }
+        int get_output_size() const override { return output_size_; }
     };
 } // namespace Thot

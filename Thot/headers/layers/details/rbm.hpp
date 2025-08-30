@@ -198,5 +198,8 @@ namespace Thot {
 
             return std::move(grad_visible);
         }
+
+        int get_input_size() const override { return visible_size_; }
+        int get_output_size() const override { return hidden_size_; }
     };
 } // namespace Thot 
