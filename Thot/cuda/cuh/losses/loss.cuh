@@ -13,8 +13,11 @@ namespace cuda {
 		__global__ void mae(const float* predictions, const float* targets, float* loss, int size);
 		__global__ void maeGradient(const float* predictions, const float* targets, float* gradients, int size);
 
-		__global__ void binaryCrossEntropy(const float* predictions, const float* targets, float* loss, int size, float epsilon);
-		__global__ void binaryCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int size, float epsilon);
+	    __global__ void binaryCrossEntropy(const float* predictions, const float* targets, float* loss, int size, float epsilon);
+	    __global__ void binaryCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int size, float epsilon);
+
+	    __global__ void crossEntropy(const float* predictions, const float* targets, float* loss, int size, float epsilon);
+	    __global__ void crossEntropyGradient(const float* predictions, const float* targets, float* gradients, int size, float epsilon);
 
 		__global__ void categoricalCrossEntropy(const float* predictions, const float* targets, float* loss, int batch_size, int num_classes, float epsilon);
 		__global__ void categoricalCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int batch_size, int num_classes, float epsilon);
@@ -38,8 +41,11 @@ namespace cuda {
 		void launchMAE(const float* predictions, const float* targets, float* loss, int size, cudaStream_t stream = nullptr);
 		void launchMAEGradient(const float* predictions, const float* targets, float* gradients, int size, cudaStream_t stream = nullptr);
 
-		void launchBinaryCrossEntropy(const float* predictions, const float* targets, float* loss, int size, float epsilon, cudaStream_t stream = nullptr);
-		void launchBinaryCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int size, float epsilon, cudaStream_t stream = nullptr);
+	    void launchBinaryCrossEntropy(const float* predictions, const float* targets, float* loss, int size, float epsilon, cudaStream_t stream = nullptr);
+	    void launchBinaryCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int size, float epsilon, cudaStream_t stream = nullptr);
+
+	    void launchCrossEntropy(const float* predictions, const float* targets, float* loss, int size, float epsilon, cudaStream_t stream = nullptr);
+	    void launchCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int size, float epsilon, cudaStream_t stream = nullptr);
 
 		void launchCategoricalCrossEntropy(const float* predictions, const float* targets, float* loss, int batch_size, int num_classes, float epsilon, cudaStream_t stream = nullptr);
 		void launchCategoricalCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int batch_size, int num_classes, float epsilon, cudaStream_t stream = nullptr);

@@ -33,6 +33,8 @@ include_directories(
 set(KERNEL_SOURCES
         Thot/cuda/cu/activations/activations.cu
         Thot/cuda/cu/layers/conv2d.cu
+        Thot/cuda/cu/layers/flatten.cu
+        Thot/cuda/cu/layers/maxpool2d.cu
         Thot/cuda/cu/layers/fc.cu
         Thot/cuda/cu/layers/rbm.cu
         Thot/cuda/cu/layers/rnn.cu
@@ -41,6 +43,8 @@ set(KERNEL_SOURCES
         Thot/cuda/cu/optimizations/adam.cu
         Thot/cuda/cu/optimizations/sgd.cu
         Thot/cuda/cu/optimizations/sgdm.cu
+        Thot/cuda/cu/layers/flatten.cu
+        Thot/cuda/cu/layers/maxpool2d.cu
 )
 
 set(HEADERS
@@ -48,6 +52,8 @@ set(HEADERS
         Thot/headers/initializations/initializations.hpp
         Thot/headers/layers/details/conv2d.hpp
         Thot/headers/layers/details/fc.hpp
+        Thot/headers/layers/details/flatten.hpp
+        Thot/headers/layers/details/maxpool2d.hpp
         Thot/headers/layers/details/rbm.hpp
         Thot/headers/layers/details/rnn.hpp
         Thot/headers/layers/layers.hpp
@@ -63,6 +69,10 @@ set(HEADERS
         Thot/headers/utils/translators.h
         Thot/headers/LearningProcess/batch.hpp
         Thot/headers/LearningProcess/kfold.hpp
+        Thot/cuda/cuh/layers/flatten.cuh
+        Thot/cuda/cuh/layers/maxpool2d.cuh
+        Thot/headers/layers/details/flatten.hpp
+        Thot/headers/layers/details/maxpool2d.hpp
 )
 
 add_library(thot_kernels STATIC ${KERNEL_SOURCES})

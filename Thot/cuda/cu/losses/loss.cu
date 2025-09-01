@@ -69,6 +69,29 @@ namespace cuda {
             }
         }
 
+
+        __global__ void crossEntropy(const float* predictions, const float* targets, float* loss, int size, float epsilon) {
+            int idx = blockIdx.x * blockDim.x + threadIdx.x;
+            if (idx < size) {
+                float p = fmaxf(predictions[idx], epsilon);
+                float t = targets[idx];
+                loss[idx] = -t * logf(p);
+                if (verbose && loss[idx]!=0) printf("CE loss[%d] = %f\n", idx, loss[idx]);
+            }
+        }
+
+        __global__ void crossEntropyGradient(const float* predictions, const float* targets, float* gradients, int size, float epsilon) {
+            int idx = blockIdx.x * blockDim.x + threadIdx.x;
+            if (idx < size) {
+                float p = fmaxf(predictions[idx], epsilon);
+                float t = targets[idx];
+                gradients[idx] = -t / p;
+                if (verbose && gradients[idx]!=0) printf("CE grad[%d] = %f\n", idx, gradients[idx]);
+            }
+        }
+
+
+
         // Categorical Cross-Entropy
         __global__ void categoricalCrossEntropy(const float* predictions, const float* targets, float* loss, int batch_size, int num_classes, float epsilon) {
             int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -244,6 +267,24 @@ namespace cuda {
             binaryCrossEntropyGradient << <numBlocks, blockSize, 0, stream >> > (predictions, targets, gradients, size, epsilon);
             cudaError_t err = cudaGetLastError();
             if (err != cudaSuccess) printf("Kernel launch error in launchBinaryCrossEntropyGradient: %s\n", cudaGetErrorString(err));
+            cudaDeviceSynchronize();
+        }
+
+        void launchCrossEntropy(const float* predictions, const float* targets, float* loss, int size, float epsilon, cudaStream_t stream) {
+            int blockSize = 256;
+            int numBlocks = (size + blockSize - 1) / blockSize;
+            crossEntropy<<<numBlocks, blockSize, 0, stream>>>(predictions, targets, loss, size, epsilon);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) printf("Kernel launch error in launchCrossEntropy: %s\n", cudaGetErrorString(err));
+            cudaDeviceSynchronize();
+        }
+
+        void launchCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int size, float epsilon, cudaStream_t stream) {
+            int blockSize = 256;
+            int numBlocks = (size + blockSize - 1) / blockSize;
+            crossEntropyGradient<<<numBlocks, blockSize, 0, stream>>>(predictions, targets, gradients, size, epsilon);
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) printf("Kernel launch error in launchCrossEntropyGradient: %s\n", cudaGetErrorString(err));
             cudaDeviceSynchronize();
         }
 

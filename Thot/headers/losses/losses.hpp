@@ -13,6 +13,7 @@ namespace Thot {
         MSE,
         MAE,
         BinaryCrossEntropy,
+        CrossEntropy,
         CategoricalCrossEntropy,
         SparseCategoricalCrossEntropy,
         Hinge,
@@ -51,6 +52,7 @@ namespace Thot {
             case Loss::MSE: return "MSE";
             case Loss::MAE: return "MAE";
             case Loss::BinaryCrossEntropy: return "BCE";
+            case Loss::CrossEntropy: return "CE";
             case Loss::CategoricalCrossEntropy: return "CCE";
             case Loss::SparseCategoricalCrossEntropy: return "SCCE";
             case Loss::Hinge: return "Hinge";
@@ -86,6 +88,16 @@ namespace Thot {
 
             case Loss::BinaryCrossEntropy:
                 cuda::losses::launchBinaryCrossEntropy(
+                    static_cast<float*>(predictions.data()),
+                    static_cast<float*>(targets.data()),
+                    loss,
+                    predictions.size(),
+                    epsilon_
+                );
+                break;
+
+            case Loss::CrossEntropy:
+                cuda::losses::launchCrossEntropy(
                     static_cast<float*>(predictions.data()),
                     static_cast<float*>(targets.data()),
                     loss,
@@ -191,6 +203,16 @@ namespace Thot {
 
             case Loss::BinaryCrossEntropy:
                 cuda::losses::launchBinaryCrossEntropyGradient(
+                    static_cast<float*>(predictions.data()),
+                    static_cast<float*>(targets.data()),
+                    static_cast<float*>(gradients.data()),
+                    predictions.size(),
+                    epsilon_
+                );
+                break;
+
+            case Loss::CrossEntropy:
+                cuda::losses::launchCrossEntropyGradient(
                     static_cast<float*>(predictions.data()),
                     static_cast<float*>(targets.data()),
                     static_cast<float*>(gradients.data()),
