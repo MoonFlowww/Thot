@@ -58,14 +58,27 @@ namespace Evaluations {
             class_f1[c] = f1;
         }
 
-        // Global (micro-averaged) metrics
-        int total_tp = std::accumulate(true_positives.begin(), true_positives.end(), 0);
-        int total_fp = std::accumulate(false_positives.begin(), false_positives.end(), 0);
-        int total_fn = std::accumulate(false_negatives.begin(), false_negatives.end(), 0);
+        // Macro-averaged metrics
+        float macro_precision = std::accumulate(class_precision.begin(), class_precision.end(), 0.0f) / num_classes;
+        float macro_recall    = std::accumulate(class_recall.begin(), class_recall.end(), 0.0f) / num_classes;
+        float macro_f1        = std::accumulate(class_f1.begin(), class_f1.end(), 0.0f) / num_classes;
 
-        float global_precision = total_tp / float(total_tp + total_fp + 1e-10f);
-        float global_recall = total_tp / float(total_tp + total_fn + 1e-10f);
-        float global_f1 = 2.0f * global_precision * global_recall / (global_precision + global_recall + 1e-10f);
+        // Weighted (support-based) metrics
+        int total_support = std::accumulate(support.begin(), support.end(), 0);
+        float weighted_precision = 0.0f;
+        float weighted_recall    = 0.0f;
+        float weighted_f1        = 0.0f;
+        if (total_support > 0) {
+            for (size_t c = 0; c < num_classes; ++c) {
+                weighted_precision += class_precision[c] * support[c];
+                weighted_recall    += class_recall[c] * support[c];
+                weighted_f1        += class_f1[c] * support[c];
+            }
+            weighted_precision /= total_support;
+            weighted_recall    /= total_support;
+            weighted_f1        /= total_support;
+        }
+
 
         float accuracy = float(correct) / predictions.size();
         float total_latency = std::accumulate(latencies.begin(), latencies.end(), 0.0f);
@@ -97,21 +110,16 @@ namespace Evaluations {
         if (verbose) {
             std::cout << "\n *~~~~~~~~~ Metrics ~~~~~~~~~*\n";
             std::cout << " | Overall Accuracy: " << accuracy * 100.0f << "%\n";
-            std::cout << " | Global Precision: " << global_precision * 100.0f << "%\n";
-            std::cout << " | Global Recall:    " << global_recall * 100.0f << "%\n";
-            std::cout << " | Global F1 Score:  " << global_f1 * 100.0f << "%\n";
+            std::cout << " | - - - - - - - - - - - -" << std::endl;
+            std::cout << " | Macro Precision:     " << macro_precision * 100.0f << "%\n";
+            std::cout << " | Macro Recall:        " << macro_recall * 100.0f << "%\n";
+            std::cout << " | Macro F1 Score:      " << macro_f1 * 100.0f << "%\n";
+            std::cout << " | - - - - - - - - - - - -" << std::endl;
+            std::cout << " | Weighted Precision:  " << weighted_precision * 100.0f << "%\n";
+            std::cout << " | Weighted Recall:     " << weighted_recall * 100.0f << "%\n";
+            std::cout << " | Weighted F1 Score:   " << weighted_f1 * 100.0f << "%\n";
             std::cout << " *~~~~~~~~~~~~~~~~~~~~~~~~~~~~*" << std::endl;
 
-
-            std::cout << "\n *~~~~ Per-class Metrics ~~~~*\n";
-            for (size_t c = 0; c < num_classes; ++c) {
-                std::cout << " | Class " << c << ":\n";
-                std::cout << " |   Precision: " << class_precision[c] * 100.0f << "%\n";
-                std::cout << " |   Recall: " << class_recall[c] * 100.0f << "%\n";
-                std::cout << " |   F1 Score: " << class_f1[c] * 100.0f << "%\n";
-            }
-
-            std::cout << " *~~~~~~~~~~~~~~~~~~~~~~~~~~~~*" << std::endl;
             std::cout << " | Latency Average : " << avg_latency << " ms\n";
             std::cout << " | Latency Std Dev: " << std_latency << " ms\n";
             std::cout << " | Latency Skew: " << skew_latency << "\n";
@@ -122,6 +130,14 @@ namespace Evaluations {
             std::cout << " | Output Bytes/s: " << Thot::formatBytes(output_bps) << "\n";
             std::cout << " | Throughput: " << throughput << " FLOPS\n";
             std::cout << " *~~~~~~~~~~~~~~~~~~~~~~~~~~~~*" << std::endl;
+
+            std::cout << "\n *~~~~ Per-class Metrics ~~~~*\n";
+            for (size_t c = 0; c < num_classes; ++c) {
+                std::cout << " | Class " << c << ":\n";
+                std::cout << " |   Precision: " << class_precision[c] * 100.0f << "%\n";
+                std::cout << " |   Recall: " << class_recall[c] * 100.0f << "%\n";
+                std::cout << " |   F1 Score: " << class_f1[c] * 100.0f << "%\n";
+            }
         }
     }
 }

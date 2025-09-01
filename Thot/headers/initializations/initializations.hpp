@@ -175,7 +175,7 @@ namespace Thot {
             case Initialization::Xavier: return "Xavier";
             case Initialization::He: return "He";
             case Initialization::LeCun: return "LeCun";
-            case Initialization::None: return "ø ";
+            case Initialization::None: return "None";
             default: return "Unknown";
             }
         }
