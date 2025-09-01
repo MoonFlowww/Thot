@@ -34,7 +34,7 @@ model.add(Thot::Layer::FC(1, 1, Thot::Activation::ReLU, Thot::Initialization::Xa
 
 #### Layers
 Available Layers:
-```cpp
+```yaml
 Thot::Layer::FC(input_size, output_size, __activation_type__, __initialization_type__)
 Thot::Layer::RNN(input_size, hidden_size, seq_length, __activation_type__, __initialization_type__)
 Thot::Layer::Conv2D(in_channels, in_height, in_width, out_channels, kernel_size, stride, padding, __activation_type__, __initialization_type__, "Layer Name")
