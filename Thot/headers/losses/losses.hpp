@@ -165,12 +165,19 @@ namespace Thot {
             }
 
 
+            //old version
+            //float result;
+            //cudaMemcpy(&result, loss, sizeof(float), cudaMemcpyDeviceToHost);
+
+            //new version
             auto result = thrust::reduce(
                 thrust::device,
                 thrust::device_pointer_cast(loss),
                 thrust::device_pointer_cast(loss) + reduce_size,
                 0.0f
             );
+            //end
+
             cudaFree(loss);
             int normalizer = 0;
             switch (Loss_) {
