@@ -46,7 +46,7 @@ Thot::Layer::Flatten(in_channels, in_height, in_width)
 
 ### Activation Functions
 Available activation functions:
-```yaml
+```ini
 Thot::Activation::Linear
 Thot::Activation::ReLU
 Thot::Activation::Sigmoid
