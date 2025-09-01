@@ -28,17 +28,19 @@ Thot::Network model("Neural Network");
 ### Layers
 #### Adding Layers
 ```cpp
-model.add(Thot::Layer::FC(1, 1, Thot::Activation::ReLU, Thot::Initialization::Xavier)); // Fully connected, single input, single neuron, ReLU activation and Xavier initialization
+model.add(Thot::Layer::FC(1, 1, Thot::Activation::ReLU, Thot::Initialization::Xavier));
+// Fully connected, 1 input, 1 neuron, ReLU activation and Xavier initialization
 ```
 
 #### Layers
 Available Layers:
 ```cpp
-Thot::Layer::RNN(input_size, hidden_size, seq_length, activation_type, weight_init);
-Thot::Layer::Conv2D(in_channels, in_height, in_width, out_channels, kernel_size, stride, padding, activation_type, weight_init, "Layer Name");
-Thot::Layer::RBM(visible_size, hidden_size, cd_steps, activation_type, weight_init, "Layer Name");
-Thot::Layer::MaxPool2D(in_channels, in_height, in_width, kernel_size, stride);
-Thot::Layer::Flatten(in_channels, in_height, in_width);
+Thot::Layer::FC(input_size, output_size, __activation_type__, __initialization_type__)
+Thot::Layer::RNN(input_size, hidden_size, seq_length, __activation_type__, __initialization_type__)
+Thot::Layer::Conv2D(in_channels, in_height, in_width, out_channels, kernel_size, stride, padding, __activation_type__, __initialization_type__, "Layer Name")
+Thot::Layer::RBM(visible_size, hidden_size, cd_steps, __activation_type__, __initialization_type__, "Layer Name")
+Thot::Layer::MaxPool2D(in_channels, in_height, in_width, kernel_size, stride)
+Thot::Layer::Flatten(in_channels, in_height, in_width)
 ```
 
 
@@ -149,7 +151,9 @@ int main() {
     //Loading train and test MNIST data
 	std::string mnist_train = "MNIST/Train"; // path -> folder in which files are
 	std::string mnist_test = "MNIST/Test";
-    auto [x, y, x_test, y_test] = Thot::Data::Load_MNIST(mnist_train, mnist_test, 0.05f, 0.15f); // 5% of total mnist train and 15% of total mnist test samples
+    auto [x, y, x_test, y_test] = Thot::Data::Load_MNIST(mnist_train, mnist_test, 0.05f, 0.15f);
+								  // Train: 5% of total mnist train
+								  // Test: 15% of total mnist test
 
     //train
     model.train(x, y, Thot::Batch::Classic(32, 10), Thot::KFold::Classic(5), 1, true);
