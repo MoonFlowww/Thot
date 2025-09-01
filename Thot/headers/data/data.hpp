@@ -6,6 +6,7 @@
 #include <limits>
 #include <algorithm>
 #include <utility>
+#include <tuple>
 #include "details/mnist.hpp"
 
 #ifndef M_PI
@@ -245,5 +246,20 @@ namespace Thot {
 
             return { X_reshaped, y_reshaped };
         }
+
+        inline std::tuple<
+            std::vector<std::vector<float>>, std::vector<std::vector<float>>, std::vector<std::vector<float>>, std::vector<std::vector<float>>
+                        > generate_train_test_data(
+                            DataType type, int train_samples, int test_samples, float noise = 0.1f, bool verbose = true) {
+
+                    auto [X, y] = generate_data(type, train_samples + test_samples, noise, verbose);
+
+                    std::vector<std::vector<float>> X_train(X.begin(), X.begin() + train_samples);
+                    std::vector<std::vector<float>> y_train(y.begin(), y.begin() + train_samples);
+                    std::vector<std::vector<float>> X_test(X.begin() + train_samples, X.end());
+                    std::vector<std::vector<float>> y_test(y.begin() + train_samples, y.end());
+
+                    return { X_train, y_train, X_test, y_test };
+                }
     }
 }

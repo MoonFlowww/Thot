@@ -321,7 +321,7 @@ public:
                 float epoch_time =
                     std::chrono::duration<float>(epoch_end - epoch_start).count();
                 epoch_times.push_back(epoch_time);
-
+                std::cout.unsetf(std::ios_base::floatfield);
                 if (epoch % log_interval == 0 || epoch == batch_method.get_epochs() - 1) {
                     std::cout << "Epoch " << epoch << " - Average Loss: "
                               << epoch_loss;
@@ -389,10 +389,6 @@ public:
         std::cout << "Throughput: " << format_samples_per_second(samples_per_second) << "\n";
 
         std::cout.unsetf(std::ios_base::floatfield);
-        std::cout << std::setprecision(6);
-
-        std::cout.unsetf(std::ios_base::floatfield);
-        std::cout << std::setprecision(6);
     }
 };
 } // namespace Thot

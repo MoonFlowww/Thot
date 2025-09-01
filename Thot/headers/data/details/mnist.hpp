@@ -5,6 +5,7 @@
 #include <cmath>
 #include <iostream>
 #include <iomanip>
+#include <tuple>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -19,11 +20,7 @@ namespace Thot {
         }
 
         inline std::pair<std::vector<std::vector<float>>, std::vector<std::vector<float>>> load_mnist(
-            const std::string& images_path,
-            const std::string& labels_path,
-            int num_classes = 10,
-            float ratio = 1.0f
-        ) {
+            const std::string& images_path, const std::string& labels_path, int num_classes = 10, float ratio = 1.0f ) {
             std::ifstream images_file(images_path, std::ios::binary);
             std::ifstream labels_file(labels_path, std::ios::binary);
 
@@ -93,24 +90,40 @@ namespace Thot {
             return { images, labels };
         }
 
-        inline std::pair<std::vector<std::vector<float>>, std::vector<std::vector<float>>> load_mnist_train(
-            const std::string& base_path = "",
-            float ratio = 1.0f
-        ) {
+        inline std::pair<std::vector<std::vector<float>>, std::vector<std::vector<float>>> Load_MNIST_Train(const std::string& base_path = "", float ratio = 1.0f ) {
             std::cout << "Loading MNIST Training Set...\n";
             std::string images_path = base_path + "/train-images.idx3-ubyte";
             std::string labels_path = base_path + "/train-labels.idx1-ubyte";
             return load_mnist(images_path, labels_path, 10, ratio);
         }
 
-        inline std::pair<std::vector<std::vector<float>>, std::vector<std::vector<float>>> load_mnist_test(
-            const std::string& base_path = "",
-            float ratio = 1.0f
-        ) {
+        inline std::pair<std::vector<std::vector<float>>, std::vector<std::vector<float>>> Load_MNIST_Test( const std::string& base_path = "", float ratio = 1.0f) {
             std::cout << "Loading MNIST Test Set...\n";
             std::string images_path = base_path + "/t10k-images.idx3-ubyte";
             std::string labels_path = base_path + "/t10k-labels.idx1-ubyte";
             return load_mnist(images_path, labels_path, 10, ratio);
+        }
+
+        inline std::tuple<
+            std::vector<std::vector<float>>, std::vector<std::vector<float>>, std::vector<std::vector<float>>, std::vector<std::vector<float>>
+                        > Load_MNIST( const std::string& train_path = "", const std::string& test_path = "", float train_ratio = 0.8f, float test_ratio = 0.2f) {
+
+            /* old method
+            float total_ratio = train_ratio + test_ratio;
+            auto [images, labels] = Load_MNIST_Train(train_path, total_ratio);
+            size_t total = images.size();
+            size_t train_count = static_cast<size_t>(total * (train_ratio / total_ratio));
+
+            std::vector<std::vector<float>> train_images(images.begin(), images.begin() + train_count);
+            std::vector<std::vector<float>> train_labels(labels.begin(), labels.begin() + train_count);
+            std::vector<std::vector<float>> test_images(images.begin() + train_count, images.end());
+            std::vector<std::vector<float>> test_labels(labels.begin() + train_count, labels.end());
+            */
+
+            auto [train_images, train_labels] = Load_MNIST_Train(train_path, train_ratio);
+            auto [test_images, test_labels] = Load_MNIST_Test(test_path, test_ratio);
+
+            return { train_images, train_labels, test_images, test_labels };
         }
     }
 }

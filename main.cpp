@@ -22,11 +22,11 @@ int main() {
 	model.summary();
 
 
-	std::string mnist_path = "/home/moonfloww/Projects/DATASETS/MNIST/train";
-	auto [x, y] = Thot::Data::load_mnist_train(mnist_path, 0.05f);
-	//auto [x, y] = Thot::Data::generate_data(Thot::DataType::XOR, 200, 0.0001, true);
+	std::string mnist_train = "/home/moonfloww/Projects/DATASETS/MNIST/train";
+	std::string mnist_test = "/home/moonfloww/Projects/DATASETS/MNIST/test";
+    auto [x, y, x_test, y_test] = Thot::Data::Load_MNIST(mnist_train, mnist_test, 0.04f, 0.01f);
     model.train(x, y, Thot::Batch::Classic(32, 10), Thot::KFold::Classic(5), 1, true);
-    model.evaluate(x, y, Thot::Evaluation::Classification, true);
+    model.evaluate(x_test, y_test, Thot::Evaluation::Classification, true);
 
 
 	return 0;
