@@ -143,7 +143,7 @@ int main() {
     model.set_optimizer(Thot::Optimizer::Adam(0.001f));
 
 
-    // Model Summary
+    // Print Model Summary
 	model.summary();
 
 
