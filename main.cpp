@@ -18,24 +18,10 @@ int main() {
     //model.add(Thot::Layer::FC(1, 1, Thot::Activation::ReLU, Thot::Initialization::Uniform));
 
 
-	model.add(Thot::Layer::RNN(2, 64, 4, Thot::Activation::Tanh, Thot::Initialization::Uniform));
-	model.add(Thot::Layer::RNN(64, 64, 4, Thot::Activation::Tanh, Thot::Initialization::Uniform));
-	model.add(Thot::Layer::RNN(64, 64, 4, Thot::Activation::Tanh, Thot::Initialization::Uniform));
-	model.add(Thot::Layer::RNN(64, 64, 4, Thot::Activation::Tanh, Thot::Initialization::Uniform));
-	model.add(Thot::Layer::RNN(64, 64, 4, Thot::Activation::Tanh, Thot::Initialization::Uniform));
-	model.add(Thot::Layer::RNN(64, 64, 4, Thot::Activation::Tanh, Thot::Initialization::Uniform));
-	model.add(Thot::Layer::RNN(64, 64, 4, Thot::Activation::Tanh, Thot::Initialization::Uniform));
-	model.add(Thot::Layer::RNN(64, 64, 4, Thot::Activation::Tanh, Thot::Initialization::Uniform));
-	model.add(Thot::Layer::RNN(64, 64, 4, Thot::Activation::Tanh, Thot::Initialization::Uniform));
-	model.add(Thot::Layer::RNN(64, 64, 4, Thot::Activation::Tanh, Thot::Initialization::Uniform));
-	model.add(Thot::Layer::RNN(64, 64, 4, Thot::Activation::Tanh, Thot::Initialization::Uniform));
-	model.add(Thot::Layer::RNN(64, 64, 4, Thot::Activation::Tanh, Thot::Initialization::Uniform));
-	model.add(Thot::Layer::RNN(64, 32, 4, Thot::Activation::Tanh, Thot::Initialization::Uniform));
-	model.add(Thot::Layer::RNN(32, 16, 4, Thot::Activation::Tanh, Thot::Initialization::Uniform));
-	model.add(Thot::Layer::RNN(16, 1, 4, Thot::Activation::Sigmoid, Thot::Initialization::Uniform));
+    model.add(Thot::Layer::FC(2, 4, Thot::Activation::Tanh, Thot::Initialization::Xavier));
+    model.add(Thot::Layer::FC(4, 1, Thot::Activation::Sigmoid, Thot::Initialization::Xavier));
 
-
-    model.set_optimizer(Thot::Optimizer::Adam(0.001f));
+    model.set_optimizer(Thot::Optimizer::Adam(0.1f));
     model.set_loss(Thot::Loss::MSE);
 
 
@@ -44,9 +30,9 @@ int main() {
 
 	//std::string mnist_path = "/home/moonfloww/Projects/DATASETS/MNIST/train";
 	//auto [x, y] = Thot::Data::load_mnist_train(mnist_path, 0.005f);
-	auto [x, y] = Thot::Data::generate_data(Thot::DataType::XOR, 20000, 0.0001, true);
-    model.train(x, y, Thot::Batch::Classic(64, 50), Thot::KFold::Classic(5), 1, true);
-    model.evaluate(x, y, Thot::Evaluation::Classification, true);
+	auto [x, y] = Thot::Data::generate_data(Thot::DataType::XOR, 200, 0.0001, true);
+    model.train(x, y, Thot::Batch::Classic(32, 10), Thot::KFold::Classic(1), 1, true);
+    model.evaluate(x, y, Thot::Evaluation::Binary, true);
 
 
 	return 0;
