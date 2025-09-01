@@ -1,4 +1,4 @@
-﻿# Thot - Neural Network Library
+﻿﻿# Thot - Neural Network Library
 
 
 ## Features
@@ -22,66 +22,31 @@
 ### Creating a Network
 
 ```cpp
-Thot::Network model("My Neural Network");
+Thot::Network model("Neural Network");
 ```
 
-### Adding Layers
-
-#### Fully Connected Layer
+### Layers
+#### Adding Layers
 ```cpp
-model.add(Thot::Layer::FC(
-    input_size,          // Number of input neurons
-    output_size,         // Number of output neurons
-    activation_type,     // Activation function
-    weight_init,         // Weight initialization method
-    "Layer Name"         // Optional layer name
-));
+model.add(Thot::Layer::FC(1, 1, Thot::Activation::ReLU, Thot::Initialization::Xavier));
+// Fully connected, 1 input, 1 neuron, ReLU activation and Xavier initialization
 ```
 
-#### Recurrent Layer
-```cpp
-model.add(Thot::Layer::RNN(
-    input_size,          // Input dimension
-    hidden_size,         // Hidden state dimension
-    seq_length,          // Sequence length
-    activation_type,     // Activation function
-    weight_init,         // Weight initialization method
-    "Layer Name"         // Optional layer name
-));
+#### Layers
+Available Layers:
+```yaml
+Thot::Layer::FC(input_size, output_size, __activation_type__, __initialization_type__)
+Thot::Layer::RNN(input_size, hidden_size, seq_length, __activation_type__, __initialization_type__)
+Thot::Layer::Conv2D(in_channels, in_height, in_width, out_channels, kernel_size, stride, padding, __activation_type__, __initialization_type__, "Layer Name")
+Thot::Layer::RBM(visible_size, hidden_size, cd_steps, __activation_type__, __initialization_type__, "Layer Name")
+Thot::Layer::MaxPool2D(in_channels, in_height, in_width, kernel_size, stride)
+Thot::Layer::Flatten(in_channels, in_height, in_width)
 ```
 
-#### Convolutional Layer
-```cpp
-model.add(Thot::Layer::Conv2D(
-    in_channels,         // Number of input channels
-    in_height,          // Input height
-    in_width,           // Input width
-    out_channels,       // Number of output channels
-    kernel_size,        // Kernel size
-    stride,             // Stride
-    padding,            // Padding
-    activation_type,    // Activation function
-    weight_init,        // Weight initialization method
-    "Layer Name"        // Optional layer name
-));
-```
-
-#### Restricted Boltzmann Machine
-```cpp
-model.add(Thot::Layer::RBM(
-    visible_size,        // Number of visible units
-    hidden_size,         // Number of hidden units
-    cd_steps,           // Number of contrastive divergence steps
-    activation_type,    // Activation function
-    weight_init,        // Weight initialization method
-    "Layer Name"        // Optional layer name
-));
-```
 
 ### Activation Functions
-
 Available activation functions:
-```cpp
+```yaml
 Thot::Activation::Linear
 Thot::Activation::ReLU
 Thot::Activation::Sigmoid
@@ -93,126 +58,111 @@ Thot::Activation::Softmax
 ```
 
 ### Initialization Methods
-
 Available initialization methods:
-```cpp
-Thot::Initialization::Xavier
-Thot::Initialization::He
+```yaml
+Thot::Initialization::Zeros
+Thot::Initialization::Ones
 Thot::Initialization::Normal
 Thot::Initialization::Uniform
+Thot::Initialization::Xavier
+Thot::Initialization::He
+Thot::Initialization::LeCun
 ```
 
 ### Optimizers
-
-#### Stochastic Gradient Descent (SGD)
+#### Choosing an Optimizer
 ```cpp
 model.set_optimizer(Thot::Optimizer::SGD(learning_rate));
 ```
-
-#### SGD with Momentum
-```cpp
-model.set_optimizer(Thot::Optimizer::SGDM(learning_rate, momentum));
+#### Available Optimizers:
+```yaml
+Thot::Optimizer::SGD(learning_rate)
+Thot::Optimizer::SGDM(learning_rate, momentum)
+Thot::Optimizer::Adam(learning_rate, beta1, beta2, epsilon)
 ```
 
-#### Adam Optimizer
+
+### Loss
+#### Choosing a Loss function
 ```cpp
-model.set_optimizer(Thot::Optimizer::Adam(
-    learning_rate,
-    beta1,              // Default: 0.9
-    beta2,              // Default: 0.999
-    epsilon             // Default: 1e-8
-));
+model.set_loss(Thot::Loss::MSE);
+```
+#### Available Losses:
+```yaml
+Thot::Loss::MSE
+Thot::Loss::MAE
+Thot::Loss::BinaryCrossEntropy
+Thot::Loss::CrossEntropy
+Thot::Loss::CategoricalCrossEntropy
+Thot::Loss::SparseCategoricalCrossEntropy
+Thot::Loss::Hinge
+Thot::Loss::Huber
+Thot::Loss::KLDivergence
 ```
 
-### Training
 
+
+### Train
 ```cpp
-model.train(
-    inputs,             // Training inputs
-    targets,            // Training targets
-    epochs,             // Number of epochs
-    batch_size,         // Batch size (default: 1)
-    log_interval        // Log interval (default: 100)
-);
+model.train(inputs, targets, Thot::Batch::Classic(batch_size, epochs_per_fold), Thot::KFold::Classic(folds), verbose_every_n_epoch, bool_verbose);
 ```
+
 
 ### Evaluation
-
-#### Binary Classification
 ```cpp
-model.evaluate(
-    inputs,
-    targets,
-    Thot::Evaluation::Binary
-);
+model.evaluate(test_inputs, test_targets, __evaluation_mode__, bool_verbose);
+```
+#### Evaluation Mode
+```yaml
+Thot::Evaluation::Binary
+Thot::Evaluation::Timeseries
+Thot::Evaluation::Regression
+Thot::Evaluation::Classification
 ```
 
-#### Time Series
-```cpp
-model.evaluate(
-    inputs,
-    targets,
-    Thot::Evaluation::Timeseries
-);
-```
-
-#### Regression
-```cpp
-model.evaluate(
-    inputs,
-    targets,
-    Thot::Evaluation::Regression
-);
-```
-
-#### Multi-class Classification
-```cpp
-model.evaluate(
-    inputs,
-    targets,
-    Thot::Evaluation::Classification
-);
-```
-
-### Example: Building a Simple Network
+### Example: Building a basic CNN for MNIST classification
 
 ```cpp
-#include "Thot"
-#include <vector>
-int main(){
-    Thot::Network model("XOR Network");
+#include "Thot/Thot.hpp"
+
+int main() {
+	Thot::Network model("Thot Network");
+
+    //Core model
+    model.add(Thot::Layer::Conv2D(1, 28, 28, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
+    model.add(Thot::Layer::Conv2D(32, 28, 28, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
+    model.add(Thot::Layer::MaxPool2D(32, 28, 28, 2, 2));
+    model.add(Thot::Layer::Flatten(32, 14, 14));
+
+    //fine-tune
+    model.add(Thot::Layer::FC(32 * 14 * 14, 128, Thot::Activation::ReLU, Thot::Initialization::He));
+    model.add(Thot::Layer::FC(128, 10, Thot::Activation::Softmax, Thot::Initialization::Xavier));
+
+    //Loss & Optimizer
+    model.set_loss(Thot::Loss::CrossEntropy);
+    model.set_optimizer(Thot::Optimizer::Adam(0.001f));
+
+
+    // Print Model Summary
+	model.summary();
+
+
+    // Loading Train and Test MNIST data
+	std::string mnist_train = "MNIST/Train"; // path -> folder in which files are
+	std::string mnist_test = "MNIST/Test";
+    auto [x, y, x_test, y_test] = Thot::Data::Load_MNIST(mnist_train, mnist_test, 0.05f, 0.15f);
+								  // Train: 5% of total mnist train
+								  // Test: 15% of total mnist test
+
+    // Training via Train Samples
+    model.train(x, y, Thot::Batch::Classic(32, 10), Thot::KFold::Classic(5), 1, true);
+
+    // Evaluation via Test Samples
+    model.evaluate(x_test, y_test, Thot::Evaluation::Classification, true);
     
-    // Add layers
-    model.add(Thot::Layer::FC(2, 4, Thot::Activation::Sigmoid, Thot::Initialization::He));
-    model.add(Thot::Layer::FC(4, 1, Thot::Activation::Sigmoid, Thot::Initialization::He));
-    
-    // Set optimizer
-    model.set_optimizer(Thot::Optimizer::Adam(0.1f));
-    
-    // Print model summary
-    model.summary();
-    
-    // XOR training data
-    std::vector<std::vector<float>> x_train = {
-        {0.0f, 0.0f},
-        {0.0f, 1.0f},
-        {1.0f, 0.0f},
-        {1.0f, 1.0f}
-    };
-    
-    std::vector<std::vector<float>> y_train = {
-        {0.0f},
-        {1.0f},
-        {1.0f},
-        {0.0f}
-    };
-    
-    // Train the model
-    model.train(x_train, y_train, 1000, 4, 100);
-    
-    // Evaluate
-    model.evaluate(x_train, y_train, Thot::Evaluation::Binary);
+	return 0;
 }
+
 ```
 
 
