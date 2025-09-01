@@ -2,6 +2,9 @@
 #include <stdio.h>
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
+#include <thrust/device_ptr.h>
+#include <thrust/execution_policy.h>
+#include <thrust/reduce.h>
 
 #include "../../cuh/losses/loss.cuh"
 
@@ -378,6 +381,11 @@ namespace cuda {
             cudaDeviceSynchronize();
         }
 
+
+        float reduceLoss(float* loss, int size, cudaStream_t stream) {
+            thrust::device_ptr<float> loss_ptr(loss);
+            return thrust::reduce(thrust::cuda::par.on(stream), loss_ptr, loss_ptr + size, 0.0f);
+        }
 
 
     }  // namespace losses

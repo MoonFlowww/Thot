@@ -63,6 +63,6 @@ namespace cuda {
 		void launchKLDivergence(const float* predictions, const float* targets, float* loss, int size, float epsilon, cudaStream_t stream = nullptr);
 		void launchKLDivergenceGradient(const float* predictions, const float* targets, float* gradients, int size, float epsilon, cudaStream_t stream = nullptr);
 
-
+	    float reduceLoss(float* loss, int size, cudaStream_t stream = nullptr);
 	}  //  losses
 }  // namespace cuda 

@@ -2,9 +2,9 @@
 
 
 #include <sstream>
-#include <thrust/execution_policy.h>
-#include <thrust/device_ptr.h>
-#include <thrust/reduce.h>
+
+
+
 #include "../tensor.hpp"
 #include "../../cuda/cuh/losses/loss.cuh"
 
@@ -170,11 +170,9 @@ namespace Thot {
             //cudaMemcpy(&result, loss, sizeof(float), cudaMemcpyDeviceToHost);
 
             //new version
-            auto result = thrust::reduce(
-                thrust::device,
-                thrust::device_pointer_cast(loss),
-                thrust::device_pointer_cast(loss) + reduce_size,
-                0.0f
+            auto result = cuda::losses::reduceLoss(
+                loss,
+                static_cast<int>(reduce_size)
             );
             //end
 
