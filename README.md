@@ -46,7 +46,7 @@ Thot::Layer::Flatten(in_channels, in_height, in_width)
 
 ### Activation Functions
 Available activation functions:
-```ini
+```yaml
 Thot::Activation::Linear
 Thot::Activation::ReLU
 Thot::Activation::Sigmoid
@@ -59,7 +59,7 @@ Thot::Activation::Softmax
 
 ### Initialization Methods
 Available initialization methods:
-```cpp
+```yaml
 Thot::Initialization::Zeros
 Thot::Initialization::Ones
 Thot::Initialization::Normal
@@ -75,7 +75,7 @@ Thot::Initialization::LeCun
 model.set_optimizer(Thot::Optimizer::SGD(learning_rate));
 ```
 #### Available Optimizers:
-```cpp
+```yaml
 Thot::Optimizer::SGD(learning_rate)
 Thot::Optimizer::SGDM(learning_rate, momentum)
 Thot::Optimizer::Adam(learning_rate, beta1, beta2, epsilon)
@@ -88,7 +88,7 @@ Thot::Optimizer::Adam(learning_rate, beta1, beta2, epsilon)
 model.set_loss(Thot::Loss::MSE);
 ```
 #### Available Losses:
-```cpp
+```yaml
 Thot::Loss::MSE
 Thot::Loss::MAE
 Thot::Loss::BinaryCrossEntropy
@@ -112,9 +112,8 @@ model.train(inputs, targets, Thot::Batch::Classic(batch_size, epochs_per_fold), 
 ```cpp
 model.evaluate(test_inputs, test_targets, __evaluation_mode__, bool_verbose);
 ```
-
 #### Evaluation Mode
-```cpp
+```yaml
 Thot::Evaluation::Binary
 Thot::Evaluation::Timeseries
 Thot::Evaluation::Regression
