@@ -13,7 +13,8 @@ namespace Thot {
         Normal,
         Xavier,
         He,          // Good for ReLU activation layers
-        LeCun        // Scaled for the fan-in size
+        LeCun,        // Scaled for the fan-in size
+        None
     };
 
     namespace Initializers {
@@ -164,6 +165,7 @@ namespace Thot {
             initialize_tensor(tensor, Initialization::LeCun, fan_in);
         }
 
+
         inline std::string to_string(Initialization init) {
             switch (init) {
             case Initialization::Zeros: return "Zeros";
@@ -173,6 +175,7 @@ namespace Thot {
             case Initialization::Xavier: return "Xavier";
             case Initialization::He: return "He";
             case Initialization::LeCun: return "LeCun";
+            case Initialization::None: return "ø ";
             default: return "Unknown";
             }
         }

@@ -41,7 +41,8 @@ namespace Evaluations {
         return num / (std::sqrt(den_x * den_y) + 1e-10f);
     }
 
-    inline void evaluate_timeseries(const std::vector<std::vector<float>>& predictions, const std::vector<std::vector<float>>& targets, const  std::vector<float>& latencies, size_t flops, bool verbose = false ) {
+    inline void evaluate_timeseries(const std::vector<std::vector<float>>& predictions, const std::vector<std::vector<float>>& targets, const  std::vector<float>& latencies,
+        size_t flops, size_t input_size, size_t output_size, bool verbose = false ) {
         if (verbose) {
             std::cout << "\nTime Series Evaluation:\n";
             std::cout << "----------------------\n";
@@ -101,12 +102,12 @@ namespace Evaluations {
         for (auto& kv : freq) {
             if (kv.second > max_count) { max_count = kv.second; mode_latency = kv.first; }
         }
-        size_t input_bytes = 0, output_bytes = 0;
-        for (const auto& t : targets) input_bytes += t.size() * sizeof(float);
-        for (const auto& p : predictions) output_bytes += p.size() * sizeof(float);
+
+        size_t model_input_bytes = predictions.size() * input_size * sizeof(float);
+        size_t model_output_bytes = predictions.size() * output_size * sizeof(float);
         float total_seconds = total_latency / 1000.0f;
-        float input_bps = total_seconds > 0 ? input_bytes / total_seconds : 0.0f;
-        float output_bps = total_seconds > 0 ? output_bytes / total_seconds : 0.0f;
+        float input_bps  = total_seconds > 0 ? static_cast<float>(model_input_bytes) / total_seconds : 0.0f;
+        float output_bps = total_seconds > 0 ? static_cast<float>(model_output_bytes) / total_seconds : 0.0f;
         float throughput = 1.0f / avg_latency;
 
         //TODO: Add DTW, msIC, msIR

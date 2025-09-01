@@ -171,8 +171,7 @@ public:
             predictions.push_back(output);
         }
 
-        Evaluations::evaluate(predictions, targets, latencies, get_flops(), type,
-                              verbose);
+        Evaluations::evaluate(predictions, targets, latencies, get_flops(), get_model_input_size(), get_model_output_size(), type, verbose);
     }
 
     void set_loss(Loss type, float epsilon = 1e-8f, float delta = 1.0f) {
@@ -209,10 +208,8 @@ public:
         for (size_t i = 0; i < layers_.size(); ++i) {
             auto &layer = layers_[i];
             std::string layer_name = layer->get_name();
-            std::string activation_name =
-                Thot::Activations::to_string(layer->get_activation());
-            std::string init_name =
-                Thot::Initializers::to_string(layer->get_initialization());
+            std::string activation_name = Thot::Activations::to_string(layer->get_activation());
+            std::string init_name = Thot::Initializers::to_string(layer->get_initialization());
 
             size_t layer_flops = layer->get_flops(batch_size);
             total_flops += layer_flops;

@@ -10,7 +10,8 @@
 #include "utils/translators.h"
 
 namespace Evaluations {
-    inline void evaluate_classification(const std::vector<std::vector<float>>& predictions, const std::vector<std::vector<float>>& targets, const std::vector<float>& latencies, size_t flops, bool verbose) {
+    inline void evaluate_classification(const std::vector<std::vector<float>>& predictions, const std::vector<std::vector<float>>& targets, const std::vector<float>& latencies,
+        size_t flops, size_t input_size, size_t output_size,bool verbose) {
         if (verbose) {
             std::cout << "\nMulti-class Classification Evaluation:\n";
             std::cout << "------------------------------------\n";
