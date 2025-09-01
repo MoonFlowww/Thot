@@ -15,7 +15,7 @@ int main() {
 
     //Loss & Optimizer
     model.set_loss(Thot::Loss::CrossEntropy);
-    model.set_optimizer(Thot::Optimizer::Adam(0.001f));<
+    model.set_optimizer(Thot::Optimizer::Adam(0.001f));
 
 
     // Model Summary
