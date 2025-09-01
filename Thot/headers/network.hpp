@@ -79,6 +79,7 @@ private:
 
 
 
+
 public:
     Network(const std::string &name = "Thot_Network")
         : name_(name), Istraining_(true) {};
@@ -132,6 +133,9 @@ public:
         }
         return total_flops;
     }
+
+    int get_model_input_size() const { return layers_.front()->get_input_size(); }
+    int get_model_output_size() const { return layers_.back()->get_output_size(); }
 
     void evaluate(const std::vector<std::vector<float>> &inputs,
                   const std::vector<std::vector<float>> &targets,

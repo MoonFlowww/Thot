@@ -6,8 +6,41 @@
 #include <cmath>
 #include <iostream>
 #include <iomanip>
+#include <unordered_map>
+#include "utils/translators.h"
 
 namespace Evaluations {
+
+    inline float dtw_distance(const std::vector<float>& seq1, const std::vector<float>& seq2) {
+        size_t n = seq1.size();
+        size_t m = seq2.size();
+        std::vector<std::vector<float>> dp(n + 1, std::vector<float>(m + 1, 1e9f));
+        dp[0][0] = 0.0f;
+        for (size_t i = 1; i <= n; ++i) {
+            for (size_t j = 1; j <= m; ++j) {
+                float cost = std::abs(seq1[i - 1] - seq2[j - 1]);
+                dp[i][j] = cost + std::min({dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]});
+            }
+        }
+        return dp[n][m];
+    }
+
+    inline float corr(const std::vector<float>& x, const std::vector<float>& y) {
+        size_t n = x.size();
+        float mean_x = std::accumulate(x.begin(), x.end(), 0.0f) / n;
+        float mean_y = std::accumulate(y.begin(), y.end(), 0.0f) / n;
+
+        float num = 0.0f, den_x = 0.0f, den_y = 0.0f;
+        for (size_t i = 0; i < n; ++i) {
+            float dx = x[i] - mean_x;
+            float dy = y[i] - mean_y;
+            num += dx * dy;
+            den_x += dx * dx;
+            den_y += dy * dy;
+        }
+        return num / (std::sqrt(den_x * den_y) + 1e-10f);
+    }
+
     inline void evaluate_timeseries(const std::vector<std::vector<float>>& predictions, const std::vector<std::vector<float>>& targets, const  std::vector<float>& latencies, size_t flops, bool verbose = false ) {
         if (verbose) {
             std::cout << "\nTime Series Evaluation:\n";
@@ -17,6 +50,7 @@ namespace Evaluations {
         float mse = 0.0f;
         float mae = 0.0f;
         float r2 = 0.0f;
+        float total_dtw = 0.0f;
 
         for (size_t i = 0; i < predictions.size(); ++i) {
 
@@ -24,6 +58,7 @@ namespace Evaluations {
             float sum_absolute_error = 0.0f;
             float sum_squared_total = 0.0f;
             float mean_target = 0.0f;
+
 
             for (size_t j = 0; j < predictions[i].size(); ++j) {
                 float error = predictions[i][j] - targets[i][j];
@@ -42,22 +77,64 @@ namespace Evaluations {
             mse += sum_squared_error / predictions[i].size();
             mae += sum_absolute_error / predictions[i].size();
             r2 += 1.0f - (sum_squared_error / (sum_squared_total + 1e-10f));
+
+            total_dtw += dtw_distance(predictions[i], targets[i]);
         }
 
         mse /= predictions.size();
         mae /= predictions.size();
         r2 /= predictions.size();
+        float avg_dtw = total_dtw / predictions.size();
 
-        float avg_latency = std::accumulate(latencies.begin(), latencies.end(), 0.0f) / latencies.size();
+        float total_latency = std::accumulate(latencies.begin(), latencies.end(), 0.0f);
+        float avg_latency = total_latency / latencies.size();
+        float sq_sum = std::inner_product(latencies.begin(), latencies.end(), latencies.begin(), 0.0f);
+        float std_latency = std::sqrt(sq_sum / latencies.size() - avg_latency * avg_latency);
+        float skew_latency = 0.0f;
+        for (float l : latencies) skew_latency += std::pow(l - avg_latency, 3);
+        skew_latency /= latencies.size();
+        skew_latency /= std::pow(std_latency, 3) + 1e-10f;
+        std::unordered_map<int,int> freq;
+        for (float l : latencies) freq[static_cast<int>(std::round(l))]++;
+        float mode_latency = latencies.empty() ? 0.0f : std::round(latencies[0]);
+        int max_count = 0;
+        for (auto& kv : freq) {
+            if (kv.second > max_count) { max_count = kv.second; mode_latency = kv.first; }
+        }
+        size_t input_bytes = 0, output_bytes = 0;
+        for (const auto& t : targets) input_bytes += t.size() * sizeof(float);
+        for (const auto& p : predictions) output_bytes += p.size() * sizeof(float);
+        float total_seconds = total_latency / 1000.0f;
+        float input_bps = total_seconds > 0 ? input_bytes / total_seconds : 0.0f;
+        float output_bps = total_seconds > 0 ? output_bytes / total_seconds : 0.0f;
         float throughput = 1.0f / avg_latency;
 
+        //TODO: Add DTW, msIC, msIR
+        // DTW: Dyc Time Wrapping
+        // msIC: mean sequencial correlation = (1/(Batchs*Output)) * Batchs_Sum( Outputs_Sum( Cov/Sigma))
+        // msIR: correlation stability ratio = msIC/TrackingError(msIC_i;msIC)
         if (verbose) {
-            std::cout << "\nMetrics:\n";
-            std::cout << "Mean Squared Error: " << mse << "\n";
-            std::cout << "Mean Absolute Error: " << mae << "\n";
-            std::cout << "R-squared: " << r2 << "\n";
-            std::cout << "Average Latency: " << avg_latency << " ms\n";
-            std::cout << "Throughput: " << throughput << " FLOPS\n";
+            std::cout << "\n *~~~~~~~~~ Metrics ~~~~~~~~~*\n";
+
+            std::cout << " | Mean Squared Error: " << mse << "\n";
+            std::cout << " | Mean Absolute Error: " << mae << "\n";
+            std::cout << " | R-squared: " << r2 << "\n";
+            std::cout << " | DTW: " << avg_dtw << "\n";
+            std::cout << " | msIR: " << "coming soon..." << "\n";
+            std::cout << " | msIC: " << "coming soon..." << "\n";
+            std::cout << " *~~~~~~~~~~~~~~~~~~~~~~~~~~~~*" << std::endl;
+
+            std::cout << " | Latency Std Dev: " << std_latency << " ms\n";
+            std::cout << " | Latency Skew: " << skew_latency << "\n";
+            std::cout << " | Latency Mode: " << mode_latency << " ms\n";
+            std::cout << " *~~~~~~~~~~~~~~~~~~~~~~~~~~~~*" << std::endl;
+
+            std::cout << " | Input Bytes/s: " << Thot::formatBytes(input_bps) << "\n";
+            std::cout << " | Output Bytes/s: " << Thot::formatBytes(output_bps) << "\n";
+
+            std::cout << " | Throughput: " << throughput << " FLOPS\n";
+            std::cout << " *~~~~~~~~~~~~~~~~~~~~~~~~~~~~*" << std::endl;
+
         }
     }
 }

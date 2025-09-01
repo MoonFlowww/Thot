@@ -219,5 +219,7 @@ namespace Thot {
 
             return std::move(grad_input);
         }
+        int get_input_size() const override { return in_channels_ * in_height_ * in_width_; } // color * height * width
+        int get_output_size() const override { return out_channels_ * out_height_ * out_width_; }
     };
 } // namespace Thot

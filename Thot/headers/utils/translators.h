@@ -56,5 +56,21 @@ namespace Thot {
         return oss.str();
     }
 
+    std::string formatBytes(float bytes) {
+        static const char* units[] = {"B", "KB", "MB", "GB", "TB"};
+        int unitIndex = 0;
+
+        double value = bytes;
+        while (value >= 1024.0 && unitIndex < 4) {
+            value /= 1024.0;
+            ++unitIndex;
+        }
+
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(2) << value << " " << units[unitIndex];
+        std::cout.unsetf(std::ios_base::floatfield);
+        return oss.str();
+    }
+
 }
 #endif //THOT_TRANSLATORS_H

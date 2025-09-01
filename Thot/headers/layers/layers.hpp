@@ -43,8 +43,8 @@ namespace Thot {
 
 		void set_optimizer(std::shared_ptr<Optimizer> optimizer) { optimizer_ = optimizer; }
 
-	    virtual int get_input_size() const { return 0; }
-	    virtual int get_output_size() const { return 0; }
+	    virtual int get_input_size() const { return -1; }
+	    virtual int get_output_size() const { return -1; }
 
 
 		static std::shared_ptr<Layer> FC(int input_size, int output_size, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "FeedForward");

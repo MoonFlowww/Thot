@@ -6,6 +6,8 @@
 #include <cmath>
 #include <iostream>
 #include <iomanip>
+#include <unordered_map>
+#include "utils/translators.h"
 
 namespace Evaluations {
     inline void evaluate_regression(const std::vector<std::vector<float>>& predictions, const std::vector<std::vector<float>>& targets, const  std::vector<float>& latencies, size_t flops, bool verbose) {
@@ -47,16 +49,47 @@ namespace Evaluations {
         mae /= predictions.size();
         r2 /= predictions.size();
 
-        float avg_latency = std::accumulate(latencies.begin(), latencies.end(), 0.0f) / latencies.size();
+        float total_latency = std::accumulate(latencies.begin(), latencies.end(), 0.0f);
+        float avg_latency = total_latency / latencies.size();
+        float sq_sum = std::inner_product(latencies.begin(), latencies.end(), latencies.begin(), 0.0f);
+        float std_latency = std::sqrt(sq_sum / latencies.size() - avg_latency * avg_latency);
+        float skew_latency = 0.0f;
+        for (float l : latencies) skew_latency += std::pow(l - avg_latency, 3);
+        skew_latency /= latencies.size();
+        skew_latency /= std::pow(std_latency, 3) + 1e-10f;
+        std::unordered_map<int,int> freq;
+        for (float l : latencies) freq[static_cast<int>(std::round(l))]++;
+        float mode_latency = latencies.empty() ? 0.0f : std::round(latencies[0]);
+        int max_count = 0;
+        for (auto& kv : freq) {
+            if (kv.second > max_count) { max_count = kv.second; mode_latency = kv.first; }
+        }
+        size_t input_bytes = 0, output_bytes = 0;
+        for (const auto& t : targets) input_bytes += t.size() * sizeof(float);
+        for (const auto& p : predictions) output_bytes += p.size() * sizeof(float);
+        float total_seconds = total_latency / 1000.0f;
+        float input_bps = total_seconds > 0 ? input_bytes / total_seconds : 0.0f;
+        float output_bps = total_seconds > 0 ? output_bytes / total_seconds : 0.0f;
         float throughput = 1.0f / avg_latency;
 
         if (verbose) {
-            std::cout << "\nMetrics:\n";
-            std::cout << "Mean Squared Error: " << mse << "\n";
-            std::cout << "Mean Absolute Error: " << mae << "\n";
-            std::cout << "R-squared: " << r2 << "\n";
-            std::cout << "Average Latency: " << avg_latency << " ms\n";
-            std::cout << "Throughput: " << throughput << " FLOPS\n";
+            std::cout << "\n *~~~~~~~~~ Metrics ~~~~~~~~~*\n";
+
+            std::cout << " | MSE: " << mse << "\n";
+            std::cout << " | MAE: " << mae << "\n";
+            std::cout << " | R-squared: " << r2 << "\n";
+            std::cout << " *~~~~~~~~~~~~~~~~~~~~~~~~~~~~*" << std::endl;
+            std::cout << " | Latency Average : " << avg_latency << " ms\n";
+            std::cout << " | Latency Std Dev: " << std_latency << " ms\n";
+            std::cout << " | Latency Skew: " << skew_latency << "\n";
+            std::cout << " | Latency Mode: " << mode_latency << " ms\n";
+            std::cout << " *~~~~~~~~~~~~~~~~~~~~~~~~~~~~*" << std::endl;
+
+            std::cout << " | Input Bytes/s: " << Thot::formatBytes(input_bps) << "\n";
+            std::cout << " | Output Bytes/s: " << Thot::formatBytes(output_bps) << "\n";
+            std::cout << " | Throughput: " << throughput << " FLOPS\n";
+            std::cout << " *~~~~~~~~~~~~~~~~~~~~~~~~~~~~*" << std::endl;
+
         }
     }
 }
