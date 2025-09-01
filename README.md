@@ -147,17 +147,17 @@ int main() {
 	model.summary();
 
 
-    //Loading train and test MNIST data
+    // Loading Train and Test MNIST data
 	std::string mnist_train = "MNIST/Train"; // path -> folder in which files are
 	std::string mnist_test = "MNIST/Test";
     auto [x, y, x_test, y_test] = Thot::Data::Load_MNIST(mnist_train, mnist_test, 0.05f, 0.15f);
 								  // Train: 5% of total mnist train
 								  // Test: 15% of total mnist test
 
-    //train
+    // Training via Train Samples
     model.train(x, y, Thot::Batch::Classic(32, 10), Thot::KFold::Classic(5), 1, true);
 
-    //test
+    // Evaluation via Test Samples
     model.evaluate(x_test, y_test, Thot::Evaluation::Classification, true);
     
 	return 0;
