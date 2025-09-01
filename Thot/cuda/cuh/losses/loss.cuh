@@ -2,6 +2,7 @@
 
 #include <cuda_runtime.h>
 
+
 namespace cuda {
 	namespace losses {
 

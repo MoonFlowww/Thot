@@ -2,6 +2,7 @@
 
 
 #include <sstream>
+#include <thrust/execution_policy.h>
 #include <thrust/device_ptr.h>
 #include <thrust/reduce.h>
 #include "../tensor.hpp"
@@ -163,8 +164,13 @@ namespace Thot {
                 reduce_size = predictions.shape()[0];
             }
 
-            float result;
-            cudaMemcpy(&result, loss, sizeof(float), cudaMemcpyDeviceToHost);
+
+            auto result = thrust::reduce(
+                thrust::device,
+                thrust::device_pointer_cast(loss),
+                thrust::device_pointer_cast(loss) + reduce_size,
+                0.0f
+            );
             cudaFree(loss);
             int normalizer = 0;
             switch (Loss_) {

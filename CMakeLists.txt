@@ -24,6 +24,9 @@ set(CMAKE_CUDA_ARCHITECTURES 89)
 
 enable_testing()
 
+# Force use of the CUDA backend for Thrust
+add_compile_definitions(THRUST_DEVICE_SYSTEM=THRUST_DEVICE_SYSTEM_CUDA)
+
 include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/Thot/cuda/cuh
         ${CMAKE_CURRENT_SOURCE_DIR}/Thot/headers
