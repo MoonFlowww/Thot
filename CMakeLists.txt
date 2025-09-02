@@ -76,6 +76,7 @@ set(HEADERS
         Thot/cuda/cuh/layers/maxpool2d.cuh
         Thot/headers/layers/details/flatten.hpp
         Thot/headers/layers/details/maxpool2d.hpp
+        Thot/headers/data/details/cifar.hpp
 )
 
 add_library(thot_kernels STATIC ${KERNEL_SOURCES})

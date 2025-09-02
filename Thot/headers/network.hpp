@@ -281,13 +281,9 @@ public:
     }
     template <typename BatchMethod, typename KFoldMethod>
     void train(const std::vector<std::vector<float>> &inputs,
-                const std::vector<std::vector<float>> &targets,
-                const BatchMethod &batch_method,
-                const KFoldMethod &kfold_method,
-                int log_interval = 100,
-                bool verbose = true) {
+                const std::vector<std::vector<float>> &targets, const BatchMethod &batch_method, const KFoldMethod &kfold_method, int log_interval = 100, bool verbose = true) {
 
-        if (!optimizer_) {
+        if (!optimizer_) { // if not defined
             optimizer_ = Thot::Optimizer::SGD(0.01f);
             for (auto &L : layers_) {
                 L->set_optimizer(optimizer_);
