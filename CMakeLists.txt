@@ -83,8 +83,9 @@ set(KERNEL_SOURCES
         Thot/cuda/cu/optimizations/sgdm.cu
         Thot/cuda/cu/layers/flatten.cu
         Thot/cuda/cu/layers/maxpool2d.cu
-        Thot/cuda/cu/layers/conv2d_old.cu
-)
+
+        Thot/cuda/cu/layers/conv2d_im2col.cu
+)        #Thot/cuda/cu/layers/conv2d_old.cu
 
 set(HEADERS
         Thot/headers/activations/activations.hpp

@@ -188,6 +188,14 @@ namespace cuda {
             float* output, int batch_size, int in_channels, int in_height, int in_width,
             int out_channels, int kernel_size, int stride, int padding, int out_height, int out_width,
             cudaStream_t stream) {
+#ifdef THOT_WITH_CUDNN
+            launchConv2DForwardCuDNN(input, weights, bias, output,
+                batch_size, in_channels, in_height, in_width,
+                out_channels, kernel_size, stride, padding,
+                out_height, out_width, stream);
+            return;
+#endif
+
             // Optimize 1x1 convolutions using GEMM
             if (kernel_size == 1 && stride == 1 && padding == 0) {
                 int spatial = in_height * in_width;
@@ -238,21 +246,11 @@ namespace cuda {
                 return;
             }
 
-            // Fallback to direct conv kernel
-            const int blockSize = 256;
-            const int numElements = batch_size * out_channels * out_height * out_width;
-            const int numBlocks = (numElements + blockSize - 1) / blockSize;
-
-            conv2d_forward<<<numBlocks, blockSize, 0, stream>>>(
-                input, weights, bias, output,
+            // General case using im2col + GEMM
+            launchConv2DForwardIm2Col(input, weights, bias, output,
                 batch_size, in_channels, in_height, in_width,
                 out_channels, kernel_size, stride, padding,
-                out_height, out_width);
-            cudaError_t err = cudaGetLastError();
-            if (err != cudaSuccess) {
-                printf("Kernel launch error in launchConv2DForward: %s\n", cudaGetErrorString(err));
-            }
-            cudaDeviceSynchronize();
+                out_height, out_width, stream);
         }
 
         void launchConv2DBackwardInput(const float* grad_output, const float* weights,
@@ -264,12 +262,19 @@ namespace cuda {
             const int numElements = batch_size * in_channels * in_height * in_width;
             const int numBlocks = (numElements + blockSize - 1) / blockSize;
 
-            conv2d_backward_input << <numBlocks, blockSize, 0, stream >> > (
+#ifdef THOT_WITH_CUDNN
+            launchConv2DBackwardInputCuDNN(grad_output, weights, grad_input,
+                batch_size, in_channels, in_height, in_width,
+                out_channels, kernel_size, stride, padding,
+                out_height, out_width, stream);
+            return;
+#endif
+            conv2d_backward_input<<<numBlocks, blockSize, 0, stream>>>(
                 grad_output, weights, grad_input,
                 batch_size, in_channels, in_height, in_width,
                 out_channels, kernel_size, stride, padding,
-                out_height, out_width
-                );
+                out_height, out_width);
+
             cudaError_t err = cudaGetLastError();
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchConv2DBackwardInput: %s\n", cudaGetErrorString(err));
@@ -286,7 +291,14 @@ namespace cuda {
             const int numElements = out_channels * in_channels * kernel_size * kernel_size;
             const int numBlocks = (numElements + blockSize - 1) / blockSize;
 
-            conv2d_backward_weights << <numBlocks, blockSize, 0, stream >> > (
+#ifdef THOT_WITH_CUDNN
+            launchConv2DBackwardWeightsCuDNN(input, grad_output, grad_weights,
+                batch_size, in_channels, in_height, in_width,
+                out_channels, kernel_size, stride, padding,
+                out_height, out_width, stream);
+            return;
+#endif
+            conv2d_backward_weights<<<numBlocks, blockSize, 0, stream>>>(
                 input, grad_output, grad_weights,
                 batch_size, in_channels, in_height, in_width,
                 out_channels, kernel_size, stride, padding,
@@ -306,7 +318,12 @@ namespace cuda {
             const int blockSize = 256;
             const int numBlocks = (out_channels + blockSize - 1) / blockSize;
 
-            conv2d_backward_bias << <numBlocks, blockSize, 0, stream >> > (
+#ifdef THOT_WITH_CUDNN
+            launchConv2DBackwardBiasCuDNN(grad_output, grad_bias,
+                batch_size, out_channels, out_height, out_width, stream);
+            return;
+#endif
+            conv2d_backward_bias<<<numBlocks, blockSize, 0, stream>>>(
                 grad_output, grad_bias,
                 batch_size, out_channels, out_height, out_width
                 );
