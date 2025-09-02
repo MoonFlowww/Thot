@@ -80,7 +80,7 @@ template <typename Net>
 
                 std::ostringstream oss;
                 oss << std::fixed << std::setprecision(2);
-                oss << "\r[" << current_epoch << "] -> "
+                oss << "\r[" << current_epoch-1 << "] -> "
                     << "Progress: " << std::setw(3) << int(progress * 100)
                     << "% | "
                     << "Elapsed: " << std::setw(6) << elapsed << "s | "

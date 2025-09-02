@@ -14,8 +14,13 @@ namespace Thot {
         Xavier,
         He,          // Good for ReLU activation layers
         LeCun,        // Scaled for the fan-in size
+        //Orthogonal,
+        TruncatedNormal,
+        Dirac,
+        Lyapunov,
         None
     };
+
 
     namespace Initializers {
 
@@ -109,8 +114,98 @@ namespace Thot {
                 }
                 break;
             }
+
+
+            case Initialization::TruncatedNormal: {
+                float stddev = 0.01f;
+                auto& gen = get_random_generator();
+                std::normal_distribution<float> dist(0.0f, stddev);
+                for (size_t i = 0; i < size; ++i) {
+                    float val;
+                    do { val = dist(gen); } while (std::abs(val) > 2 * stddev);
+                    host_data[i] = val;
+                }
+                break;
             }
 
+
+            case Initialization::Dirac: {
+                std::fill(host_data.begin(), host_data.end(), 0.0f);
+                if (shape.size() == 2) {
+                    int diag = std::min(shape[0], shape[1]);
+                    for (int i = 0; i < diag; ++i) {
+                        host_data[i * shape[1] + i] = 1.0f;
+                    }
+                }
+                break;
+            }
+
+            /*
+            case Initialization::Orthogonal: {
+                // Simplified: fill with normal then QR-decompose (requires linear algebra lib)
+                // Placeholder: same as normal
+                float stddev = 1.0f;
+                std::normal_distribution<float> dist(0.0f, stddev);
+                auto& gen = get_random_generator();
+                for (size_t i = 0; i < size; ++i) host_data[i] = dist(gen);
+                // TODO: apply QR for true orthogonality
+                break;
+                }
+                */
+
+            case Initialization::Lyapunov: {
+                // Generate random Gaussian weights
+                std::normal_distribution<float> dist(0.0f, 1.0f);
+                auto& gen = get_random_generator();
+                for (size_t i = 0; i < size; ++i) {
+                    host_data[i] = dist(gen);
+                }
+
+                // If 2D (matrix), enforce spectral radius < 1
+                if (shape.size() == 2) {
+                    int rows = shape[0];
+                    int cols = shape[1];
+
+                    // crude power iteration to approximate spectral radius
+                    std::vector<float> v(cols, 1.0f);
+                    for (int iter = 0; iter < 20; ++iter) {
+                        std::vector<float> v_new(rows, 0.0f);
+                        for (int r = 0; r < rows; ++r) {
+                            for (int c = 0; c < cols; ++c) {
+                                v_new[r] += host_data[r * cols + c] * v[c];
+                            }
+                        }
+                        float norm = 0.0f;
+                        for (float val : v_new) norm += val * val;
+                        norm = std::sqrt(norm);
+                        if (norm > 0) {
+                            for (float& val : v_new) val /= norm;
+                        }
+                        v = v_new;
+                    }
+
+                    // Rayleigh quotient estimate of spectral radius
+                    float spectral_radius = 0.0f;
+                    for (int r = 0; r < rows; ++r) {
+                        float acc = 0.0f;
+                        for (int c = 0; c < cols; ++c) {
+                            acc += host_data[r * cols + c] * v[c];
+                        }
+                        spectral_radius += acc * v[r];
+                    }
+                    spectral_radius = std::abs(spectral_radius);
+
+                    if (spectral_radius > 0) {
+                        float scale = 0.95f / spectral_radius; // ensure < 1
+                        for (size_t i = 0; i < size; ++i) {
+                            host_data[i] *= scale;
+                        }
+                    }
+                }
+
+                break;
+                }
+            }
             tensor.upload(host_data);
 
 
@@ -165,6 +260,22 @@ namespace Thot {
             initialize_tensor(tensor, Initialization::LeCun, fan_in);
         }
 
+        inline void TruncatedNormal(Utils::Tensor& tensor, int fan_in = 0) {
+            initialize_tensor(tensor, Initialization::TruncatedNormal, fan_in);
+        }
+        /*
+        inline void Orthogonal(Utils::Tensor& tensor, int fan_in = 0) {
+            initialize_tensor(tensor, Initialization::Orthogonal, fan_in);
+        }
+        */
+        inline void Dirac(Utils::Tensor& tensor, int fan_in = 0) {
+            initialize_tensor(tensor, Initialization::Dirac, fan_in);
+        }
+
+        inline void Lyapunov(Utils::Tensor& tensor, int fan_in = 0) {
+            initialize_tensor(tensor, Initialization::Lyapunov, fan_in);
+        }
+
 
         inline std::string to_string(Initialization init) {
             switch (init) {
@@ -175,6 +286,10 @@ namespace Thot {
             case Initialization::Xavier: return "Xavier";
             case Initialization::He: return "He";
             case Initialization::LeCun: return "LeCun";
+            case Initialization::TruncatedNormal: return "TruncatedNormal";
+            case Initialization::Dirac: return "Dirac";
+            //case Initialization::Orthogonal: return "Orthogonal";
+            case Initialization::Lyapunov: return "Lyapunov";
             case Initialization::None: return "None";
             default: return "Unknown";
             }

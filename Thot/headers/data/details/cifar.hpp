@@ -35,7 +35,7 @@ namespace Thot {
             return label_names;
         }
 
-        inline std::pair<std::vector<std::vector<float>>, std::vector<std::vector<float>>> load_cifar10(const std::string& file_path, int num_classes = 10, float ratio = 1.0f) {
+        inline std::pair<std::vector<std::vector<float>>, std::vector<std::vector<float>>> load_cifar10(const std::string& file_path, int num_classes = 10, float ratio = 1.0f, bool show_info = true) {
             std::ifstream file(file_path, std::ios::binary);
             if (!file) throw std::runtime_error("Cannot open CIFAR-10 file: " + file_path);
 
@@ -58,17 +58,19 @@ namespace Thot {
             size_t num_images = file_size / record_size;
             size_t actual_num_images = static_cast<size_t>(num_images * ratio);
 
-            std::cout << "\nCIFAR-10 Dataset Information:\n";
-            std::cout << "-------------------------\n";
-            std::cout << "Total images available: " << num_images << "\n";
-            std::cout << "Loading ratio: " << std::fixed << std::setprecision(2) << ratio * 100 << "%\n";
-            std::cout << "Images to load: " << actual_num_images << "\n";
-            std::cout << "Image dimensions: 32x32x3 (" << image_size << " values)\n";
-            std::cout << "Number of classes: " << num_classes << "\n";
-            std::cout << "Memory usage (approx):\n";
-            std::cout << "  - Images: " << std::setprecision(2) << (actual_num_images * image_size * sizeof(float)) / (1024.0 * 1024.0) << " MB\n";
-            std::cout << "  - Labels: " << std::setprecision(2) << (actual_num_images * num_classes * sizeof(float)) / (1024.0 * 1024.0) << " MB\n";
-            std::cout << "-------------------------\n\n";
+            if (show_info) {
+                std::cout << "\nCIFAR-10 Dataset Information:\n";
+                std::cout << "-------------------------\n";
+                std::cout << "Total images available: " << num_images << "\n";
+                std::cout << "Loading ratio: " << std::fixed << std::setprecision(2) << ratio * 100 << "%\n";
+                std::cout << "Images to load: " << actual_num_images << "\n";
+                std::cout << "Image dimensions: 32x32x3 (" << image_size << " values)\n";
+                std::cout << "Number of classes: " << num_classes << "\n";
+                std::cout << "Memory usage (approx):\n";
+                std::cout << "  - Images: " << std::setprecision(2) << (actual_num_images * image_size * sizeof(float)) / (1024.0 * 1024.0) << " MB\n";
+                std::cout << "  - Labels: " << std::setprecision(2) << (actual_num_images * num_classes * sizeof(float)) / (1024.0 * 1024.0) << " MB\n";
+                std::cout << "-------------------------\n\n";
+            }
 
             std::vector<std::vector<float>> images(actual_num_images, std::vector<float>(image_size));
             std::vector<std::vector<float>> labels(actual_num_images, std::vector<float>(num_classes, 0.0f));
@@ -91,14 +93,16 @@ namespace Thot {
                 label_counts[label]++;
             }
 
-            std::cout << "Label Distribution:\n";
-            std::cout << "------------------\n";
-            for (int i = 0; i < num_classes; ++i) {
-                double percentage = (100.0 * label_counts[i]) / actual_num_images;
-                std::cout << "Class " << (label_string.empty() ? std::to_string(i) : std::to_string(i)+" "+label_string[i]) << ": " << label_counts[i] << " images ("
-                          << std::fixed << std::setprecision(2) << percentage << "%)\n";
+            if (show_info) {
+                std::cout << "Label Distribution:\n";
+                std::cout << "------------------\n";
+                for (int i = 0; i < num_classes; ++i) {
+                    double percentage = (100.0 * label_counts[i]) / actual_num_images;
+                    std::cout << "Class " << (label_string.empty() ? std::to_string(i) : std::to_string(i)+" "+label_string[i]) << ": " << label_counts[i] << " images ("
+                              << std::fixed << std::setprecision(2) << percentage << "%)\n";
+                }
+                std::cout << "------------------\n\n";
             }
-            std::cout << "------------------\n\n";
 
             return { images, labels };
         }
@@ -107,13 +111,50 @@ namespace Thot {
             std::cout << "Loading CIFAR-10 Training Set...\n";
             std::vector<std::vector<float>> train_images;
             std::vector<std::vector<float>> train_labels;
+            const int num_classes = 10;
+
+            std::vector<int> total_label_counts(num_classes, 0);
+
 
             for (int batch = 1; batch <= 5; ++batch) {
                 std::string path = base_path + "/data_batch_" + std::to_string(batch) + ".bin";
-                auto [images, labels] = load_cifar10(path, 10, ratio);
+                auto [images, labels] = load_cifar10(path, num_classes, ratio, false);
+                for (const auto& lbl : labels) {
+                    for (int i = 0; i < num_classes; ++i) {
+                        if (lbl[i] == 1.0f) {
+                            total_label_counts[i]++;
+                            break;
+                        }
+                    }
+                }
                 train_images.insert(train_images.end(), images.begin(), images.end());
                 train_labels.insert(train_labels.end(), labels.begin(), labels.end());
             }
+
+
+            const int image_size = 32 * 32 * 3;
+            const int total_available = 5 * 10000;
+            size_t actual_num_images = train_images.size();
+
+            std::cout << "\nCIFAR-10 Dataset Information:\n";
+            std::cout << "-------------------------\n";
+            std::cout << "Total images available: " << total_available << "\n";
+            std::cout << "Loading ratio: " << std::fixed << std::setprecision(2) << ratio * 100 << "%\n";
+            std::cout << "Images to load: " << actual_num_images << "\n";
+            std::cout << "Image dimensions: 32x32x3 (" << image_size << " values)\n";
+            std::cout << "Number of classes: " << num_classes << "\n";
+            std::cout << "Memory usage (approx):\n";
+            std::cout << "  - Images: " << std::setprecision(2) << (actual_num_images * image_size * sizeof(float)) / (1024.0 * 1024.0) << " MB\n";
+            std::cout << "  - Labels: " << std::setprecision(2) << (actual_num_images * num_classes * sizeof(float)) / (1024.0 * 1024.0) << " MB\n";
+            std::cout << "-------------------------\n\n";
+
+            std::cout << "Label Distribution:\n";
+            std::cout << "------------------\n";
+            for (int i = 0; i < num_classes; ++i) {
+                double percentage = (100.0 * total_label_counts[i]) / actual_num_images;
+                std::cout << "Class " << i << ": " << total_label_counts[i] << " images (" << std::fixed << std::setprecision(2) << percentage << "%)\n";
+            }
+            std::cout << "------------------\n\n";
             return { train_images, train_labels };
         }
 
