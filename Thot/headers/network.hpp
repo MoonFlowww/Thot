@@ -366,6 +366,22 @@ public:
                         {"output_size", rbm->get_output_size()},
                         {"cd_steps", rbm->get_cd_steps()}
                     };
+                } else if (auto pool = std::dynamic_pointer_cast<MaxPool2DLayer>(layer)) {
+                    jl["type"] = "MaxPool2D";
+                    jl["params"] = {
+                        {"in_channels", pool->in_channels()},
+                        {"in_height", pool->in_height()},
+                        {"in_width", pool->in_width()},
+                        {"kernel_size", pool->kernel_size()},
+                        {"stride", pool->stride()}
+                    };
+                } else if (auto flat = std::dynamic_pointer_cast<FlattenLayer>(layer)) {
+                    jl["type"] = "Flatten";
+                    jl["params"] = {
+                        {"in_channels", flat->in_channels()},
+                        {"in_height", flat->in_height()},
+                        {"in_width", flat->in_width()}
+                    };
                 }
                 jlayers.push_back(jl);
             }
@@ -458,6 +474,18 @@ public:
                     int hid = jl["params"].value("output_size", 0);
                     int cd = jl["params"].value("cd_steps", 0);
                     layer = Layer::RBM(vis, hid, cd, act);
+                } else if (type == "MaxPool2D") {
+                    int in_c = jl["params"].value("in_channels", 0);
+                    int in_h = jl["params"].value("in_height", 0);
+                    int in_w = jl["params"].value("in_width", 0);
+                    int k = jl["params"].value("kernel_size", 0);
+                    int s = jl["params"].value("stride", 0);
+                    layer = Layer::MaxPool2D(in_c, in_h, in_w, k, s);
+                } else if (type == "Flatten") {
+                    int in_c = jl["params"].value("in_channels", 0);
+                    int in_h = jl["params"].value("in_height", 0);
+                    int in_w = jl["params"].value("in_width", 0);
+                    layer = Layer::Flatten(in_c, in_h, in_w);
                 }
                 if (layer) {
                     if (optimizer_) layer->set_optimizer(optimizer_);
