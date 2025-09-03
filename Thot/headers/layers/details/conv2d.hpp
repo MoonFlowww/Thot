@@ -64,13 +64,13 @@ namespace Thot {
             // fan_out = out_channels * kernel_size * kernel_size
             int fan_in = in_channels_ * kernel_size_ * kernel_size_;
             int fan_out = out_channels_ * kernel_size_ * kernel_size_;
-            Initializers::initialize_tensor(weights_, weight_init, fan_in, fan_out);
+            Initializations::initialize_tensor(weights_, weight_init, fan_in, fan_out);
 
             grad_weights_ = Utils::Tensor({ out_channels_, in_channels_, kernel_size_, kernel_size_ }, true);
 
             // Initialize bias
             bias_ = Utils::Tensor({ out_channels_ });
-            Initializers::zeros(bias_);
+            Initializations::zeros(bias_);
             grad_bias_ = Utils::Tensor({ out_channels_ }, true);
         }
 
@@ -80,6 +80,10 @@ namespace Thot {
             // Total output elements = batch_size * out_channels * out_height * out_width
             return batch_size * out_channels_ * out_height_ * out_width_ *
                 (2 * kernel_size_ * kernel_size_ * in_channels_ + 1);
+        }
+
+        size_t get_parameters() const override {
+            return out_channels_ * in_channels_ * kernel_size_ * kernel_size_ + out_channels_;
         }
 
         Activation get_activation() const override {

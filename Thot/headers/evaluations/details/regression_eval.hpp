@@ -60,11 +60,8 @@ namespace Evaluations {
         skew_latency /= std::pow(std_latency, 3) + 1e-10f;
         std::unordered_map<int,int> freq;
         for (float l : latencies) freq[static_cast<int>(std::round(l))]++;
-        float mode_latency = latencies.empty() ? 0.0f : std::round(latencies[0]);
-        int max_count = 0;
-        for (auto& kv : freq) {
-            if (kv.second > max_count) { max_count = kv.second; mode_latency = kv.first; }
-        }
+        float mode_latency = avg_latency - (std_latency*skew_latency)/2; // pearson approx
+
         size_t model_input_bytes = predictions.size() * input_size * sizeof(float);
         size_t model_output_bytes = predictions.size() * output_size * sizeof(float);
         float total_seconds = total_latency / 1000.0f;

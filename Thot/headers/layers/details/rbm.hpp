@@ -50,17 +50,17 @@ namespace Thot {
 
             // Initialize weights
             weights_ = Utils::Tensor({ hidden_size, visible_size });
-            Initializers::initialize_tensor(weights_, weight_init, visible_size, hidden_size);
+            Initializations::initialize_tensor(weights_, weight_init, visible_size, hidden_size);
             grad_weights_ = Utils::Tensor({ hidden_size, visible_size }, true);
 
             // Initialize visible bias
             visible_bias_ = Utils::Tensor({ visible_size });
-            Initializers::zeros(visible_bias_);
+            Initializations::zeros(visible_bias_);
             grad_visible_bias_ = Utils::Tensor({ visible_size }, true);
 
             // Initialize hidden bias
             hidden_bias_ = Utils::Tensor({ hidden_size });
-            Initializers::zeros(hidden_bias_);
+            Initializations::zeros(hidden_bias_);
             grad_hidden_bias_ = Utils::Tensor({ hidden_size }, true);
 
             // Initialize temporary storage
@@ -78,6 +78,10 @@ namespace Thot {
             return batch_size * cd_steps_ *
                 (2 * visible_size_ * hidden_size_ + hidden_size_ +
                     2 * visible_size_ * hidden_size_ + visible_size_);
+        }
+
+        size_t get_parameters() const override {
+            return visible_size_ * hidden_size_ + visible_size_ + hidden_size_;
         }
 
         Activation get_activation() const override {

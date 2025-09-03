@@ -42,12 +42,12 @@ namespace Thot {
 
             weights_ = Utils::Tensor({ output_size, input_size });
 
-            Initializers::initialize_tensor(weights_, weight_init, input_size, output_size);
+            Initializations::initialize_tensor(weights_, weight_init, input_size, output_size);
 
             grad_weights_ = Utils::Tensor({ output_size, input_size }, true); // Init to zeros
 
             bias_ = Utils::Tensor({ output_size });
-            Initializers::zeros(bias_);
+            Initializations::zeros(bias_);
 
             grad_bias_ = Utils::Tensor({ output_size }, true); // Init to zeros
         }
@@ -184,11 +184,16 @@ namespace Thot {
 
 
 
-        size_t get_flops(int batch_size = 1) const {
+        size_t get_flops(int batch_size = 1) const  override{
             // Matrix multiplication: 2 * input_size * output_size FLOPs per sample
             // Bias addition: output_size FLOPs per sample
             return batch_size * (2 * input_size_ * output_size_ + output_size_);
         }
+
+        size_t get_parameters() const override{
+            return input_size_ * output_size_ + output_size_;
+        }
+
         Activation get_activation() const override {
             return activation_type_;
         }

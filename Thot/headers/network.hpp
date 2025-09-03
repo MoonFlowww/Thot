@@ -40,29 +40,8 @@ class Optimizer;
 namespace Thot {
 
     //made for model load
-    inline Activation activation_from_string(const std::string &name) {
-        if (name == "Linear") return Activation::Linear;
-        if (name == "ReLU") return Activation::ReLU;
-        if (name == "Sigmoid") return Activation::Sigmoid;
-        if (name == "Tanh") return Activation::Tanh;
-        if (name == "LeakyReLU") return Activation::LeakyReLU;
-        if (name == "ELU") return Activation::ELU;
-        if (name == "GELU") return Activation::GELU;
-        if (name == "Softmax") return Activation::Softmax;
-        throw std::runtime_error("Unknown activation: " + name);
-    }
-    inline Loss loss_from_string(const std::string &name) {
-        if (name == "MSE") return Loss::MSE;
-        if (name == "MAE") return Loss::MAE;
-        if (name == "BCE") return Loss::BinaryCrossEntropy;
-        if (name == "CE") return Loss::CrossEntropy;
-        if (name == "CCE") return Loss::CategoricalCrossEntropy;
-        if (name == "SCCE") return Loss::SparseCategoricalCrossEntropy;
-        if (name == "Hinge") return Loss::Hinge;
-        if (name == "Huber") return Loss::Huber;
-        if (name == "KL div") return Loss::KLDivergence;
-        throw std::runtime_error("Unknown loss: " + name);
-    }
+
+
 
 class Network {
 private:
@@ -337,10 +316,12 @@ public:
                 if (auto fc = std::dynamic_pointer_cast<FCLayer>(layer)) {
                     jl["type"] = "FC";
                     jl["activation"] = Activations::to_string(layer->get_activation());
+                    jl["initializer"] = Initializations::to_string(layer->get_initialization());
                     jl["params"] = { {"input_size", fc->get_input_size()}, {"output_size", fc->get_output_size()} };
                 } else if (auto conv = std::dynamic_pointer_cast<Conv2DLayer>(layer)) {
                     jl["type"] = "Conv2D";
                     jl["activation"] = Activations::to_string(layer->get_activation());
+                    jl["initializer"] = Initializations::to_string(layer->get_initialization());
                     jl["params"] = {
                         {"in_channels", conv->in_channels()},
                         {"in_height", conv->in_height()},
@@ -353,6 +334,7 @@ public:
                 } else if (auto rnn = std::dynamic_pointer_cast<RNNLayer>(layer)) {
                     jl["type"] = "RNN";
                     jl["activation"] = Activations::to_string(layer->get_activation());
+                    jl["initializer"] = Initializations::to_string(layer->get_initialization());
                     jl["params"] = {
                         {"input_size", rnn->get_input_size()},
                         {"output_size", rnn->get_output_size()},
@@ -361,6 +343,7 @@ public:
                 } else if (auto rbm = std::dynamic_pointer_cast<RBMLayer>(layer)) {
                     jl["type"] = "RBM";
                     jl["activation"] = Activations::to_string(layer->get_activation());
+                    jl["initializer"] = Initializations::to_string(layer->get_initialization());
                     jl["params"] = {
                         {"input_size", rbm->get_input_size()},
                         {"output_size", rbm->get_output_size()},
@@ -368,6 +351,7 @@ public:
                     };
                 } else if (auto pool = std::dynamic_pointer_cast<MaxPool2DLayer>(layer)) {
                     jl["type"] = "MaxPool2D";
+                    jl["initializer"] = Initializations::to_string(layer->get_initialization());
                     jl["params"] = {
                         {"in_channels", pool->in_channels()},
                         {"in_height", pool->in_height()},
@@ -377,6 +361,7 @@ public:
                     };
                 } else if (auto flat = std::dynamic_pointer_cast<FlattenLayer>(layer)) {
                     jl["type"] = "Flatten";
+                    jl["initializer"] = Initializations::to_string(layer->get_initialization());
                     jl["params"] = {
                         {"in_channels", flat->in_channels()},
                         {"in_height", flat->in_height()},
@@ -391,6 +376,7 @@ public:
         if (!json_file)
             throw std::runtime_error("Failed to open architecture file for saving");
         json_file << j.dump(4);
+        std::cout << "Model and Architecture saved in:" << path << std::endl;
     }
 
 
@@ -449,12 +435,14 @@ public:
             for (const auto &jl : j["layers"]) {
                 std::string type = jl.value("type", "");
                 std::string act_str = jl.value("activation", "Linear");
+                std::string init_str = jl.value("initialization", "Xavier");
                 Activation act = activation_from_string(act_str);
+                Initialization init = initialization_from_string(init_str);
                 std::shared_ptr<Layer> layer;
                 if (type == "FC") {
                     int in = jl["params"].value("input_size", 0);
                     int out = jl["params"].value("output_size", 0);
-                    layer = Layer::FC(in, out, act);
+                    layer = Layer::FC(in, out, act, init);
                 } else if (type == "Conv2D") {
                     int in_c = jl["params"].value("in_channels", 0);
                     int in_h = jl["params"].value("in_height", 0);
@@ -463,17 +451,17 @@ public:
                     int k = jl["params"].value("kernel_size", 0);
                     int s = jl["params"].value("stride", 0);
                     int p = jl["params"].value("padding", 0);
-                    layer = Layer::Conv2D(in_c, in_h, in_w, out_c, k, s, p, act);
+                    layer = Layer::Conv2D(in_c, in_h, in_w, out_c, k, s, p, act, init);
                 } else if (type == "RNN") {
                     int in = jl["params"].value("input_size", 0);
                     int out = jl["params"].value("output_size", 0);
                     int seq = jl["params"].value("seq_length", 0);
-                    layer = Layer::RNN(in, out, seq, act);
+                    layer = Layer::RNN(in, out, seq, act, init);
                 } else if (type == "RBM") {
                     int vis = jl["params"].value("input_size", 0);
                     int hid = jl["params"].value("output_size", 0);
                     int cd = jl["params"].value("cd_steps", 0);
-                    layer = Layer::RBM(vis, hid, cd, act);
+                    layer = Layer::RBM(vis, hid, cd, act, init);
                 } else if (type == "MaxPool2D") {
                     int in_c = jl["params"].value("in_channels", 0);
                     int in_h = jl["params"].value("in_height", 0);
@@ -514,6 +502,7 @@ public:
             params[i] = std::move(lp);
         }
         apply_parameters(params);
+        std::cout << "Model and Architecture loaded from:" << path << std::endl;
     }
 
 
@@ -522,26 +511,30 @@ public:
         std::cout << "Layers:" << std::endl;
 
         size_t total_flops = 0;
+        size_t total_parm = 0;
         size_t batch_size = 1;
 
         std::cout << "+---------------+----------------------+---------------------"
-                     "-+----------------------+---------------+"
+                     "-+----------------------+---------------+---------------+"
                   << std::endl;
         std::cout << "| Layer         | Type                 | Activation          "
-                     " | Initialization       | FLOPs         |"
+                     " | Initialization       | FLOPs         | Parameters    "
                   << std::endl;
         std::cout << "+---------------+----------------------+---------------------"
-                     "-+----------------------+---------------+"
+                     "-+----------------------+---------------+---------------+"
                   << std::endl;
 
         for (size_t i = 0; i < layers_.size(); ++i) {
             auto &layer = layers_[i];
             std::string layer_name = layer->get_name();
             std::string activation_name = Thot::Activations::to_string(layer->get_activation());
-            std::string init_name = Thot::Initializers::to_string(layer->get_initialization());
+            std::string init_name = Thot::Initializations::to_string(layer->get_initialization());
 
             size_t layer_flops = layer->get_flops(batch_size);
+            size_t layer_parm = layer->get_parameters();
+
             total_flops += layer_flops;
+            total_parm += layer_parm;
 
             if (layer_name.length() > 20)
                 layer_name = layer_name.substr(0, 17) + "...";
@@ -554,18 +547,19 @@ public:
                       << std::left << std::setw(20) << layer_name << " | "
                       << std::left << std::setw(20) << activation_name << " | "
                       << std::left << std::setw(20) << init_name << " | "
-                      << std::right << std::setw(13) << layer_flops << " |"
+                      << std::right << std::setw(13) << human_readable_size(layer_flops) << " | "
+                        << std::right << std::setw(13) << human_readable_size(layer_parm) << " |"
                       << std::endl;
         }
 
         std::cout << "+---------------+----------------------+---------------------"
-                     "-+----------------------+---------------+"
+                     "-+----------------------+---------------+---------------+"
                   << std::endl;
         std::cout << "| Thot Model    |                                            "
                      "                                "
-                  << std::right << std::setw(7) << total_flops << " |" << std::endl;
+                  << std::right << std::setw(7) << human_readable_size(total_flops) << " | "<< std::setw(13) << human_readable_size(total_parm) << " |" << std::endl;
         std::cout << "+---------------+--------------------------------------------"
-                     "----------------------------------------+"
+                     "----------------------------------------+---------------+"
                   << std::endl;
 
         std::cout << "\nTraining Configuration:" << std::endl;
@@ -629,6 +623,8 @@ public:
         ModelParams best_params;
 
         int folds = kfold_method.get_folds();
+        bool new_best= false;
+        int best_epoch = -1;
 
         for (int fold = 0; fold < folds; ++fold) {
             if (folds > 1 && verbose) {
@@ -673,15 +669,22 @@ public:
                             val_loss += loss_function_->compute(prediction_tensor, target_tensor);
                         }
                         val_loss /= val_inputs.size();
-                        std::cout << " - Validation Loss: " << val_loss;
-                        fold_losses.push_back(val_loss);
 
                         if (val_loss < best_val_loss) { //best state
                             best_val_loss = val_loss;
                             best_params = capture_parameters();
+                            best_epoch = epoch;
+                            new_best = true;
                         }
+
+                        std::cout << " - Validation Loss: " << val_loss;
+                        if (new_best) std::cout << " *(" << epoch << ")*";
+                        fold_losses.push_back(val_loss);
+
+
                     }
                     std::cout << std::endl;
+                    new_best = false;
                 }
             }
         }

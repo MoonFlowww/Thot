@@ -49,17 +49,17 @@ namespace Thot {
 
             // Input-to-hidden weights
             weights_ih_ = Utils::Tensor({ hidden_size, input_size });
-            Initializers::initialize_tensor(weights_ih_, param_init, input_size, hidden_size);
+            Initializations::initialize_tensor(weights_ih_, param_init, input_size, hidden_size);
             grad_weights_ih_ = Utils::Tensor({ hidden_size, input_size }, true);
 
             // Hidden-to-hidden weights
             weights_hh_ = Utils::Tensor({ hidden_size, hidden_size });
-            Initializers::initialize_tensor(weights_hh_, param_init, hidden_size, hidden_size);
+            Initializations::initialize_tensor(weights_hh_, param_init, hidden_size, hidden_size);
             grad_weights_hh_ = Utils::Tensor({ hidden_size, hidden_size }, true);
 
             // Bias
             bias_ = Utils::Tensor({ hidden_size });
-            Initializers::initialize_tensor(bias_, param_init, hidden_size, 1);
+            Initializations::initialize_tensor(bias_, param_init, hidden_size, 1);
             grad_bias_ = Utils::Tensor({ hidden_size }, true);
 
             // Hidden state
@@ -88,6 +88,8 @@ namespace Thot {
                     2 * hidden_size_ * hidden_size_ +
                     hidden_size_);
         }
+
+        size_t get_parameters() const override { return input_size_ * hidden_size_ + hidden_size_ * hidden_size_ + hidden_size_;}
 
         Activation get_activation() const override {
             return activation_type_;

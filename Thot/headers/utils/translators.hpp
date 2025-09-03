@@ -72,5 +72,22 @@ namespace Thot {
         return oss.str();
     }
 
+    std::string human_readable_size(size_t value) {
+        if (value == 0) return "-";
+        static const char* suffixes[] = {"", "K", "M", "B", "T"};
+        size_t suffix_index = 0;
+        double scaled = static_cast<double>(value);
+
+        while (scaled >= 1000.0 && suffix_index < 4) {
+            scaled /= 1000.0;
+            ++suffix_index;
+        }
+
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(scaled < 10 ? 1 : 0) << scaled
+            << suffixes[suffix_index];
+        return oss.str();
+    }
+
 }
 #endif //THOT_TRANSLATORS_H

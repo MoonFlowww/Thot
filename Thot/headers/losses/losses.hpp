@@ -21,6 +21,18 @@ namespace Thot {
         Huber,
         KLDivergence
     };
+    inline Loss loss_from_string(const std::string &name) { // for model.save() & model.load()
+        if (name == "MSE") return Loss::MSE;
+        if (name == "MAE") return Loss::MAE;
+        if (name == "BCE") return Loss::BinaryCrossEntropy;
+        if (name == "CE") return Loss::CrossEntropy;
+        if (name == "CCE") return Loss::CategoricalCrossEntropy;
+        if (name == "SCCE") return Loss::SparseCategoricalCrossEntropy;
+        if (name == "Hinge") return Loss::Hinge;
+        if (name == "Huber") return Loss::Huber;
+        if (name == "KL div") return Loss::KLDivergence;
+        throw std::runtime_error("Unknown loss: " + name);
+    }
     class Losses {
     public:
 

@@ -21,8 +21,41 @@ namespace Thot {
         None
     };
 
+    inline Initialization initialization_from_string(const std::string &name) {
+        if (name == "Zeros") return Initialization::Zeros;
+        if (name == "Ones") return Initialization::Ones;
+        if (name == "Uniform") return Initialization::Uniform;
+        if (name == "Normal") return Initialization::Normal;
+        if (name == "Xavier") return Initialization::Xavier;
+        if (name == "He") return Initialization::He;
+        if (name == "LeCun") return Initialization::LeCun;
+        if (name == "TruncatedNormal") return Initialization::TruncatedNormal;
+        if (name == "Dirac") return Initialization::Dirac;
+        //if (name == "Orthogonal") return Initialization::Orthogonal;
+        if (name == "Lyapunov") return Initialization::Lyapunov;
+        if (name == "None") return Initialization::None;
+        throw std::runtime_error("Unknown initialization: " + name);
+    }
 
-    namespace Initializers {
+    namespace Initializations {
+
+        inline std::string to_string(Initialization init) {
+            switch (init) {
+                case Initialization::Zeros: return "Zeros";
+                case Initialization::Ones: return "Ones";
+                case Initialization::Uniform: return "Uniform";
+                case Initialization::Normal: return "Normal";
+                case Initialization::Xavier: return "Xavier";
+                case Initialization::He: return "He";
+                case Initialization::LeCun: return "LeCun";
+                case Initialization::TruncatedNormal: return "TruncatedNormal";
+                case Initialization::Dirac: return "Dirac";
+                    //case Initialization::Orthogonal: return "Orthogonal";
+                case Initialization::Lyapunov: return "Lyapunov";
+                case Initialization::None: return "None";
+                default: return "Unknown";
+            }
+        }
 
         inline std::mt19937& get_random_generator() {
             static thread_local std::random_device rd;
@@ -277,22 +310,6 @@ namespace Thot {
         }
 
 
-        inline std::string to_string(Initialization init) {
-            switch (init) {
-            case Initialization::Zeros: return "Zeros";
-            case Initialization::Ones: return "Ones";
-            case Initialization::Uniform: return "Uniform";
-            case Initialization::Normal: return "Normal";
-            case Initialization::Xavier: return "Xavier";
-            case Initialization::He: return "He";
-            case Initialization::LeCun: return "LeCun";
-            case Initialization::TruncatedNormal: return "TruncatedNormal";
-            case Initialization::Dirac: return "Dirac";
-            //case Initialization::Orthogonal: return "Orthogonal";
-            case Initialization::Lyapunov: return "Lyapunov";
-            case Initialization::None: return "None";
-            default: return "Unknown";
-            }
-        }
+
     } // namespace Initializers
 } // namespace Thot

@@ -15,6 +15,18 @@ namespace Thot {
         Softmax
     };
 
+    inline Activation activation_from_string(const std::string &name) { // for model.save() & model.load()
+        if (name == "Linear") return Activation::Linear;
+        if (name == "ReLU") return Activation::ReLU;
+        if (name == "Sigmoid") return Activation::Sigmoid;
+        if (name == "Tanh") return Activation::Tanh;
+        if (name == "LeakyReLU") return Activation::LeakyReLU;
+        if (name == "ELU") return Activation::ELU;
+        if (name == "GELU") return Activation::GELU;
+        if (name == "Softmax") return Activation::Softmax;
+        throw std::runtime_error("Unknown activation: " + name);
+    }
+
     namespace Activations {
 
         inline void apply_activation(Utils::Tensor& input, Utils::Tensor& output, Activation type) {
