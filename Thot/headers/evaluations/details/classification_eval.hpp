@@ -97,8 +97,7 @@ namespace Evaluations {
             if (kv.second > max_count) { max_count = kv.second; mode_latency = kv.first; }
         }
 
-        //TODO: remove 28*28 via size input
-        size_t model_input_bytes = predictions.size() * 28 * 28 * sizeof(float);
+        size_t model_input_bytes = predictions.size() * input_size * sizeof(float);
         size_t model_output_bytes = predictions.size() * num_classes * sizeof(float);
 
         float total_seconds = total_latency / 1000.0f;

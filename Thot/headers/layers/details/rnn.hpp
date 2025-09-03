@@ -134,7 +134,6 @@ namespace Thot {
             float* hidden_ptr = static_cast<float*>(hidden_state_.data());
             float* output_ptr = static_cast<float*>(output_.data());
 
-            // TODO: comment debug
             /*
             auto h_input = input.download();
             std::cout << "Input[0] host after upload: " << h_input[0] << std::endl;

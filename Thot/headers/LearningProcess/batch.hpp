@@ -72,6 +72,7 @@ template <typename Net>
 
             net.backward(std::move(grad_tensor));
 
+            //TODO change progress bar for a 100%==log_verbose instead of per epoch
             if (verbose && ((i + 1) % log_interval == 0 || i == inputs.size() - 1)) {
                 auto now = std::chrono::high_resolution_clock::now();
                 double elapsed = std::chrono::duration<double>(now - start).count();
@@ -84,8 +85,7 @@ template <typename Net>
                     << "Progress: " << std::setw(3) << int(progress * 100)
                     << "% | "
                     << "Elapsed: " << std::setw(6) << elapsed << "s | "
-                    << "ETA: " << std::setw(6) << eta << "s | "
-                    ;
+                    << "ETA: " << std::setw(6) << eta << "s ";
 
                 std::cout << oss.str() << std::flush;
             }

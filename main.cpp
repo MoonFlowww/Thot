@@ -32,7 +32,7 @@ int main() {
 	//std::string mnist_train = "/home/moonfloww/Projects/DATASETS/MNIST/train";
 	//std::string mnist_test = "/home/moonfloww/Projects/DATASETS/MNIST/test";
 	std::string cifar = "/home/moonfloww/Projects/DATASETS/CIFAR10";
-    auto [x, y, x_test, y_test] = Thot::Data::Load_CIFAR10(cifar, 0.1f, 0.05f);
+    auto [x, y, x_test, y_test] = Thot::Data::Load_CIFAR10(cifar, 0.05f, 0.05f);
 
     model.train(x, y, Thot::Batch::Classic(512, 15), Thot::KFold::Classic(5), 5, true);
 
