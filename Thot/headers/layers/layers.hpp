@@ -15,6 +15,8 @@ namespace Thot {
     class RBMLayer;
     class FlattenLayer;
     class MaxPool2DLayer;
+
+
 	class Layer {
 	protected:
 		std::string name_;
