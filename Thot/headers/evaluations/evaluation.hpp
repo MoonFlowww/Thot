@@ -24,20 +24,20 @@ namespace Thot {
 
     namespace Evaluations {
         inline void evaluate(const std::vector<std::vector<float>>& predictions, const std::vector<std::vector<float>>& targets, const std::vector<float>& latencies,
-            size_t flops, size_t input_size, size_t output_size, Evaluation type, bool verbose = false) {
+            size_t flops, size_t input_size, size_t output_size, Evaluation type, size_t total_flops, size_t total_parm, bool verbose = false) {
 
             switch (type) {
             case Evaluation::Binary:
-                ::Evaluations::evaluate_binary(predictions, targets, latencies, flops, input_size, output_size, verbose);
+                ::Evaluations::evaluate_binary(predictions, targets, latencies, flops, input_size, output_size, total_flops, total_parm, verbose);
                 break;
             case Evaluation::Timeseries:
-                ::Evaluations::evaluate_timeseries(predictions, targets, latencies, flops, input_size, output_size, verbose);
+                ::Evaluations::evaluate_timeseries(predictions, targets, latencies, flops, input_size, output_size, total_flops, total_parm, verbose);
                 break;
             case Evaluation::Regression:
-                    ::Evaluations::evaluate_regression(predictions, targets, latencies, flops, input_size, output_size, verbose);
+                    ::Evaluations::evaluate_regression(predictions, targets, latencies, flops, input_size, output_size, total_flops, total_parm, verbose);
                 break;
             case Evaluation::Classification:
-                ::Evaluations::evaluate_classification(predictions, targets, latencies, flops, input_size, output_size, verbose);
+                ::Evaluations::evaluate_classification(predictions, targets, latencies, flops, input_size, output_size, total_flops, total_parm, verbose);
                 break;
             }
         }

@@ -57,7 +57,7 @@ namespace Thot {
     }
 
     std::string formatBytes(float bytes) {
-        static const char* units[] = {"B", "KB", "MB", "GB", "TB"};
+        static const char* units[] = {"b", "Kb", "Mb", "Gb", "Tb"};
         int unitIndex = 0;
 
         double value = bytes;

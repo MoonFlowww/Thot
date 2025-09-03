@@ -57,6 +57,8 @@ private:
 
     size_t max_gpu_batches_;
     std::vector<cudaStream_t> cuda_streams_;
+    size_t total_flops = 0;
+    size_t total_parm = 0;
 
     void print_vector(const std::vector<float> &vec) {
         std::cout << "[";
@@ -232,7 +234,7 @@ public:
             predictions.push_back(output);
         }
 
-        Evaluations::evaluate(predictions, targets, latencies, get_flops(), get_model_input_size(), get_model_output_size(), type, verbose);
+        Evaluations::evaluate(predictions, targets, latencies, get_flops(), get_model_input_size(), get_model_output_size(), type, total_flops, total_parm, verbose);
     }
 
     void set_loss(Loss type, float epsilon = 1e-8f, float delta = 1.0f) {
@@ -510,15 +512,14 @@ public:
         std::cout << "Network: " << name_ << std::endl;
         std::cout << "Layers:" << std::endl;
 
-        size_t total_flops = 0;
-        size_t total_parm = 0;
+
         size_t batch_size = 1;
 
         std::cout << "+---------------+----------------------+---------------------"
                      "-+----------------------+---------------+---------------+"
                   << std::endl;
         std::cout << "| Layer         | Type                 | Activation          "
-                     " | Initialization       | FLOPs         | Parameters    "
+                     " | Initialization       | Total FLOPs   | Parameters    "
                   << std::endl;
         std::cout << "+---------------+----------------------+---------------------"
                      "-+----------------------+---------------+---------------+"

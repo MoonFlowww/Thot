@@ -11,7 +11,7 @@
 
 namespace Evaluations {
     inline void evaluate_classification(const std::vector<std::vector<float>>& predictions, const std::vector<std::vector<float>>& targets, const std::vector<float>& latencies,
-        size_t flops, size_t input_size, size_t output_size,bool verbose) {
+        size_t flops, size_t input_size, size_t output_size, size_t total_flops, size_t total_parm, bool verbose) {
         if (verbose) {
             std::cout << "\nMulti-class Classification Evaluation:\n";
             std::cout << "------------------------------------\n";
@@ -100,7 +100,10 @@ namespace Evaluations {
         float input_bps  = total_seconds > 0 ? static_cast<float>(model_input_bytes) / total_seconds : 0.0f;
         float output_bps = total_seconds > 0 ? static_cast<float>(model_output_bytes) / total_seconds : 0.0f;
 
-        float throughput = 1.0f / avg_latency;
+
+
+
+        float forward_s = 1.0f / avg_latency;
 
         if (verbose) {
             std::cout << "\n *~~~~~~~~~ Metrics ~~~~~~~~~*\n";
@@ -123,7 +126,12 @@ namespace Evaluations {
 
             std::cout << " | Input Bytes/s: " << Thot::formatBytes(input_bps) << "\n";
             std::cout << " | Output Bytes/s: " << Thot::formatBytes(output_bps) << "\n";
-            std::cout << " | Throughput: " << throughput << " FLOPS\n";
+            std::cout << " | Throughput/s: " << Thot::formatBytes(input_bps+output_bps) << "\n";
+            std::cout << " | Forward/s: " << Thot::human_readable_size(static_cast<size_t>(forward_s)) << "\n";
+            std::cout << " *- - - - - - -  - - - - - - -*" << std::endl;
+            std::cout << " | Arithmetic Intensity: " << static_cast<float>(total_flops)/(input_bps+output_bps) << "  SweetSpot∈[5;20]\n";
+            std::cout << " | FLOP/s: " << Thot::human_readable_size(total_flops*static_cast<size_t>(forward_s)) << "\n";
+            std::cout << " | Throughput/Parm: " << Thot::human_readable_size((input_bps+output_bps)/static_cast<float>(total_parm)) << "\n";
             std::cout << " *~~~~~~~~~~~~~~~~~~~~~~~~~~~~*" << std::endl;
 
             std::cout << "\n *~~~~ Per-class Metrics ~~~~*\n";
