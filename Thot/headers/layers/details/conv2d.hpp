@@ -13,9 +13,11 @@
 namespace Thot {
 
     class Layer;
+    class Network;
 
     class Conv2DLayer : public Layer {
     private:
+        friend class Network;
         int in_channels_;
         int in_height_;
         int in_width_;
@@ -221,5 +223,18 @@ namespace Thot {
         }
         int get_input_size() const override { return in_channels_ * in_height_ * in_width_; } // color * height * width
         int get_output_size() const override { return out_channels_ * out_height_ * out_width_; }
+
+        int in_channels() const { return in_channels_; }
+        int in_height() const { return in_height_; }
+        int in_width() const { return in_width_; }
+        int out_channels() const { return out_channels_; }
+        int kernel_size() const { return kernel_size_; }
+        int stride() const { return stride_; }
+        int padding() const { return padding_; }
+
+        Utils::Tensor& weights() { return weights_; }
+        const Utils::Tensor& weights() const { return weights_; }
+        Utils::Tensor& bias() { return bias_; }
+        const Utils::Tensor& bias() const { return bias_; }
     };
 } // namespace Thot

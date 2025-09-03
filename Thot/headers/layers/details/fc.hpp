@@ -16,9 +16,11 @@
 namespace Thot {
 
     class Layer;
+    class Network;
 
     class FCLayer : public Layer {
     private:
+        friend class Network;
         int input_size_;
         int output_size_;
         Activation activation_type_;
@@ -197,5 +199,10 @@ namespace Thot {
 
         int get_input_size() const override { return input_size_; }
         int get_output_size() const override { return output_size_; }
+
+        Utils::Tensor& weights() { return weights_; }
+        const Utils::Tensor& weights() const { return weights_; }
+        Utils::Tensor& bias() { return bias_; }
+        const Utils::Tensor& bias() const { return bias_; }
     };
 } // namespace Thot

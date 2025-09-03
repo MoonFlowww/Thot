@@ -13,9 +13,11 @@
 namespace Thot {
 
     class Layer;
+    class Network;
 
     class RBMLayer : public Layer {
     private:
+        friend class Network;
         int visible_size_;
         int hidden_size_;
         Activation activation_type_;
@@ -201,5 +203,13 @@ namespace Thot {
 
         int get_input_size() const override { return visible_size_; }
         int get_output_size() const override { return hidden_size_; }
+
+        int get_cd_steps() const { return cd_steps_; }
+        Utils::Tensor& weights() { return weights_; }
+        const Utils::Tensor& weights() const { return weights_; }
+        Utils::Tensor& visible_bias() { return visible_bias_; }
+        const Utils::Tensor& visible_bias() const { return visible_bias_; }
+        Utils::Tensor& hidden_bias() { return hidden_bias_; }
+        const Utils::Tensor& hidden_bias() const { return hidden_bias_; }
     };
 } // namespace Thot 

@@ -13,9 +13,11 @@
 namespace Thot {
 
     class Layer;
+    class Network;
 
     class RNNLayer : public Layer {
     private:
+        friend class Network;
         int input_size_;
         int hidden_size_;
         int seq_length_;
@@ -246,5 +248,7 @@ namespace Thot {
 
         int get_input_size() const override { return input_size_; }
         int get_output_size() const override { return hidden_size_; }
+
+        int get_seq_length() const { return seq_length_; }
     };
 } // namespace Thot
