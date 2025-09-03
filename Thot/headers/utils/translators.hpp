@@ -14,7 +14,7 @@ namespace Thot {
     std::string format_time(float seconds) {
         std::ostringstream oss;
         oss << std::fixed << std::setprecision(2);
-
+        if (seconds<0) return"-";
         if (seconds < 1e-6) {
             oss << seconds * 1e9 << " ns";
         } else if (seconds < 1e-3) {

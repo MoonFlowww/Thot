@@ -507,6 +507,29 @@ public:
         std::cout << "Model and Architecture loaded from:" << path << std::endl;
     }
 
+    inline void initializaiton_summary() {
+        float lat=0.0f;
+        float total=0.0f;
+        std::vector<float> lat_vec;
+        std::vector<std::string> names_vec;
+        for (auto &L : layers_) {
+            lat = L->get_latency();
+            lat*=1e-9;
+            lat_vec.push_back(lat);
+            total+= lat;
+            names_vec.push_back(L->get_name());
+        }
+        std::cout << "\n\n------------------------------------" <<std::endl;
+
+        std::cout << "Latency from Initializaiton:" << std::endl;
+        for (int i = 0; i < lat_vec.size(); ++i) {
+            std::cout << "[" << i+1 << "]-> " << names_vec[i] << ": " << Thot::format_time(lat_vec[i]) << std::endl;
+        }
+        std::cout << "------------------------------------" <<std::endl;
+        std::cout << "[MODEL]-> " << name_ << ": "<<Thot::format_time(total) << std::endl;
+        std::cout << "------------------------------------\n\n" <<std::endl;
+
+    }
 
     inline void summary() {
         std::cout << "Network: " << name_ << std::endl;
@@ -567,7 +590,7 @@ public:
         std::cout << "+----------------------+----------------------+--------------"
                      "--------+"
                   << std::endl;
-        std::cout << "| Optimizer           | Parameters           | Loss Function "
+        std::cout << "| Optimizer            | Parameters           | Loss Function "
                      "       |"
                   << std::endl;
         std::cout << "+----------------------+----------------------+--------------"
@@ -602,6 +625,8 @@ public:
         std::cout << "+----------------------+----------------------+--------------"
                      "--------+"
                   << std::endl;
+
+        initializaiton_summary();
     }
     template <typename BatchMethod, typename KFoldMethod>
     void train(const std::vector<std::vector<float>> &inputs,

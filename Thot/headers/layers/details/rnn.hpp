@@ -35,17 +35,20 @@ namespace Thot {
         Utils::Tensor prev_hidden_state_; // Previous hidden state
         Utils::Tensor output_;        // Output after activation
 
+        std::chrono::nanoseconds total_init_;
+
     public:
         RNNLayer(int input_size, int hidden_size, int seq_length = 1,
          Activation activation_type = Activation::Tanh,
          Initialization param_init = Initialization::Xavier,
          const std::string& name = "RNN")
-    : Layer(name),
-        input_size_(input_size),
-        hidden_size_(hidden_size),
-        seq_length_(seq_length),
-        activation_type_(activation_type),
-        initialization_type_(param_init) {
+            : Layer(name),
+                input_size_(input_size),
+                hidden_size_(hidden_size),
+                seq_length_(seq_length),
+                activation_type_(activation_type),
+                initialization_type_(param_init) {
+            auto t1 = std::chrono::high_resolution_clock::now();
 
             // Input-to-hidden weights
             weights_ih_ = Utils::Tensor({ hidden_size, input_size });
@@ -65,6 +68,9 @@ namespace Thot {
             // Hidden state
             hidden_state_ = Utils::Tensor({ 1, hidden_size }, true);
             prev_hidden_state_ = Utils::Tensor({ 1, hidden_size }, true);
+            auto t2 = std::chrono::high_resolution_clock::now();
+            total_init_ = std::chrono::duration_cast<std::chrono::nanoseconds>(t2-t1);
+
         }
 
         Utils::Tensor& W_ih() { return weights_ih_; }
@@ -93,6 +99,10 @@ namespace Thot {
 
         Activation get_activation() const override {
             return activation_type_;
+        }
+
+        float get_latency() const override {
+            return total_init_.count();
         }
 
         Initialization get_initialization() const override {

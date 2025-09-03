@@ -12,6 +12,7 @@
 #include <cmath>
 #include <iostream>
 #include <utility> 
+#include <chrono>
 
 namespace Thot {
 
@@ -35,8 +36,11 @@ namespace Thot {
         Utils::Tensor pre_act_output_; // Output before activation
         Utils::Tensor activation_output_; // Storage for output after activation
 
+        std::chrono::nanoseconds total_init_;
+
     public:
         FCLayer(int input_size, int output_size, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "FC") : Layer(name), input_size_(input_size), output_size_(output_size), activation_type_(activation_type), initialization_type_(weight_init) {
+            auto t1 = std::chrono::high_resolution_clock::now();
 
 
 
@@ -50,6 +54,9 @@ namespace Thot {
             Initializations::zeros(bias_);
 
             grad_bias_ = Utils::Tensor({ output_size }, true); // Init to zeros
+
+            auto t2 = std::chrono::high_resolution_clock::now();
+            total_init_ = std::chrono::duration_cast<std::chrono::nanoseconds>(t2-t1);
         }
 
 
@@ -196,6 +203,10 @@ namespace Thot {
 
         Activation get_activation() const override {
             return activation_type_;
+        }
+
+        float get_latency() const override {
+            return total_init_.count();
         }
 
         Initialization get_initialization() const override {

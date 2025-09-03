@@ -9,6 +9,8 @@
 #include <iomanip>
 #include <tuple>
 
+#include "utils/translators.hpp"
+
 namespace Thot {
     namespace Data {
 
@@ -45,7 +47,7 @@ namespace Thot {
             std::size_t pos = p.find_last_of('/');
             if (pos != std::string::npos) p.erase(pos);
             std::vector<std::string> label_string = get_CIFAR10_label_string(p+"/batches.meta.txt");
-
+            if (label_string.empty()) throw std::runtime_error("CIFAR-10 meta file contains no label names");
             // CIFAR-10 fixed sizes
             const int image_size = 32 * 32 * 3;
             const int record_size = 1 + image_size;
@@ -144,14 +146,14 @@ namespace Thot {
             std::cout << "Image dimensions: 32x32x3 (" << image_size << " values)\n";
             std::cout << "Number of classes: " << num_classes << "\n";
             std::cout << "Memory usage (approx):\n";
-            std::cout << "  - Images: " << std::setprecision(2) << (actual_num_images * image_size * sizeof(float)) / (1024.0 * 1024.0) << " MB\n";
-            std::cout << "  - Labels: " << std::setprecision(2) << (actual_num_images * num_classes * sizeof(float)) / (1024.0 * 1024.0) << " MB\n";
+            std::cout << "  - Images: " << std::setprecision(2) << Thot::formatBytes(static_cast<float>(actual_num_images) * image_size * sizeof(float)) << "\n";
+            std::cout << "  - Labels: " << std::setprecision(2) << Thot::formatBytes(static_cast<float>(actual_num_images) * num_classes * sizeof(float))  << "\n";
             std::cout << "-------------------------\n\n";
 
             std::cout << "Label Distribution:\n";
             std::cout << "------------------\n";
             for (int i = 0; i < num_classes; ++i) {
-                double percentage = (100.0 * total_label_counts[i]) / actual_num_images;
+                double percentage = (100.0 * total_label_counts[i]) / static_cast<double>(actual_num_images);
                 std::cout << "Class " << i << ": " << total_label_counts[i] << " images (" << std::fixed << std::setprecision(2) << percentage << "%)\n";
             }
             std::cout << "------------------\n\n";
@@ -162,7 +164,7 @@ namespace Thot {
         Load_CIFAR10_Test(const std::string& base_path = "", float ratio = 1.0f) {
             std::cout << "Loading CIFAR-10 Test Set...\n";
             std::string path = base_path + "/test_batch.bin";
-            return load_cifar10(path, 10, ratio);
+            return load_cifar10(path, 10, ratio, true);
         }
 
         inline std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<float>>, std::vector<std::vector<float>>, std::vector<std::vector<float>>

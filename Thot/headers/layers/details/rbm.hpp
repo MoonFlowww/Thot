@@ -9,6 +9,7 @@
 #include <cmath>
 #include <iostream>
 #include <utility> 
+#include <chrono>
 
 namespace Thot {
 
@@ -36,6 +37,8 @@ namespace Thot {
         Utils::Tensor visible_recon_;    // Reconstruction of visible units
         Utils::Tensor hidden_recon_probs_; // Probabilities for the reconstruction
 
+        std::chrono::nanoseconds total_init_;
+
     public:
         RBMLayer(int visible_size, int hidden_size, int cd_steps = 1,
             Activation activation_type = Activation::Sigmoid,
@@ -47,6 +50,7 @@ namespace Thot {
             cd_steps_(cd_steps),
             activation_type_(activation_type),
             initialization_type_(weight_init) {
+            auto t1 = std::chrono::high_resolution_clock::now();
 
             // Initialize weights
             weights_ = Utils::Tensor({ hidden_size, visible_size });
@@ -68,6 +72,10 @@ namespace Thot {
             hidden_states_ = Utils::Tensor({ 1, hidden_size }, true);
             visible_recon_ = Utils::Tensor({ 1, visible_size }, true);
             hidden_recon_probs_ = Utils::Tensor({ 1, hidden_size }, true);
+
+            auto t2 = std::chrono::high_resolution_clock::now();
+            total_init_ = std::chrono::duration_cast<std::chrono::nanoseconds>(t2-t1);
+
         }
 
         size_t get_flops(int batch_size = 1) const override {
@@ -86,6 +94,10 @@ namespace Thot {
 
         Activation get_activation() const override {
             return activation_type_;
+        }
+
+        float get_latency() const override {
+            return total_init_.count();
         }
 
         Initialization get_initialization() const override {
@@ -215,5 +227,7 @@ namespace Thot {
         const Utils::Tensor& visible_bias() const { return visible_bias_; }
         Utils::Tensor& hidden_bias() { return hidden_bias_; }
         const Utils::Tensor& hidden_bias() const { return hidden_bias_; }
+        Utils::Tensor& hidden_probs() { return hidden_probs_; }
+        const Utils::Tensor& hidden_probs() const { return hidden_probs_; }
     };
 } // namespace Thot 

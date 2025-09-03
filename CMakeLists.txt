@@ -84,6 +84,8 @@ set(KERNEL_SOURCES
         Thot/cuda/cu/layers/flatten.cu
         Thot/cuda/cu/layers/maxpool2d.cu
         Thot/cuda/cu/attentions/mha.cu
+        Thot/cuda/cu/attentions/mla.cu
+        Thot/cuda/cu/initializations/random.cu
 
 )
 
@@ -109,16 +111,17 @@ set(HEADERS
         Thot/headers/utils/translators.hpp
         Thot/headers/LearningProcess/batch.hpp
         Thot/headers/LearningProcess/kfold.hpp
-
         Thot/headers/layers/details/flatten.hpp
         Thot/headers/layers/details/maxpool2d.hpp
         Thot/headers/data/details/cifar.hpp
         Thot/headers/attentions/details/mha.hpp
+        Thot/headers/attentions/details/mla.hpp
         Thot/headers/attentions/attentions.hpp
 )
 
 add_library(thot_kernels STATIC ${KERNEL_SOURCES})
-target_link_libraries(thot_kernels PUBLIC CUDA::cublas)
+target_link_libraries(thot_kernels PUBLIC CUDA::cublas CUDA::curand)
+
 set_target_properties(thot_kernels PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
         POSITION_INDEPENDENT_CODE ON

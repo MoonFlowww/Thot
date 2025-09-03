@@ -49,11 +49,12 @@ namespace Thot {
         Utils::Tensor attn_probs_;
         Utils::Tensor concat_;
 
+        std::chrono::nanoseconds total_init_;
+
     public:
-        MHAAttentionLayer(int embed_dim, int num_heads, Initialization init,
-                          const std::string &name = "MHA")
-            : Layer(name), embed_dim_(embed_dim), num_heads_(num_heads),
-              initialization_(init) {
+        MHAAttentionLayer(int embed_dim, int num_heads, Initialization init, const std::string &name = "MHA")
+            : Layer(name), embed_dim_(embed_dim), num_heads_(num_heads), initialization_(init) {
+            auto t1 = std::chrono::high_resolution_clock::now();
             if (embed_dim_ % num_heads_ != 0) {
                 throw std::invalid_argument("embed_dim must be divisible by num_heads");
             }
@@ -88,6 +89,9 @@ namespace Thot {
             Initializations::zeros(b_k_);
             Initializations::zeros(b_v_);
             Initializations::zeros(b_o_);
+
+            auto t2 = std::chrono::high_resolution_clock::now();
+            total_init_ = std::chrono::duration_cast<std::chrono::nanoseconds>(t2-t1);
         }
 
         Utils::Tensor forward(const Utils::Tensor &input) override {
@@ -181,7 +185,7 @@ namespace Thot {
         Activation get_activation() const override { return Activation::Linear; }
 
         Initialization get_initialization() const override { return initialization_; }
-
+        float get_latency() const override { return total_init_.count();}
         int get_input_size() const override { return embed_dim_; }
 
         int get_output_size() const override { return embed_dim_; }

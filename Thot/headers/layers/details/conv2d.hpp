@@ -8,7 +8,8 @@
 #include <random>
 #include <cmath>
 #include <iostream>
-#include <utility> 
+#include <utility>
+#include <chrono>
 
 namespace Thot {
 
@@ -38,6 +39,8 @@ namespace Thot {
         Utils::Tensor pre_act_output_; // Output before activation
         Utils::Tensor activation_output_; // Storage for output after activation
 
+        std::chrono::nanoseconds total_init_;
+
     public:
         Conv2DLayer(int in_channels, int in_height, int in_width,
             int out_channels, int kernel_size, int stride = 1, int padding = 0,
@@ -55,6 +58,7 @@ namespace Thot {
             activation_type_(activation_type),
             initialization_type_(weight_init) {
 
+            auto t1 = std::chrono::high_resolution_clock::now();
             out_height_ = (in_height_ + 2 * padding_ - kernel_size_) / stride_ + 1;
             out_width_ = (in_width_ + 2 * padding_ - kernel_size_) / stride_ + 1;
 
@@ -64,6 +68,7 @@ namespace Thot {
             // fan_out = out_channels * kernel_size * kernel_size
             int fan_in = in_channels_ * kernel_size_ * kernel_size_;
             int fan_out = out_channels_ * kernel_size_ * kernel_size_;
+
             Initializations::initialize_tensor(weights_, weight_init, fan_in, fan_out);
 
             grad_weights_ = Utils::Tensor({ out_channels_, in_channels_, kernel_size_, kernel_size_ }, true);
@@ -72,6 +77,8 @@ namespace Thot {
             bias_ = Utils::Tensor({ out_channels_ });
             Initializations::zeros(bias_);
             grad_bias_ = Utils::Tensor({ out_channels_ }, true);
+            auto t2 = std::chrono::high_resolution_clock::now();
+            total_init_ = std::chrono::duration_cast<std::chrono::nanoseconds>(t2-t1);
         }
 
         size_t get_flops(int batch_size = 1) const override {
@@ -92,6 +99,10 @@ namespace Thot {
 
         Initialization get_initialization() const override {
             return initialization_type_;
+        }
+
+        float get_latency() const override {
+            return total_init_.count();
         }
 
         Utils::Tensor forward(const Utils::Tensor& input) override {

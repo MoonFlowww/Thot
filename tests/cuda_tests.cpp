@@ -5,7 +5,6 @@
 #include <memory>
 #define private public
 #define protected public
-#include "layers/layers.hpp"
 #undef private
 #undef protected
 
@@ -14,6 +13,8 @@
 #include "tensor.hpp"
 #include "initializations/initializations.hpp"
 #include "attentions/attentions.hpp"
+#include "layers/layers.hpp"
+
 
 using namespace Thot;
 
@@ -56,8 +57,8 @@ void test_rnn() {
 void test_fc() {
     std::cout << "[RUN] test_fc" << std::endl;
     FCLayer fc(2, 1, Activation::Linear, Initialization::Ones);
-    Initializations::ones(fc.weights_);
-    Initializations::zeros(fc.bias_);
+    Initializations::ones(fc.weights());
+    Initializations::zeros(fc.bias());
     Utils::Tensor input({1, 2});
     input.upload({1.0f, 2.0f});
     auto out = fc.forward(input).download();
@@ -70,8 +71,8 @@ void test_fc() {
 void test_conv2d() {
     std::cout << "[RUN] test_conv2d" << std::endl;
     Conv2DLayer conv(1, 2, 2, 1, 1, 1, 0, Activation::Linear, Initialization::Ones);
-    Initializations::ones(conv.weights_);
-    Initializations::zeros(conv.bias_);
+    Initializations::ones(conv.weights());
+    Initializations::zeros(conv.bias());
     Utils::Tensor input({1,1,2,2});
     input.upload({1.0f,2.0f,3.0f,4.0f});
     auto out = conv.forward(input).download();
@@ -86,13 +87,13 @@ void test_conv2d() {
 void test_rbm() {
     std::cout << "[RUN] test_rbm" << std::endl;
     RBMLayer rbm(1,1,1, Activation::Sigmoid, Initialization::Ones);
-    Initializations::ones(rbm.weights_);
-    Initializations::zeros(rbm.visible_bias_);
-    Initializations::zeros(rbm.hidden_bias_);
+    Initializations::ones(rbm.weights());
+    Initializations::zeros(rbm.visible_bias());
+    Initializations::zeros(rbm.hidden_bias());
     Utils::Tensor input({1,1});
     input.upload({1.0f});
     auto out = rbm.forward(input).download();
-    auto hidden_act = rbm.hidden_probs_.download();
+    auto hidden_act = rbm.hidden_probs().download();
     std::cout << "RBM hidden activation: " << hidden_act[0] << " output state: " << out[0] << std::endl;
     CHECK(std::fabs(hidden_act[0] - 1.0f) < 1e-4);
     CHECK(std::fabs(out[0]) < 1e-4);

@@ -36,6 +36,9 @@ namespace Thot {
 	    virtual size_t get_parameters() const = 0;
 		virtual Activation get_activation() const { return static_cast<const Layer*>(this)->get_activation(); }
 
+	    virtual float get_latency() const { return -1.0f; }
+
+
 		virtual Initialization get_initialization() const { return static_cast<const Layer*>(this)->get_initialization(); }
 
 
@@ -47,6 +50,7 @@ namespace Thot {
 
 	    virtual int get_input_size() const { return -1; }
 	    virtual int get_output_size() const { return -1; }
+
 
 
 		static std::shared_ptr<Layer> FC(int input_size, int output_size, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "FeedForward");
