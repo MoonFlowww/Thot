@@ -24,7 +24,7 @@
 #include "metrics/metrics.hpp"
 #include "optimizations/optimizations.hpp"
 
-#include "utils/translators.h"
+#include "utils/translators.hpp"
 
 #include "LearningProcess/batch.hpp"
 #include "LearningProcess/kfold.hpp"

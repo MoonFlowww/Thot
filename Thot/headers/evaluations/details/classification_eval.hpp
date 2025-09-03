@@ -7,7 +7,7 @@
 #include <iostream>
 #include <iomanip>
 #include <unordered_map>
-#include "utils/translators.h"
+#include "utils/translators.hpp"
 
 namespace Evaluations {
     inline void evaluate_classification(const std::vector<std::vector<float>>& predictions, const std::vector<std::vector<float>>& targets, const std::vector<float>& latencies,

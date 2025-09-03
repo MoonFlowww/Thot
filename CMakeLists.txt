@@ -83,8 +83,9 @@ set(KERNEL_SOURCES
         Thot/cuda/cu/optimizations/sgdm.cu
         Thot/cuda/cu/layers/flatten.cu
         Thot/cuda/cu/layers/maxpool2d.cu
+        Thot/cuda/cu/attentions/mha.cu
 
-)        #Thot/cuda/cu/layers/conv2d_old.cu
+)
 
 set(HEADERS
         Thot/headers/activations/activations.hpp
@@ -105,16 +106,13 @@ set(HEADERS
         Thot/headers/optimizations/optimizations.hpp
         Thot/headers/tensor.hpp
         Thot/Thot.hpp
-        Thot/headers/utils/translators.h
+        Thot/headers/utils/translators.hpp
         Thot/headers/LearningProcess/batch.hpp
         Thot/headers/LearningProcess/kfold.hpp
-        Thot/cuda/cuh/layers/flatten.cuh
-        Thot/cuda/cuh/layers/maxpool2d.cuh
+
         Thot/headers/layers/details/flatten.hpp
         Thot/headers/layers/details/maxpool2d.hpp
         Thot/headers/data/details/cifar.hpp
-        Thot/cuda/cu/attentions/mha.cu
-        Thot/cuda/cuh/attentions/mha.cuh
         Thot/headers/attentions/details/mha.hpp
         Thot/headers/attentions/attentions.hpp
 )

@@ -1,6 +1,7 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <cmath>
+#include <iostream>
 #include "../../cuh/attentions/mha.cuh"
 
 #ifndef CUDA_CHECK
