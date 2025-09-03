@@ -2,6 +2,7 @@
 // Created by moonfloww on 29/08/2025.
 //
 #include <sstream>
+#include <memory>
 #define private public
 #define protected public
 #include "layers/layers.hpp"
@@ -27,9 +28,9 @@ void test_rnn() {
     std::cout << "[RUN] test_rnn" << std::endl;
     RNNLayer rnn(1, 1, 1, Activation::Tanh, Initialization::Ones);
     rnn.reset_hidden_state();
-    Initializers::ones(rnn.W_ih());
-    Initializers::ones(rnn.W_hh());
-    Initializers::zeros(rnn.bias());
+    Initializations::ones(rnn.W_ih());
+    Initializations::ones(rnn.W_hh());
+    Initializations::zeros(rnn.bias());
     auto wih = rnn.W_ih().download();
     auto whh = rnn.W_hh().download();
     for (float v : wih) CHECK(std::fabs(v - 1.0f) < 1e-5);
@@ -55,8 +56,8 @@ void test_rnn() {
 void test_fc() {
     std::cout << "[RUN] test_fc" << std::endl;
     FCLayer fc(2, 1, Activation::Linear, Initialization::Ones);
-    Initializers::ones(fc.weights_);
-    Initializers::zeros(fc.bias_);
+    Initializations::ones(fc.weights_);
+    Initializations::zeros(fc.bias_);
     Utils::Tensor input({1, 2});
     input.upload({1.0f, 2.0f});
     auto out = fc.forward(input).download();
@@ -69,8 +70,8 @@ void test_fc() {
 void test_conv2d() {
     std::cout << "[RUN] test_conv2d" << std::endl;
     Conv2DLayer conv(1, 2, 2, 1, 1, 1, 0, Activation::Linear, Initialization::Ones);
-    Initializers::ones(conv.weights_);
-    Initializers::zeros(conv.bias_);
+    Initializations::ones(conv.weights_);
+    Initializations::zeros(conv.bias_);
     Utils::Tensor input({1,1,2,2});
     input.upload({1.0f,2.0f,3.0f,4.0f});
     auto out = conv.forward(input).download();
@@ -85,9 +86,9 @@ void test_conv2d() {
 void test_rbm() {
     std::cout << "[RUN] test_rbm" << std::endl;
     RBMLayer rbm(1,1,1, Activation::Sigmoid, Initialization::Ones);
-    Initializers::ones(rbm.weights_);
-    Initializers::zeros(rbm.visible_bias_);
-    Initializers::zeros(rbm.hidden_bias_);
+    Initializations::ones(rbm.weights_);
+    Initializations::zeros(rbm.visible_bias_);
+    Initializations::zeros(rbm.hidden_bias_);
     Utils::Tensor input({1,1});
     input.upload({1.0f});
     auto out = rbm.forward(input).download();
@@ -217,13 +218,51 @@ void test_mha_dimension_check() {
     std::cout << "[RUN] test_mha_dimension_check" << std::endl;
     bool threw = false;
     try {
-        MHAAtt att(10, 3); // 10 not divisible by 3
+        Thot::Attention::MHA(10, 3, Thot::Initialization::Xavier);
     } catch (const std::invalid_argument&) {
         threw = true;
     }
     CHECK(threw);
     std::cout << "[PASS] test_mha_dimension_check" << std::endl;
 }
+
+void test_mha() {
+    std::cout << "[RUN] test_mha_forward_backward" << std::endl;
+    auto layer = Thot::Attention::MHA(4, 2, Thot::Initialization::Xavier);
+    auto mha = std::dynamic_pointer_cast<MHAAttentionLayer>(layer);
+
+    // Set projections: Q and K zero, V and O identity
+    Initializations::zeros(mha->W_q()); Initializations::zeros(mha->W_k());
+    Initializations::zeros(mha->b_q()); Initializations::zeros(mha->b_k());
+    Initializations::zeros(mha->b_v()); Initializations::zeros(mha->b_o());
+
+
+
+    std::vector<float> identity(16, 0.0f);
+    for (int i = 0; i < 4; ++i) identity[i * 4 + i] = 1.0f;
+    mha->W_v().upload(identity);
+    mha->W_o().upload(identity);
+
+    Utils::Tensor input({1, 2, 4});
+    input.upload(std::vector<float>(8, 0.0f));
+    auto out = mha->forward(input).download();
+    for (float v : out) {
+        std::cout << "MHA output val: " << v << std::endl;
+        CHECK(std::fabs(v) < 1e-5);
+    }
+
+    Utils::Tensor grad_out({1, 2, 4});
+    grad_out.upload(std::vector<float>(8, 1.0f));
+    auto grad_in = mha->backward(grad_out).download();
+    for (float v : grad_in) {
+        std::cout << "MHA grad input: " << v << std::endl;
+        CHECK(std::fabs(v - 1.0f) < 1e-4);
+    }
+    std::cout << "[PASS] test_mha_forward_backward" << std::endl;
+    test_mha_dimension_check();
+}
+
+
 
 int main() {
     test_rnn();
@@ -232,7 +271,7 @@ int main() {
     test_rbm();
     test_activations();
     test_losses();
-    test_mha_dimension_check();
+    test_mha();
     std::cout << "All CUDA backend tests passed." << std::endl;
     return 0;
 }

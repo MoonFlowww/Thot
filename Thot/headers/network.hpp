@@ -519,7 +519,7 @@ public:
                      "-+----------------------+---------------+---------------+"
                   << std::endl;
         std::cout << "| Layer         | Type                 | Activation          "
-                     " | Initialization       | Total FLOPs   | Parameters    "
+                     " | Initialization       | Total FLOPs   | Parameters    |"
                   << std::endl;
         std::cout << "+---------------+----------------------+---------------------"
                      "-+----------------------+---------------+---------------+"

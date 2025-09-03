@@ -4,14 +4,14 @@
 
 
 int main() {
-    bool IsLoading = true;
+    bool IsLoading = false;
     std::string name ="Thot_Network_CIFAR";
 
 	Thot::Network model(name);
     if (IsLoading)model.load("/home/moonfloww/Projects/NNs/Thot");
 
     else {
-        //model.add(Thot::Attention::MHA(32*32*3,8,Thot::Initialization::He));
+        model.add(Thot::Attention::MHA(32*32*3,8,Thot::Initialization::He));
         model.add(Thot::Layer::Conv2D(3, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
         model.add(Thot::Layer::Conv2D(32, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
         model.add(Thot::Layer::MaxPool2D(32, 32, 32, 2, 2));   // → 32x16x16
