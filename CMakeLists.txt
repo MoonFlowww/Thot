@@ -116,6 +116,7 @@ set(HEADERS
         Thot/cuda/cu/attentions/mha.cu
         Thot/cuda/cuh/attentions/mha.cuh
         Thot/headers/attentions/details/mha.hpp
+        Thot/headers/attentions/attentions.hpp
 )
 
 add_library(thot_kernels STATIC ${KERNEL_SOURCES})

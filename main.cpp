@@ -1,3 +1,4 @@
+#include "attentions/attentions.hpp"
 #include "data/details/cifar.hpp"
 #include "Thot/Thot.hpp"
 
@@ -5,6 +6,7 @@ int main() {
 	Thot::Network model("Thot Network");
 
     // input: 3x32x32
+    model.add(Thot::Attention::MHA(256,8,Thot::Initialization::He));
     model.add(Thot::Layer::Conv2D(3, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
     model.add(Thot::Layer::MaxPool2D(32, 32, 32, 2, 2));   // → 32x16x16
 
