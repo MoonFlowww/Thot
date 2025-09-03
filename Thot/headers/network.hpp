@@ -16,6 +16,8 @@
 #include <fstream>
 #include <filesystem>
 #include <limits>
+#include <nlohmann/json.hpp>
+
 
 #include "layers/layers.hpp"
 #include "tensor.hpp"
@@ -37,6 +39,7 @@ class Optimizer;
 
 namespace Thot {
 
+    //made for model load
     inline Activation activation_from_string(const std::string &name) {
         if (name == "Linear") return Activation::Linear;
         if (name == "ReLU") return Activation::ReLU;
@@ -47,6 +50,18 @@ namespace Thot {
         if (name == "GELU") return Activation::GELU;
         if (name == "Softmax") return Activation::Softmax;
         throw std::runtime_error("Unknown activation: " + name);
+    }
+    inline Loss loss_from_string(const std::string &name) {
+        if (name == "MSE") return Loss::MSE;
+        if (name == "MAE") return Loss::MAE;
+        if (name == "BCE") return Loss::BinaryCrossEntropy;
+        if (name == "CE") return Loss::CrossEntropy;
+        if (name == "CCE") return Loss::CategoricalCrossEntropy;
+        if (name == "SCCE") return Loss::SparseCategoricalCrossEntropy;
+        if (name == "Hinge") return Loss::Hinge;
+        if (name == "Huber") return Loss::Huber;
+        if (name == "KL div") return Loss::KLDivergence;
+        throw std::runtime_error("Unknown loss: " + name);
     }
 
 class Network {
@@ -255,177 +270,224 @@ public:
         return loss_function_->compute_gradients(predictions, targets);
     }
 
+        void save(const std::string &path) {
+            namespace fs = std::filesystem;
+            fs::path dir = fs::path(path) / name_;
+            fs::create_directories(dir);
 
-
-    void save(const std::string &path) {
-        namespace fs = std::filesystem;
-
-        // Create parent directory if needed
-        fs::path p(path);
-        if (p.has_parent_path()) {
-            fs::create_directories(p.parent_path());
-        }
-
-        std::cout << "Model Saved in: " << path << std::endl;
-
-        std::ofstream ofs(path, std::ios::out | std::ios::trunc);
-        if (!ofs) {
-            throw std::runtime_error("Failed to open file for saving: " + path);
-        }
-
-        ofs << layers_.size() << "\n";
-        for (auto &layer : layers_) {
-            if (auto fc = std::dynamic_pointer_cast<FCLayer>(layer)) {
-                ofs << "FC " << Activations::to_string(layer->get_activation()) << " "
-                    << fc->get_input_size() << " " << fc->get_output_size() << "\n";
-                auto w = fc->weights().download();
-                auto b = fc->bias().download();
-                ofs << w.size();
-                for (auto &v : w) ofs << ' ' << v;
-                ofs << "\n";
-                ofs << b.size();
-                for (auto &v : b) ofs << ' ' << v;
-                ofs << "\n";
-            } else if (auto conv = std::dynamic_pointer_cast<Conv2DLayer>(layer)) {
-                ofs << "Conv2D " << Activations::to_string(layer->get_activation()) << " "
-                    << conv->in_channels() << " " << conv->in_height() << " "
-                    << conv->in_width() << " " << conv->out_channels() << " "
-                    << conv->kernel_size() << " " << conv->stride() << " "
-                    << conv->padding() << "\n";
-                auto w = conv->weights().download();
-                auto b = conv->bias().download();
-                ofs << w.size();
-                for (auto &v : w) ofs << ' ' << v;
-                ofs << "\n";
-                ofs << b.size();
-                for (auto &v : b) ofs << ' ' << v;
-                ofs << "\n";
-            } else if (auto rnn = std::dynamic_pointer_cast<RNNLayer>(layer)) {
-                ofs << "RNN " << Activations::to_string(layer->get_activation()) << " "
-                    << rnn->get_input_size() << " " << rnn->get_output_size() << " "
-                    << rnn->get_seq_length() << "\n";
-                auto wih = rnn->W_ih().download();
-                auto whh = rnn->W_hh().download();
-                auto b = rnn->bias().download();
-                ofs << wih.size();
-                for (auto &v : wih) ofs << ' ' << v;
-                ofs << "\n";
-                ofs << whh.size();
-                for (auto &v : whh) ofs << ' ' << v;
-                ofs << "\n";
-                ofs << b.size();
-                for (auto &v : b) ofs << ' ' << v;
-                ofs << "\n";
-            } else if (auto rbm = std::dynamic_pointer_cast<RBMLayer>(layer)) {
-                ofs << "RBM " << Activations::to_string(layer->get_activation()) << " "
-                    << rbm->get_input_size() << " " << rbm->get_output_size() << " "
-                    << rbm->get_cd_steps() << "\n";
-                auto w = rbm->weights().download();
-                auto vb = rbm->visible_bias().download();
-                auto hb = rbm->hidden_bias().download();
-                ofs << w.size();
-                for (auto &v : w) ofs << ' ' << v;
-                ofs << "\n";
-                ofs << vb.size();
-                for (auto &v : vb) ofs << ' ' << v;
-                ofs << "\n";
-                ofs << hb.size();
-                for (auto &v : hb) ofs << ' ' << v;
-                ofs << "\n";
+            // Save model parameters in binary form
+            ModelParams params = capture_parameters();
+            std::ofstream param_file(dir / "parameters.bin", std::ios::binary | std::ios::trunc);
+            if (!param_file)
+                throw std::runtime_error("Failed to open parameter file for saving");
+            size_t layer_count = params.size();
+            param_file.write(reinterpret_cast<const char*>(&layer_count), sizeof(size_t));
+            for (const auto &lp : params) {
+                size_t vec_count = lp.size();
+                param_file.write(reinterpret_cast<const char*>(&vec_count), sizeof(size_t));
+                for (const auto &vec : lp) {
+                    size_t sz = vec.size();
+                    param_file.write(reinterpret_cast<const char*>(&sz), sizeof(size_t));
+                    param_file.write(reinterpret_cast<const char*>(vec.data()), sz * sizeof(float));
+                }
             }
-        }
+            // Build JSON architecture description
+            nlohmann::json j;
+            j["name"] = name_;
+
+            // Optimizer information
+            nlohmann::json jopt;
+            if (optimizer_) {
+                jopt["name"] = optimizer_->get_name();
+                jopt["learning_rate"] = optimizer_->get_learning_rate();
+                if (auto sgdm = std::dynamic_pointer_cast<SGDM>(optimizer_)) {
+                    jopt["momentum"] = sgdm->get_momentum();
+                } else if (auto adam = std::dynamic_pointer_cast<Adam>(optimizer_)) {
+                    jopt["beta1"] = adam->get_beta1();
+                    jopt["beta2"] = adam->get_beta2();
+                    jopt["epsilon"] = adam->get_epsilon();
+                }
+            } else {
+                jopt["name"] = "None";
+            }
+            j["optimizer"] = jopt;
+
+            // Loss information
+            nlohmann::json jloss;
+            if (loss_function_) {
+                jloss["name"] = Losses::to_string(loss_function_->get_type());
+                std::string params_str = loss_function_->get_params();
+                float eps = 1e-8f, delta = 1.0f;
+                auto pos = params_str.find("Eps=");
+                if (pos != std::string::npos)
+                    eps = std::stof(params_str.substr(pos + 4));
+                pos = params_str.find("Delta=");
+                if (pos != std::string::npos)
+                    delta = std::stof(params_str.substr(pos + 6));
+                jloss["epsilon"] = eps;
+                jloss["delta"] = delta;
+            } else {
+                jloss["name"] = "None";
+            }
+            j["loss"] = jloss;
+            // Layers architecture
+            nlohmann::json jlayers = nlohmann::json::array();
+            for (auto &layer : layers_) {
+                nlohmann::json jl;
+                if (auto fc = std::dynamic_pointer_cast<FCLayer>(layer)) {
+                    jl["type"] = "FC";
+                    jl["activation"] = Activations::to_string(layer->get_activation());
+                    jl["params"] = { {"input_size", fc->get_input_size()}, {"output_size", fc->get_output_size()} };
+                } else if (auto conv = std::dynamic_pointer_cast<Conv2DLayer>(layer)) {
+                    jl["type"] = "Conv2D";
+                    jl["activation"] = Activations::to_string(layer->get_activation());
+                    jl["params"] = {
+                        {"in_channels", conv->in_channels()},
+                        {"in_height", conv->in_height()},
+                        {"in_width", conv->in_width()},
+                        {"out_channels", conv->out_channels()},
+                        {"kernel_size", conv->kernel_size()},
+                        {"stride", conv->stride()},
+                        {"padding", conv->padding()}
+                    };
+                } else if (auto rnn = std::dynamic_pointer_cast<RNNLayer>(layer)) {
+                    jl["type"] = "RNN";
+                    jl["activation"] = Activations::to_string(layer->get_activation());
+                    jl["params"] = {
+                        {"input_size", rnn->get_input_size()},
+                        {"output_size", rnn->get_output_size()},
+                        {"seq_length", rnn->get_seq_length()}
+                    };
+                } else if (auto rbm = std::dynamic_pointer_cast<RBMLayer>(layer)) {
+                    jl["type"] = "RBM";
+                    jl["activation"] = Activations::to_string(layer->get_activation());
+                    jl["params"] = {
+                        {"input_size", rbm->get_input_size()},
+                        {"output_size", rbm->get_output_size()},
+                        {"cd_steps", rbm->get_cd_steps()}
+                    };
+                }
+                jlayers.push_back(jl);
+            }
+        j["layers"] = jlayers;
+
+        std::ofstream json_file(dir / "architecture.json", std::ios::out | std::ios::trunc);
+        if (!json_file)
+            throw std::runtime_error("Failed to open architecture file for saving");
+        json_file << j.dump(4);
     }
+
+
 
 
     void load(const std::string &path) {
-        std::ifstream ifs(path);
-        if (!ifs)
-            throw std::runtime_error("Failed to open file for loading");
+        namespace fs = std::filesystem;
+        fs::path dir(path);
+        if (!fs::exists(dir / "architecture.json")) {
+            fs::path alt = dir / name_;
+            if (fs::exists(alt / "architecture.json"))
+                dir = alt;
+            else
+                throw std::runtime_error("Architecture file not found");
+        }
 
-        layers_.clear();
+        // Parse JSON architecture
+        nlohmann::json j;
+        std::ifstream json_file(dir / "architecture.json");
+        if (!json_file)
+            throw std::runtime_error("Failed to open architecture file for loading");
+        json_file >> j;
 
-        size_t layer_count = 0;
-        ifs >> layer_count;
-        for (size_t i = 0; i < layer_count; ++i) {
-            std::string type;
-            ifs >> type;
-            if (type == "FC") {
-                std::string act_str; int in_size, out_size;
-                ifs >> act_str >> in_size >> out_size;
-                Activation act = activation_from_string(act_str);
-                auto layer = Layer::FC(in_size, out_size, act);
-                size_t w_size; ifs >> w_size;
-                std::vector<float> w(w_size);
-                for (size_t j = 0; j < w_size; ++j) ifs >> w[j];
-                size_t b_size; ifs >> b_size;
-                std::vector<float> b(b_size);
-                for (size_t j = 0; j < b_size; ++j) ifs >> b[j];
-                auto fc = std::dynamic_pointer_cast<FCLayer>(layer);
-                fc->weights().upload(w);
-                fc->bias().upload(b);
-                if (optimizer_) layer->set_optimizer(optimizer_);
-                layers_.push_back(layer);
-            } else if (type == "Conv2D") {
-                std::string act_str; int in_c, in_h, in_w, out_c, k, s, p;
-                ifs >> act_str >> in_c >> in_h >> in_w >> out_c >> k >> s >> p;
-                Activation act = activation_from_string(act_str);
-                auto layer = Layer::Conv2D(in_c, in_h, in_w, out_c, k, s, p, act);
-                size_t w_size; ifs >> w_size;
-                std::vector<float> w(w_size);
-                for (size_t j = 0; j < w_size; ++j) ifs >> w[j];
-                size_t b_size; ifs >> b_size;
-                std::vector<float> b(b_size);
-                for (size_t j = 0; j < b_size; ++j) ifs >> b[j];
-                auto conv = std::dynamic_pointer_cast<Conv2DLayer>(layer);
-                conv->weights().upload(w);
-                conv->bias().upload(b);
-                if (optimizer_) layer->set_optimizer(optimizer_);
-                layers_.push_back(layer);
-            } else if (type == "RNN") {
-                std::string act_str; int in_size, hidden, seq_len;
-                ifs >> act_str >> in_size >> hidden >> seq_len;
-                Activation act = activation_from_string(act_str);
-                auto layer = Layer::RNN(in_size, hidden, seq_len, act);
-                size_t wih_size; ifs >> wih_size;
-                std::vector<float> wih(wih_size);
-                for (size_t j = 0; j < wih_size; ++j) ifs >> wih[j];
-                size_t whh_size; ifs >> whh_size;
-                std::vector<float> whh(whh_size);
-                for (size_t j = 0; j < whh_size; ++j) ifs >> whh[j];
-                size_t b_size; ifs >> b_size;
-                std::vector<float> b(b_size);
-                for (size_t j = 0; j < b_size; ++j) ifs >> b[j];
-                auto rnn = std::dynamic_pointer_cast<RNNLayer>(layer);
-                rnn->W_ih().upload(wih);
-                rnn->W_hh().upload(whh);
-                rnn->bias().upload(b);
-                if (optimizer_) layer->set_optimizer(optimizer_);
-                layers_.push_back(layer);
-            } else if (type == "RBM") {
-                std::string act_str; int vis, hid, cd;
-                ifs >> act_str >> vis >> hid >> cd;
-                Activation act = activation_from_string(act_str);
-                auto layer = Layer::RBM(vis, hid, cd, act);
-                size_t w_size; ifs >> w_size;
-                std::vector<float> w(w_size);
-                for (size_t j = 0; j < w_size; ++j) ifs >> w[j];
-                size_t vb_size; ifs >> vb_size;
-                std::vector<float> vb(vb_size);
-                for (size_t j = 0; j < vb_size; ++j) ifs >> vb[j];
-                size_t hb_size; ifs >> hb_size;
-                std::vector<float> hb(hb_size);
-                for (size_t j = 0; j < hb_size; ++j) ifs >> hb[j];
-                auto rbm = std::dynamic_pointer_cast<RBMLayer>(layer);
-                rbm->weights().upload(w);
-                rbm->visible_bias().upload(vb);
-                rbm->hidden_bias().upload(hb);
-                if (optimizer_) layer->set_optimizer(optimizer_);
-                layers_.push_back(layer);
-            } else {
-                throw std::runtime_error("Unknown layer type: " + type);
+        name_ = j.value("name", name_);
+
+        // Optimizer
+        if (j.contains("optimizer")) {
+            std::string opt_name = j["optimizer"].value("name", "None");
+            if (opt_name == "SGD") {
+                float lr = j["optimizer"].value("learning_rate", 0.01f);
+                set_optimizer(Optimizer::SGD(lr));
+            } else if (opt_name == "SGDM") {
+                float lr = j["optimizer"].value("learning_rate", 0.01f);
+                float momentum = j["optimizer"].value("momentum", 0.9f);
+                set_optimizer(Optimizer::SGDM(lr, momentum));
+            } else if (opt_name == "Adam") {
+                float lr = j["optimizer"].value("learning_rate", 0.001f);
+                float b1 = j["optimizer"].value("beta1", 0.9f);
+                float b2 = j["optimizer"].value("beta2", 0.999f);
+                float eps = j["optimizer"].value("epsilon", 1e-8f);
+                set_optimizer(Optimizer::Adam(lr, b1, b2, eps));
             }
         }
+
+        // Loss
+        if (j.contains("loss")) {
+            std::string loss_name = j["loss"].value("name", "MSE");
+            float eps = j["loss"].value("epsilon", 1e-8f);
+            float delta = j["loss"].value("delta", 1.0f);
+            set_loss(loss_from_string(loss_name), eps, delta);
+        }
+
+        // Layers
+        layers_.clear();
+        if (j.contains("layers")) {
+            for (const auto &jl : j["layers"]) {
+                std::string type = jl.value("type", "");
+                std::string act_str = jl.value("activation", "Linear");
+                Activation act = activation_from_string(act_str);
+                std::shared_ptr<Layer> layer;
+                if (type == "FC") {
+                    int in = jl["params"].value("input_size", 0);
+                    int out = jl["params"].value("output_size", 0);
+                    layer = Layer::FC(in, out, act);
+                } else if (type == "Conv2D") {
+                    int in_c = jl["params"].value("in_channels", 0);
+                    int in_h = jl["params"].value("in_height", 0);
+                    int in_w = jl["params"].value("in_width", 0);
+                    int out_c = jl["params"].value("out_channels", 0);
+                    int k = jl["params"].value("kernel_size", 0);
+                    int s = jl["params"].value("stride", 0);
+                    int p = jl["params"].value("padding", 0);
+                    layer = Layer::Conv2D(in_c, in_h, in_w, out_c, k, s, p, act);
+                } else if (type == "RNN") {
+                    int in = jl["params"].value("input_size", 0);
+                    int out = jl["params"].value("output_size", 0);
+                    int seq = jl["params"].value("seq_length", 0);
+                    layer = Layer::RNN(in, out, seq, act);
+                } else if (type == "RBM") {
+                    int vis = jl["params"].value("input_size", 0);
+                    int hid = jl["params"].value("output_size", 0);
+                    int cd = jl["params"].value("cd_steps", 0);
+                    layer = Layer::RBM(vis, hid, cd, act);
+                }
+                if (layer) {
+                    if (optimizer_) layer->set_optimizer(optimizer_);
+                    layers_.push_back(layer);
+                }
+            }
+        }
+
+        // Load parameters
+        std::ifstream param_file(dir / "parameters.bin", std::ios::binary);
+        if (!param_file)
+            throw std::runtime_error("Failed to open parameter file for loading");
+        size_t layer_count = 0;
+        param_file.read(reinterpret_cast<char*>(&layer_count), sizeof(size_t));
+        ModelParams params(layer_count);
+        for (size_t i = 0; i < layer_count; ++i) {
+            size_t vec_count = 0;
+            param_file.read(reinterpret_cast<char*>(&vec_count), sizeof(size_t));
+            LayerParams lp(vec_count);
+            for (size_t jv = 0; jv < vec_count; ++jv) {
+                size_t sz = 0;
+                param_file.read(reinterpret_cast<char*>(&sz), sizeof(size_t));
+                lp[jv].resize(sz);
+                param_file.read(reinterpret_cast<char*>(lp[jv].data()), sz * sizeof(float));
+            }
+            params[i] = std::move(lp);
+        }
+        apply_parameters(params);
     }
+
 
     inline void summary() {
         std::cout << "Network: " << name_ << std::endl;
