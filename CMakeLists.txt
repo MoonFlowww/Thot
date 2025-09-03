@@ -113,6 +113,9 @@ set(HEADERS
         Thot/headers/layers/details/flatten.hpp
         Thot/headers/layers/details/maxpool2d.hpp
         Thot/headers/data/details/cifar.hpp
+        Thot/cuda/cu/attentions/mha.cu
+        Thot/cuda/cuh/attentions/mha.cuh
+        Thot/headers/attentions/details/mha.hpp
 )
 
 add_library(thot_kernels STATIC ${KERNEL_SOURCES})

@@ -20,6 +20,8 @@ using namespace Thot;
     std::exit(EXIT_FAILURE); \
 } } while(0)
 
+
+
 void test_rnn() {
     std::cout << "[RUN] test_rnn" << std::endl;
     RNNLayer rnn(1, 1, 1, Activation::Tanh, Initialization::Ones);

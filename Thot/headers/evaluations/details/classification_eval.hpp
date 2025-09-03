@@ -119,10 +119,10 @@ namespace Evaluations {
             std::cout << " | Weighted F1 Score:   " << weighted_f1 * 100.0f << "%\n";
             std::cout << " *~~~~~~~~~~~~~~~~~~~~~~~~~~~~*" << std::endl;
 
-            std::cout << " | Latency Average : " << avg_latency << " ms\n";
-            std::cout << " | Latency Std Dev: " << std_latency << " ms\n";
+            std::cout << " | Latency Average : " << Thot::format_time(avg_latency) << "\n";
+            std::cout << " | Latency Std Dev: " << Thot::format_time(std_latency) << "\n";
             std::cout << " | Latency Skew: " << skew_latency << "\n";
-            std::cout << " | Latency Mode: " << mode_latency << " ms\n";
+            std::cout << " | Latency Mode: " << Thot::format_time(mode_latency) << "\n";
             std::cout << " *~~~~~~~~~~~~~~~~~~~~~~~~~~~~*" << std::endl;
 
             std::cout << " | Input Bytes/s: " << Thot::formatBytes(input_bps) << "\n";
