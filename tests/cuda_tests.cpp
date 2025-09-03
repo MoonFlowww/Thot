@@ -12,6 +12,7 @@
 #include "losses/losses.hpp"
 #include "tensor.hpp"
 #include "initializations/initializations.hpp"
+#include "attentions/attentions.hpp"
 
 using namespace Thot;
 
@@ -212,6 +213,18 @@ void test_losses() {
     std::cout << "[PASS] test_losses" << std::endl;
 }
 
+void test_mha_dimension_check() {
+    std::cout << "[RUN] test_mha_dimension_check" << std::endl;
+    bool threw = false;
+    try {
+        MHAAtt att(10, 3); // 10 not divisible by 3
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    CHECK(threw);
+    std::cout << "[PASS] test_mha_dimension_check" << std::endl;
+}
+
 int main() {
     test_rnn();
     test_fc();
@@ -219,6 +232,7 @@ int main() {
     test_rbm();
     test_activations();
     test_losses();
+    test_mha_dimension_check();
     std::cout << "All CUDA backend tests passed." << std::endl;
     return 0;
 }

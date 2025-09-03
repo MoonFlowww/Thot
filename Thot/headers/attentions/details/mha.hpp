@@ -4,6 +4,7 @@
 #include "../../initializations/initializations.hpp"
 #include "../../optimizations/optimizations.hpp"
 #include "../../../cuda/cuh/attentions/mha.cuh"
+#include <stdexcept>
 
 namespace Thot {
 
@@ -18,11 +19,13 @@ namespace Thot {
         Utils::Tensor Q_, K_, V_, softmax_, context_;
 
     public:
-        MHAAtt(int embed_dim, int num_heads,
-               Initialization init = Initialization::Xavier,
-               const std::string& name = "MHAAtt")
-            : Attention(name), embed_dim_(embed_dim), num_heads_(num_heads),
-              head_dim_(embed_dim / num_heads), initialization_type_(init) {
+        MHAAtt(int embed_dim, int num_heads, Initialization init = Initialization::Xavier, const std::string& name = "MHAAtt") :
+        Attention(name), embed_dim_(embed_dim), num_heads_(num_heads), head_dim_(0), initialization_type_(init) {
+            if (num_heads_ <= 0 || embed_dim_ % num_heads_ != 0) {
+                throw std::invalid_argument(
+                    "embed_dim must be divisible by num_heads and num_heads > 0");
+            }
+            head_dim_ = embed_dim_ / num_heads_;
             Wq_ = Utils::Tensor({embed_dim_, embed_dim_});
             Wk_ = Utils::Tensor({embed_dim_, embed_dim_});
             Wv_ = Utils::Tensor({embed_dim_, embed_dim_});

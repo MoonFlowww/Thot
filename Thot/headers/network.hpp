@@ -114,9 +114,7 @@ public:
 
         Utils::Tensor input_tensor(input_shape);
         input_tensor.upload(input);
-
         Utils::Tensor output_tensor = forward_gpu(std::move(input_tensor));
-
         return output_tensor.download();
     }
 
