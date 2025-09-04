@@ -11,6 +11,8 @@ int main() {
     if (IsLoading)model.load("/home/moonfloww/Projects/NNs/Thot");
 
     else {
+        model.add(Thot::Attention::MLA(3*32*32, 8, 256, Thot::Initialization::He));
+
         model.add(Thot::Layer::Conv2D(3, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
         model.add(Thot::Layer::Conv2D(32, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
         model.add(Thot::Layer::MaxPool2D(32, 32, 32, 2, 2));   // → 32x16x16
@@ -25,7 +27,6 @@ int main() {
 
         model.add(Thot::Layer::Flatten(128, 4, 4));            // → 2048
 
-        //model.add(Thot::Attention::MLA(2048, 8, 256, Thot::Initialization::He));
 
 
         model.add(Thot::Layer::FC(2048, 1024, Thot::Activation::ReLU, Thot::Initialization::He));
@@ -50,7 +51,7 @@ int main() {
 
 
     if (!IsLoading) {
-        auto [x, y] = Thot::Data::Load_CIFAR10_Train(cifar, 0.1f);
+        auto [x, y] = Thot::Data::Load_CIFAR10_Train(cifar, 0.01f);
         model.train(x, y, Thot::Batch::Classic(512, 15), Thot::KFold::Classic(5), 5, true);
     }
 

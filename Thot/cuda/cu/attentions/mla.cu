@@ -3,7 +3,7 @@
 #include <vector>
 #include <algorithm>
 
-#include "../../cuh/attentions/mha.cuh"
+#include "../../cuh/attentions/mla.cuh"
 
 namespace cuda::attentions {
 

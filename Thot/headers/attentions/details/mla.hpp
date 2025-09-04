@@ -98,25 +98,33 @@ namespace Thot {
     }
 
     Utils::Tensor forward(const Utils::Tensor &input) override {
-        if (input.shape().size() < 2) {
-            throw std::invalid_argument("Input tensor must be at least 2D [B, S, ...]");
+        if (input.shape().size() != 3) {
+            throw std::invalid_argument("Input tensor must be 3D [B, S, D]");
         }
+
         input_cache_ = Utils::Tensor(input.shape());
         ::cudaMemcpy(input_cache_.data(), input.data(),
                      input.size() * sizeof(float), ::cudaMemcpyDeviceToDevice);
 
         int batch = input.shape()[0];
-        int seq   = input.shape().size() > 1 ? input.shape()[1] : 1;
-        last_batch_ = batch;
-        last_seq_ = seq;
+        int seq_len = input.shape()[1];
+        int embed_dim = input.shape()[2];
+        if (embed_dim != embed_dim_) {
+            throw std::invalid_argument(
+                "Input embed_dim " + std::to_string(embed_dim) +
+                " differs from layer embed_dim " + std::to_string(embed_dim_));
+        }
 
-        Utils::Tensor output({batch, seq, embed_dim_});
-        q_      = Utils::Tensor({batch, seq, embed_dim_});
-        k_      = Utils::Tensor({batch, seq, embed_dim_});
-        v_      = Utils::Tensor({batch, seq, embed_dim_});
-        c_kv_   = Utils::Tensor({batch, seq, latent_dim_});
-        attn_probs_ = Utils::Tensor({batch, num_heads_, seq, seq});
-        concat_ = Utils::Tensor({batch, seq, embed_dim_});
+        last_batch_ = batch;
+        last_seq_ = seq_len;
+
+        Utils::Tensor output({batch, seq_len, embed_dim});
+        q_      = Utils::Tensor({batch, seq_len, embed_dim});
+        k_      = Utils::Tensor({batch, seq_len, embed_dim});
+        v_      = Utils::Tensor({batch, seq_len, embed_dim});
+        c_kv_   = Utils::Tensor({batch, seq_len, latent_dim_});
+        attn_probs_ = Utils::Tensor({batch, num_heads_, seq_len, seq_len});
+        concat_ = Utils::Tensor({batch, seq_len, embed_dim});
 
         cuda::attentions::launchMLAForward(
             static_cast<const float *>(input_cache_.data()),
@@ -130,7 +138,7 @@ namespace Thot {
             static_cast<float *>(v_.data()), static_cast<float *>(c_kv_.data()),
             static_cast<float *>(attn_probs_.data()),
             static_cast<float *>(concat_.data()),
-            batch, seq, embed_dim_, num_heads_, latent_dim_);
+            batch, seq_len, embed_dim, num_heads_, latent_dim_);
 
         return output;
     }
