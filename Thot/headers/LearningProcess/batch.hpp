@@ -79,6 +79,7 @@ template <typename Net>
                 double progress = (i + 1) / static_cast<double>(inputs.size());
                 double eta = elapsed / progress - elapsed;
 
+
                 std::ostringstream oss;
                 oss << std::fixed << std::setprecision(2);
                 oss << "\r[" << current_epoch-1 << "] -> "

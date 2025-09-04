@@ -653,10 +653,11 @@ public:
         std::vector<float> epoch_times;
         std::vector<float> fold_losses;
         double best_val_loss = std::numeric_limits<double>::infinity();
+        double best_val_acc = -std::numeric_limits<double>::infinity();
         ModelParams best_params;
 
         int folds = kfold_method.get_folds();
-        bool new_best= false;
+        bool new_best = false;
         int best_epoch = -1;
         int best_fold = -1;
 
@@ -683,39 +684,54 @@ public:
                     std::chrono::duration<float>(epoch_end - epoch_start).count();
                 epoch_times.push_back(epoch_time);
                 std::cout.unsetf(std::ios_base::floatfield);
-                if (epoch % log_interval == 0 || epoch == batch_method.get_epochs() - 1) {
-                    std::cout << "Epoch " << epoch << " - Average Loss: "
-                              << epoch_loss;
 
+                double val_loss = 0.0;
+                if (folds > 1) {
+                    for (size_t i = 0; i < val_inputs.size(); ++i) {
+                        std::vector<float> output =
+                            forward(val_inputs[i],
+                                    {1, static_cast<int>(val_inputs[i].size())});
+
+                        Utils::Tensor prediction_tensor(
+                            {1, static_cast<int>(output.size())});
+                        prediction_tensor.upload(output);
+
+                        Utils::Tensor target_tensor(
+                            {1, static_cast<int>(val_targets[i].size())});
+                        target_tensor.upload(val_targets[i]);
+
+                        val_loss +=
+                            loss_function_->compute(prediction_tensor, target_tensor);
+
+
+                        int correct = 0;
+                        for (size_t j = 0; j < output.size(); ++j) {
+                            float pred = output[j] >= 0.5f ? 1.0f : 0.0f;
+                            if (pred == val_targets[i][j])
+                                ++correct;
+                        }
+                    }
+                    val_loss /= val_inputs.size();
+
+                    if (val_loss < best_val_loss) { // best state by accuracy
+                        best_val_loss = val_loss;
+                        best_params = capture_parameters();
+                        best_epoch = epoch;
+                        best_fold = fold;
+                        new_best = true;
+                    }
+                    fold_losses.push_back(val_loss);
+                }
+                bool is_logging =
+                    (epoch % log_interval == 0 ||
+                     epoch == batch_method.get_epochs() - 1);
+                if (is_logging) {
+                    std::cout << "Epoch " << epoch + 1
+                              << " - Average Loss: " << epoch_loss;
                     if (folds > 1) {
-                        double val_loss = 0.0;
-                        for (size_t i = 0; i < val_inputs.size(); ++i) {
-                            std::vector<float> output = forward(val_inputs[i], {1, static_cast<int>(val_inputs[i].size())});
-
-                            Utils::Tensor prediction_tensor(
-                                {1, static_cast<int>(output.size())});
-                            prediction_tensor.upload(output);
-
-                            Utils::Tensor target_tensor(
-                                {1, static_cast<int>(val_targets[i].size())});
-                            target_tensor.upload(val_targets[i]);
-
-                            val_loss += loss_function_->compute(prediction_tensor, target_tensor);
-                        }
-                        val_loss /= val_inputs.size();
-
-                        if (val_loss < best_val_loss) { //best state
-                            best_val_loss = val_loss;
-                            best_params = capture_parameters();
-                            best_epoch = epoch;
-                            best_fold = fold;
-                            new_best = true;
-                        }
-
                         std::cout << " - Validation Loss: " << val_loss;
-                        if (new_best) std::cout << " *(" << epoch << ")*";
-                        fold_losses.push_back(val_loss);
-
+                        if (new_best)
+                            std::cout << " *(" << epoch + 1 << ")*";
 
                     }
                     std::cout << std::endl;
@@ -761,9 +777,11 @@ public:
             std::cout << "Min Validation Loss: " << min_fold_loss << "\n";
             std::cout << "Max Validation Loss: " << max_fold_loss << "\n";
             std::cout << "------------ Best State ------------" << std::endl;
-            std::cout << "Best Fold: " << best_fold+1 << std::endl;
-            std::cout << "Best Epoch: " << best_epoch+1 << std::endl;
-            std::cout << "Loss [" << Thot::Losses::to_string(loss_function_) << "]: " << best_val_loss << std::endl;
+            std::cout << "Best Fold: " << best_fold + 1 << std::endl;
+            std::cout << "Best Epoch: " << best_epoch + 1 << std::endl;
+            std::cout << "Loss ["
+                      << Thot::Losses::to_string(loss_function_->get_type())
+                      << "]: " << best_val_loss << std::endl;
             std::cout << "------------------------------------" << std::endl;
 
 

@@ -50,7 +50,7 @@ int main() {
 
 
     if (!IsLoading) {
-        auto [x, y] = Thot::Data::Load_CIFAR10_Train(cifar, 0.01f);
+        auto [x, y] = Thot::Data::Load_CIFAR10_Train(cifar, 0.1f);
         model.train(x, y, Thot::Batch::Classic(512, 15), Thot::KFold::Classic(5), 5, true);
     }
 
