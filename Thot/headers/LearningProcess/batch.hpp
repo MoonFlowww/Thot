@@ -66,9 +66,12 @@ namespace Batch {
             opt->step_lr(current_epoch, fold);
         }
 
-
+        int from_epoch = current_epoch;
         float total_loss = 0.0f;
-        auto start = std::chrono::high_resolution_clock::now();
+        static auto interval_start = std::chrono::high_resolution_clock::now();
+        if ((current_epoch - 1) % log_interval == 0) {
+            interval_start = std::chrono::high_resolution_clock::now();
+        }
 
         for (size_t b = 0; b < inputs.size(); b += batch_size_) {
             size_t end = std::min(b + batch_size_, inputs.size());
@@ -91,22 +94,23 @@ namespace Batch {
                 net.backward(std::move(grad_tensor));
 
                 // Progress bar now reflects the log interval rather than the epoch
-                if (verbose && ((i + 1) % log_interval == 0 || i == inputs.size() - 1)) {
+                if (verbose) {
                     auto now = std::chrono::high_resolution_clock::now();
-                    double elapsed = std::chrono::duration<double>(now - start).count();
+                    double elapsed = std::chrono::duration<double>(now - interval_start).count();
 
-                    int interval_size = std::min(
-                        log_interval, static_cast<int>(inputs.size() -
-                                                       (i / log_interval) * log_interval));
-                    double progress =
-                        ((i % log_interval) + 1) / static_cast<double>(interval_size);
-                    double epoch_progress = (i + 1) / static_cast<double>(inputs.size());
-                    double eta = elapsed / epoch_progress - elapsed;
+                    int epoch_offset = (current_epoch - 1) % log_interval;
+                    size_t batches_per_epoch = inputs.size();
+                    size_t total_batches = static_cast<size_t>(log_interval) * batches_per_epoch;
+                    size_t completed_batches = epoch_offset * batches_per_epoch + (i + 1);
+
+                    double progress = completed_batches / static_cast<double>(total_batches);
+                    double eta = elapsed / progress - elapsed;
 
                     std::ostringstream oss;
                     oss << std::fixed << std::setprecision(2);
-                    oss << "\r[" << current_epoch - 1 << "] -> "
-                        << "Progress: " << std::setw(3) << int(progress * 100) << "% | "
+                    oss << "\r[" << current_epoch <<"] -> "
+                        << "Progress: " << std::setw(3)
+                        << int(progress * 100) << "% | "
                         << "Elapsed: " << std::setw(6) << elapsed << "s | "
                         << "ETA: " << std::setw(6) << eta << "s ";
 

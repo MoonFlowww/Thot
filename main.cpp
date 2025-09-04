@@ -27,13 +27,17 @@ int main() {
 
         model.add(Thot::Layer::Flatten(128, 4, 4));            // → 2048
 
-        model.add(Thot::Layer::FC(2048, 1024, Thot::Activation::ReLU, Thot::Initialization::He));
-        model.add(Thot::Layer::FC(1024, 512, Thot::Activation::ReLU, Thot::Initialization::He));
-        model.add(Thot::Layer::FC(512, 256, Thot::Activation::ReLU, Thot::Initialization::He));
-        model.add(Thot::Layer::FC(256, 10, Thot::Activation::Softmax, Thot::Initialization::He));
+        model.add(Thot::Layer::RBM(2048, 1024, 4, Thot::Activation::Tanh, Thot::Initialization::Xavier));
+        model.add(Thot::Layer::RBM(1024, 512, 4, Thot::Activation::Tanh, Thot::Initialization::Xavier));
+        model.add(Thot::Layer::RBM(512, 256, 4, Thot::Activation::Tanh, Thot::Initialization::Xavier));
+
+        model.add(Thot::Layer::FC(256, 128, Thot::Activation::ReLU, Thot::Initialization::He));
+        model.add(Thot::Layer::FC(128, 64, Thot::Activation::ReLU, Thot::Initialization::He));
+        model.add(Thot::Layer::FC(64, 32, Thot::Activation::ReLU, Thot::Initialization::He));
+        model.add(Thot::Layer::FC(32, 10, Thot::Activation::Softmax, Thot::Initialization::He));
 
         model.set_loss(Thot::Loss::CategoricalCrossEntropy);
-        model.set_optimizer(Thot::Optimizer::AdaMuon(5e-4f));
+        model.set_optimizer(Thot::Optimizer::AdaMuon(1e-4f));
 
     }
 
@@ -49,8 +53,8 @@ int main() {
 
 
     if (!IsLoading) {
-        auto [x, y] = Thot::Data::Load_CIFAR10_Train(cifar, 0.05f);
-        model.train(x, y, Thot::Batch::Classic(512, 15), Thot::KFold::Classic(5), 5, true);
+        auto [x, y] = Thot::Data::Load_CIFAR10_Train(cifar, 0.5f);
+        model.train(x, y, Thot::Batch::Classic(512, 10), Thot::KFold::Classic(10), 5, true);
     }
 
     auto [x_test, y_test] = Thot::Data::Load_CIFAR10_Test(cifar, 1.f);
