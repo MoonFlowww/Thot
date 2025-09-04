@@ -27,9 +27,9 @@ int main() {
 
         model.add(Thot::Layer::Flatten(128, 4, 4));            // → 2048
 
-        model.add(Thot::Layer::RBM(2048, 1024, 4, Thot::Activation::Tanh, Thot::Initialization::Xavier));
-        model.add(Thot::Layer::RBM(1024, 512, 4, Thot::Activation::Tanh, Thot::Initialization::Xavier));
-        model.add(Thot::Layer::RBM(512, 256, 4, Thot::Activation::Tanh, Thot::Initialization::Xavier));
+        model.add(Thot::Layer::RBM(2048, 1024, 2, Thot::Activation::Tanh, Thot::Initialization::Xavier));
+        model.add(Thot::Layer::RBM(1024, 512, 2, Thot::Activation::Tanh, Thot::Initialization::Xavier));
+        model.add(Thot::Layer::RBM(512, 256, 2, Thot::Activation::Tanh, Thot::Initialization::Xavier));
 
         model.add(Thot::Layer::FC(256, 128, Thot::Activation::ReLU, Thot::Initialization::He));
         model.add(Thot::Layer::FC(128, 64, Thot::Activation::ReLU, Thot::Initialization::He));
