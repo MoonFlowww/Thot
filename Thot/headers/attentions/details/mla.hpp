@@ -98,17 +98,32 @@ namespace Thot {
     }
 
     Utils::Tensor forward(const Utils::Tensor &input) override {
-        if (input.shape().size() != 3) {
-            throw std::invalid_argument("Input tensor must be 3D [B, S, D]");
+        int dims = static_cast<int>(input.shape().size());
+        int batch, seq_len, embed_dim;
+
+        if (dims == 2) {
+            batch = input.shape()[0];
+            seq_len = 1;
+            embed_dim = input.shape()[1];
+            input_cache_ = Utils::Tensor({batch, seq_len, embed_dim});
+        } else if (dims == 3) {
+            batch = input.shape()[0];
+            seq_len = input.shape()[1];
+            embed_dim = input.shape()[2];
+            input_cache_ = Utils::Tensor({batch, seq_len, embed_dim});
+        } else if (dims == 4) {
+            batch = input.shape()[0];
+            seq_len = 1;
+            embed_dim = input.shape()[1] * input.shape()[2] * input.shape()[3];
+            input_cache_ = Utils::Tensor({batch, seq_len, embed_dim});
+        } else {
+            throw std::invalid_argument("Input tensor must be 2D, 3D or 4D");
         }
 
-        input_cache_ = Utils::Tensor(input.shape());
         ::cudaMemcpy(input_cache_.data(), input.data(),
                      input.size() * sizeof(float), ::cudaMemcpyDeviceToDevice);
 
-        int batch = input.shape()[0];
-        int seq_len = input.shape()[1];
-        int embed_dim = input.shape()[2];
+
         if (embed_dim != embed_dim_) {
             throw std::invalid_argument(
                 "Input embed_dim " + std::to_string(embed_dim) +

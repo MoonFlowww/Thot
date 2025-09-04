@@ -264,6 +264,21 @@ void test_mha() {
 }
 
 
+void test_mla_4d_input() {
+    std::cout << "[RUN] test_mla_4d_input" << std::endl;
+    auto layer = Thot::Attention::MLA(3 * 32 * 32, 2, 64, Thot::Initialization::Xavier);
+    Utils::Tensor input({1, 3, 32, 32});
+    input.upload(std::vector<float>(1 * 3 * 32 * 32, 0.0f));
+    bool threw = false;
+    try {
+        layer->forward(input);
+    } catch (...) {
+        threw = true;
+    }
+    CHECK(!threw);
+    std::cout << "[PASS] test_mla_4d_input" << std::endl;
+}
+
 
 int main() {
     test_rnn();
@@ -273,6 +288,7 @@ int main() {
     test_activations();
     test_losses();
     test_mha();
+    test_mla_4d_input();
     std::cout << "All CUDA backend tests passed." << std::endl;
     return 0;
 }
