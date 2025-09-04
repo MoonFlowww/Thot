@@ -1,13 +1,9 @@
-//
-// Created by moonfloww on 28/08/2025.
-//
-
 #ifndef THOT_KFOLD_H
 #define THOT_KFOLD_H
-#pragma once
+
 
 #include <vector>
-
+#include "../optimizations/optimizations.hpp"
 namespace Thot {
 namespace KFold {
 
@@ -18,6 +14,14 @@ public:
     Classic(int folds = 1) : folds_(folds) {}
 
     int get_folds() const { return folds_; }
+
+    template <typename Net>
+    void start_fold(Net& net, int fold) const {
+        if (auto opt = net.get_optimizer()) {
+            opt->step_lr(0, fold);
+        }
+    }
+
 
     void split(
         const std::vector<std::vector<float>> &inputs,
@@ -65,6 +69,13 @@ public:
     Sequential(int folds = 1) : folds_(folds) {}
 
     int get_folds() const { return folds_; }
+
+    template <typename Net>
+    void start_fold(Net& net, int fold) const {
+        if (auto opt = net.get_optimizer()) {
+            opt->step_lr(0, fold);
+        }
+    }
 
     void split(
     const std::vector<std::vector<float>> &inputs,

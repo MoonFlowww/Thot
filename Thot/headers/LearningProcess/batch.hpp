@@ -8,6 +8,7 @@
 #include <iostream>
 #include <vector>
 
+#include "../optimizations/optimizations.hpp"
 #include "../tensor.hpp"
 
 namespace Thot {
@@ -27,14 +28,14 @@ public:
                 const std::vector<std::vector<float>> &targets,
                 const std::vector<std::vector<int>> &input_shapes,
                 int log_interval, bool verbose,
-                int current_epoch, int total_epochs) const;
+                int current_epoch, int total_epochs, int fold = 0) const;
 
     template <typename Net>
     float train_epoch(Net &net,
                     const std::vector<std::vector<float>> &inputs,
                     const std::vector<std::vector<float>> &targets,
                     int log_interval, bool verbose, int current_epoch,
-                    int total_epochs) const;
+                    int total_epochs, int fold = 0) const;
 
 
 
@@ -58,7 +59,12 @@ namespace Batch {
             int log_interval,
             bool verbose,
             int current_epoch,
-            int total_epochs) const {
+            int total_epochs,
+            int fold) const {
+
+        if (auto opt = net.get_optimizer()) {
+            opt->step_lr(current_epoch, fold);
+        }
 
 
         float total_loss = 0.0f;
@@ -127,7 +133,8 @@ namespace Batch {
     int log_interval,
     bool verbose,
     int current_epoch,
-    int total_epochs) const {
+    int total_epochs,
+    int fold) const {
 
         std::vector<std::vector<int>> input_shapes;
         input_shapes.reserve(inputs.size());
@@ -135,8 +142,7 @@ namespace Batch {
             input_shapes.push_back({1, static_cast<int>(input.size())});
         }
 
-        return this->train_epoch(net, inputs, targets, input_shapes, log_interval,
-                                 verbose, current_epoch, total_epochs);
+        return this->train_epoch(net, inputs, targets, input_shapes, log_interval, verbose, current_epoch, total_epochs, fold);
     }
 
 

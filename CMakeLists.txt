@@ -81,11 +81,13 @@ set(KERNEL_SOURCES
         Thot/cuda/cu/optimizations/adam.cu
         Thot/cuda/cu/optimizations/sgd.cu
         Thot/cuda/cu/optimizations/sgdm.cu
+        Thot/cuda/cu/optimizations/muon.cu
         Thot/cuda/cu/layers/flatten.cu
         Thot/cuda/cu/layers/maxpool2d.cu
         Thot/cuda/cu/attentions/mha.cu
         Thot/cuda/cu/attentions/mla.cu
         Thot/cuda/cu/initializations/random.cu
+        Thot/cuda/cu/optimizations/adamuon.cu
 
 )
 
@@ -102,9 +104,12 @@ set(HEADERS
         Thot/headers/losses/losses.hpp
         Thot/headers/metrics/metrics.hpp
         Thot/headers/network.hpp
+
         Thot/headers/optimizations/details/adam.hpp
         Thot/headers/optimizations/details/sgd.hpp
         Thot/headers/optimizations/details/sgdm.hpp
+        Thot/headers/optimizations/details/muon.hpp
+
         Thot/headers/optimizations/optimizations.hpp
         Thot/headers/tensor.hpp
         Thot/Thot.hpp
@@ -117,6 +122,10 @@ set(HEADERS
         Thot/headers/attentions/details/mha.hpp
         Thot/headers/attentions/details/mla.hpp
         Thot/headers/attentions/attentions.hpp
+        Thot/cuda/cuh/optimizations/muon.cuh
+        Thot/headers/optimizations/learning_rate.hpp
+        Thot/headers/optimizations/details/adamuon.hpp
+        Thot/cuda/cuh/optimizations/adamuon.cuh
 )
 
 add_library(thot_kernels STATIC ${KERNEL_SOURCES})

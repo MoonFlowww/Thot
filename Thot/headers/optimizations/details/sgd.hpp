@@ -10,7 +10,8 @@ namespace Thot {
 
     class SGD : public Optimizer {
     public:
-        SGD(float learning_rate = 0.01f) : Optimizer(learning_rate) {}
+        SGD(float learning_rate = 0.01f, LearningRate lr_type = LearningRate::Constant, LrFn lr_fn = nullptr)
+            : Optimizer(learning_rate, lr_type, lr_fn) {}
 
         inline void update(Utils::Tensor& weights, const Utils::Tensor& gradients) override {
             if (weights.size() != gradients.size()) {
@@ -30,8 +31,8 @@ namespace Thot {
             return "Lr=" + std::to_string(learning_rate_);
         }
 
-        static std::shared_ptr<Optimizer> create(float learning_rate = 0.01f) {
-            return std::make_shared<SGD>(learning_rate);
+        static std::shared_ptr<Optimizer> create(float learning_rate = 0.01f, LearningRate lr_type = LearningRate::Constant, LrFn lr_fn = nullptr) {
+            return std::make_shared<SGD>(learning_rate, lr_type, lr_fn);
         }
     };
 

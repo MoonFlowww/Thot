@@ -159,6 +159,8 @@ public:
         }
     }
 
+    inline std::shared_ptr<Optimizer> get_optimizer() const { return optimizer_; }
+
     inline Utils::Tensor forward_gpu(Utils::Tensor input) {
         for (auto &L : layers_) {
             input = L->forward(input);
@@ -666,7 +668,7 @@ public:
                 std::cout << "\nTraining Fold " << fold + 1 << "/" << folds
                           << std::endl;
             }
-
+            kfold_method.start_fold(*this, fold);
             std::vector<std::vector<float>> train_inputs, train_targets, val_inputs,
                 val_targets;
             kfold_method.split(inputs, targets, fold, train_inputs, train_targets,
@@ -677,7 +679,7 @@ public:
 
                 double epoch_loss = batch_method.template train_epoch<Network>(
                         *this, train_inputs, train_targets, log_interval, verbose,
-                        epoch + 1, batch_method.get_epochs());
+                        epoch + 1, batch_method.get_epochs(), fold);
 
                 auto epoch_end = std::chrono::high_resolution_clock::now();
                 float epoch_time =

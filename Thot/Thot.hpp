@@ -5,6 +5,7 @@
 
 #include "headers/layers/layers.hpp"
 #include "headers/optimizations/optimizations.hpp"
+#include "headers/optimizations/learning_rate.hpp"
 #include "headers/initializations/initializations.hpp"
 
 #include "headers/data/data.hpp"

@@ -44,99 +44,100 @@ namespace cuda::attentions {
                                  float *concat,
                                  int batch_size, int seq_len, int embed_dim,
                                  int num_heads, int latent_dim) {
-    const int head_dim = embed_dim / num_heads;
-    const float scale = 1.0f / sqrtf(static_cast<float>(head_dim));
-    // loops over entire batch/sequence executed by single thread
-    for (int b = 0; b < batch_size; ++b) {
-        for (int t = 0; t < seq_len; ++t) {
-            // C = W_DKV * X + b_DKV
-            for (int oc = 0; oc < latent_dim; ++oc) {
-                float s = b_DKV ? b_DKV[oc] : 0.0f;
-                for (int i = 0; i < embed_dim; ++i) {
-                    s += W_DKV[oc * embed_dim + i] * input[idx_bt(b, t, i, seq_len, embed_dim)];
-                    c_kv[(b * seq_len + t) * latent_dim + oc] = s;
-                }
-                // Q = W_Q * X + b_Q
-                for (int o = 0; o < embed_dim; ++o) {
-                    float s = b_Q ? b_Q[o] : 0.0f;
-                    for (int i = 0; i < embed_dim; ++i) {
-                        s += W_Q[o * embed_dim + i] * input[idx_bt(b, t, i, seq_len, embed_dim)];
-                    }
-                    q[idx_bt(b, t, o, seq_len, embed_dim)] = s;
-                }
-            }
-        }
-
-        // K,V from latent C
+        const int head_dim = embed_dim / num_heads;
+        const float scale = 1.0f / sqrtf(static_cast<float>(head_dim));
+        // loops over entire batch/sequence executed by single thread
         for (int b = 0; b < batch_size; ++b) {
             for (int t = 0; t < seq_len; ++t) {
-                for (int o = 0; o < embed_dim; ++o) {
-                    float sk = b_UK ? b_UK[o] : 0.0f;
-                    float sv = b_UV ? b_UV[o] : 0.0f;
-                    for (int i = 0; i < latent_dim; ++i) {
-                        float c = c_kv[(b * seq_len + t) * latent_dim + i];
-                        sk += W_UK[o * latent_dim + i] * c;
-                        sv += W_UV[o * latent_dim + i] * c;
+                // C = W_DKV * X + b_DKV
+                for (int oc = 0; oc < latent_dim; ++oc) {
+                    float s = b_DKV ? b_DKV[oc] : 0.0f;
+                    for (int i = 0; i < embed_dim; ++i) {
+                        s += W_DKV[oc * embed_dim + i] * input[idx_bt(b, t, i, seq_len, embed_dim)];
+                        c_kv[(b * seq_len + t) * latent_dim + oc] = s;
                     }
-                    k[idx_bt(b, t, o, seq_len, embed_dim)] = sk;
-                    v[idx_bt(b, t, o, seq_len, embed_dim)] = sv;
+                    // Q = W_Q * X + b_Q
+                    for (int o = 0; o < embed_dim; ++o) {
+                        float s = b_Q ? b_Q[o] : 0.0f;
+                        for (int i = 0; i < embed_dim; ++i) {
+                            s += W_Q[o * embed_dim + i] * input[idx_bt(b, t, i, seq_len, embed_dim)];
+                        }
+                        q[idx_bt(b, t, o, seq_len, embed_dim)] = s;
+                    }
                 }
             }
-        }
-        // Attention and concat
-        for (int b = 0; b < batch_size; ++b) {
-            for (int h = 0; h < num_heads; ++h) {
+
+            // K,V from latent C
+            for (int b = 0; b < batch_size; ++b) {
                 for (int t = 0; t < seq_len; ++t) {
-                    // compute raw scores in attn_probs
-                    for (int t2 = 0; t2 < seq_len; ++t2) {
-                        float dot = 0.0f;
-                        for (int d = 0; d < head_dim; ++d) {
-                            dot += q[idx_bthd(b, t, h, d, seq_len, embed_dim, head_dim)] *
-                               k[idx_bthd(b, t2, h, d, seq_len, embed_dim, head_dim)];
+                    for (int o = 0; o < embed_dim; ++o) {
+                        float sk = b_UK ? b_UK[o] : 0.0f;
+                        float sv = b_UV ? b_UV[o] : 0.0f;
+                        for (int i = 0; i < latent_dim; ++i) {
+                            float c = c_kv[(b * seq_len + t) * latent_dim + i];
+                            sk += W_UK[o * latent_dim + i] * c;
+                            sv += W_UV[o * latent_dim + i] * c;
                         }
-                        attn_probs[idx_bhtt(b, h, t, t2, seq_len, num_heads)] =
-                        dot * scale;
-                    }
-                    // softmax in-place
-                    float mx = attn_probs[idx_bhtt(b, h, t, 0, seq_len, num_heads)];
-                    for (int t2 = 1; t2 < seq_len; ++t2) {
-                        float val = attn_probs[idx_bhtt(b, h, t, t2, seq_len, num_heads)];
-                        mx = mx > val ? mx : val;
-                    }
-                    float sum = 0.0f;
-                    for (int t2 = 0; t2 < seq_len; ++t2) {
-                        int id = idx_bhtt(b, h, t, t2, seq_len, num_heads);
-                        float e = expf(attn_probs[id] - mx);
-                        attn_probs[id] = e;
-                        sum += e;
-                    }
-                    for (int t2 = 0; t2 < seq_len; ++t2) {
-                        int id = idx_bhtt(b, h, t, t2, seq_len, num_heads);
-                        attn_probs[id] /= sum;
-                    }
-                    // concat = attn_probs * V
-                    for (int d = 0; d < head_dim; ++d) {
-                        float acc = 0.0f;
-                        for (int t2 = 0; t2 < seq_len; ++t2) {
-                            float p = attn_probs[idx_bhtt(b, h, t, t2, seq_len, num_heads)];
-                            acc += p * v[idx_bthd(b, t2, h, d, seq_len, embed_dim, head_dim)];
-                        }
-                        concat[idx_bthd(b, t, h, d, seq_len, embed_dim, head_dim)] = acc;
+                        k[idx_bt(b, t, o, seq_len, embed_dim)] = sk;
+                        v[idx_bt(b, t, o, seq_len, embed_dim)] = sv;
                     }
                 }
             }
-        }
-
-        // Output projection
-        for (int b = 0; b < batch_size; ++b) {
-            for (int t = 0; t < seq_len; ++t) {
-                for (int o = 0; o < embed_dim; ++o) {
-                    float s = b_O ? b_O[o] : 0.0f;
-                    for (int i = 0; i < embed_dim; ++i) {
-                        s += W_O[o * embed_dim + i] *
-                         concat[idx_bt(b, t, i, seq_len, embed_dim)];
+            // Attention and concat
+            for (int b = 0; b < batch_size; ++b) {
+                for (int h = 0; h < num_heads; ++h) {
+                    for (int t = 0; t < seq_len; ++t) {
+                        // compute raw scores in attn_probs
+                        for (int t2 = 0; t2 < seq_len; ++t2) {
+                            float dot = 0.0f;
+                            for (int d = 0; d < head_dim; ++d) {
+                                dot += q[idx_bthd(b, t, h, d, seq_len, embed_dim, head_dim)] *
+                                   k[idx_bthd(b, t2, h, d, seq_len, embed_dim, head_dim)];
+                            }
+                            attn_probs[idx_bhtt(b, h, t, t2, seq_len, num_heads)] =
+                            dot * scale;
+                        }
+                        // softmax in-place
+                        float mx = attn_probs[idx_bhtt(b, h, t, 0, seq_len, num_heads)];
+                        for (int t2 = 1; t2 < seq_len; ++t2) {
+                            float val = attn_probs[idx_bhtt(b, h, t, t2, seq_len, num_heads)];
+                            mx = mx > val ? mx : val;
+                        }
+                        float sum = 0.0f;
+                        for (int t2 = 0; t2 < seq_len; ++t2) {
+                            int id = idx_bhtt(b, h, t, t2, seq_len, num_heads);
+                            float e = expf(attn_probs[id] - mx);
+                            attn_probs[id] = e;
+                            sum += e;
+                        }
+                        for (int t2 = 0; t2 < seq_len; ++t2) {
+                            int id = idx_bhtt(b, h, t, t2, seq_len, num_heads);
+                            attn_probs[id] /= sum;
+                        }
+                        // concat = attn_probs * V
+                        for (int d = 0; d < head_dim; ++d) {
+                            float acc = 0.0f;
+                            for (int t2 = 0; t2 < seq_len; ++t2) {
+                                float p = attn_probs[idx_bhtt(b, h, t, t2, seq_len, num_heads)];
+                                acc += p * v[idx_bthd(b, t2, h, d, seq_len, embed_dim, head_dim)];
+                            }
+                            concat[idx_bthd(b, t, h, d, seq_len, embed_dim, head_dim)] = acc;
+                        }
                     }
-                    output[idx_bt(b, t, o, seq_len, embed_dim)] = s;
+                }
+            }
+
+            // Output projection
+            for (int b = 0; b < batch_size; ++b) {
+                for (int t = 0; t < seq_len; ++t) {
+                    for (int o = 0; o < embed_dim; ++o) {
+                        float s = b_O ? b_O[o] : 0.0f;
+                        for (int i = 0; i < embed_dim; ++i) {
+                            s += W_O[o * embed_dim + i] *
+                             concat[idx_bt(b, t, i, seq_len, embed_dim)];
+                        }
+                        output[idx_bt(b, t, o, seq_len, embed_dim)] = s;
+                    }
                 }
             }
         }
@@ -271,15 +272,12 @@ namespace cuda::attentions {
                     }
                     for (int t2 = 0; t2 < seq_len; ++t2) {
                         int id = idx_bhtt(b, h, t, t2, seq_len, num_heads);
-                        float grad = attn_h[id] * (dAttn_h[id] - sum);
-                        grad *= 1.0f / std::sqrt(static_cast<float>(head_dim));
+
                         float grad = attn_probs[id] * (dAttn[id] - sum);
                         grad *= 1.0f / sqrtf(static_cast<float>(head_dim));
                         for (int d = 0; d < head_dim; ++d) {
-                            dQ[idx_bthd(b, t, h, d, seq_len, embed_dim, head_dim)] +=
-                            grad * k[idx_bthd(b, t2, h, d, seq_len, embed_dim, head_dim)];
-                            dK[idx_bthd(b, t2, h, d, seq_len, embed_dim, head_dim)] +=
-                                grad * q[idx_bthd(b, t, h, d, seq_len, embed_dim, head_dim)];
+                            dQ[idx_bthd(b, t, h, d, seq_len, embed_dim, head_dim)] += grad * k[idx_bthd(b, t2, h, d, seq_len, embed_dim, head_dim)];
+                            dK[idx_bthd(b, t2, h, d, seq_len, embed_dim, head_dim)] += grad * q[idx_bthd(b, t, h, d, seq_len, embed_dim, head_dim)];
                         }
                     }
                 }
@@ -415,4 +413,4 @@ namespace cuda::attentions {
         CUDA_CHECK(cudaFree(dQ));
         CUDA_CHECK(cudaFree(dC));
     }
-} // namespace cuda::attention
+} // namespace cuda::attentions

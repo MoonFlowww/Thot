@@ -14,7 +14,7 @@
 #include "initializations/initializations.hpp"
 #include "attentions/attentions.hpp"
 #include "layers/layers.hpp"
-
+#include "optimizations/optimizations.hpp"
 
 using namespace Thot;
 
@@ -279,6 +279,19 @@ void test_mla_4d_input() {
     std::cout << "[PASS] test_mla_4d_input" << std::endl;
 }
 
+void test_muon_optimizer() {
+    std::cout << "[RUN] test_muon_optimizer" << std::endl;
+    auto opt = Optimizer::Muon(0.1f, 0.9f, 0.01f);
+    Utils::Tensor w({1});
+    w.upload({1.0f});
+    Utils::Tensor g({1});
+    g.upload({1.0f});
+    opt->update(w, g);
+    auto host = w.download();
+    std::cout << "Muon weight: " << host[0] << std::endl;
+    CHECK(host[0] < 1.0f);
+    std::cout << "[PASS] test_muon_optimizer" << std::endl;
+}
 
 int main() {
     test_rnn();
@@ -289,6 +302,7 @@ int main() {
     test_losses();
     test_mha();
     test_mla_4d_input();
+    test_muon_optimizer();
     std::cout << "All CUDA backend tests passed." << std::endl;
     return 0;
 }
