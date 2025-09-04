@@ -64,7 +64,7 @@ namespace Thot {
             return gen;
         }
 
-        inline void initialize_tensor(Utils::Tensor& tensor, Initialization method, int fan_in = 0, int fan_out = 0) {
+                inline void initialize_tensor(Utils::Tensor& tensor, Initialization method, int fan_in = 0, int fan_out = 0) {
             std::vector<int> shape = tensor.shape();
             size_t size = tensor.size();
 
@@ -72,20 +72,15 @@ namespace Thot {
                 if (shape.size() >= 2) {
                     fan_out = shape[0];
                     fan_in = shape[1];
-
-                    // For convolutional kernels: [out_channels, in_channels, height, width]
                     if (shape.size() > 2) {
-                        for (size_t i = 2; i < shape.size(); ++i) {
-                            fan_in *= shape[i];
-                        }
+                        for (size_t i = 2; i < shape.size(); ++i) fan_in *= shape[i];
                     }
-                }
-                else {
+                } else {
                     fan_in = fan_out = static_cast<int>(size);
                 }
             }
 
-#ifdef __CUDACC__
+            // CUDA-only code path
             switch (method) {
                 case Initialization::Zeros:
                     cudaMemset(tensor.data(), 0, size * sizeof(float));
@@ -133,8 +128,11 @@ namespace Thot {
                 }
                 case Initialization::Lyapunov: {
                     if (shape.size() == 2) {
+                        std::cout << "true lyapunov" << std::endl;
                         cuda::initializations::launchLyapunov(tensor.data(), shape[0], shape[1]);
                     } else {
+                        std::cout << "<>2D -> Mesokurtic" << std::endl;
+
                         cuda::initializations::launchRandomNormal(tensor.data(), static_cast<int>(size), 0.0f, 1.0f);
                     }
                     break;
@@ -144,123 +142,8 @@ namespace Thot {
                     break;
             }
             cudaDeviceSynchronize();
-            auto end_time = high_resolution_clock::now();
-            double ms = duration<double, std::milli>(end_time - start_time).count();
-            static double total_ms = 0.0;
-            static size_t total_params = 0;
-            total_ms += ms;
-            total_params += size;
-            std::cout << "Initialized tensor with " << to_string(method)
-                      << " in " << ms << " ms (" << (ms / size) << " ms/param). "
-                      << "Total: " << total_ms << " ms over " << total_params << " params." << std::endl;
-            return;
-#endif
-            std::vector<float> host_data(size);
-            switch (method) {
-                case Initialization::Zeros:
-                    std::fill(host_data.begin(), host_data.end(), 0.0f);
-                    break;
-                case Initialization::Ones:
-                    std::fill(host_data.begin(), host_data.end(), 1.0f);
-                    break;
-                case Initialization::Uniform: {
-                    float range = 0.1f;
-                    std::uniform_real_distribution<float> dist(-range, range);
-                    auto& gen = get_random_generator();
-                    for (size_t i = 0; i < size; ++i) host_data[i] = dist(gen);
-                    break;
-                }
-                case Initialization::Normal: {
-                    float stddev = 0.01f;
-                    std::normal_distribution<float> dist(0.0f, stddev);
-                    auto& gen = get_random_generator();
-                    for (size_t i = 0; i < size; ++i) host_data[i] = dist(gen);
-                    break;
-                }
-                case Initialization::Xavier: {
-                    float scale = std::sqrt(6.0f / (fan_in + fan_out));
-                    std::uniform_real_distribution<float> dist(-scale, scale);
-                    auto& gen = get_random_generator();
-                    for (size_t i = 0; i < size; ++i) host_data[i] = dist(gen);
-                    break;
-                }
-                case Initialization::He: {
-                    float scale = std::sqrt(2.0f / fan_in);
-                    std::normal_distribution<float> dist(0.0f, scale);
-                    auto& gen = get_random_generator();
-                    for (size_t i = 0; i < size; ++i) host_data[i] = dist(gen);
-                    break;
-                }
-                case Initialization::LeCun: {
-                    float scale = std::sqrt(1.0f / fan_in);
-                    std::normal_distribution<float> dist(0.0f, scale);
-                    auto& gen = get_random_generator();
-                    for (size_t i = 0; i < size; ++i) host_data[i] = dist(gen);
-                    break;
-                }
-                case Initialization::TruncatedNormal: {
-                    float stddev = 0.01f;
-                    auto& gen = get_random_generator();
-                    std::normal_distribution<float> dist(0.0f, stddev);
-                    for (size_t i = 0; i < size; ++i) {
-                        float val;
-                        do { val = dist(gen); } while (std::abs(val) > 2 * stddev);
-                        host_data[i] = val;
-                    }
-                    break;
-                }
-                case Initialization::Dirac: {
-                    std::fill(host_data.begin(), host_data.end(), 0.0f);
-                    if (shape.size() == 2) {
-                        int diag = std::min(shape[0], shape[1]);
-                        for (int i = 0; i < diag; ++i) host_data[i * shape[1] + i] = 1.0f;
-                    }
-                    break;
-                }
-                case Initialization::Lyapunov: {
-                    std::normal_distribution<float> dist(0.0f, 1.0f);
-                    auto& gen = get_random_generator();
-                    for (size_t i = 0; i < size; ++i) host_data[i] = dist(gen);
-
-                    if (shape.size() == 2) {
-                        int rows = shape[0];
-                        int cols = shape[1];
-                        std::vector<float> v(cols, 1.0f);
-                        for (int iter = 0; iter < 20; ++iter) {
-                            std::vector<float> v_new(rows, 0.0f);
-                            for (int r = 0; r < rows; ++r) {
-                                for (int c = 0; c < cols; ++c) v_new[r] += host_data[r * cols + c] * v[c];
-                            }
-                            float norm = 0.0f;
-                            for (float val : v_new) norm += val * val;
-                            norm = std::sqrt(norm);
-                            if (norm > 0) {
-                                for (float& val : v_new) val /= norm;
-                            }
-                            v = v_new;
-                        }
-                        float spectral_radius = 0.0f;
-                        for (int r = 0; r < rows; ++r) {
-                            float acc = 0.0f;
-                            for (int c = 0; c < cols; ++c) acc += host_data[r * cols + c] * v[c];
-                            spectral_radius += acc * v[r];
-                        }
-                        spectral_radius = std::abs(spectral_radius);
-                        if (spectral_radius > 0) {
-                            float scale = 0.95f / spectral_radius;
-                            for (size_t i = 0; i < size; ++i) host_data[i] *= scale;
-                        }
-                    }
-                    break;
-                }
-                default:
-                    std::fill(host_data.begin(), host_data.end(), 0.0f);
-                    break;
-            }
-            tensor.upload(host_data);
-
-
         }
+
 
         inline void zeros(Utils::Tensor& tensor) {
             initialize_tensor(tensor, Initialization::Zeros);

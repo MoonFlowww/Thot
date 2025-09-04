@@ -39,7 +39,6 @@ class Optimizer;
 
 namespace Thot {
 
-    //made for model load
 
 
 
@@ -60,6 +59,8 @@ private:
     size_t total_flops = 0;
     size_t total_parm = 0;
 
+
+
     void print_vector(const std::vector<float> &vec) {
         std::cout << "[";
         for (size_t i = 0; i < vec.size(); ++i) {
@@ -75,7 +76,7 @@ private:
             int expected = layers_[i]->get_output_size();
             int actual = layers_[i + 1]->get_input_size();
             if (expected > 0 && actual > 0 && expected != actual) {
-                std::cout << "Layer dimension mismatch between layer n" << i
+                std::cout << "Layer dimension mismatch between layer n" << i+1
                           << " (" << layers_[i]->get_name() << ") output size "
                           << expected << " and layer n" << i + 1
                           << " (" << layers_[i + 1]->get_name() << ") input size "
@@ -175,6 +176,7 @@ public:
             if (NetworkInput > 0 && input.size() != static_cast<size_t>(NetworkInput)) {
                 throw std::invalid_argument("Input size does not match network input layer size\n - [Input] Network: " + std::to_string(NetworkInput) + "  ||  Data: " + std::to_string(input.size()));
             }
+
         }
 
         Utils::Tensor input_tensor(input_shape);
@@ -628,12 +630,17 @@ public:
 
         initializaiton_summary();
     }
+
     template <typename BatchMethod, typename KFoldMethod>
-    void train(const std::vector<std::vector<float>> &inputs,
-            const std::vector<std::vector<float>> &targets,
-            const BatchMethod &batch_method, const KFoldMethod &kfold_method,
-            int log_interval = 100, bool verbose = true,
-            bool restore_best_model = true) {
+    void train(const std::vector<std::vector<float>> &inputs, const std::vector<std::vector<float>> &targets, const BatchMethod &batch_method, const KFoldMethod &kfold_method,
+            int log_interval = 100, bool verbose = true, bool restore_best_model = true) {
+
+        if (!layers_.empty()) {
+            int NetworkOutput = layers_.back()->get_output_size();
+            if (NetworkOutput > 0 && targets[0].size() != static_cast<size_t>(NetworkOutput)) {
+                throw std::invalid_argument("Output size does not match network output layer size\n - [Input] Network: " + std::to_string(NetworkOutput) + "  ||  Target: " + std::to_string(targets[0].size()));
+            }
+        }
 
         if (!optimizer_) { // if not defined
             optimizer_ = Thot::Optimizer::SGD(0.01f);
@@ -651,6 +658,7 @@ public:
         int folds = kfold_method.get_folds();
         bool new_best= false;
         int best_epoch = -1;
+        int best_fold = -1;
 
         for (int fold = 0; fold < folds; ++fold) {
             if (folds > 1 && verbose) {
@@ -700,6 +708,7 @@ public:
                             best_val_loss = val_loss;
                             best_params = capture_parameters();
                             best_epoch = epoch;
+                            best_fold = fold;
                             new_best = true;
                         }
 
@@ -751,6 +760,13 @@ public:
             std::cout << "Average Validation Loss: " << avg_fold_loss << "\n";
             std::cout << "Min Validation Loss: " << min_fold_loss << "\n";
             std::cout << "Max Validation Loss: " << max_fold_loss << "\n";
+            std::cout << "------------ Best State ------------" << std::endl;
+            std::cout << "Best Fold: " << best_fold+1 << std::endl;
+            std::cout << "Best Epoch: " << best_epoch+1 << std::endl;
+            std::cout << "Loss [" << Thot::Losses::to_string(loss_function_) << "]: " << best_val_loss << std::endl;
+            std::cout << "------------------------------------" << std::endl;
+
+
         }
         std::cout << "Total Training Time: " << format_time(total_time) << "\n";
         std::cout << "Average Epoch Time: " << format_time(avg_epoch_time) << "\n";

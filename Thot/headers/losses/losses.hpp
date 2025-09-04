@@ -21,6 +21,7 @@ namespace Thot {
         Huber,
         KLDivergence
     };
+
     inline Loss loss_from_string(const std::string &name) { // for model.save() & model.load()
         if (name == "MSE") return Loss::MSE;
         if (name == "MAE") return Loss::MAE;

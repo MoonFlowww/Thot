@@ -8,6 +8,7 @@
 #include <iostream>
 #include <iomanip>
 #include <tuple>
+#include <filesystem>
 
 #include "utils/translators.hpp"
 
@@ -37,17 +38,15 @@ namespace Thot {
             return label_names;
         }
 
-        inline std::pair<std::vector<std::vector<float>>, std::vector<std::vector<float>>> load_cifar10(const std::string& file_path, int num_classes = 10, float ratio = 1.0f, bool show_info = true) {
+
+        inline std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<float>>> load_cifar10(const std::string& file_path, int num_classes = 10, float ratio = 1.0f, bool show_info = true) {
             std::ifstream file(file_path, std::ios::binary);
             if (!file) throw std::runtime_error("Cannot open CIFAR-10 file: " + file_path);
 
-            //TODO: rewrite label string
-            // computed 2 times for train & test + not saved for other std::cout << class
-            std::string p = file_path;
-            std::size_t pos = p.find_last_of('/');
-            if (pos != std::string::npos) p.erase(pos);
-            std::vector<std::string> label_string = get_CIFAR10_label_string(p+"/batches.meta.txt");
-            if (label_string.empty()) throw std::runtime_error("CIFAR-10 meta file contains no label names");
+
+            std::filesystem::path p(file_path); p = p.parent_path();
+            std::vector<std::string> label_str = get_CIFAR10_label_string((p / "batches.meta.txt").string());
+
             // CIFAR-10 fixed sizes
             const int image_size = 32 * 32 * 3;
             const int record_size = 1 + image_size;
@@ -99,14 +98,14 @@ namespace Thot {
                 std::cout << "Label Distribution:\n";
                 std::cout << "------------------\n";
                 for (int i = 0; i < num_classes; ++i) {
-                    double percentage = (100.0 * label_counts[i]) / actual_num_images;
-                    std::cout << "Class " << (label_string.empty() ? std::to_string(i) : std::to_string(i)+" "+label_string[i]) << ": " << label_counts[i] << " images ("
-                              << std::fixed << std::setprecision(2) << percentage << "%)\n";
+                    double percentage = (100.0 * label_counts[i]) / static_cast<double>(actual_num_images);
+                    std::cout << "Class " << (label_str.empty() ? std::to_string(i) : std::to_string(i)+" ["+label_str[i]) << "]: " << label_str[i] << " images ("
+                                  << std::fixed << std::setprecision(2) << percentage << "%)\n";
                 }
                 std::cout << "------------------\n\n";
             }
 
-            return { images, labels };
+            return { images, labels};
         }
 
         inline std::pair<std::vector<std::vector<float>>, std::vector<std::vector<float>>> Load_CIFAR10_Train(const std::string& base_path = "", float ratio = 1.0f) {
@@ -133,6 +132,7 @@ namespace Thot {
                 train_labels.insert(train_labels.end(), labels.begin(), labels.end());
             }
 
+            std::vector<std::string> label_str = get_CIFAR10_label_string((base_path + "/batches.meta.txt"));
 
             const int image_size = 32 * 32 * 3;
             const int total_available = 5 * 10000;
@@ -154,7 +154,8 @@ namespace Thot {
             std::cout << "------------------\n";
             for (int i = 0; i < num_classes; ++i) {
                 double percentage = (100.0 * total_label_counts[i]) / static_cast<double>(actual_num_images);
-                std::cout << "Class " << i << ": " << total_label_counts[i] << " images (" << std::fixed << std::setprecision(2) << percentage << "%)\n";
+                std::cout << "Class " << (label_str.empty() ? std::to_string(i) : std::to_string(i)+" ["+label_str[i]) << "]: " << label_str[i] << " images ("
+                              << std::fixed << std::setprecision(2) << percentage << "%)\n";
             }
             std::cout << "------------------\n\n";
             return { train_images, train_labels };
@@ -164,7 +165,9 @@ namespace Thot {
         Load_CIFAR10_Test(const std::string& base_path = "", float ratio = 1.0f) {
             std::cout << "Loading CIFAR-10 Test Set...\n";
             std::string path = base_path + "/test_batch.bin";
-            return load_cifar10(path, 10, ratio, true);
+            auto t = load_cifar10(path, 10, ratio, true); // remove label_str
+            return std::make_pair(std::get<0>(t), std::get<1>(t));
+
         }
 
         inline std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<float>>, std::vector<std::vector<float>>, std::vector<std::vector<float>>
