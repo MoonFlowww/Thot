@@ -15,29 +15,28 @@ int main() {
 
         model.add(Thot::Layer::Conv2D(3, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
         model.add(Thot::Layer::Conv2D(32, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
-        model.add(Thot::Layer::MaxPool2D(32, 32, 32, 2, 2));   // → 32x16x16
+        model.add(Thot::Layer::MaxPool2D(32, 32, 32, 2, 2));   // 32×16×16
 
         model.add(Thot::Layer::Conv2D(32, 16, 16, 64, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
         model.add(Thot::Layer::Conv2D(64, 16, 16, 64, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
-        model.add(Thot::Layer::MaxPool2D(64, 16, 16, 2, 2));   // → 64x8x8
+        model.add(Thot::Layer::MaxPool2D(64, 16, 16, 2, 2));   // 64×8×8
 
         model.add(Thot::Layer::Conv2D(64, 8, 8, 128, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
-        model.add(Thot::Layer::Conv2D(128, 8, 8, 128, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
-        model.add(Thot::Layer::MaxPool2D(128, 8, 8, 2, 2));    // → 128x4x4
+        model.add(Thot::Layer::MaxPool2D(128, 8, 8, 2, 2));    // 128×4×4
 
-        model.add(Thot::Layer::Flatten(128, 4, 4));            // → 2048
+        model.add(Thot::Layer::Flatten(128, 4, 4));            // 2048
 
-        model.add(Thot::Layer::RBM(2048, 1024, 2, Thot::Activation::Tanh, Thot::Initialization::Xavier));
-        model.add(Thot::Layer::RBM(1024, 512, 2, Thot::Activation::Tanh, Thot::Initialization::Xavier));
-        model.add(Thot::Layer::RBM(512, 256, 2, Thot::Activation::Tanh, Thot::Initialization::Xavier));
+        model.add(Thot::Layer::FC(2048, 524, Thot::Activation::ReLU, Thot::Initialization::He));
 
-        model.add(Thot::Layer::FC(256, 128, Thot::Activation::ReLU, Thot::Initialization::He));
-        model.add(Thot::Layer::FC(128, 64, Thot::Activation::ReLU, Thot::Initialization::He));
-        model.add(Thot::Layer::FC(64, 32, Thot::Activation::ReLU, Thot::Initialization::He));
-        model.add(Thot::Layer::FC(32, 10, Thot::Activation::Softmax, Thot::Initialization::He));
+        model.add(Thot::Attention::MLA(524, 4, 256, Thot::Initialization::Lyapunov));
+
+        model.add(Thot::Layer::FC(524, 126, Thot::Activation::ReLU, Thot::Initialization::He));
+        model.add(Thot::Layer::FC(126, 10, Thot::Activation::Softmax, Thot::Initialization::He));
 
         model.set_loss(Thot::Loss::CategoricalCrossEntropy);
-        model.set_optimizer(Thot::Optimizer::AdaMuon(1e-4f));
+        model.set_optimizer(Thot::Optimizer::Adam(1e-3f));
+
+
 
     }
 

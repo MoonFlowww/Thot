@@ -88,9 +88,9 @@ namespace Thot {
                                               const std::string& name = "SparseAE");
 	};
 
-	};
+};
 
-}
+
 #include "../layers/details/fc.hpp"
 #include "../layers/details/rnn.hpp"
 #include "../layers/details/conv2d.hpp"

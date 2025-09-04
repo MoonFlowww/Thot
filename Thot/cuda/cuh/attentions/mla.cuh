@@ -18,6 +18,13 @@ void launchMLAForward(const float *input,
                       int latent_dim,
                       cudaStream_t stream = 0);
 
+
+    void initMLABackwardWorkspace(int batch_size, int seq_len, int embed_dim,
+                                  int num_heads, int latent_dim);
+
+    void freeMLABackwardWorkspace();
+
+
 void launchMLABackward(const float *input,
                        const float *W_DKV, const float *b_DKV,
                        const float *W_UK,  const float *b_UK,

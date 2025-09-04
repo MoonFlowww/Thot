@@ -13,6 +13,19 @@ printf("CUDA error %s:%d: %s\n", __FILE__, __LINE__, cudaGetErrorString(_e)); } 
 
 namespace cuda::attentions {
 
+    namespace {
+        float *g_dConcat = nullptr;
+        float *g_dAttn   = nullptr;
+        float *g_dV      = nullptr;
+        float *g_dK      = nullptr;
+        float *g_dQ      = nullptr;
+        float *g_dC      = nullptr;
+
+        size_t g_X_size   = 0;
+        size_t g_C_size   = 0;
+        size_t g_prob_sz  = 0;
+    }
+
     __device__ inline int idx_bt(int b, int t, int e, int seq, int embed) {
         return (b * seq + t) * embed + e;
     }
@@ -171,6 +184,47 @@ namespace cuda::attentions {
     ////////////////////////////////////////////////////////////////////////////////
     // Backward
     ////////////////////////////////////////////////////////////////////////////////
+
+    void initMLABackwardWorkspace(int batch_size, int seq_len, int embed_dim,
+                                  int num_heads, int latent_dim) {
+        size_t X_size  = static_cast<size_t>(batch_size) * seq_len * embed_dim;
+        size_t C_size  = static_cast<size_t>(batch_size) * seq_len * latent_dim;
+        size_t prob_sz = static_cast<size_t>(batch_size) * num_heads * seq_len * seq_len;
+
+        if (X_size > g_X_size) {
+            if (g_dConcat) CUDA_CHECK(cudaFree(g_dConcat));
+            if (g_dV)      CUDA_CHECK(cudaFree(g_dV));
+            if (g_dK)      CUDA_CHECK(cudaFree(g_dK));
+            if (g_dQ)      CUDA_CHECK(cudaFree(g_dQ));
+            CUDA_CHECK(cudaMalloc(&g_dConcat, X_size * sizeof(float)));
+            CUDA_CHECK(cudaMalloc(&g_dV,     X_size * sizeof(float)));
+            CUDA_CHECK(cudaMalloc(&g_dK,     X_size * sizeof(float)));
+            CUDA_CHECK(cudaMalloc(&g_dQ,     X_size * sizeof(float)));
+            g_X_size = X_size;
+        }
+
+        if (prob_sz > g_prob_sz) {
+            if (g_dAttn) CUDA_CHECK(cudaFree(g_dAttn));
+            CUDA_CHECK(cudaMalloc(&g_dAttn, prob_sz * sizeof(float)));
+            g_prob_sz = prob_sz;
+        }
+
+        if (C_size > g_C_size) {
+            if (g_dC) CUDA_CHECK(cudaFree(g_dC));
+            CUDA_CHECK(cudaMalloc(&g_dC, C_size * sizeof(float)));
+            g_C_size = C_size;
+        }
+    }
+
+    void freeMLABackwardWorkspace() {
+        if (g_dConcat) { CUDA_CHECK(cudaFree(g_dConcat)); g_dConcat = nullptr; }
+        if (g_dAttn)   { CUDA_CHECK(cudaFree(g_dAttn));   g_dAttn   = nullptr; }
+        if (g_dV)      { CUDA_CHECK(cudaFree(g_dV));      g_dV      = nullptr; }
+        if (g_dK)      { CUDA_CHECK(cudaFree(g_dK));      g_dK      = nullptr; }
+        if (g_dQ)      { CUDA_CHECK(cudaFree(g_dQ));      g_dQ      = nullptr; }
+        if (g_dC)      { CUDA_CHECK(cudaFree(g_dC));      g_dC      = nullptr; }
+        g_X_size = g_C_size = g_prob_sz = 0;
+    }
 
     __global__ void MLABackwardKernel(const float *input,
                                       const float *W_DKV, const float *b_DKV,
@@ -375,17 +429,7 @@ namespace cuda::attentions {
                        int batch_size, int seq_len, int embed_dim, int num_heads,
                        int latent_dim,
                        cudaStream_t stream) {
-        size_t X_size = static_cast<size_t>(batch_size) * seq_len * embed_dim;
-        size_t C_size = static_cast<size_t>(batch_size) * seq_len * latent_dim;
-        size_t prob_sz = static_cast<size_t>(batch_size) * num_heads * seq_len * seq_len;
-
-        float *dConcat = nullptr, *dAttn = nullptr, *dV = nullptr, *dK = nullptr, *dQ = nullptr, *dC = nullptr;
-        CUDA_CHECK(cudaMalloc(&dConcat, X_size * sizeof(float)));
-        CUDA_CHECK(cudaMalloc(&dAttn,  prob_sz * sizeof(float)));
-        CUDA_CHECK(cudaMalloc(&dV,     X_size * sizeof(float)));
-        CUDA_CHECK(cudaMalloc(&dK,     X_size * sizeof(float)));
-        CUDA_CHECK(cudaMalloc(&dQ,     X_size * sizeof(float)));
-        CUDA_CHECK(cudaMalloc(&dC,     C_size * sizeof(float)));
+        initMLABackwardWorkspace(batch_size, seq_len, embed_dim, num_heads, latent_dim);
 
         MLABackwardKernel<<<1, 1, 0, stream>>>(input, W_DKV, b_DKV,
                                                W_UK, b_UK,
@@ -401,16 +445,10 @@ namespace cuda::attentions {
                                                grad_W_UV, grad_b_UV,
                                                grad_W_Q, grad_b_Q,
                                                grad_W_O, grad_b_O,
-                                               dConcat, dAttn, dV, dK, dQ, dC,
+                                               g_dConcat, g_dAttn, g_dV, g_dK, g_dQ, g_dC,
                                                batch_size, seq_len, embed_dim,
                                                num_heads, latent_dim);
         CUDA_CHECK(cudaGetLastError());
 
-        CUDA_CHECK(cudaFree(dConcat));
-        CUDA_CHECK(cudaFree(dAttn));
-        CUDA_CHECK(cudaFree(dV));
-        CUDA_CHECK(cudaFree(dK));
-        CUDA_CHECK(cudaFree(dQ));
-        CUDA_CHECK(cudaFree(dC));
     }
 } // namespace cuda::attentions

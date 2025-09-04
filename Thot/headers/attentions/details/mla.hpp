@@ -164,6 +164,8 @@ namespace Thot {
 
         Utils::Tensor grad_input(input_cache_.shape());
 
+        cuda::attentions::initMLABackwardWorkspace(batch, seq, embed_dim_, num_heads_, latent_dim_);
+
         cuda::attentions::launchMLABackward(
             static_cast<const float *>(input_cache_.data()),
             static_cast<const float *>(W_DKV_.data()), static_cast<const float *>(b_DKV_.data()),
@@ -234,6 +236,7 @@ namespace Thot {
         params += static_cast<size_t>(embed_dim_);                // b_O
         return params;
     }
+        ~MLAAttentionLayer() override {cuda::attentions::freeMLABackwardWorkspace(); }
 };
 
 } // namespace Thot

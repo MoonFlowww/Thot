@@ -35,7 +35,7 @@ namespace Thot {
                                              activation_type, weight_init, name+"_dec");
         }
 
-        void set_optimizer(std::shared_ptr<Optimizer> optimizer) override {
+        void set_optimizer(std::shared_ptr<Optimizer> optimizer) {
             optimizer_ = optimizer;
             enc_mean_->set_optimizer(optimizer);
             enc_logvar_->set_optimizer(optimizer);
