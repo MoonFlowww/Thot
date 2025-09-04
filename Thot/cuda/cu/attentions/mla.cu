@@ -2,8 +2,14 @@
 #include <cmath>
 #include <vector>
 #include <algorithm>
+#include <cstdio>
 
 #include "../../cuh/attentions/mla.cuh"
+
+#ifndef CUDA_CHECK
+#define CUDA_CHECK(x) do { cudaError_t _e = (x); if (_e != cudaSuccess) { \
+printf("CUDA error %s:%d: %s\n", __FILE__, __LINE__, cudaGetErrorString(_e)); } } while(0)
+#endif
 
 namespace cuda::attentions {
 
@@ -46,7 +52,7 @@ void launchMLAForward(const float *input,
     std::vector<float> concat_h(X_size, 0.0f);
     std::vector<float> out_h(X_size, 0.0f);
 
-    cudaMemcpy(X_h.data(), input, X_size * sizeof(float), cudaMemcpyDeviceToHost);
+    CUDA_CHECK(cudaMemcpy(X_h.data(), input, X_size * sizeof(float), cudaMemcpyDeviceToHost));
 
     // C = W_DKV * X + b_DKV
     for (int b = 0; b < batch_size; ++b) {
@@ -142,13 +148,14 @@ void launchMLAForward(const float *input,
         }
     }
 
-    cudaMemcpy(output, out_h.data(), X_size * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(q, q_h.data(), X_size * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(k, k_h.data(), X_size * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(v, v_h.data(), X_size * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(attn_probs, attn_h.data(), prob_sz * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(concat, concat_h.data(), X_size * sizeof(float), cudaMemcpyHostToDevice);
-    if (c_kv) cudaMemcpy(c_kv, C_h.data(), C_size * sizeof(float), cudaMemcpyHostToDevice);
+    CUDA_CHECK(cudaMemcpy(output, out_h.data(), X_size * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(q, q_h.data(), X_size * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(k, k_h.data(), X_size * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(v, v_h.data(), X_size * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(attn_probs, attn_h.data(), prob_sz * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(concat, concat_h.data(), X_size * sizeof(float), cudaMemcpyHostToDevice));
+    if (c_kv) CUDA_CHECK(cudaMemcpy(c_kv, C_h.data(), C_size * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaGetLastError());
 }
 
 void launchMLABackward(const float *input,
@@ -182,14 +189,14 @@ void launchMLABackward(const float *input,
     std::vector<float> attn_h(prob_sz), concat_h(X_size);
     std::vector<float> dOut_h(X_size);
 
-    cudaMemcpy(X_h.data(), input, X_size * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(q_h.data(), q, X_size * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(k_h.data(), k, X_size * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(v_h.data(), v, X_size * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(attn_h.data(), attn_probs, prob_sz * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(concat_h.data(), concat, X_size * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(dOut_h.data(), grad_output, X_size * sizeof(float), cudaMemcpyDeviceToHost);
-    if (c_kv) cudaMemcpy(C_h.data(), c_kv, C_size * sizeof(float), cudaMemcpyDeviceToHost);
+    CUDA_CHECK(cudaMemcpy(X_h.data(), input, X_size * sizeof(float), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(q_h.data(), q, X_size * sizeof(float), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(k_h.data(), k, X_size * sizeof(float), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(v_h.data(), v, X_size * sizeof(float), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(attn_h.data(), attn_probs, prob_sz * sizeof(float), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(concat_h.data(), concat, X_size * sizeof(float), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(dOut_h.data(), grad_output, X_size * sizeof(float), cudaMemcpyDeviceToHost));
+    if (c_kv) CUDA_CHECK(cudaMemcpy(C_h.data(), c_kv, C_size * sizeof(float), cudaMemcpyDeviceToHost));
 
     std::vector<float> dConcat_h(X_size, 0.0f);
     std::vector<float> dAttn_h(prob_sz, 0.0f);
@@ -325,17 +332,18 @@ void launchMLABackward(const float *input,
         }
     }
 
-    cudaMemcpy(grad_input, dX_h.data(), X_size * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(grad_W_DKV, gW_DKV.data(), gW_DKV.size() * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(grad_b_DKV, gB_DKV.data(), gB_DKV.size() * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(grad_W_UK, gW_UK.data(), gW_UK.size() * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(grad_b_UK, gB_UK.data(), gB_UK.size() * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(grad_W_UV, gW_UV.data(), gW_UV.size() * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(grad_b_UV, gB_UV.data(), gB_UV.size() * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(grad_W_Q, gW_Q.data(), gW_Q.size() * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(grad_b_Q, gB_Q.data(), gB_Q.size() * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(grad_W_O, gW_O.data(), gW_O.size() * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(grad_b_O, gB_O.data(), gB_O.size() * sizeof(float), cudaMemcpyHostToDevice);
+    CUDA_CHECK(cudaMemcpy(grad_input, dX_h.data(), X_size * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(grad_W_DKV, gW_DKV.data(), gW_DKV.size() * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(grad_b_DKV, gB_DKV.data(), gB_DKV.size() * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(grad_W_UK, gW_UK.data(), gW_UK.size() * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(grad_b_UK, gB_UK.data(), gB_UK.size() * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(grad_W_UV, gW_UV.data(), gW_UV.size() * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(grad_b_UV, gB_UV.data(), gB_UV.size() * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(grad_W_Q, gW_Q.data(), gW_Q.size() * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(grad_b_Q, gB_Q.data(), gB_Q.size() * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(grad_W_O, gW_O.data(), gW_O.size() * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(grad_b_O, gB_O.data(), gB_O.size() * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaGetLastError());
 }
 
 } // namespace cuda::attentions
