@@ -88,6 +88,10 @@ set(KERNEL_SOURCES
         Thot/cuda/cu/attentions/mla.cu
         Thot/cuda/cu/initializations/random.cu
         Thot/cuda/cu/optimizations/adamuon.cu
+        Thot/cuda/cu/layers/vae.cu
+        Thot/cuda/cu/layers/rcnn.cu
+        Thot/cuda/cu/layers/spike.cu
+        Thot/cuda/cu/layers/sparse_contractive_ae.cu
 
 )
 
@@ -126,6 +130,14 @@ set(HEADERS
         Thot/headers/optimizations/learning_rate.hpp
         Thot/headers/optimizations/details/adamuon.hpp
         Thot/cuda/cuh/optimizations/adamuon.cuh
+        Thot/cuda/cuh/layers/vae.cuh
+        Thot/headers/layers/details/vae.hpp
+        Thot/cuda/cuh/layers/rcnn.cuh
+        Thot/headers/layers/details/rcnn.hpp
+        Thot/cuda/cuh/layers/spike.cuh
+        Thot/headers/layers/details/spike.hpp
+        Thot/cuda/cuh/layers/sparse_contractive_ae.cuh
+        Thot/headers/layers/details/sparse_contractive_ae.hpp
 )
 
 add_library(thot_kernels STATIC ${KERNEL_SOURCES})

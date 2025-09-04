@@ -15,6 +15,7 @@
 #include "attentions/attentions.hpp"
 #include "layers/layers.hpp"
 #include "optimizations/optimizations.hpp"
+#include "network.hpp"
 
 using namespace Thot;
 
@@ -293,6 +294,37 @@ void test_muon_optimizer() {
     std::cout << "[PASS] test_muon_optimizer" << std::endl;
 }
 
+
+void test_spike_layer() {
+    std::cout << "[RUN] test_spike_layer" << std::endl;
+    Network net("spike_net");
+    net.add(Layer::FC(1,1, Activation::Linear, Initialization::Ones));
+    net.add(Layer::Spike(1, 1.0f));
+    net.add(Layer::FC(1,1, Activation::Linear, Initialization::Ones));
+
+    Utils::Tensor input({1,1});
+    input.upload({1.5f});
+    auto out = net.forward_gpu(input).download();
+    CHECK(std::fabs(out[0] - 1.0f) < 1e-4);
+    std::cout << "[PASS] test_spike_layer" << std::endl;
+}
+
+void test_sparse_contractive_ae() {
+    std::cout << "[RUN] test_sparse_contractive_ae" << std::endl;
+    SparseContractiveAELayer base_layer(2, 2, Activation::Sigmoid, Initialization::Ones, false, false);
+    Utils::Tensor input({1,2});
+    input.upload({0.5f, 0.25f});
+    base_layer.forward(input);
+    float base_reg = base_layer.regularization_loss();
+
+    SparseContractiveAELayer reg_layer(2, 2, Activation::Sigmoid, Initialization::Ones, true, true);
+    reg_layer.forward(input);
+    float reg = reg_layer.regularization_loss();
+    std::cout << "base=" << base_reg << " reg=" << reg << std::endl;
+    CHECK(reg > base_reg);
+    std::cout << "[PASS] test_sparse_contractive_ae" << std::endl;
+}
+
 int main() {
     test_rnn();
     test_fc();
@@ -303,6 +335,8 @@ int main() {
     test_mha();
     test_mla_4d_input();
     test_muon_optimizer();
+    test_spike_layer();
+    test_sparse_contractive_ae();
     std::cout << "All CUDA backend tests passed." << std::endl;
     return 0;
 }

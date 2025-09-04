@@ -19,7 +19,8 @@ namespace Thot {
         SparseCategoricalCrossEntropy,
         Hinge,
         Huber,
-        KLDivergence
+        KLDivergence,
+        VAE
     };
 
     inline Loss loss_from_string(const std::string &name) { // for model.save() & model.load()
@@ -32,6 +33,7 @@ namespace Thot {
         if (name == "Hinge") return Loss::Hinge;
         if (name == "Huber") return Loss::Huber;
         if (name == "KL div") return Loss::KLDivergence;
+        if (name == "VAE") return Loss::VAE;
         throw std::runtime_error("Unknown loss: " + name);
     }
     class Losses {
@@ -72,6 +74,7 @@ namespace Thot {
             case Loss::Hinge: return "Hinge";
             case Loss::Huber: return "Huber";
             case Loss::KLDivergence: return "KL div";
+                case Loss::VAE: return "VAE";
             default: return "Unknown";
             }
         }
@@ -170,6 +173,15 @@ namespace Thot {
                     epsilon_
                 );
                 break;
+
+                case Loss::VAE:
+                    cuda::losses::launchMSE(
+                        static_cast<float*>(predictions.data()),
+                        static_cast<float*>(targets.data()),
+                        loss,
+                        predictions.size()
+                    );
+                    break;
             }
 
             size_t reduce_size = predictions.size();
@@ -202,6 +214,26 @@ namespace Thot {
             }
             return result / static_cast<float>(normalizer);
         }
+
+        float compute_with_kl(const Utils::Tensor& reconstruction, const Utils::Tensor& targets,
+                              const Utils::Tensor& mean, const Utils::Tensor& logvar) {
+            float recon = compute(reconstruction, targets);
+
+            size_t buffer_size = mean.size();
+            float* kl = nullptr;
+            cudaMalloc(&kl, buffer_size * sizeof(float));
+            cuda::losses::launchKLDivergence(
+                static_cast<float*>(mean.data()),
+                static_cast<float*>(logvar.data()),
+                kl,
+                buffer_size,
+                epsilon_
+            );
+            auto kl_val = cuda::losses::reduceLoss(kl, static_cast<int>(buffer_size));
+            cudaFree(kl);
+            return recon + kl_val / buffer_size;
+        }
+
 
         Utils::Tensor compute_gradients(const Utils::Tensor& predictions, const Utils::Tensor& targets) {
             Utils::Tensor gradients(predictions.shape());

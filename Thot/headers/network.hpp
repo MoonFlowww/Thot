@@ -101,6 +101,9 @@ private:
             } else if (auto conv = std::dynamic_pointer_cast<Conv2DLayer>(layer)) {
                 lp.push_back(conv->weights_.download());
                 lp.push_back(conv->bias_.download());
+            } else if (auto rcnn = std::dynamic_pointer_cast<RCNNLayer>(layer)) {
+                lp.push_back(rcnn->weights().download());
+                lp.push_back(rcnn->bias().download());
             } else if (auto rnn = std::dynamic_pointer_cast<RNNLayer>(layer)) {
                 lp.push_back(rnn->weights_ih_.download());
                 lp.push_back(rnn->weights_hh_.download());
@@ -127,6 +130,11 @@ private:
                 if (lp.size() >= 2) {
                     conv->weights_.upload(lp[0]);
                     conv->bias_.upload(lp[1]);
+                }
+            } else if (auto rcnn = std::dynamic_pointer_cast<RCNNLayer>(layers_[i])) {
+                if (lp.size() >= 2) {
+                    rcnn->weights().upload(lp[0]);
+                    rcnn->bias().upload(lp[1]);
                 }
             } else if (auto rnn = std::dynamic_pointer_cast<RNNLayer>(layers_[i])) {
                 if (lp.size() >= 3) {
@@ -156,6 +164,9 @@ public:
         optimizer_ = optimizer;
         for (auto &L : layers_) {
             L->set_optimizer(optimizer);
+            if (auto rcnn = std::dynamic_pointer_cast<RCNNLayer>(L)) {
+                rcnn->conv_.set_optimizer(optimizer);
+            }
         }
     }
 
@@ -224,6 +235,16 @@ public:
             }
         }
 
+        if (Istraining_) { // spike neuron plasticity
+            Istraining_ = false;
+            for (auto &L : layers_) {
+                L->set_training(false);
+                if (auto spike = std::dynamic_pointer_cast<SpikeLayer>(L)) {
+                    spike->reset_state();
+                }
+            }
+        }
+
         std::vector<std::vector<float>> predictions;
         std::vector<float> latencies;
 
@@ -247,7 +268,13 @@ public:
 
     float compute_loss(const Utils::Tensor &predictions,
                        const Utils::Tensor &targets) {
-        return loss_function_->compute(predictions, targets);
+        float base = loss_function_->compute(predictions, targets);
+        float reg = 0.0f;
+        for (const auto &L : layers_) { //TODO Impl Penalization
+            reg += L->regularization_loss(); // Sparce Con AE
+        }
+        return base + reg;
+
     }
 
     Utils::Tensor compute_gradients(const Utils::Tensor &predictions,
@@ -648,6 +675,16 @@ public:
             optimizer_ = Thot::Optimizer::SGD(0.01f);
             for (auto &L : layers_) {
                 L->set_optimizer(optimizer_);
+            }
+        }
+
+        if (!Istraining_) { // spiek neuron reset
+            Istraining_ = true;
+            for (auto &L : layers_) {
+                L->set_training(true);
+                if (auto spike = std::dynamic_pointer_cast<SpikeLayer>(L)) {
+                    spike->reset_state();
+                }
             }
         }
 
