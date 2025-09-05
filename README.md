@@ -37,7 +37,7 @@ Available Layers:
 ```yaml
 Thot::Layer::FC(input_size, output_size, __activation_type__, __initialization_type__)
 Thot::Layer::RNN(input_size, hidden_size, seq_length, __activation_type__, __initialization_type__)
-Thot::Layer::Conv2D(in_channels, in_height, in_width, out_channels, kernel_size, stride, padding, __activation_type__, __initialization_type__, "Layer Name")
+Thot::Layer::Conv2D(in_channels, in_height, in_width, out_channels, kernel_size, stride, padding, __activation_type__, __initialization_type__, __conv_algo__, "Layer Name")
 Thot::Layer::RCNN(in_channels, in_height, in_width, out_channels, kernel_size, stride, padding, pooled_h, pooled_w, __activation_type__, __initialization_type__, "Layer Name")
 Thot::Layer::VAE(input_size, latent_size, __activation_type__, __initialization_type__, "Layer Name")
 Thot::Layer::RBM(visible_size, hidden_size, cd_steps, __activation_type__, __initialization_type__, "Layer Name")
@@ -46,6 +46,11 @@ Thot::Layer::SparseAE(input_size, latent_size, __activation_type__, __initializa
 Thot::Layer::MaxPool2D(in_channels, in_height, in_width, kernel_size, stride)
 Thot::Layer::Flatten(in_channels, in_height, in_width)
 ```
+The optional `__conv_algo__` argument for `Conv2D` chooses the convolution
+backend. Supported values are `auto`, `direct`, `winograd` and `fft`. The
+default `auto` selects a heuristic based on kernel size and stride. `winograd`
+implements F(2x2,3x3) transforms with precomputed filter tiles, while `fft`
+performs convolution via a frequency-domain multiply using a naïve 2‑D DFT.
 
 #### Attention Layers
 Available Attention Mechanisms:

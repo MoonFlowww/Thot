@@ -85,6 +85,31 @@ void test_conv2d() {
     std::cout << "[PASS] test_conv2d" << std::endl;
 }
 
+void test_conv2d_algorithms() {
+    std::cout << "[RUN] test_conv2d_algorithms" << std::endl;
+    using ::cuda::layers::ConvAlgo;
+    Conv2DLayer direct(1, 4, 4, 1, 3, 1, 1, Activation::Linear,
+                       Initialization::Ones, ConvAlgo::Direct);
+    Conv2DLayer winograd(1, 4, 4, 1, 3, 1, 1, Activation::Linear,
+                         Initialization::Ones, ConvAlgo::Winograd);
+    Conv2DLayer fft(1, 4, 4, 1, 3, 1, 1, Activation::Linear,
+                    Initialization::Ones, ConvAlgo::FFT);
+    Utils::Tensor input({1,1,4,4});
+    input.upload({1,2,3,4,
+                  5,6,7,8,
+                  9,10,11,12,
+                  13,14,15,16});
+    auto od = direct.forward(input).download();
+    auto ow = winograd.forward(input).download();
+    auto of = fft.forward(input).download();
+    for (size_t i=0;i<od.size();++i){
+        CHECK(std::fabs(od[i]-ow[i]) < 1e-4);
+        CHECK(std::fabs(od[i]-of[i]) < 1e-4);
+    }
+    std::cout << "[PASS] test_conv2d_algorithms" << std::endl;
+}
+
+
 void test_rbm() {
     std::cout << "[RUN] test_rbm" << std::endl;
     RBMLayer rbm(1,1,1, Activation::Sigmoid, Initialization::Ones);
@@ -329,6 +354,7 @@ int main() {
     test_rnn();
     test_fc();
     test_conv2d();
+    test_conv2d_algorithms();
     test_rbm();
     test_activations();
     test_losses();

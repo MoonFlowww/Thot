@@ -30,6 +30,7 @@ namespace Thot {
         int out_width_;
         Activation activation_type_;
         Initialization initialization_type_;
+        ::cuda::layers::ConvAlgo conv_algo_;
 
         Utils::Tensor weights_;
         Utils::Tensor bias_;
@@ -46,6 +47,7 @@ namespace Thot {
             int out_channels, int kernel_size, int stride = 1, int padding = 0,
             Activation activation_type = Activation::ReLU,
             Initialization weight_init = Initialization::Xavier,
+            ::cuda::layers::ConvAlgo conv_algo = ::cuda::layers::ConvAlgo::Auto,
             const std::string& name = "Conv2D")
             : Layer(name),
             in_channels_(in_channels),
@@ -56,7 +58,8 @@ namespace Thot {
             stride_(stride),
             padding_(padding),
             activation_type_(activation_type),
-            initialization_type_(weight_init) {
+            initialization_type_(weight_init),
+            conv_algo_(conv_algo) {
 
             auto t1 = std::chrono::high_resolution_clock::now();
             out_height_ = (in_height_ + 2 * padding_ - kernel_size_) / stride_ + 1;
@@ -128,7 +131,7 @@ namespace Thot {
                 input_ptr, weights_ptr, bias_ptr, pre_act_ptr,
                 batch_size, in_channels_, in_height_, in_width_,
                 out_channels_, kernel_size_, stride_, padding_,
-                out_height_, out_width_
+                out_height_, out_width_, conv_algo_
             );
 
             pre_act_output_ = std::move(pre_activation);
@@ -195,7 +198,7 @@ namespace Thot {
                 grad_pre_activation_ptr, weights_ptr, grad_input_ptr,
                 batch_size, in_channels_, in_height_, in_width_,
                 out_channels_, kernel_size_, stride_, padding_,
-                out_height_, out_width_
+                out_height_, out_width_, conv_algo_
             );
 
             // Compute gradients for weights
@@ -203,7 +206,7 @@ namespace Thot {
                 input_ptr, grad_pre_activation_ptr, grad_weights_ptr,
                 batch_size, in_channels_, in_height_, in_width_,
                 out_channels_, kernel_size_, stride_, padding_,
-                out_height_, out_width_
+                out_height_, out_width_, conv_algo_
             );
 
             // Compute gradients for bias

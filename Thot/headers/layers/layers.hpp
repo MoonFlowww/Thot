@@ -4,6 +4,7 @@
 #include "../activations/activations.hpp"
 #include "../initializations/initializations.hpp"
 #include "../optimizations/optimizations.hpp"
+#include "../../cuda/cuh/layers/conv2d.cuh"
 
 namespace Thot {
 
@@ -63,7 +64,7 @@ namespace Thot {
 
 		static std::shared_ptr<Layer> RNN(int input_size, int hidden_size, int seq_length, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "Recurrent Layer");
 
-	    static std::shared_ptr<Layer> Conv2D(int in_channels, int in_height, int in_width, int out_channels, int kernel_size, int stride, int padding, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "Conv2D");
+	    static std::shared_ptr<Layer> Conv2D(int in_channels, int in_height, int in_width, int out_channels, int kernel_size, int stride, int padding, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, ::cuda::layers::ConvAlgo conv_algo = ::cuda::layers::ConvAlgo::Auto, const std::string& name = "Conv2D");
 
 	    static std::shared_ptr<Layer> RBM(int visible_size, int hidden_size, int cd_steps, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "Restriced Boltzman Layer");
 
@@ -73,7 +74,7 @@ namespace Thot {
 
 	    static std::shared_ptr<Layer> VAE(int input_size, int latent_size, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "VAE");
 
-	    static std::shared_ptr<Layer> RCNN(int in_channels, int in_height, int in_width, int out_channels, int kernel_size, int stride, int padding, int pooled_h, int pooled_w, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, const std::string& name = "RCNN");
+	    static std::shared_ptr<Layer> RCNN(int in_channels, int in_height, int in_width, int out_channels, int kernel_size, int stride, int padding, int pooled_h, int pooled_w, Activation activation_type = Activation::ReLU, Initialization weight_init = Initialization::Xavier, ::cuda::layers::ConvAlgo conv_algo = ::cuda::layers::ConvAlgo::Auto, const std::string& name = "RCNN");
 
 	    static std::shared_ptr<Layer> Spike(int size, float threshold = 1.0f, const std::string& name = "Spike");
 
@@ -112,8 +113,8 @@ namespace Thot {
 		return std::make_shared<RNNLayer>(input_size, hidden_size, seq_length, activation_type, weight_init, name);
 	}
 
-	inline std::shared_ptr<Layer> Layer::Conv2D(int in_channels, int in_height, int in_width, int out_channels, int kernel_size, int stride, int padding, Activation activation_type, Initialization weight_init, const std::string& name) {
-		return std::make_shared<Conv2DLayer>(in_channels, in_height, in_width, out_channels, kernel_size, stride, padding, activation_type, weight_init, name);
+    inline std::shared_ptr<Layer> Layer::Conv2D(int in_channels, int in_height, int in_width, int out_channels, int kernel_size, int stride, int padding, Activation activation_type, Initialization weight_init, ::cuda::layers::ConvAlgo conv_algo, const std::string& name) {
+	    return std::make_shared<Conv2DLayer>(in_channels, in_height, in_width, out_channels, kernel_size, stride, padding, activation_type, weight_init, conv_algo, name);
 	}
 
     inline std::shared_ptr<Layer> Layer::RBM(int visible_size, int hidden_size, int cd_steps, Activation activation_type, Initialization weight_init, const std::string& name) {
@@ -132,7 +133,7 @@ namespace Thot {
 	    return std::make_shared<VAELayer>(input_size, latent_size, activation_type, weight_init, name);
 	}
 
-    inline std::shared_ptr<Layer> Layer::RCNN(int in_channels, int in_height, int in_width, int out_channels, int kernel_size, int stride, int padding, int pooled_h, int pooled_w, Activation activation_type, Initialization weight_init, const std::string& name) {
+    inline std::shared_ptr<Layer> Layer::RCNN(int in_channels, int in_height, int in_width, int out_channels, int kernel_size, int stride, int padding, int pooled_h, int pooled_w, Activation activation_type, Initialization weight_init, ::cuda::layers::ConvAlgo conv_algo, const std::string& name) {
 	    return std::make_shared<RCNNLayer>(in_channels, in_height, in_width, out_channels, kernel_size, stride, padding, pooled_h, pooled_w, activation_type, weight_init, name);
 	}
 

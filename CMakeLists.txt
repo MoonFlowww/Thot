@@ -141,7 +141,8 @@ set(HEADERS
 )
 
 add_library(thot_kernels STATIC ${KERNEL_SOURCES})
-target_link_libraries(thot_kernels PUBLIC CUDA::cublas CUDA::curand)
+target_link_libraries(thot_kernels PUBLIC CUDA::cublas CUDA::curand CUDA::cufft)
+
 
 set_target_properties(thot_kernels PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
