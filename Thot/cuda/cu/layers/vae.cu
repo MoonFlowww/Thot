@@ -24,14 +24,14 @@ namespace cuda {
             float std = expf(0.5f * logvar[idx]);
             grad_logvar[idx] = grad_z[idx] * 0.5f * std * eps[idx];
         }
-        inline void launchVAESample(const float* mean, const float* logvar, float* z, float* eps, int size, cudaStream_t stream) {
+        void launchVAESample(const float* mean, const float* logvar, float* z, float* eps, int size, cudaStream_t stream) {
             int block = 256;
             int grid = (size + block - 1) / block;
             unsigned long long seed = 1234ULL;
             vae_sample_kernel<<<grid, block, 0, stream>>>(mean, logvar, z, eps, size, seed);
         }
 
-        inline void launchVAESampleBackward(const float* grad_z, const float* eps, const float* logvar, float* grad_mean, float* grad_logvar, int size, cudaStream_t stream) {
+        void launchVAESampleBackward(const float* grad_z, const float* eps, const float* logvar, float* grad_mean, float* grad_logvar, int size, cudaStream_t stream) {
             int block = 256;
             int grid = (size + block - 1) / block;
             vae_backward_kernel<<<grid, block, 0, stream>>>(grad_z, eps, logvar, grad_mean, grad_logvar, size);
