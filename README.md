@@ -16,6 +16,11 @@
 ### Prerequisites
 - CUDA Toolkit (version 12.5 or higher)
 - C++17 compatible compiler
+- GPU architectures (`61;75;86;89`). 
+
+To target a specific GPU, pass
+  `-DCMAKE_CUDA_ARCHITECTURES=<arch>` when invoking CMake.
+
 
 ## Usage
 

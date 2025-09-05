@@ -54,8 +54,9 @@ if(THOT_USE_CUDNN)
 endif()
 # -----------------------
 
-# Ada (RTX 4070 Ti)
-set(CMAKE_CUDA_ARCHITECTURES 89)
+if(NOT CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES 61;75;86;89)
+endif()
 
 enable_testing()
 
