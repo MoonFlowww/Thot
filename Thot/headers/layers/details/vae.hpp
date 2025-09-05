@@ -11,6 +11,7 @@ namespace Thot {
 
     class VAELayer : public Layer {
     private:
+        friend class Network;
         int input_size_;
         int latent_size_;
         std::shared_ptr<FCLayer> enc_mean_;

@@ -4,14 +4,13 @@
 
 
 int main() {
-    bool IsLoading = false;
+    bool IsLoading = true;
     std::string name ="Thot_Network_CIFAR";
 
 	Thot::Network model(name);
     if (IsLoading)model.load("/home/moonfloww/Projects/NNs/Thot");
 
     else {
-        //model.add(Thot::Attention::MLA(3*32*32, 8, 256, Thot::Initialization::He));
 
         model.add(Thot::Layer::Conv2D(3, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
         model.add(Thot::Layer::Conv2D(32, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
@@ -28,10 +27,10 @@ int main() {
 
         model.add(Thot::Layer::FC(2048, 524, Thot::Activation::ReLU, Thot::Initialization::He));
 
-        model.add(Thot::Attention::MLA(524, 4, 256, Thot::Initialization::Lyapunov));
+        model.add(Thot::Attention::MLA(524, 4, 256, Thot::Initialization::Xavier));
 
         model.add(Thot::Layer::FC(524, 126, Thot::Activation::ReLU, Thot::Initialization::He));
-        model.add(Thot::Layer::FC(126, 10, Thot::Activation::Softmax, Thot::Initialization::He));
+        model.add(Thot::Layer::FC(126, 10, Thot::Activation::Softmax, Thot::Initialization::Xavier));
 
         model.set_loss(Thot::Loss::CategoricalCrossEntropy);
         model.set_optimizer(Thot::Optimizer::Adam(1e-3f));

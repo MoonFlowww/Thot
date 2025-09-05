@@ -36,6 +36,10 @@ namespace Thot {
                    ", beta=" + std::to_string(beta_) +
                    ", weight_decay=" + std::to_string(weight_decay_);
         }
+
+
+        float get_beta() const { return beta_; }
+        float get_weight_decay() const { return weight_decay_; }
     };
 
 } // namespace Thot

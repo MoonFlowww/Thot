@@ -195,6 +195,19 @@ namespace Thot {
     int get_input_size()  const override { return embed_dim_; }
     int get_output_size() const override { return embed_dim_; }
 
+    Utils::Tensor& W_DKV() { return W_DKV_; }
+    Utils::Tensor& b_DKV() { return b_DKV_; }
+    Utils::Tensor& W_UK()  { return W_UK_; }
+    Utils::Tensor& b_UK()  { return b_UK_; }
+    Utils::Tensor& W_UV()  { return W_UV_; }
+    Utils::Tensor& b_UV()  { return b_UV_; }
+    Utils::Tensor& W_Q()   { return W_Q_; }
+    Utils::Tensor& b_Q()   { return b_Q_; }
+    Utils::Tensor& W_O()   { return W_O_; }
+    Utils::Tensor& b_O()   { return b_O_; }
+    int num_heads() const { return num_heads_; }
+    int latent_dim() const { return latent_dim_; }
+
 
         //last_seq define how many flops, without ->0
     size_t get_flops(int batch_size = 1) const override {

@@ -27,6 +27,7 @@
 #include "losses/losses.hpp"
 #include "metrics/metrics.hpp"
 #include "optimizations/optimizations.hpp"
+#include "attentions/attentions.hpp"
 
 #include "utils/translators.hpp"
 
@@ -112,6 +113,38 @@ private:
                 lp.push_back(rbm->weights_.download());
                 lp.push_back(rbm->visible_bias_.download());
                 lp.push_back(rbm->hidden_bias_.download());
+            } else if (auto vae = std::dynamic_pointer_cast<VAELayer>(layer)) {
+                lp.push_back(vae->enc_mean_->weights_.download());
+                lp.push_back(vae->enc_mean_->bias_.download());
+                lp.push_back(vae->enc_logvar_->weights_.download());
+                lp.push_back(vae->enc_logvar_->bias_.download());
+                lp.push_back(vae->dec_->weights_.download());
+                lp.push_back(vae->dec_->bias_.download());
+            } else if (auto scae = std::dynamic_pointer_cast<SparseContractiveAELayer>(layer)) {
+                lp.push_back(scae->enc_weights_.download());
+                lp.push_back(scae->enc_bias_.download());
+                lp.push_back(scae->dec_weights_.download());
+                lp.push_back(scae->dec_bias_.download());
+            } else if (auto mha = std::dynamic_pointer_cast<MHAAttentionLayer>(layer)) {
+                lp.push_back(mha->W_q().download());
+                lp.push_back(mha->b_q().download());
+                lp.push_back(mha->W_k().download());
+                lp.push_back(mha->b_k().download());
+                lp.push_back(mha->W_v().download());
+                lp.push_back(mha->b_v().download());
+                lp.push_back(mha->W_o().download());
+                lp.push_back(mha->b_o().download());
+            } else if (auto mla = std::dynamic_pointer_cast<MLAAttentionLayer>(layer)) {
+                lp.push_back(mla->W_DKV().download());
+                lp.push_back(mla->b_DKV().download());
+                lp.push_back(mla->W_UK().download());
+                lp.push_back(mla->b_UK().download());
+                lp.push_back(mla->W_UV().download());
+                lp.push_back(mla->b_UV().download());
+                lp.push_back(mla->W_Q().download());
+                lp.push_back(mla->b_Q().download());
+                lp.push_back(mla->W_O().download());
+                lp.push_back(mla->b_O().download());
             }
             params.push_back(std::move(lp));
         }
@@ -147,6 +180,46 @@ private:
                     rbm->weights_.upload(lp[0]);
                     rbm->visible_bias_.upload(lp[1]);
                     rbm->hidden_bias_.upload(lp[2]);
+                }
+            } else if (auto vae = std::dynamic_pointer_cast<VAELayer>(layers_[i])) {
+                if (lp.size() >= 6) {
+                    vae->enc_mean_->weights_.upload(lp[0]);
+                    vae->enc_mean_->bias_.upload(lp[1]);
+                    vae->enc_logvar_->weights_.upload(lp[2]);
+                    vae->enc_logvar_->bias_.upload(lp[3]);
+                    vae->dec_->weights_.upload(lp[4]);
+                    vae->dec_->bias_.upload(lp[5]);
+                }
+            } else if (auto scae = std::dynamic_pointer_cast<SparseContractiveAELayer>(layers_[i])) {
+                if (lp.size() >= 4) {
+                    scae->enc_weights_.upload(lp[0]);
+                    scae->enc_bias_.upload(lp[1]);
+                    scae->dec_weights_.upload(lp[2]);
+                    scae->dec_bias_.upload(lp[3]);
+                }
+            } else if (auto mha = std::dynamic_pointer_cast<MHAAttentionLayer>(layers_[i])) {
+                if (lp.size() >= 8) {
+                    mha->W_q().upload(lp[0]);
+                    mha->b_q().upload(lp[1]);
+                    mha->W_k().upload(lp[2]);
+                    mha->b_k().upload(lp[3]);
+                    mha->W_v().upload(lp[4]);
+                    mha->b_v().upload(lp[5]);
+                    mha->W_o().upload(lp[6]);
+                    mha->b_o().upload(lp[7]);
+                }
+            } else if (auto mla = std::dynamic_pointer_cast<MLAAttentionLayer>(layers_[i])) {
+                if (lp.size() >= 10) {
+                    mla->W_DKV().upload(lp[0]);
+                    mla->b_DKV().upload(lp[1]);
+                    mla->W_UK().upload(lp[2]);
+                    mla->b_UK().upload(lp[3]);
+                    mla->W_UV().upload(lp[4]);
+                    mla->b_UV().upload(lp[5]);
+                    mla->W_Q().upload(lp[6]);
+                    mla->b_Q().upload(lp[7]);
+                    mla->W_O().upload(lp[8]);
+                    mla->b_O().upload(lp[9]);
                 }
             }
         }
@@ -318,6 +391,13 @@ public:
                     jopt["beta1"] = adam->get_beta1();
                     jopt["beta2"] = adam->get_beta2();
                     jopt["epsilon"] = adam->get_epsilon();
+                } else if (auto muon = std::dynamic_pointer_cast<Muon>(optimizer_)) {
+                    jopt["beta"] = muon->get_beta();
+                    jopt["weight_decay"] = muon->get_weight_decay();
+                } else if (auto adamuon = std::dynamic_pointer_cast<AdaMuon>(optimizer_)) {
+                    jopt["beta1"] = adamuon->get_beta1();
+                    jopt["beta2"] = adamuon->get_beta2();
+                    jopt["weight_decay"] = adamuon->get_weight_decay();
                 }
             } else {
                 jopt["name"] = "None";
@@ -373,6 +453,57 @@ public:
                         {"output_size", rnn->get_output_size()},
                         {"seq_length", rnn->get_seq_length()}
                     };
+                    } else if (auto rcnn = std::dynamic_pointer_cast<RCNNLayer>(layer)) {
+                    jl["type"] = "RCNN";
+                    jl["activation"] = Activations::to_string(layer->get_activation());
+                    jl["initializer"] = Initializations::to_string(layer->get_initialization());
+                    jl["params"] = {
+                        {"in_channels", rcnn->conv_.in_channels()},
+                        {"in_height", rcnn->conv_.in_height()},
+                        {"in_width", rcnn->conv_.in_width()},
+                        {"out_channels", rcnn->conv_.out_channels()},
+                        {"kernel_size", rcnn->conv_.kernel_size()},
+                        {"stride", rcnn->conv_.stride()},
+                        {"padding", rcnn->conv_.padding()},
+        {"pooled_h", rcnn->pooled_h_},
+                        {"pooled_w", rcnn->pooled_w_}
+                    };
+                } else if (auto vae = std::dynamic_pointer_cast<VAELayer>(layer)) {
+                    jl["type"] = "VAE";
+                    jl["activation"] = Activations::to_string(layer->get_activation());
+                    jl["initializer"] = Initializations::to_string(layer->get_initialization());
+                    jl["params"] = {
+                        {"input_size", vae->get_input_size()},
+                        {"latent_size", vae->latent_size_}
+                    };
+                } else if (auto scae = std::dynamic_pointer_cast<SparseContractiveAELayer>(layer)) {
+                    jl["type"] = "SparseAE";
+                    jl["activation"] = Activations::to_string(layer->get_activation());
+                    jl["initializer"] = Initializations::to_string(layer->get_initialization());
+                    jl["params"] = {
+                        {"input_size", scae->input_size_},
+                        {"latent_size", scae->latent_size_},
+                        {"use_sparsity", scae->use_sparsity_},
+                        {"use_contractive", scae->use_contractive_},
+                        {"sparsity_rho", scae->sparsity_rho_},
+                        {"sparsity_beta", scae->sparsity_beta_},
+                        {"contractive_lambda", scae->contractive_lambda_}
+                    };
+                } else if (auto mha = std::dynamic_pointer_cast<MHAAttentionLayer>(layer)) {
+                    jl["type"] = "MHA";
+                    jl["initializer"] = Initializations::to_string(layer->get_initialization());
+                    jl["params"] = {
+                        {"embed_dim", mha->get_input_size()},
+                        {"num_heads", mha->num_heads()}
+                    };
+                } else if (auto mla = std::dynamic_pointer_cast<MLAAttentionLayer>(layer)) {
+                    jl["type"] = "MLA";
+                    jl["initializer"] = Initializations::to_string(layer->get_initialization());
+                    jl["params"] = {
+                        {"embed_dim", mla->get_input_size()},
+                        {"num_heads", mla->num_heads()},
+                        {"latent_dim", mla->latent_dim()}
+                    };
                 } else if (auto rbm = std::dynamic_pointer_cast<RBMLayer>(layer)) {
                     jl["type"] = "RBM";
                     jl["activation"] = Activations::to_string(layer->get_activation());
@@ -381,6 +512,13 @@ public:
                         {"input_size", rbm->get_input_size()},
                         {"output_size", rbm->get_output_size()},
                         {"cd_steps", rbm->get_cd_steps()}
+                    };
+                } else if (auto spike = std::dynamic_pointer_cast<SpikeLayer>(layer)) {
+                    jl["type"] = "Spike";
+                    jl["initializer"] = Initializations::to_string(layer->get_initialization());
+                    jl["params"] = {
+                        {"size", spike->get_input_size()},
+                        {"threshold", spike->threshold_}
                     };
                 } else if (auto pool = std::dynamic_pointer_cast<MaxPool2DLayer>(layer)) {
                     jl["type"] = "MaxPool2D";
@@ -451,6 +589,17 @@ public:
                 float b2 = j["optimizer"].value("beta2", 0.999f);
                 float eps = j["optimizer"].value("epsilon", 1e-8f);
                 set_optimizer(Optimizer::Adam(lr, b1, b2, eps));
+            } else if (opt_name == "Muon") {
+                float lr = j["optimizer"].value("learning_rate", 0.01f);
+                float beta = j["optimizer"].value("beta", 0.9f);
+                float wd = j["optimizer"].value("weight_decay", 0.0f);
+                set_optimizer(Optimizer::Muon(lr, beta, wd));
+            } else if (opt_name == "AdaMuon") {
+                float lr = j["optimizer"].value("learning_rate", 0.001f);
+                float b1 = j["optimizer"].value("beta1", 0.9f);
+                float b2 = j["optimizer"].value("beta2", 0.999f);
+                float wd = j["optimizer"].value("weight_decay", 0.0f);
+                set_optimizer(Optimizer::AdaMuon(lr, b1, b2, wd));
             }
         }
 
@@ -490,11 +639,48 @@ public:
                     int out = jl["params"].value("output_size", 0);
                     int seq = jl["params"].value("seq_length", 0);
                     layer = Layer::RNN(in, out, seq, act, init);
+                    } else if (type == "RCNN") {
+                    int in_c = jl["params"].value("in_channels", 0);
+                    int in_h = jl["params"].value("in_height", 0);
+                    int in_w = jl["params"].value("in_width", 0);
+                    int out_c = jl["params"].value("out_channels", 0);
+                    int k = jl["params"].value("kernel_size", 0);
+                    int s = jl["params"].value("stride", 0);
+                    int p = jl["params"].value("padding", 0);
+                    int ph = jl["params"].value("pooled_h", 0);
+                    int pw = jl["params"].value("pooled_w", 0);
+                    layer = Layer::RCNN(in_c, in_h, in_w, out_c, k, s, p, ph, pw, act, init);
+                } else if (type == "VAE") {
+                    int in = jl["params"].value("input_size", 0);
+                    int latent = jl["params"].value("latent_size", 0);
+                    layer = Layer::VAE(in, latent, act, init);
+                } else if (type == "SparseAE") {
+                    int in = jl["params"].value("input_size", 0);
+                    int latent = jl["params"].value("latent_size", 0);
+                    bool use_s = jl["params"].value("use_sparsity", false);
+                    bool use_c = jl["params"].value("use_contractive", false);
+                    float rho = jl["params"].value("sparsity_rho", 0.05f);
+                    float beta = jl["params"].value("sparsity_beta", 1e-3f);
+                    float lambda = jl["params"].value("contractive_lambda", 1e-3f);
+                    layer = Layer::SparseAE(in, latent, act, init, use_s, use_c, rho, beta, lambda);
+                } else if (type == "MHA") {
+                    int embed = jl["params"].value("embed_dim", 0);
+                    int heads = jl["params"].value("num_heads", 1);
+                    layer = Attention::MHA(embed, heads, init);
+                } else if (type == "MLA") {
+                    int embed = jl["params"].value("embed_dim", 0);
+                    int heads = jl["params"].value("num_heads", 1);
+                    int latent = jl["params"].value("latent_dim", 0);
+                    layer = Attention::MLA(embed, heads, latent, init);
                 } else if (type == "RBM") {
                     int vis = jl["params"].value("input_size", 0);
                     int hid = jl["params"].value("output_size", 0);
                     int cd = jl["params"].value("cd_steps", 0);
                     layer = Layer::RBM(vis, hid, cd, act, init);
+                } else if (type == "Spike") {
+                    int sz = jl["params"].value("size", 0);
+                    float th = jl["params"].value("threshold", 1.0f);
+                    layer = Layer::Spike(sz, th);
                 } else if (type == "MaxPool2D") {
                     int in_c = jl["params"].value("in_channels", 0);
                     int in_h = jl["params"].value("in_height", 0);

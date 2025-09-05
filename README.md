@@ -38,9 +38,20 @@ Available Layers:
 Thot::Layer::FC(input_size, output_size, __activation_type__, __initialization_type__)
 Thot::Layer::RNN(input_size, hidden_size, seq_length, __activation_type__, __initialization_type__)
 Thot::Layer::Conv2D(in_channels, in_height, in_width, out_channels, kernel_size, stride, padding, __activation_type__, __initialization_type__, "Layer Name")
+Thot::Layer::RCNN(in_channels, in_height, in_width, out_channels, kernel_size, stride, padding, pooled_h, pooled_w, __activation_type__, __initialization_type__, "Layer Name")
+Thot::Layer::VAE(input_size, latent_size, __activation_type__, __initialization_type__, "Layer Name")
 Thot::Layer::RBM(visible_size, hidden_size, cd_steps, __activation_type__, __initialization_type__, "Layer Name")
+Thot::Layer::Spike(size, threshold)
+Thot::Layer::SparseAE(input_size, latent_size, __activation_type__, __initialization_type__, use_sparsity, use_contractive, sparsity_rho, sparsity_beta, contractive_lambda, "Layer Name")
 Thot::Layer::MaxPool2D(in_channels, in_height, in_width, kernel_size, stride)
 Thot::Layer::Flatten(in_channels, in_height, in_width)
+```
+
+#### Attention Layers
+Available Attention Mechanisms:
+```yaml
+Thot::Attention::MHA(embed_dim, num_heads, __initialization_type__, "Layer Name")
+Thot::Attention::MLA(embed_dim, num_heads, latent_dim, __initialization_type__, "Layer Name")
 ```
 
 
@@ -79,6 +90,8 @@ model.set_optimizer(Thot::Optimizer::SGD(learning_rate));
 Thot::Optimizer::SGD(learning_rate)
 Thot::Optimizer::SGDM(learning_rate, momentum)
 Thot::Optimizer::Adam(learning_rate, beta1, beta2, epsilon)
+Thot::Optimizer::Muon(learning_rate, beta, weight_decay)
+Thot::Optimizer::AdaMuon(learning_rate, beta1, beta2, weight_decay)
 ```
 
 
@@ -97,7 +110,8 @@ Thot::Loss::CategoricalCrossEntropy
 Thot::Loss::SparseCategoricalCrossEntropy
 Thot::Loss::Hinge
 Thot::Loss::Huber
-Thot::Loss::KLDivergence
+Thot::Loss::KLDivergenc
+Thot::Loss::VAE
 ```
 
 

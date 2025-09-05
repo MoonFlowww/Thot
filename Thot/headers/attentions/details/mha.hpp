@@ -189,5 +189,7 @@ namespace Thot {
         int get_input_size() const override { return embed_dim_; }
 
         int get_output_size() const override { return embed_dim_; }
+
+        int num_heads() const { return num_heads_; }
     };
 } // namespace Thot
