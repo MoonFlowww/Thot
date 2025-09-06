@@ -1,5 +1,7 @@
 #pragma once
 
+
+#include "../layers.hpp"
 #include "../../tensor.hpp"
 #include "../../initializations/initializations.hpp"
 #include "../../../cuda/cuh/layers/conv2d.cuh"
@@ -13,10 +15,8 @@
 
 namespace Thot {
 
-    class Layer;
     class Network;
 
-    enum class ConvAlgo { Auto, Direct, Winograd, FFT }; // latency optim techs (-1, 0, 1, 2)
 
     class Conv2DLayer : public Layer {
     private:

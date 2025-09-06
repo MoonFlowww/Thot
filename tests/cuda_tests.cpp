@@ -87,7 +87,7 @@ void test_conv2d() {
 
 void test_conv2d_algorithms() {
     std::cout << "[RUN] test_conv2d_algorithms" << std::endl;
-    using ::cuda::layers::ConvAlgo;
+    using Thot::ConvAlgo;
     Conv2DLayer direct(1, 4, 4, 1, 3, 1, 1, Activation::Linear,
                        Initialization::Ones, ConvAlgo::Direct);
     Conv2DLayer winograd(1, 4, 4, 1, 3, 1, 1, Activation::Linear,

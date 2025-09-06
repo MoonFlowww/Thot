@@ -9,6 +9,9 @@
 namespace Thot {
 
 	class Optimizer;
+    enum class ConvAlgo { Auto = -1, Direct = 0, Winograd = 1, FFT = 2 };
+
+
 
     class FCLayer;
     class RNNLayer;

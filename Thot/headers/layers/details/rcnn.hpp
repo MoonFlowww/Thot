@@ -24,7 +24,7 @@ namespace Thot {
         int num_rois_per_image_;
         Utils::Tensor rois_;
         Utils::Tensor conv_output_;
-        ::cuda::layers::ConvAlgo conv_algo_;
+        ConvAlgo conv_algo_;
 
     public:
         RCNNLayer(int in_channels, int in_height, int in_width,
@@ -35,7 +35,7 @@ namespace Thot {
             const std::string& name = "RCNN")
             : Layer(name),
             conv_(in_channels, in_height, in_width, out_channels, kernel_size, stride, padding,
-            activation_type, weight_init, ::cuda::layers::ConvAlgo::Auto, name + "_conv"),
+            activation_type, weight_init, ConvAlgo::Auto, name + "_conv"),
             pooled_h_(pooled_h), pooled_w_(pooled_w), num_rois_per_image_(4) {}
 
         size_t get_flops(int batch_size = 1) const override {
