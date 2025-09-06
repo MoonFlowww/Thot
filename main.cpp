@@ -12,22 +12,21 @@ int main() {
 
     else {
 
-        model.add(Thot::Layer::Conv2D(3, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
-        model.add(Thot::Layer::Conv2D(32, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
+        model.add(Thot::Layer::Conv2D(3, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, ::cuda::layers::ConvAlgo::Auto));
+        model.add(Thot::Layer::Conv2D(32, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, ::cuda::layers::ConvAlgo::Auto));
         model.add(Thot::Layer::MaxPool2D(32, 32, 32, 2, 2));
 
-        model.add(Thot::Layer::Conv2D(32, 16, 16, 64, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
-        model.add(Thot::Layer::Conv2D(64, 16, 16, 64, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
+        model.add(Thot::Layer::Conv2D(32, 16, 16, 64, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, ::cuda::layers::ConvAlgo::Auto));
+        model.add(Thot::Layer::Conv2D(64, 16, 16, 64, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, ::cuda::layers::ConvAlgo::Auto));
         model.add(Thot::Layer::MaxPool2D(64, 16, 16, 2, 2));
 
-        model.add(Thot::Layer::Conv2D(64, 8, 8, 128, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He));
+        model.add(Thot::Layer::Conv2D(64, 8, 8, 128, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, ::cuda::layers::ConvAlgo::Auto));
         model.add(Thot::Layer::MaxPool2D(128, 8, 8, 2, 2));
 
         model.add(Thot::Layer::Flatten(128, 4, 4));
 
         model.add(Thot::Layer::FC(2048, 524, Thot::Activation::ReLU, Thot::Initialization::He));
 
-        model.add(Thot::Attention::MLA(524, 4, 256, Thot::Initialization::Xavier)); // <- test case
 
         model.add(Thot::Layer::FC(524, 126, Thot::Activation::ReLU, Thot::Initialization::He));
         model.add(Thot::Layer::FC(126, 10, Thot::Activation::Softmax, Thot::Initialization::Xavier));

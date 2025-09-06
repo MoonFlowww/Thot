@@ -23,10 +23,6 @@ endif()
 option(THOT_USE_CUDNN "Enable cuDNN acceleration" ON)
 
 if(THOT_USE_CUDNN)
-    # Allow users to point at a non-default install with CUDNN_ROOT
-    # Typical layouts:
-    #   $CUDNN_ROOT/include/cudnn.h
-    #   $CUDNN_ROOT/lib64/libcudnn.so
     find_path(CUDNN_INCLUDE_DIR
             NAMES cudnn.h
             HINTS ENV CUDNN_ROOT ${CUDAToolkit_INCLUDE_DIRS}

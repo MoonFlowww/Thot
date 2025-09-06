@@ -36,15 +36,6 @@ namespace cuda {
             0.f, 1.f,-1.f,-1.f
         };
 
-        // Basic heuristic for runtime algorithm selection.
-        __host__ __device__ inline ConvAlgo choose_algo(int kernel_size,
-                                                        int stride,
-                                                        ConvAlgo requested) {
-            if (requested != ConvAlgo::Auto) return requested;
-            if (kernel_size <= 5 && stride <= 1) return ConvAlgo::Winograd;
-            return ConvAlgo::FFT;
-        }
-
         __forceinline__ __device__ int div_floor(int a, int b) {
             // b > 0
             int q = a / b;
@@ -502,16 +493,15 @@ namespace cuda {
         void launchConv2DForward(
             const float* input, const float* weights, const float* bias,
             float* output, int batch_size, int in_channels, int in_height, int in_width,
-            int out_channels, int kernel_size, int stride, int padding, int out_height, int out_width, ConvAlgo algo,
+            int out_channels, int kernel_size, int stride, int padding, int out_height, int out_width, int ConvAlgo,
             cudaStream_t stream)
         {
-            ConvAlgo impl = choose_algo(kernel_size, stride, algo);
-            if (impl == ConvAlgo::Winograd) {
+            if (ConvAlgo == 1) { // Winograde
                 conv2d_forward_winograd_gpu(input, weights, bias, output,
                     batch_size, in_channels, in_height, in_width,
                     out_channels, kernel_size, padding, out_height, out_width, stream);
                 return;
-            } else if (impl == ConvAlgo::FFT) {
+            } else if (ConvAlgo == 2) { // FFT
                 conv2d_forward_fft_gpu(input, weights, bias, output,
                     batch_size, in_channels, in_height, in_width,
                     out_channels, kernel_size, padding, out_height, out_width, stream);
@@ -531,11 +521,10 @@ namespace cuda {
         void launchConv2DBackwardInput(
             const float* grad_output, const float* weights,
             float* grad_input, int batch_size, int in_channels, int in_height, int in_width,
-            int out_channels, int kernel_size, int stride, int padding, int out_height, int out_width, ConvAlgo algo,
+            int out_channels, int kernel_size, int stride, int padding, int out_height, int out_width,  int ConvAlgo,
             cudaStream_t stream)
         {
-            ConvAlgo impl = choose_algo(kernel_size, stride, algo);
-            if (impl == ConvAlgo::Winograd || impl == ConvAlgo::FFT) {
+            if (ConvAlgo == 1 || ConvAlgo == 2) { // winograd or FFT
                 int pad = kernel_size - 1 - padding;
                 size_t wsize = (size_t)out_channels * in_channels * kernel_size * kernel_size;
                 std::vector<float> flipped(wsize);
@@ -548,7 +537,7 @@ namespace cuda {
                 float* d_flipped;
                 CUDA_CHECK(cudaMalloc(&d_flipped, wsize * sizeof(float)));
                 CUDA_CHECK(cudaMemcpyAsync(d_flipped, flipped.data(), wsize*sizeof(float), cudaMemcpyHostToDevice, stream));
-                if (impl == ConvAlgo::Winograd)
+                if (ConvAlgo == 1) // winograd
                     conv2d_forward_winograd_gpu(grad_output, d_flipped, nullptr, grad_input,
                         batch_size, out_channels, out_height, out_width,
                         in_channels, kernel_size, pad, in_height, in_width, stream);
@@ -573,14 +562,14 @@ namespace cuda {
         void launchConv2DBackwardWeights(
             const float* input, const float* grad_output,
             float* grad_weights, int batch_size, int in_channels, int in_height, int in_width,
-            int out_channels, int kernel_size, int stride, int padding, int out_height, int out_width, ConvAlgo algo,
+            int out_channels, int kernel_size, int stride, int padding, int out_height, int out_width, int ConvAlgo,
             cudaStream_t stream)
         {
-            ConvAlgo impl = choose_algo(kernel_size, stride, algo);
+
             const int64_t N = (int64_t)out_channels * in_channels * kernel_size * kernel_size;
             const int blockSize = 256;
             const int gridSize  = (int)std::min<int64_t>((N + blockSize - 1) / blockSize, 65535);
-            (void)impl;
+            (void)ConvAlgo; // placeholder
             conv2d_backward_weights<<<gridSize, blockSize, 0, stream>>>(
                 input, grad_output, grad_weights,
                 batch_size, in_channels, in_height, in_width,
