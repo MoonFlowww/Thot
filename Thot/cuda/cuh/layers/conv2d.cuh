@@ -4,6 +4,8 @@
 
 namespace cuda {
     namespace layers {
+
+
         __global__ void conv2d_forward(const float* input, const float* weights, const float* bias,
             float* output, int batch_size, int in_channels, int in_height, int in_width,
             int out_channels, int kernel_size, int stride, int padding, int out_height, int out_width);
@@ -23,16 +25,19 @@ namespace cuda {
         void launchConv2DForward(const float* input, const float* weights, const float* bias,
             float* output, int batch_size, int in_channels, int in_height, int in_width,
             int out_channels, int kernel_size, int stride, int padding, int out_height, int out_width,
+            int ConvAlgo,
             cudaStream_t stream = 0);
 
         void launchConv2DBackwardInput(const float* grad_output, const float* weights,
             float* grad_input, int batch_size, int in_channels, int in_height, int in_width,
             int out_channels, int kernel_size, int stride, int padding, int out_height, int out_width,
+            int ConvAlgo,
             cudaStream_t stream = 0);
 
         void launchConv2DBackwardWeights(const float* input, const float* grad_output,
             float* grad_weights, int batch_size, int in_channels, int in_height, int in_width,
             int out_channels, int kernel_size, int stride, int padding, int out_height, int out_width,
+            int ConvAlgo,
             cudaStream_t stream = 0);
 
         void launchConv2DBackwardBias(const float* grad_output, float* grad_bias,
