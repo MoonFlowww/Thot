@@ -110,6 +110,7 @@ void test_conv2d_algorithms() {
 }
 
 
+
 void test_rbm() {
     std::cout << "[RUN] test_rbm" << std::endl;
     RBMLayer rbm(1,1,1, Activation::Sigmoid, Initialization::Ones);
