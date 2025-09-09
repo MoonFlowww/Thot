@@ -136,8 +136,9 @@ namespace Thot {
 	}
 
     inline std::shared_ptr<Layer> Layer::Conv2D(int in_channels, int in_height, int in_width, int out_channels, int kernel_size, int stride, int padding, Activation activation_type, Initialization weight_init, ConvAlgo conv_algo, const std::string& name) {
-	    return std::make_shared<Conv2DLayer>(in_channels, in_height, in_width, out_channels, kernel_size, stride, padding, activation_type, weight_init, conv_algo, name);
+	    return std::static_pointer_cast<Layer>( std::make_shared<Conv2DLayer>(in_channels, in_height, in_width, out_channels, kernel_size, stride, padding, activation_type, weight_init, conv_algo, name));
 	}
+
 
     inline std::shared_ptr<Layer> Layer::RBM(int visible_size, int hidden_size, int cd_steps, Activation activation_type, Initialization weight_init, const std::string& name) {
 	    return std::make_shared<RBMLayer>(visible_size, hidden_size, cd_steps, activation_type, weight_init, name);
@@ -156,7 +157,7 @@ namespace Thot {
 	}
 
     inline std::shared_ptr<Layer> Layer::RCNN(int in_channels, int in_height, int in_width, int out_channels, int kernel_size, int stride, int padding, int pooled_h, int pooled_w, Activation activation_type, Initialization weight_init, ConvAlgo conv_algo, const std::string& name) {
-	    return std::make_shared<RCNNLayer>(in_channels, in_height, in_width, out_channels, kernel_size, stride, padding, pooled_h, pooled_w, activation_type, weight_init, conv_algo, name);
+	    return std::static_pointer_cast<Layer>(std::make_shared<RCNNLayer>(in_channels, in_height, in_width, out_channels, kernel_size, stride, padding, pooled_h, pooled_w, activation_type, weight_init, conv_algo, name));
 	}
 
     inline std::shared_ptr<Layer> Layer::Spike(int size, float threshold, const std::string& name) {
