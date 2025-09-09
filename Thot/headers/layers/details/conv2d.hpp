@@ -66,15 +66,13 @@ namespace Thot {
 
             auto t1 = std::chrono::high_resolution_clock::now();
 
-            if (conv_algo_ != ConvAlgo::Auto) { //-1
+            if (conv_algo_ == ConvAlgo::Auto) { //-1
                 if (kernel_size_ <=5 && stride_ <=1) { // 1
                     conv_algo_ = ConvAlgo::Winograd;
-                    cuda_conv_algo_ = 1;
                 } else { // 2
                     conv_algo_ = ConvAlgo::FFT;
-                    cuda_conv_algo_ =2;
                 }
-            }
+            } cuda_conv_algo_ = static_cast<int>(conv_algo_);
 
             out_height_ = (in_height_ + 2 * padding_ - kernel_size_) / stride_ + 1;
             out_width_ = (in_width_ + 2 * padding_ - kernel_size_) / stride_ + 1;
