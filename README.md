@@ -104,6 +104,28 @@ Thot::Optimizer::Muon(learning_rate, beta, weight_decay)
 Thot::Optimizer::AdaMuon(learning_rate, beta1, beta2, weight_decay)
 ```
 
+### Learning Rate Schedulers
+You can pass a scheduler when constructing an optimizer:
+
+```cpp
+model.set_optimizer(Thot::Optimizer::SGD(0.01f,
+    Thot::LrScheduler::ExponentialDecay(0.95f)));
+```
+
+Available schedulers:
+```yaml
+Thot::LrScheduler::StepDecay(step_size, gamma)
+Thot::LrScheduler::MultiStepDecay({milestones...}, gamma)
+Thot::LrScheduler::ExponentialDecay(gamma)
+Thot::LrScheduler::CosineAnnealingDecay(T_max, eta_min)
+Thot::LrScheduler::OnPlateauDecay(factor, patience)
+Thot::LrScheduler::OneCycleDecay(max_lr, total_steps, pct_start)
+Thot::LrScheduler::CyclicDecay(max_lr, step_size)
+Thot::LrScheduler::PolynomialDecay(total_steps, power)
+Thot::LrScheduler::CosineDecay(T_max)
+Thot::LrScheduler::CosineDecayRestarts(T_0, T_mult)
+```
+
 
 ### Loss
 #### Choosing a Loss function
@@ -120,7 +142,7 @@ Thot::Loss::CategoricalCrossEntropy
 Thot::Loss::SparseCategoricalCrossEntropy
 Thot::Loss::Hinge
 Thot::Loss::Huber
-Thot::Loss::KLDivergenc
+Thot::Loss::KLDivergence
 Thot::Loss::VAE
 ```
 

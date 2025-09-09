@@ -16,6 +16,7 @@
 #include "layers/layers.hpp"
 #include "optimizations/optimizations.hpp"
 #include "network.hpp"
+#include "layernorm/layernorm.hpp"
 
 using namespace Thot;
 
@@ -325,6 +326,35 @@ void test_sparse_contractive_ae() {
     std::cout << "[PASS] test_sparse_contractive_ae" << std::endl;
 }
 
+
+void test_rms_layernorm() {
+    std::cout << "[RUN] test_rms_layernorm" << std::endl;
+    float input[4] = {1.0f, 2.0f, 3.0f, 4.0f};
+    float output[4];
+    LayerNorm::RMSLayerNorm(input, output, 1, 4);
+    float mean_sq = (1.0f + 4.0f + 9.0f + 16.0f) / 4.0f;
+    float scale = 1.0f / std::sqrt(mean_sq + 1e-5f);
+    for (int i = 0; i < 4; ++i) {
+        float expected = input[i] * scale;
+        CHECK(std::fabs(output[i] - expected) < 1e-4);
+    }
+    std::cout << "[PASS] test_rms_layernorm" << std::endl;
+}
+
+void test_dyt_layernorm() {
+    std::cout << "[RUN] test_dyt_layernorm" << std::endl;
+    float input[4] = {1.0f, 2.0f, 3.0f, 4.0f};
+    float output[4];
+    LayerNorm::DyTLayerNorm(input, output, 1, 4);
+    float mean_sq = (1.0f + 4.0f + 9.0f + 16.0f) / 4.0f;
+    float scale = 1.0f / std::sqrt(mean_sq + 1e-5f);
+    for (int i = 0; i < 4; ++i) {
+        float expected = std::tanh(input[i] * scale);
+        CHECK(std::fabs(output[i] - expected) < 1e-4);
+    }
+    std::cout << "[PASS] test_dyt_layernorm" << std::endl;
+}
+
 int main() {
     test_rnn();
     test_fc();
@@ -337,6 +367,8 @@ int main() {
     test_muon_optimizer();
     test_spike_layer();
     test_sparse_contractive_ae();
+    test_rms_layernorm();
+    test_dyt_layernorm();
     std::cout << "All CUDA backend tests passed." << std::endl;
     return 0;
 }
