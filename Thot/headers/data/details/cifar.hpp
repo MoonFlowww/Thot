@@ -154,7 +154,7 @@ namespace Thot {
             std::cout << "------------------\n";
             for (int i = 0; i < num_classes; ++i) {
                 double percentage = (100.0 * total_label_counts[i]) / static_cast<double>(actual_num_images);
-                std::cout << "Class " << (label_str.empty() ? std::to_string(i) : std::to_string(i)+" ["+label_str[i]) << "]: " << static_cast<double>(actual_num_images)*percentage << " images ("
+                std::cout << "Class " << (label_str.empty() ? std::to_string(i) : std::to_string(i)+" ["+label_str[i]) << "]: " << static_cast<int>(static_cast<double>(actual_num_images)*(percentage/100)) << " images ("
                               << std::fixed << std::setprecision(2) << percentage << "%)\n";
             }
             std::cout << "------------------\n\n";

@@ -14,6 +14,12 @@
     printf("CUDA error %s:%d: %s\n", __FILE__, __LINE__, cudaGetErrorString(_e)); } } while(0)
 #endif
 
+#ifndef CUFFT_CHECK
+#define CUFFT_CHECK(x) do { cufftResult _e = (x); if (_e != CUFFT_SUCCESS) { \
+printf("cuFFT error %s:%d: %d\n", __FILE__, __LINE__, (int)_e); return; } } while(0)
+#endif
+
+
 namespace cuda {
     namespace layers {
         // Winograd F(2x2,3x3) transform matrices. These are stored in constant
@@ -136,13 +142,15 @@ namespace cuda {
             int out_channels, int padding, int out_height, int out_width)
         {
             int tiles_w = (out_width + 1) / 2;
-            int tile_idx = blockIdx.x * blockDim.x + threadIdx.x;
+            int tiles_h = (out_height + 1) / 2;
+            int tile_count = tiles_w * tiles_h;
+            int grid_stride = blockDim.x * gridDim.x;
             int oc = blockIdx.y;
             int b = blockIdx.z;
-            int tile_count = tiles_w * ((out_height + 1) / 2);
-            for (; tile_idx < tile_count; tile_idx += blockDim.x * gridDim.x) {
+            for (int tile_idx = blockIdx.x * blockDim.x + threadIdx.x; tile_idx < tile_count; tile_idx += grid_stride) {
                 int th = tile_idx / tiles_w;
                 int tw = tile_idx - th * tiles_w;
+                if (th >= tiles_h || tw >= tiles_w) continue;
                 float M[16] = {0};
                 for (int ic = 0; ic < in_channels; ++ic) {
                     float d[16];
@@ -246,16 +254,22 @@ namespace cuda {
             int out_channels, int kernel_size, int padding,
             int out_height, int out_width, cudaStream_t stream)
         {
-            int fft_h = 1; while (fft_h < in_height + kernel_size - 1) fft_h <<= 1;
-            int fft_w = 1; while (fft_w < in_width + kernel_size - 1)  fft_w <<= 1;
+            int req_h = in_height + kernel_size - 1;
+            int req_w = in_width  + kernel_size - 1;
+            int fft_h = 1; while (fft_h < req_h) fft_h <<= 1;
+            int fft_w = 1; while (fft_w < req_w)  fft_w <<= 1;
+            if (fft_h < req_h || fft_w < req_w) {
+                printf("Invalid FFT dimensions\n");
+                return;
+            }
             size_t real_size = (size_t)fft_h * fft_w;
             size_t complex_size = (size_t)fft_h * (fft_w/2 + 1);
 
             cufftHandle plan_fwd, plan_inv;
-            cufftPlan2d(&plan_fwd, fft_h, fft_w, CUFFT_R2C);
-            cufftPlan2d(&plan_inv, fft_h, fft_w, CUFFT_C2R);
-            cufftSetStream(plan_fwd, stream);
-            cufftSetStream(plan_inv, stream);
+            CUFFT_CHECK(cufftPlan2d(&plan_fwd, fft_h, fft_w, CUFFT_R2C));
+            CUFFT_CHECK(cufftPlan2d(&plan_inv, fft_h, fft_w, CUFFT_C2R));
+            CUFFT_CHECK(cufftSetStream(plan_fwd, stream));
+            CUFFT_CHECK(cufftSetStream(plan_inv, stream));
 
             float *d_in_pad, *d_w_pad;
             cufftComplex *d_in_fft, *d_w_fft, *d_prod;
@@ -264,6 +278,12 @@ namespace cuda {
             CUDA_CHECK(cudaMalloc(&d_in_fft, complex_size * sizeof(cufftComplex)));
             CUDA_CHECK(cudaMalloc(&d_w_fft, complex_size * sizeof(cufftComplex)));
             CUDA_CHECK(cudaMalloc(&d_prod, complex_size * sizeof(cufftComplex)));
+
+            CUDA_CHECK(cudaMemsetAsync(d_in_pad, 0, real_size * sizeof(float), stream));
+            CUDA_CHECK(cudaMemsetAsync(d_w_pad, 0, real_size * sizeof(float), stream));
+            CUDA_CHECK(cudaMemsetAsync(d_in_fft, 0, complex_size * sizeof(cufftComplex), stream));
+            CUDA_CHECK(cudaMemsetAsync(d_w_fft, 0, complex_size * sizeof(cufftComplex), stream));
+            CUDA_CHECK(cudaMemsetAsync(d_prod, 0, complex_size * sizeof(cufftComplex), stream));
 
             dim3 block2d(16,16);
             dim3 gridPad((fft_w + 15)/16, (fft_h + 15)/16);
@@ -277,15 +297,21 @@ namespace cuda {
                     for (int ic = 0; ic < in_channels; ++ic) {
                         const float* in_src = input + ((b*in_channels + ic) * in_height * in_width);
                         const float* w_src  = weights + ((oc*in_channels + ic) * kernel_size * kernel_size);
+                        CUDA_CHECK(cudaMemsetAsync(d_in_pad, 0, real_size*sizeof(float), stream));
+                        CUDA_CHECK(cudaMemsetAsync(d_w_pad, 0, real_size*sizeof(float), stream));
                         pad_2d<<<gridPad, block2d, 0, stream>>>(in_src, d_in_pad, in_height, in_width, fft_h, fft_w);
+                        CUDA_CHECK(cudaGetLastError());
                         pad_2d<<<gridPad, block2d, 0, stream>>>(w_src, d_w_pad, kernel_size, kernel_size, fft_h, fft_w);
-                        cufftExecR2C(plan_fwd, d_in_pad, d_in_fft);
-                        cufftExecR2C(plan_fwd, d_w_pad, d_w_fft);
+                        CUDA_CHECK(cudaGetLastError());
+                        CUFFT_CHECK(cufftExecR2C(plan_fwd, d_in_pad, d_in_fft));
+                        CUFFT_CHECK(cufftExecR2C(plan_fwd, d_w_pad, d_w_fft));
                         complex_mul_accum<<<grid1d, block1d, 0, stream>>>(d_in_fft, d_w_fft, d_prod, complex_size);
+                        CUDA_CHECK(cudaGetLastError());
                     }
-                    cufftExecC2R(plan_inv, d_prod, d_in_pad);
+                    CUFFT_CHECK(cufftExecC2R(plan_inv, d_prod, d_in_pad));
                     float bias_val = bias ? bias[oc] : 0.f;
                     crop_2d_bias<<<gridCrop, block2d, 0, stream>>>(d_in_pad, output + ((b*out_channels + oc)*out_height*out_width), fft_w, out_height, out_width, bias_val, fft_h, fft_w);
+                    CUDA_CHECK(cudaGetLastError());
                 }
             }
 
@@ -294,8 +320,8 @@ namespace cuda {
             CUDA_CHECK(cudaFree(d_in_fft));
             CUDA_CHECK(cudaFree(d_w_fft));
             CUDA_CHECK(cudaFree(d_prod));
-            cufftDestroy(plan_fwd);
-            cufftDestroy(plan_inv);
+            CUFFT_CHECK(cufftDestroy(plan_fwd));
+            CUFFT_CHECK(cufftDestroy(plan_inv));
         }
 
         __global__ void conv2d_forward(
