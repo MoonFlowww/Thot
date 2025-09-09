@@ -89,6 +89,8 @@ set(KERNEL_SOURCES
         Thot/cuda/cu/layers/rcnn.cu
         Thot/cuda/cu/layers/spike.cu
         Thot/cuda/cu/layers/sparse_contractive_ae.cu
+        Thot/cuda/cu/layernorm/layernorm.cu
+
 
 )
 
@@ -123,21 +125,13 @@ set(HEADERS
         Thot/headers/attentions/details/mha.hpp
         Thot/headers/attentions/details/mla.hpp
         Thot/headers/attentions/attentions.hpp
-        Thot/cuda/cuh/optimizations/muon.cuh
         Thot/headers/optimizations/learning_rate.hpp
         Thot/headers/optimizations/details/adamuon.hpp
-        Thot/cuda/cuh/optimizations/adamuon.cuh
-        Thot/cuda/cuh/layers/vae.cuh
         Thot/headers/layers/details/vae.hpp
-        Thot/cuda/cuh/layers/rcnn.cuh
         Thot/headers/layers/details/rcnn.hpp
-        Thot/cuda/cuh/layers/spike.cuh
         Thot/headers/layers/details/spike.hpp
-        Thot/cuda/cuh/layers/sparse_contractive_ae.cuh
         Thot/headers/layers/details/sparse_contractive_ae.hpp
-        #Thot/headers/layernorm/layernorm.hpp
-        #Thot/cuda/cu/layernorm/layernorm.cu
-        #Thot/cuda/cuh/layernorm/layernorm.cuh
+        Thot/headers/layernorm/layernorm.hpp
         Thot/headers/optimizations/lr_schedulers.hpp
         Thot/headers/layernorm/details/dyt.hpp
         Thot/headers/layernorm/details/rms.hpp
