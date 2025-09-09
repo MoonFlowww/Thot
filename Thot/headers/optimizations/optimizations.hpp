@@ -11,7 +11,6 @@ namespace Thot {
     class Optimizer {
     protected:
         float learning_rate_;
-        LearningRate lr_type_;
         LrFn lr_fn_;
 
     public:

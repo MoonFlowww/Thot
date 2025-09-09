@@ -13,14 +13,17 @@ int main() {
     else {
         Thot::ConvAlgo ConvAlgo = Thot::ConvAlgo::Direct; // Optim Method for Convulational Layers
 
+        model.add(Thot::LayerNorm::DyT(3*32*32));
         model.add(Thot::Layer::Conv2D(3, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, ConvAlgo));
         model.add(Thot::Layer::Conv2D(32, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, ConvAlgo));
         model.add(Thot::Layer::MaxPool2D(32, 32, 32, 2, 2));
 
+        model.add(Thot::LayerNorm::DyT(32*16*16));
         model.add(Thot::Layer::Conv2D(32, 16, 16, 64, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, ConvAlgo));
         model.add(Thot::Layer::Conv2D(64, 16, 16, 64, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, ConvAlgo));
         model.add(Thot::Layer::MaxPool2D(64, 16, 16, 2, 2));
 
+        model.add(Thot::LayerNorm::DyT(64*8*8));
         model.add(Thot::Layer::Conv2D(64, 8, 8, 128, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, ConvAlgo));
         model.add(Thot::Layer::MaxPool2D(128, 8, 8, 2, 2));
 
@@ -31,7 +34,7 @@ int main() {
         model.add(Thot::Layer::FC(126, 10, Thot::Activation::Softmax, Thot::Initialization::Xavier));
 
         model.set_loss(Thot::Loss::CategoricalCrossEntropy);
-        model.set_optimizer(Thot::Optimizer::AdaMuon(1e-3f, Thot::LrScheduler::ExponentialDecay(0.95f)));
+        model.set_optimizer(Thot::Optimizer::AdaMuon(1e-3f, 0.9f, 0.999f, 0.0f, Thot::LrScheduler::OneCycleDecay(0.01f, (100*(2500/512), 0.3, 25, 1e4))));
 
     }
 
@@ -44,7 +47,7 @@ int main() {
 
 
     if (!IsLoading) {
-        auto [x, y] = Thot::Data::Load_CIFAR10_Train(cifar, 0.02f);
+        auto [x, y] = Thot::Data::Load_CIFAR10_Train(cifar, 0.05f);
         model.train(x, y, Thot::Batch::Classic(512, 10), Thot::KFold::Classic(10), 5, true);
     }
 

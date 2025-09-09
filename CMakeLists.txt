@@ -139,6 +139,8 @@ set(HEADERS
         #Thot/cuda/cu/layernorm/layernorm.cu
         #Thot/cuda/cuh/layernorm/layernorm.cuh
         Thot/headers/optimizations/lr_schedulers.hpp
+        Thot/headers/layernorm/details/dyt.hpp
+        Thot/headers/layernorm/details/rms.hpp
 )
 
 add_library(thot_kernels STATIC ${KERNEL_SOURCES})

@@ -58,7 +58,6 @@ namespace Thot {
         }
 
         static std::shared_ptr<Optimizer> create(float learning_rate = 0.01f, float momentum = 0.9f,
-                                                 LearningRate lr_type = LearningRate::Constant,
                                                  LrFn lr_fn = nullptr) {
             return std::make_shared<SGDM>(learning_rate, momentum, lr_fn);
         }
