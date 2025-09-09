@@ -1,7 +1,5 @@
 #pragma once
 
-
-#include "../layers.hpp"
 #include "../../tensor.hpp"
 #include "../../initializations/initializations.hpp"
 #include "../../../cuda/cuh/layers/conv2d.cuh"
@@ -15,8 +13,8 @@
 
 namespace Thot {
 
+    class Layer;
     class Network;
-
 
     class Conv2DLayer : public Layer {
     private:
@@ -32,8 +30,6 @@ namespace Thot {
         int out_width_;
         Activation activation_type_;
         Initialization initialization_type_;
-        /*ConvAlgo conv_algo_;*/
-        int cuda_conv_algo_;
 
         Utils::Tensor weights_;
         Utils::Tensor bias_;
@@ -50,7 +46,6 @@ namespace Thot {
             int out_channels, int kernel_size, int stride = 1, int padding = 0,
             Activation activation_type = Activation::ReLU,
             Initialization weight_init = Initialization::Xavier,
-            /*ConvAlgo conv_algo = ConvAlgo::Auto,*/
             const std::string& name = "Conv2D")
             : Layer(name),
             in_channels_(in_channels),
@@ -61,19 +56,9 @@ namespace Thot {
             stride_(stride),
             padding_(padding),
             activation_type_(activation_type),
-            initialization_type_(weight_init)/*,
-            conv_algo_(conv_algo)*/ {
+            initialization_type_(weight_init) {
 
             auto t1 = std::chrono::high_resolution_clock::now();
-            /*
-            if (conv_algo_ == ConvAlgo::Auto) { //-1
-                if (kernel_size_ <=5 && stride_ <=1) { // 1
-                    conv_algo_ = ConvAlgo::Winograd;
-                } else { // 2
-                    conv_algo_ = ConvAlgo::FFT;
-                }
-            } cuda_conv_algo_ = static_cast<int>(conv_algo_);
-            */
             out_height_ = (in_height_ + 2 * padding_ - kernel_size_) / stride_ + 1;
             out_width_ = (in_width_ + 2 * padding_ - kernel_size_) / stride_ + 1;
 
@@ -143,10 +128,8 @@ namespace Thot {
                 input_ptr, weights_ptr, bias_ptr, pre_act_ptr,
                 batch_size, in_channels_, in_height_, in_width_,
                 out_channels_, kernel_size_, stride_, padding_,
-                out_height_, out_width_/*, cuda_conv_algo_*/
+                out_height_, out_width_
             );
-
-
 
             pre_act_output_ = std::move(pre_activation);
 
@@ -212,7 +195,7 @@ namespace Thot {
                 grad_pre_activation_ptr, weights_ptr, grad_input_ptr,
                 batch_size, in_channels_, in_height_, in_width_,
                 out_channels_, kernel_size_, stride_, padding_,
-                out_height_, out_width_ /*, cuda_conv_algo_*/
+                out_height_, out_width_
             );
 
             // Compute gradients for weights
@@ -220,7 +203,7 @@ namespace Thot {
                 input_ptr, grad_pre_activation_ptr, grad_weights_ptr,
                 batch_size, in_channels_, in_height_, in_width_,
                 out_channels_, kernel_size_, stride_, padding_,
-                out_height_, out_width_ /*,cuda_conv_algo_*/
+                out_height_, out_width_
             );
 
             // Compute gradients for bias

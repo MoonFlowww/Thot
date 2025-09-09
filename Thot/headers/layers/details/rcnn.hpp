@@ -24,7 +24,6 @@ namespace Thot {
         int num_rois_per_image_;
         Utils::Tensor rois_;
         Utils::Tensor conv_output_;
-        /*ConvAlgo conv_algo_;*/
 
     public:
         RCNNLayer(int in_channels, int in_height, int in_width,
@@ -32,12 +31,11 @@ namespace Thot {
             int pooled_h, int pooled_w,
             Activation activation_type = Activation::ReLU,
             Initialization weight_init = Initialization::Xavier,
-            /*ConvAlgo conv_algo = ConvAlgo::Auto,*/
             const std::string& name = "RCNN")
             : Layer(name),
             conv_(in_channels, in_height, in_width, out_channels, kernel_size, stride, padding,
-            activation_type, weight_init, /*conv_algo,*/ name + "_conv"),
-            pooled_h_(pooled_h), pooled_w_(pooled_w), num_rois_per_image_(4)/*, conv_algo_(conv_algo)*/ {}
+                activation_type, weight_init, name + "_conv"),
+            pooled_h_(pooled_h), pooled_w_(pooled_w), num_rois_per_image_(4) {}
 
         size_t get_flops(int batch_size = 1) const override {
             int rois = num_rois_per_image_ * batch_size;

@@ -23,6 +23,10 @@ endif()
 option(THOT_USE_CUDNN "Enable cuDNN acceleration" ON)
 
 if(THOT_USE_CUDNN)
+    # Allow users to point at a non-default install with CUDNN_ROOT
+    # Typical layouts:
+    #   $CUDNN_ROOT/include/cudnn.h
+    #   $CUDNN_ROOT/lib64/libcudnn.so
     find_path(CUDNN_INCLUDE_DIR
             NAMES cudnn.h
             HINTS ENV CUDNN_ROOT ${CUDAToolkit_INCLUDE_DIRS}
@@ -50,9 +54,8 @@ if(THOT_USE_CUDNN)
 endif()
 # -----------------------
 
-if(NOT CMAKE_CUDA_ARCHITECTURES)
-    set(CMAKE_CUDA_ARCHITECTURES 61;75;86;89)
-endif()
+# Ada (RTX 4070 Ti)
+set(CMAKE_CUDA_ARCHITECTURES 89)
 
 enable_testing()
 
@@ -138,8 +141,7 @@ set(HEADERS
 )
 
 add_library(thot_kernels STATIC ${KERNEL_SOURCES})
-target_link_libraries(thot_kernels PUBLIC CUDA::cublas CUDA::curand CUDA::cufft)
-
+target_link_libraries(thot_kernels PUBLIC CUDA::cublas CUDA::curand)
 
 set_target_properties(thot_kernels PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON

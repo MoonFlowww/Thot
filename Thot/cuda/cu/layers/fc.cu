@@ -134,4 +134,3 @@ namespace cuda::layers {
     }
 
 } // namespace cuda::layers
-
