@@ -11,7 +11,9 @@
 
 #ifndef CUDA_CHECK
 #define CUDA_CHECK(x) do { cudaError_t _e = (x); if (_e != cudaSuccess) { \
-    printf("CUDA error %s:%d: %s\n", __FILE__, __LINE__, cudaGetErrorString(_e)); } } while(0)
+    printf("CUDA error %s:%d: %s\n", __FILE__, __LINE__, cudaGetErrorString(_e)); \
+    return; \
+    } } while(0)
 #endif
 
 #ifndef CUFFT_CHECK
@@ -522,20 +524,42 @@ namespace cuda {
             int out_channels, int kernel_size, int stride, int padding, int out_height, int out_width, int ConvAlgo,
             cudaStream_t stream)
         {
+            const int64_t N = (int64_t)batch_size * out_channels * out_height * out_width;
+            const int blockSize = 256;
+            const int gridSize  = (int)std::min<int64_t>((N + blockSize - 1) / blockSize, 65535);
             if (ConvAlgo == 1) { // Winograde
                 conv2d_forward_winograd_gpu(input, weights, bias, output,
                     batch_size, in_channels, in_height, in_width,
                     out_channels, kernel_size, padding, out_height, out_width, stream);
+                cudaError_t err = cudaGetLastError();
+                if (err != cudaSuccess) {
+                    // Fallback to direct convolution on failure
+                    conv2d_forward<<<gridSize, blockSize, 0, stream>>>(
+                        input, weights, bias, output,
+                        batch_size, in_channels, in_height, in_width,
+                        out_channels, kernel_size, stride, padding,
+                        out_height, out_width);
+                    CUDA_CHECK(cudaGetLastError());
+                }
                 return;
             } else if (ConvAlgo == 2) { // FFT
                 conv2d_forward_fft_gpu(input, weights, bias, output,
                     batch_size, in_channels, in_height, in_width,
                     out_channels, kernel_size, padding, out_height, out_width, stream);
+                cudaError_t err = cudaGetLastError();
+                if (err != cudaSuccess) {
+                    // Fallback to direct convolution on failure
+                    conv2d_forward<<<gridSize, blockSize, 0, stream>>>(
+                        input, weights, bias, output,
+                        batch_size, in_channels, in_height, in_width,
+                        out_channels, kernel_size, stride, padding,
+                        out_height, out_width);
+                    CUDA_CHECK(cudaGetLastError());
+                }
+
                 return;
             }
-            const int64_t N = (int64_t)batch_size * out_channels * out_height * out_width;
-            const int blockSize = 256;
-            const int gridSize  = (int)std::min<int64_t>((N + blockSize - 1) / blockSize, 65535);
+
             conv2d_forward<<<gridSize, blockSize, 0, stream>>>(
                 input, weights, bias, output,
                 batch_size, in_channels, in_height, in_width,
