@@ -30,7 +30,7 @@ int main() {
         model.add(Thot::Layer::FC(126, 10, Thot::Activation::Softmax, Thot::Initialization::Xavier));
 
         model.set_loss(Thot::Loss::CategoricalCrossEntropy);
-        model.set_optimizer(Thot::Optimizer::AdaMuon(1e-3f));
+        model.set_optimizer(Thot::Optimizer::AdaMuon(1e-5f));
 
 
 
@@ -48,7 +48,7 @@ int main() {
 
 
     if (!IsLoading) {
-        auto [x, y] = Thot::Data::Load_CIFAR10_Train(cifar, 0.5f);
+        auto [x, y] = Thot::Data::Load_CIFAR10_Train(cifar, 0.02f);
         model.train(x, y, Thot::Batch::Classic(512, 10), Thot::KFold::Classic(10), 5, true);
     }
 
