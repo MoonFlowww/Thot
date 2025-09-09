@@ -11,16 +11,16 @@ int main() {
     if (IsLoading)model.load("/home/moonfloww/Projects/NNs/Thot");
 
     else {
-
-        model.add(Thot::Layer::Conv2D(3, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, Thot::ConvAlgo::Winograd));
-        model.add(Thot::Layer::Conv2D(32, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, Thot::ConvAlgo::Winograd));
+        Thot::ConvAlgo ConvAlgo = Thot::ConvAlgo::Direct; // Optim Method for Convulational Layers
+        model.add(Thot::Layer::Conv2D(3, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, ConvAlgo));
+        model.add(Thot::Layer::Conv2D(32, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, ConvAlgo));
         model.add(Thot::Layer::MaxPool2D(32, 32, 32, 2, 2));
 
-        model.add(Thot::Layer::Conv2D(32, 16, 16, 64, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, Thot::ConvAlgo::Winograd));
-        model.add(Thot::Layer::Conv2D(64, 16, 16, 64, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, Thot::ConvAlgo::Winograd));
+        model.add(Thot::Layer::Conv2D(32, 16, 16, 64, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, ConvAlgo));
+        model.add(Thot::Layer::Conv2D(64, 16, 16, 64, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, ConvAlgo));
         model.add(Thot::Layer::MaxPool2D(64, 16, 16, 2, 2));
 
-        model.add(Thot::Layer::Conv2D(64, 8, 8, 128, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, Thot::ConvAlgo::Winograd));
+        model.add(Thot::Layer::Conv2D(64, 8, 8, 128, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, ConvAlgo));
         model.add(Thot::Layer::MaxPool2D(128, 8, 8, 2, 2));
 
         model.add(Thot::Layer::Flatten(128, 4, 4));
@@ -30,7 +30,7 @@ int main() {
         model.add(Thot::Layer::FC(126, 10, Thot::Activation::Softmax, Thot::Initialization::Xavier));
 
         model.set_loss(Thot::Loss::CategoricalCrossEntropy);
-        model.set_optimizer(Thot::Optimizer::AdaMuon(1e-5f));
+        model.set_optimizer(Thot::Optimizer::AdaMuon(1e-3f));
 
 
 

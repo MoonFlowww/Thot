@@ -985,7 +985,8 @@ public:
 
         float samples_per_second = (inputs.size() * batch_method.get_epochs() * folds) / total_time;
 
-        std::cout << std::fixed << std::setprecision(2);
+        //std::cout << std::fixed << std::setprecision(2);
+        std::cout.unsetf(std::ios_base::floatfield);
 
         std::cout << "\nTraining Summary:\n";
         std::cout << "----------------\n";
@@ -1017,7 +1018,6 @@ public:
         std::cout << "Max Epoch Time: " << format_time(max_epoch_time) << "\n";
         std::cout << "Throughput: " << format_samples_per_second(samples_per_second) << "\n";
 
-        std::cout.unsetf(std::ios_base::floatfield);
     }
 };
 } // namespace Thot

@@ -559,7 +559,6 @@ namespace cuda {
 
                 return;
             }
-
             conv2d_forward<<<gridSize, blockSize, 0, stream>>>(
                 input, weights, bias, output,
                 batch_size, in_channels, in_height, in_width,

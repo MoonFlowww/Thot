@@ -82,6 +82,7 @@ Training
 	- dropout
 	- L2
 	- Informed Mechanism
+	- Polyak Averaging W
 
 	Data
 	- Lorenz 74
