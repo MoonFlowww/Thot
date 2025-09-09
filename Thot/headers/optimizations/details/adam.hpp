@@ -31,8 +31,7 @@ namespace Thot {
 
     public:
         Adam(float learning_rate = 0.001f, float beta1 = 0.9f, float beta2 = 0.999f, float epsilon = 1e-8f,
-             LearningRate lr_type = LearningRate::Constant, LrFn lr_fn = nullptr)
-            : Optimizer(learning_rate, lr_type, lr_fn), beta1_(beta1), beta2_(beta2), epsilon_(epsilon), t_(0) {}
+        LrFn lr_fn = nullptr) : Optimizer(learning_rate, lr_fn), beta1_(beta1), beta2_(beta2), epsilon_(epsilon), t_(0) {}
 
         inline void update(Utils::Tensor& weights, const Utils::Tensor& gradients) override {
             if (weights.size() != gradients.size()) {
@@ -91,8 +90,8 @@ namespace Thot {
         }
 
         static std::shared_ptr<Optimizer> create(float learning_rate = 0.001f, float beta1 = 0.9f,
-            float beta2 = 0.999f, float epsilon = 1e-8f, LearningRate lr_type = LearningRate::Constant, LrFn lr_fn = nullptr) {
-            return std::make_shared<Adam>(learning_rate, beta1, beta2, epsilon, lr_type, lr_fn);
+        float beta2 = 0.999f, float epsilon = 1e-8f, LrFn lr_fn = nullptr) {
+            return std::make_shared<Adam>(learning_rate, beta1, beta2, epsilon, lr_fn);
         }
     };
 } // namespace Thot

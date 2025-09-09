@@ -12,9 +12,7 @@ namespace Thot {
         float beta2_;
         float weight_decay_;
     public:
-        AdaMuon(float learning_rate = 0.001f, float beta1 = 0.9f, float beta2 = 0.999f,
-                float weight_decay = 0.0f, LearningRate lr_type = LearningRate::Constant, LrFn lr_fn = nullptr)
-            : Optimizer(learning_rate, lr_type, lr_fn),
+        AdaMuon(float learning_rate = 0.001f, float beta1 = 0.9f, float beta2 = 0.999f, float weight_decay = 0.0f, LrFn lr_fn = nullptr) : Optimizer(learning_rate, lr_fn),
               beta1_(beta1), beta2_(beta2), weight_decay_(weight_decay) {}
 
         inline void update(Utils::Tensor& weights, const Utils::Tensor& gradients) override {

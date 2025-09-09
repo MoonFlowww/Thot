@@ -6,6 +6,8 @@
 #include "headers/layers/layers.hpp"
 #include "headers/optimizations/optimizations.hpp"
 #include "headers/optimizations/learning_rate.hpp"
+#include "headers/optimizations/lr_schedulers.hpp"
+
 #include "headers/initializations/initializations.hpp"
 #include "headers/layernorm/layernorm.hpp"
 

@@ -3,12 +3,6 @@
 
 namespace Thot {
 
-    enum class LearningRate {
-        Constant,
-        Schedule,
-        Function
-    };
-
     using LrFn = std::function<float(int epoch, int fold)>;
-
+    using LrSchedule = std::function<LrFn(float initial_lr)>;
 } // namespace Thot

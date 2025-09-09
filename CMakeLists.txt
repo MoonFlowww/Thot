@@ -135,9 +135,10 @@ set(HEADERS
         Thot/headers/layers/details/spike.hpp
         Thot/cuda/cuh/layers/sparse_contractive_ae.cuh
         Thot/headers/layers/details/sparse_contractive_ae.hpp
-        Thot/headers/layernorm/layernorm.hpp
-        Thot/cuda/cu/layernorm/layernorm.cu
-        Thot/cuda/cuh/layernorm/layernorm.cuh
+        #Thot/headers/layernorm/layernorm.hpp
+        #Thot/cuda/cu/layernorm/layernorm.cu
+        #Thot/cuda/cuh/layernorm/layernorm.cuh
+        Thot/headers/optimizations/lr_schedulers.hpp
 )
 
 add_library(thot_kernels STATIC ${KERNEL_SOURCES})

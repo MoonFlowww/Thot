@@ -13,7 +13,6 @@ int main() {
     else {
         Thot::ConvAlgo ConvAlgo = Thot::ConvAlgo::Direct; // Optim Method for Convulational Layers
 
-        model.add(Thot::LayerNorm::DyTLayerNorm((32*32*3), (32*32*3), 512, 1));
         model.add(Thot::Layer::Conv2D(3, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, ConvAlgo));
         model.add(Thot::Layer::Conv2D(32, 32, 32, 32, 3, 1, 1, Thot::Activation::ReLU, Thot::Initialization::He, ConvAlgo));
         model.add(Thot::Layer::MaxPool2D(32, 32, 32, 2, 2));
@@ -32,7 +31,7 @@ int main() {
         model.add(Thot::Layer::FC(126, 10, Thot::Activation::Softmax, Thot::Initialization::Xavier));
 
         model.set_loss(Thot::Loss::CategoricalCrossEntropy);
-        model.set_optimizer(Thot::Optimizer::AdaMuon(1e-3f));
+        model.set_optimizer(Thot::Optimizer::AdaMuon(1e-3f, Thot::LrScheduler::ExponentialDecay(0.95f)));
 
     }
 

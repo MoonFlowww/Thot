@@ -24,9 +24,7 @@ namespace Thot {
         }
 
     public:
-        SGDM(float learning_rate = 0.01f, float momentum = 0.9f,
-             LearningRate lr_type = LearningRate::Constant, LrFn lr_fn = nullptr)
-            : Optimizer(learning_rate, lr_type, lr_fn), momentum_(momentum) {}
+        SGDM(float learning_rate = 0.01f, float momentum = 0.9f, LrFn lr_fn = nullptr) : Optimizer(learning_rate, lr_fn), momentum_(momentum) {}
 
         inline void update(Utils::Tensor& weights, const Utils::Tensor& gradients) override {
             if (weights.size() != gradients.size())
@@ -62,7 +60,7 @@ namespace Thot {
         static std::shared_ptr<Optimizer> create(float learning_rate = 0.01f, float momentum = 0.9f,
                                                  LearningRate lr_type = LearningRate::Constant,
                                                  LrFn lr_fn = nullptr) {
-            return std::make_shared<SGDM>(learning_rate, momentum, lr_type, lr_fn);
+            return std::make_shared<SGDM>(learning_rate, momentum, lr_fn);
         }
     };
 } // namespace Thot

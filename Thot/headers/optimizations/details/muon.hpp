@@ -11,9 +11,7 @@ namespace Thot {
         float beta_;
         float weight_decay_;
     public:
-        Muon(float learning_rate = 0.01f, float beta = 0.9f, float weight_decay = 0.0f,
-             LearningRate lr_type = LearningRate::Constant, LrFn lr_fn = nullptr)
-            : Optimizer(learning_rate, lr_type, lr_fn), beta_(beta), weight_decay_(weight_decay) {}
+        Muon(float learning_rate = 0.01f, float beta = 0.9f, float weight_decay = 0.0f, LrFn lr_fn = nullptr) : Optimizer(learning_rate, lr_fn), beta_(beta), weight_decay_(weight_decay) {}
 
         inline void update(Utils::Tensor& weights, const Utils::Tensor& gradients) override {
             if (weights.size() != gradients.size()) {
