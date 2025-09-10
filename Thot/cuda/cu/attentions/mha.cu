@@ -2,6 +2,7 @@
 #include <cmath>
 #include <vector>
 #include <algorithm>
+#include <cublas_v2.h>
 
 #include "../../cuh/attentions/mha.cuh"
 

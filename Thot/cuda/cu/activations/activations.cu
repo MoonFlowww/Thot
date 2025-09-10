@@ -5,6 +5,12 @@
 #include <stdio.h>
 
 #include "../../cuh/activations/activations.cuh"
+#ifdef THOT_CUDA_DEBUG_SYNC
+#define CUDA_DEBUG_SYNC() cudaDeviceSynchronize()
+#else
+#define CUDA_DEBUG_SYNC() ((void)0)
+#endif
+
 
 namespace cuda {
     const int BLOCK_SIZE = 256;
@@ -123,50 +129,125 @@ namespace cuda {
         }
 
         // Softmax Activation
-        __global__ void softmax_forward(const float* input, float* output, int batch_size, int feature_dim) {
-            int idx = blockIdx.x * blockDim.x + threadIdx.x;
-            if (idx < batch_size) {
-                // Find max value for numerical stability
-                float max_val = -CUDART_INF_F;
-                for (int i = 0; i < feature_dim; ++i) {
-                    int input_idx = idx * feature_dim + i;
-                    max_val = fmaxf(max_val, input[input_idx]);
-                }
+         __global__ void softmax_forward(const float* input, float* output,
+                                        int batch_size, int feature_dim) {
+            extern __shared__ float shared[];
+            float* smax = shared;
+            float* ssum = shared + blockDim.x;
 
-                // Compute sum of exp(input - max_val)
-                float sum_exp = 0.0f;
-                for (int i = 0; i < feature_dim; ++i) {
-                    int input_idx = idx * feature_dim + i;
-                    sum_exp += expf(input[input_idx] - max_val);
-                }
+            int row = blockIdx.x;
+            int tid = threadIdx.x;
+            if (row >= batch_size) return;
 
-                // Compute softmax: exp(input - max_val) / sum_exp
-                for (int i = 0; i < feature_dim; ++i) {
-                    int input_idx = idx * feature_dim + i;
-                    output[input_idx] = expf(input[input_idx] - max_val) / sum_exp;
-                }
+            const float* in_row = input + row * feature_dim;
+            float* out_row = output + row * feature_dim;
+
+            // ---- compute maximum ----
+            float local_max = -CUDART_INF_F;
+            int vec_stride = blockDim.x * 4;
+            int limit = feature_dim & ~3;
+
+            for (int i = tid * 4; i < limit; i += vec_stride) {
+                float4 v = reinterpret_cast<const float4*>(in_row)[i / 4];
+                local_max = fmaxf(local_max, fmaxf(fmaxf(v.x, v.y), fmaxf(v.z, v.w)));
+            }
+            for (int i = limit + tid; i < feature_dim; i += blockDim.x)
+                local_max = fmaxf(local_max, in_row[i]);
+
+            smax[tid] = local_max;
+            __syncthreads();
+            for (int offset = blockDim.x / 2; offset > 0; offset >>= 1) {
+                if (tid < offset)
+                    smax[tid] = fmaxf(smax[tid], smax[tid + offset]);
+                __syncthreads();
+            }
+            float max_val = smax[0];
+
+            // ---- compute sum of exp(x - max) ----
+            float local_sum = 0.0f;
+            for (int i = tid * 4; i < limit; i += vec_stride) {
+                float4 v = reinterpret_cast<const float4*>(in_row)[i / 4];
+                local_sum += expf(v.x - max_val) + expf(v.y - max_val) +
+                             expf(v.z - max_val) + expf(v.w - max_val);
+            }
+            for (int i = limit + tid; i < feature_dim; i += blockDim.x)
+                local_sum += expf(in_row[i] - max_val);
+
+            ssum[tid] = local_sum;
+            __syncthreads();
+            for (int offset = blockDim.x / 2; offset > 0; offset >>= 1) {
+                if (tid < offset)
+                    ssum[tid] += ssum[tid + offset];
+                __syncthreads();
+            }
+            float sum_val = ssum[0];
+
+            // ---- write outputs ----
+            for (int i = tid * 4; i < limit; i += vec_stride) {
+                float4 v = reinterpret_cast<const float4*>(in_row)[i / 4];
+                float4 outv;
+                outv.x = expf(v.x - max_val) / sum_val;
+                outv.y = expf(v.y - max_val) / sum_val;
+                outv.z = expf(v.z - max_val) / sum_val;
+                outv.w = expf(v.w - max_val) / sum_val;
+                reinterpret_cast<float4*>(out_row)[i / 4] = outv;
+            }
+            for (int i = limit + tid; i < feature_dim; i += blockDim.x)
+                out_row[i] = expf(in_row[i] - max_val) / sum_val;
+        }
+
+        __global__ void softmax_backward(const float* grad_output, const float* output,
+                                         float* grad_input, int batch_size,
+                                         int feature_dim) {
+            extern __shared__ float sdata[];
+
+            int row = blockIdx.x;
+            int tid = threadIdx.x;
+            if (row >= batch_size) return;
+
+            const float* g_row = grad_output + row * feature_dim;
+            const float* o_row = output + row * feature_dim;
+            float* gi_row = grad_input + row * feature_dim;
+
+            // Compute dot = sum_j g_j * o_j
+            float local_dot = 0.0f;
+            int vec_stride = blockDim.x * 4;
+            int limit = feature_dim & ~3;
+            for (int i = tid * 4; i < limit; i += vec_stride) {
+                float4 g = reinterpret_cast<const float4*>(g_row)[i / 4];
+                float4 o = reinterpret_cast<const float4*>(o_row)[i / 4];
+                local_dot += g.x * o.x + g.y * o.y + g.z * o.z + g.w * o.w;
+            }
+            for (int i = limit + tid; i < feature_dim; i += blockDim.x)
+                local_dot += g_row[i] * o_row[i];
+
+            sdata[tid] = local_dot;
+            __syncthreads();
+            for (int offset = blockDim.x / 2; offset > 0; offset >>= 1) {
+                if (tid < offset)
+                    sdata[tid] += sdata[tid + offset];
+                __syncthreads();
+            }
+            float dot = sdata[0];
+
+            // Compute gradient
+            for (int i = tid * 4; i < limit; i += vec_stride) {
+                float4 g = reinterpret_cast<const float4*>(g_row)[i / 4];
+                float4 o = reinterpret_cast<const float4*>(o_row)[i / 4];
+                float4 gi;
+                gi.x = o.x * (g.x - dot);
+                gi.y = o.y * (g.y - dot);
+                gi.z = o.z * (g.z - dot);
+                gi.w = o.w * (g.w - dot);
+                reinterpret_cast<float4*>(gi_row)[i / 4] = gi;
+            }
+            for (int i = limit + tid; i < feature_dim; i += blockDim.x) {
+                float g = g_row[i];
+                float o = o_row[i];
+                gi_row[i] = o * (g - dot);
             }
         }
 
-        __global__ void softmax_backward(const float* grad_output, const float* output, float* grad_input, int batch_size, int feature_dim) {
-            int idx = blockIdx.x * blockDim.x + threadIdx.x;
-            if (idx < batch_size) {
-                for (int i = 0; i < feature_dim; ++i) {
-                    int current_idx = idx * feature_dim + i;
-                    float grad_sum = 0.0f;
-
-                    // Compute gradient for each element in the softmax
-                    for (int j = 0; j < feature_dim; ++j) {
-                        int j_idx = idx * feature_dim + j;
-                        float kronecker_delta = (i == j) ? 1.0f : 0.0f;
-                        float softmax_grad = output[current_idx] * (kronecker_delta - output[j_idx]);
-                        grad_sum += grad_output[j_idx] * softmax_grad;
-                    }
-
-                    grad_input[current_idx] = grad_sum;
-                }
-            }
-        }
 
         // Wrapper functions for launching kernels
         void launchReluForward(const float* input, float* output, int size, cudaStream_t stream) {
@@ -176,7 +257,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchReluForward: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchReluBackward(const float* grad_output, const float* input, float* grad_input, int size, cudaStream_t stream) {
@@ -186,7 +267,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchReluBackward: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchSigmoidForward(const float* input, float* output, int size, cudaStream_t stream) {
@@ -196,7 +277,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchSigmoidForward: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchSigmoidBackward(const float* grad_output, const float* output, float* grad_input, int size, cudaStream_t stream) {
@@ -206,7 +287,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchSigmoidBackward: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchTanhForward(const float* input, float* output, int size, cudaStream_t stream) {
@@ -216,7 +297,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchTanhForward: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchTanhBackward(const float* grad_output, const float* output, float* grad_input, int size, cudaStream_t stream) {
@@ -226,7 +307,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchTanhBackward: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchLeakyReluForward(const float* input, float* output, float negative_slope, int size, cudaStream_t stream) {
@@ -236,7 +317,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchLeakyReluForward: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchLeakyReluBackward(const float* grad_output, const float* input, float* grad_input, float negative_slope, int size, cudaStream_t stream) {
@@ -246,7 +327,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchLeakyReluBackward: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchEluForward(const float* input, float* output, float alpha, int size, cudaStream_t stream) {
@@ -256,7 +337,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchEluForward: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchEluBackward(const float* grad_output, const float* output, const float* input, float* grad_input, float alpha, int size, cudaStream_t stream) {
@@ -266,7 +347,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchEluBackward: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchGeluForward(const float* input, float* output, int size, cudaStream_t stream) {
@@ -276,7 +357,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchGeluForward: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchGeluBackward(const float* grad_output, const float* input, float* grad_input, int size, cudaStream_t stream) {
@@ -286,25 +367,31 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchGeluBackward: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchSoftmaxForward(const float* input, float* output, int batch_size, int feature_dim, cudaStream_t stream) {
-            softmax_forward << <batch_size, 1, 0, stream >> > (input, output, batch_size, feature_dim);
+            int blockSize = 256;
+            size_t shared = 2 * blockSize * sizeof(float);
+            softmax_forward<<<batch_size, blockSize, shared, stream>>>(
+                input, output, batch_size, feature_dim);
             cudaError_t err = cudaGetLastError();
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchSoftmaxForward: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchSoftmaxBackward(const float* grad_output, const float* output, float* grad_input, int batch_size, int feature_dim, cudaStream_t stream) {
-            softmax_backward << <batch_size, 1, 0, stream >> > (grad_output, output, grad_input, batch_size, feature_dim);
+            int blockSize = 256;
+            size_t shared = blockSize * sizeof(float);
+            softmax_backward<<<batch_size, blockSize, shared, stream>>>(
+                grad_output, output, grad_input, batch_size, feature_dim);
             cudaError_t err = cudaGetLastError();
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchSoftmaxBackward: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
     }  // namespace activations

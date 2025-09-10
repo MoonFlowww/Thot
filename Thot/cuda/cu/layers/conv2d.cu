@@ -8,6 +8,9 @@
 #include <complex>
 #include <cufft.h>
 #include "../../cuh/layers/conv2d.cuh"
+#ifdef THOT_WITH_CUDNN
+#include <cudnn.h>
+#endif
 
 #ifndef CUDA_CHECK
 #define CUDA_CHECK(x) do { cudaError_t _e = (x); if (_e != cudaSuccess) { \
@@ -20,6 +23,8 @@
 #define CUFFT_CHECK(x) do { cufftResult _e = (x); if (_e != CUFFT_SUCCESS) { \
 printf("cuFFT error %s:%d: %d\n", __FILE__, __LINE__, (int)_e); return; } } while(0)
 #endif
+
+
 
 
 namespace cuda {
@@ -326,6 +331,65 @@ namespace cuda {
             CUFFT_CHECK(cufftDestroy(plan_inv));
         }
 
+        #ifdef THOT_WITH_CUDNN
+        static void conv2d_forward_cudnn(
+            const float* input, const float* weights, const float* bias, float* output,
+            int batch_size, int in_channels, int in_height, int in_width,
+            int out_channels, int kernel_size, int stride, int padding,
+            int out_height, int out_width, cudaStream_t stream)
+        {
+            cudnnHandle_t handle;
+            cudnnCreate(&handle);
+            cudnnSetStream(handle, stream);
+
+            cudnnTensorDescriptor_t in_desc, out_desc, bias_desc;
+            cudnnFilterDescriptor_t w_desc;
+            cudnnConvolutionDescriptor_t conv_desc;
+            cudnnCreateTensorDescriptor(&in_desc);
+            cudnnCreateTensorDescriptor(&out_desc);
+            cudnnCreateTensorDescriptor(&bias_desc);
+            cudnnCreateFilterDescriptor(&w_desc);
+            cudnnCreateConvolutionDescriptor(&conv_desc);
+
+            cudnnSetTensor4dDescriptor(in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+                                       batch_size, in_channels, in_height, in_width);
+            cudnnSetTensor4dDescriptor(out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+                                       batch_size, out_channels, out_height, out_width);
+            cudnnSetFilter4dDescriptor(w_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+                                       out_channels, in_channels, kernel_size, kernel_size);
+            cudnnSetConvolution2dDescriptor(conv_desc,
+                padding, padding, stride, stride, 1, 1,
+                CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT);
+
+            cudnnConvolutionFwdAlgo_t algo;
+            cudnnGetConvolutionForwardAlgorithm(handle, in_desc, w_desc, conv_desc, out_desc,
+                CUDNN_CONVOLUTION_FWD_PREFER_FASTEST, 0, &algo);
+            size_t ws_bytes = 0;
+            cudnnGetConvolutionForwardWorkspaceSize(handle, in_desc, w_desc, conv_desc, out_desc,
+                algo, &ws_bytes);
+            void* workspace = nullptr;
+            if (ws_bytes > 0) cudaMalloc(&workspace, ws_bytes);
+
+            const float alpha = 1.f, beta = 0.f;
+            cudnnConvolutionForward(handle, &alpha, in_desc, input, w_desc, weights,
+                                    conv_desc, algo, workspace, ws_bytes,
+                                    &beta, out_desc, output);
+
+            if (bias) {
+                cudnnSetTensor4dDescriptor(bias_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+                                           1, out_channels, 1, 1);
+                cudnnAddTensor(handle, &alpha, bias_desc, bias, &alpha, out_desc, output);
+            }
+
+            if (workspace) cudaFree(workspace);
+            cudnnDestroyConvolutionDescriptor(conv_desc);
+            cudnnDestroyFilterDescriptor(w_desc);
+            cudnnDestroyTensorDescriptor(in_desc);
+            cudnnDestroyTensorDescriptor(out_desc);
+            cudnnDestroyTensorDescriptor(bias_desc);
+            cudnnDestroy(handle);
+        }
+#endif // THOT_WITH_CUDNN
         __global__ void conv2d_forward(
             const float* __restrict__ input,
             const float* __restrict__ weights,
@@ -384,6 +448,19 @@ namespace cuda {
                 if (bias) sum += ro(bias + oc);
                 output[idx] = sum;
             }
+        }
+
+        __global__ void flip_weights_kernel( const float* __restrict__ src, float* __restrict__ dst, int out_channels, int in_channels, int k)
+        {
+            int idx = blockIdx.x * blockDim.x + threadIdx.x;
+            int total = out_channels * in_channels * k * k;
+            if (idx >= total) return;
+            int kw = idx % k;
+            int kh = (idx / k) % k;
+            int ic = (idx / (k * k)) % in_channels;
+            int oc = idx / (k * k * in_channels);
+            int src_idx = ((oc * in_channels + ic) * k + (k - 1 - kh)) * k + (k - 1 - kw);
+            dst[idx] = src[src_idx];
         }
 
         __global__ void conv2d_backward_input(
@@ -559,6 +636,25 @@ namespace cuda {
 
                 return;
             }
+#ifdef THOT_WITH_CUDNN
+            else if (ConvAlgo == 3) { // cuDNN
+                conv2d_forward_cudnn(input, weights, bias, output,
+                    batch_size, in_channels, in_height, in_width,
+                    out_channels, kernel_size, stride, padding,
+                    out_height, out_width, stream);
+                cudaError_t err = cudaGetLastError();
+                if (err != cudaSuccess) {
+                    // Fallback to direct convolution on failure
+                    conv2d_forward<<<gridSize, blockSize, 0, stream>>>(
+                        input, weights, bias, output,
+                        batch_size, in_channels, in_height, in_width,
+                        out_channels, kernel_size, stride, padding,
+                        out_height, out_width);
+                    CUDA_CHECK(cudaGetLastError());
+                }
+                return;
+            }
+#endif
             conv2d_forward<<<gridSize, blockSize, 0, stream>>>(
                 input, weights, bias, output,
                 batch_size, in_channels, in_height, in_width,
@@ -577,15 +673,13 @@ namespace cuda {
                 int pad = kernel_size - 1 - padding;
                 size_t wsize = (size_t)out_channels * in_channels * kernel_size * kernel_size;
                 std::vector<float> flipped(wsize);
-                for (int oc = 0; oc < out_channels; ++oc)
-                    for (int ic = 0; ic < in_channels; ++ic)
-                        for (int kh = 0; kh < kernel_size; ++kh)
-                            for (int kw = 0; kw < kernel_size; ++kw)
-                                flipped[((oc*in_channels + ic)*kernel_size + kh)*kernel_size + kw] =
-                                    weights[((oc*in_channels + ic)*kernel_size + (kernel_size-1-kh))*kernel_size + (kernel_size-1-kw)];
+
                 float* d_flipped;
                 CUDA_CHECK(cudaMalloc(&d_flipped, wsize * sizeof(float)));
-                CUDA_CHECK(cudaMemcpyAsync(d_flipped, flipped.data(), wsize*sizeof(float), cudaMemcpyHostToDevice, stream));
+                int block = 256;
+                int grid = (int)((wsize + block - 1) / block);
+                flip_weights_kernel<<<grid, block, 0, stream>>>(weights, d_flipped, out_channels, in_channels, kernel_size);
+                CUDA_CHECK(cudaGetLastError());
                 if (ConvAlgo == 1) // winograd
                     conv2d_forward_winograd_gpu(grad_output, d_flipped, nullptr, grad_input,
                         batch_size, out_channels, out_height, out_width,

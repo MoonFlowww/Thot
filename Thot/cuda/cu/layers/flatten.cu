@@ -3,6 +3,13 @@
 #include <stdio.h>
 #include <cmath>
 #include "../../cuh/layers/flatten.cuh"
+#ifdef THOT_CUDA_DEBUG_SYNC
+#define CUDA_DEBUG_SYNC() cudaDeviceSynchronize()
+#else
+#define CUDA_DEBUG_SYNC() ((void)0)
+#endif
+
+
 
 namespace cuda {
     namespace layers {
@@ -30,7 +37,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchFlattenForward: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchFlattenBackward(const float* grad_output, float* grad_input, int batch_size, int feature_size, cudaStream_t stream) {
@@ -42,7 +49,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchFlattenBackward: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
     }

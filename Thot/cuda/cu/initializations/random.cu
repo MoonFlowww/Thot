@@ -7,6 +7,12 @@
 #include <cmath>
 
 #include "../../cuh/initializations/random.cuh"
+#ifdef THOT_CUDA_DEBUG_SYNC
+#define CUDA_DEBUG_SYNC() cudaDeviceSynchronize()
+#else
+#define CUDA_DEBUG_SYNC() ((void)0)
+#endif
+
 
 namespace cuda {
     const int BLOCK_SIZE = 256;
@@ -77,7 +83,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchRandomUniform: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchRandomNormal(float* data, int size, float mean, float stddev, cudaStream_t stream) {
@@ -88,7 +94,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchRandomNormal: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchRandomTruncatedNormal(float* data, int size, float mean, float stddev, cudaStream_t stream) {
@@ -99,7 +105,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchRandomTruncatedNormal: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchFill(float* data, int size, float value, cudaStream_t stream) {
@@ -109,7 +115,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchFill: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchDirac(float* data, int rows, int cols, cudaStream_t stream) {
@@ -120,7 +126,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchDirac: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchScale(float* data, int size, float scale, cudaStream_t stream) {
@@ -130,7 +136,7 @@ namespace cuda {
             if (err != cudaSuccess) {
                 printf("Kernel launch error in launchScale: %s\n", cudaGetErrorString(err));
             }
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
         void launchLyapunov(float* data, int rows, int cols, cudaStream_t stream) {
@@ -171,7 +177,7 @@ namespace cuda {
             cudaFree(v);
             cudaFree(v_new);
             cublasDestroy(handle);
-            cudaDeviceSynchronize();
+            CUDA_DEBUG_SYNC();
         }
 
     } // namespace initializations

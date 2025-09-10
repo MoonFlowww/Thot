@@ -2,8 +2,9 @@
 #define THOT_KFOLD_H
 
 
-#include <vector>
 #include "../optimizations/optimizations.hpp"
+#include <vector>
+
 namespace Thot {
 namespace KFold {
 
@@ -15,22 +16,18 @@ public:
 
     int get_folds() const { return folds_; }
 
-    template <typename Net>
-    void start_fold(Net& net, int fold) const {
+    template <typename Net> void start_fold(Net &net, int fold) const {
         if (auto opt = net.get_optimizer()) {
+            opt->reset_lr();
             opt->step_lr(0, fold);
         }
     }
 
 
-    void split(
-        const std::vector<std::vector<float>> &inputs,
-        const std::vector<std::vector<float>> &targets,
-        int fold,
-        std::vector<std::vector<float>> &train_inputs,
-        std::vector<std::vector<float>> &train_targets,
-        std::vector<std::vector<float>> &val_inputs,
-        std::vector<std::vector<float>> &val_targets) const {
+    void split(const std::vector<std::vector<float>> &inputs, const std::vector<std::vector<float>> &targets, int fold,
+             std::vector<std::vector<float>> &train_inputs, std::vector<std::vector<float>> &train_targets,
+             std::vector<std::vector<float>> &val_inputs, std::vector<std::vector<float>> &val_targets) const {
+
         if (folds_ <= 1) {
             train_inputs = inputs;
             train_targets = targets;
@@ -39,9 +36,11 @@ public:
             return;
         }
 
+
         size_t fold_size = inputs.size() / folds_;
         size_t start_idx = fold * fold_size;
-        size_t end_idx = (fold == folds_ - 1) ? inputs.size() : (fold + 1) * fold_size;
+        size_t end_idx =
+            (fold == folds_ - 1) ? inputs.size() : (fold + 1) * fold_size;
 
         train_inputs.clear();
         train_targets.clear();
@@ -70,24 +69,20 @@ public:
 
     int get_folds() const { return folds_; }
 
-    template <typename Net>
-    void start_fold(Net& net, int fold) const {
+    template <typename Net> void start_fold(Net &net, int fold) const {
         if (auto opt = net.get_optimizer()) {
+            opt->reset_lr();
             opt->step_lr(0, fold);
         }
     }
 
-    void split(
-    const std::vector<std::vector<float>> &inputs,
-    const std::vector<std::vector<float>> &targets,
-    int fold,
-    std::vector<std::vector<float>> &train_inputs,
-    std::vector<std::vector<float>> &train_targets,
-    std::vector<std::vector<float>> &val_inputs,
-    std::vector<std::vector<float>> &val_targets) const {
+    void split(const std::vector<std::vector<float>> &inputs, const std::vector<std::vector<float>> &targets, int fold,
+             std::vector<std::vector<float>> &train_inputs, std::vector<std::vector<float>> &train_targets,
+             std::vector<std::vector<float>> &val_inputs, std::vector<std::vector<float>> &val_targets) const {
         size_t fold_size = inputs.size() / folds_;
         size_t start_idx = fold * fold_size;
-        size_t end_idx = (fold == folds_ - 1) ? inputs.size() : (fold + 1) * fold_size;
+        size_t end_idx =
+            (fold == folds_ - 1) ? inputs.size() : (fold + 1) * fold_size;
 
         train_inputs.assign(inputs.begin(), inputs.begin() + start_idx);
         train_targets.assign(targets.begin(), targets.begin() + start_idx);

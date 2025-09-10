@@ -96,32 +96,81 @@ namespace cuda {
 
 
         // Categorical Cross-Entropy
-        __global__ void categoricalCrossEntropy(const float* predictions, const float* targets, float* loss, int batch_size, int num_classes, float epsilon) {
-            int idx = blockIdx.x * blockDim.x + threadIdx.x;
-            if (idx < batch_size) {
-                loss[idx] = 0.0f;
-                for (int c = 0; c < num_classes; ++c) {
-                    int i = idx * num_classes + c;
-                    float p = fmaxf(predictions[i], epsilon);
-                    float t = targets[i];
-                    loss[idx] -= t * logf(p);
-                }
-                if (verbose && loss[idx]!=0) printf("CCE loss[%d] = %f\n", idx, loss[idx]);
+        __global__ void categoricalCrossEntropy(const float* predictions,
+                                                const float* targets,
+                                                float* loss,
+                                                int num_classes,
+                                                float epsilon) {
+            extern __shared__ float sdata[];
+            int b = blockIdx.x;
+            int tid = threadIdx.x;
+            const float* p_row = predictions + b * num_classes;
+            const float* t_row = targets + b * num_classes;
+
+            float local = 0.0f;
+            int vec_stride = blockDim.x * 4;
+            int limit = num_classes & ~3;
+            for (int i = tid * 4; i < limit; i += vec_stride) {
+                float4 p = reinterpret_cast<const float4*>(p_row)[i / 4];
+                float4 t = reinterpret_cast<const float4*>(t_row)[i / 4];
+                local += -t.x * logf(fmaxf(p.x, epsilon))
+                       + -t.y * logf(fmaxf(p.y, epsilon))
+                       + -t.z * logf(fmaxf(p.z, epsilon))
+                       + -t.w * logf(fmaxf(p.w, epsilon));
+            }
+            for (int i = limit + tid; i < num_classes; i += blockDim.x) {
+                float p = fmaxf(p_row[i], epsilon);
+                float t = t_row[i];
+                local += -t * logf(p);
+            }
+
+            sdata[tid] = local;
+            __syncthreads();
+            for (int offset = blockDim.x / 2; offset > 0; offset >>= 1) {
+                if (tid < offset)
+                    sdata[tid] += sdata[tid + offset];
+                __syncthreads();
+            }
+            if (tid == 0) {
+                loss[b] = sdata[0];
+                if (verbose && loss[b] != 0) printf("CCE loss[%d] = %f\n", b, loss[b]);
             }
         }
 
-        __global__ void categoricalCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int batch_size, int num_classes, float epsilon) {
-            int idx = blockIdx.x * blockDim.x + threadIdx.x;
-            if (idx < batch_size * num_classes) {
-                int b = idx / num_classes;
-                int c = idx % num_classes;
-                int i = b * num_classes + c;
-                float p = fmaxf(predictions[i], epsilon);
-                float t = targets[i];
-                gradients[i] = -t / p;
-                if (verbose && gradients[idx]!=0)printf("CCE grad[%d] = %f\n", i, gradients[i]);
+        __global__ void categoricalCrossEntropyGradient(const float* predictions,
+                                                        const float* targets,
+                                                        float* gradients,
+                                                        int num_classes,
+                                                        float epsilon) {
+            int b = blockIdx.x;
+            int tid = threadIdx.x;
+            const float* p_row = predictions + b * num_classes;
+            const float* t_row = targets + b * num_classes;
+            float* g_row = gradients + b * num_classes;
+
+            int vec_stride = blockDim.x * 4;
+            int limit = num_classes & ~3;
+            for (int i = tid * 4; i < limit; i += vec_stride) {
+                float4 p = reinterpret_cast<const float4*>(p_row)[i / 4];
+                float4 t = reinterpret_cast<const float4*>(t_row)[i / 4];
+                float4 g;
+                g.x = -t.x / fmaxf(p.x, epsilon);
+                g.y = -t.y / fmaxf(p.y, epsilon);
+                g.z = -t.z / fmaxf(p.z, epsilon);
+                g.w = -t.w / fmaxf(p.w, epsilon);
+                reinterpret_cast<float4*>(g_row)[i / 4] = g;
             }
+            for (int i = limit + tid; i < num_classes; i += blockDim.x) {
+                float p = fmaxf(p_row[i], epsilon);
+                float t = t_row[i];
+                g_row[i] = -t / p;
+            }
+            if (verbose && tid == 0)
+                for (int i = 0; i < num_classes; ++i)
+                    if (g_row[i] != 0)
+                        printf("CCE grad[%d] = %f\n", b * num_classes + i, g_row[i]);
         }
+
 
         // Sparse Categorical Cross-Entropy
         __global__ void sparseCategoricalCrossEntropy(const float* predictions, const float* targets, float* loss, int batch_size, int num_classes, float epsilon) {
@@ -138,21 +187,25 @@ namespace cuda {
             }
         }
 
-        __global__ void sparseCategoricalCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int batch_size, int num_classes, float epsilon) {
-            int idx = blockIdx.x * blockDim.x + threadIdx.x;
-            if (idx < batch_size * num_classes) {
-                int b = idx / num_classes;
-                int c = idx % num_classes;
-                int target_class = targets[b];
-
-                if (c == target_class) {
-                    float p = fmaxf(predictions[idx], epsilon);
-                    gradients[idx] = -1.0f / p;
-                } else {
-                    gradients[idx] = 0.0f;
-                }
-                if (verbose && gradients[idx]!=0) printf("Sparse CCE grad[%d] = %f\n", idx, gradients[idx]);
+        __global__ void sparseCategoricalCrossEntropyGradient(const float* predictions,
+                                                              const float* targets,
+                                                              float* gradients,
+                                                              int num_classes,
+                                                              float epsilon) {
+            int b = blockIdx.x;
+            int target = static_cast<int>(targets[b]);
+            const float* p_row = predictions + b * num_classes;
+            float* g_row = gradients + b * num_classes;
+            int tid = threadIdx.x;
+            for (int i = tid; i < num_classes; i += blockDim.x) {
+                if (i == target)
+                    g_row[i] = -1.0f / fmaxf(p_row[i], epsilon);
+                else
+                    g_row[i] = 0.0f;
             }
+            if (verbose && tid == 0 && target >= 0 && target < num_classes)
+                printf("Sparse CCE grad[%d] = %f\n", b * num_classes + target,
+                       g_row[target]);
         }
 
         // Hinge
@@ -293,37 +346,39 @@ namespace cuda {
 
         void launchCategoricalCrossEntropy(const float* predictions, const float* targets, float* loss, int batch_size, int num_classes, float epsilon, cudaStream_t stream) {
             int blockSize = 256;
-            int numBlocks = (batch_size + blockSize - 1) / blockSize;
-            categoricalCrossEntropy << <numBlocks, blockSize, 0, stream >> > (predictions, targets, loss, batch_size, num_classes, epsilon);
+            size_t shared = blockSize * sizeof(float);
+            categoricalCrossEntropy<<<batch_size, blockSize, shared, stream>>>( predictions, targets, loss, num_classes, epsilon);
             cudaError_t err = cudaGetLastError();
-            if (err != cudaSuccess) printf("Kernel launch error in launchCategoricalCrossEntropy: %s\n", cudaGetErrorString(err));
+            if (err != cudaSuccess)
+                printf("Kernel launch error in launchCategoricalCrossEntropy: %s\n", cudaGetErrorString(err));
             cudaDeviceSynchronize();
         }
 
         void launchCategoricalCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int batch_size, int num_classes, float epsilon, cudaStream_t stream) {
             int blockSize = 256;
-            int numBlocks = (batch_size * num_classes + blockSize - 1) / blockSize;
-            categoricalCrossEntropyGradient << <numBlocks, blockSize, 0, stream >> > (predictions, targets, gradients, batch_size, num_classes, epsilon);
+            categoricalCrossEntropyGradient<<<batch_size, blockSize, 0, stream>>>(predictions, targets, gradients, num_classes, epsilon);
             cudaError_t err = cudaGetLastError();
-            if (err != cudaSuccess) printf("Kernel launch error in launchCategoricalCrossEntropyGradient: %s\n", cudaGetErrorString(err));
+            if (err != cudaSuccess)
+                printf("Kernel launch error in launchCategoricalCrossEntropyGradient: %s\n", cudaGetErrorString(err));
             cudaDeviceSynchronize();
         }
 
         void launchSparseCategoricalCrossEntropy(const float* predictions, const float* targets, float* loss, int batch_size, int num_classes, float epsilon, cudaStream_t stream) {
             int blockSize = 256;
             int numBlocks = (batch_size + blockSize - 1) / blockSize;
-            sparseCategoricalCrossEntropy << <numBlocks, blockSize, 0, stream >> > (predictions, targets, loss, batch_size, num_classes, epsilon);
+            sparseCategoricalCrossEntropy<<<numBlocks, blockSize, 0, stream>>>(predictions, targets, loss, batch_size, num_classes, epsilon);
             cudaError_t err = cudaGetLastError();
-            if (err != cudaSuccess) printf("Kernel launch error in launchSparseCategoricalCrossEntropy: %s\n", cudaGetErrorString(err));
+            if (err != cudaSuccess)
+                printf("Kernel launch error in launchSparseCategoricalCrossEntropy: %s\n", cudaGetErrorString(err));
             cudaDeviceSynchronize();
         }
 
         void launchSparseCategoricalCrossEntropyGradient(const float* predictions, const float* targets, float* gradients, int batch_size, int num_classes, float epsilon, cudaStream_t stream) {
             int blockSize = 256;
-            int numBlocks = (batch_size * num_classes + blockSize - 1) / blockSize;
-            sparseCategoricalCrossEntropyGradient << <numBlocks, blockSize, 0, stream >> > (predictions, targets, gradients, batch_size, num_classes, epsilon);
+            sparseCategoricalCrossEntropyGradient<<<batch_size, blockSize, 0, stream>>>(predictions, targets, gradients, num_classes, epsilon);
             cudaError_t err = cudaGetLastError();
-            if (err != cudaSuccess) printf("Kernel launch error in launchSparseCategoricalCrossEntropyGradient: %s\n", cudaGetErrorString(err));
+            if (err != cudaSuccess)
+                printf("Kernel launch error in launchSparseCategoricalCrossEntropyGradient: %s\n", cudaGetErrorString(err));
             cudaDeviceSynchronize();
         }
 

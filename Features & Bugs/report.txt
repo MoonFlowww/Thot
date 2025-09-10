@@ -4,171 +4,130 @@ Layers:
 +---------------+----------------------+----------------------+----------------------+---------------+---------------+
 | Layer         | Type                 | Activation           | Initialization       | Total FLOPs   | Parameters    |
 +---------------+----------------------+----------------------+----------------------+---------------+---------------+
-| 1             | Conv2D               | ReLU                 | He                   |          1.8M |           896 |
-| 2             | Conv2D               | ReLU                 | He                   |           19M |          9.2K |
-| 3             | MaxPool2D            | Linear               | None                 |           33K |             - |
-| 4             | Conv2D               | ReLU                 | He                   |          9.5M |           18K |
-| 5             | Conv2D               | ReLU                 | He                   |           19M |           37K |
-| 6             | MaxPool2D            | Linear               | None                 |           16K |             - |
-| 7             | Conv2D               | ReLU                 | He                   |          9.4M |           74K |
-| 8             | MaxPool2D            | Linear               | None                 |          8.2K |             - |
-| 9             | Flatten              | Linear               | None                 |             - |             - |
-| 10            | FeedForward          | ReLU                 | He                   |          2.1M |          1.1M |
-| 11            | FeedForward          | ReLU                 | He                   |          132K |           66K |
-| 12            | FeedForward          | Softmax              | Xavier               |          2.5K |          1.3K |
+| 1             | Conv2D               | ReLU                 | He                   |          477K |           320 |
+| 2             | Conv2D               | ReLU                 | He                   |           14M |          9.2K |
+| 3             | MaxPool2D            | Linear               | None                 |           25K |             - |
+| 4             | Conv2D               | ReLU                 | He                   |          7.2M |           18K |
+| 5             | Conv2D               | ReLU                 | He                   |           14M |           37K |
+| 6             | MaxPool2D            | Linear               | None                 |           13K |             - |
+| 7             | Flatten              | Linear               | None                 |             - |             - |
+| 8             | FeedForward          | ReLU                 | He                   |          803K |          402K |
+| 9             | FeedForward          | Softmax              | Xavier               |          2.6K |          1.3K |
 +---------------+----------------------+----------------------+----------------------+---------------+---------------+
-| Thot Model    |                                                                                61M |          1.3M |
+| Thot Model    |                                                                                37M |          468K |
 +---------------+------------------------------------------------------------------------------------+---------------+
 
 Training Configuration:
 +----------------------+----------------------+----------------------+
 | Optimizer            | Parameters           | Loss Function        |
 +----------------------+----------------------+----------------------+
-| AdaMuon              | lr=0.000010, beta... | CCE                  |
+| AdaMuon              | lr=0.000030, beta... | CCE                  |
 |                      |                      | Eps=1e-08            |
 +----------------------+----------------------+----------------------+
 
 
 ------------------------------------
 Latency from Initializaiton:
-[1]-> Conv2D: 157.12 ms
-[2]-> Conv2D: 326.37 us
+[1]-> Conv2D: 256.68 ms
+[2]-> Conv2D: 169.44 us
 [3]-> MaxPool2D: -
-[4]-> Conv2D: 260.56 us
-[5]-> Conv2D: 546.06 us
+[4]-> Conv2D: 243.44 us
+[5]-> Conv2D: 428.33 us
 [6]-> MaxPool2D: -
-[7]-> Conv2D: 997.32 us
-[8]-> MaxPool2D: -
-[9]-> Flatten: -
-[10]-> FeedForward: 11.79 ms
-[11]-> FeedForward: 849.23 us
-[12]-> FeedForward: 126.73 us
+[7]-> Flatten: -
+[8]-> FeedForward: 3.96 ms
+[9]-> FeedForward: 126.91 us
 ------------------------------------
-[MODEL]-> Thot_Network_CIFAR: 172.02 ms
+[MODEL]-> Thot_Network_CIFAR: 261.61 ms
 ------------------------------------
 
 
-Loading CIFAR-10 Training Set...
+Loading MNIST Training Set...
 
-CIFAR-10 Dataset Information:
+MNIST Dataset Information:
 -------------------------
-Total images available: 50000
-Loading ratio: 2.00%
-Images to load: 1000
-Image dimensions: 32x32x3 (3072 values)
+Total images available: 60000
+Loading ratio: 10.00%
+Images to load: 6000
+Image dimensions: 28x28 (784 pixels)
 Number of classes: 10
 Memory usage (approx):
-  - Images: 11.72 Mb
-  - Labels: 39.06 Kb
+  - Images: 17.94 MB
+  - Labels: 0.23 MB
 -------------------------
 
 Label Distribution:
 ------------------
-Class 0 [airplane]: airplane images (8.30%)
-Class 1 [automobile]: automobile images (11.40%)
-Class 2 [bird]: bird images (9.40%)
-Class 3 [cat]: cat images (9.90%)
-Class 4 [deer]: deer images (10.90%)
-Class 5 [dog]: dog images (9.80%)
-Class 6 [frog]: frog images (10.10%)
-Class 7 [horse]: horse images (10.40%)
-Class 8 [ship]: ship images (9.40%)
-Class 9 [truck]: truck images (10.40%)
+Class 0: 592 images (9.87%)
+Class 1: 671 images (11.18%)
+Class 2: 581 images (9.68%)
+Class 3: 608 images (10.13%)
+Class 4: 623 images (10.38%)
+Class 5: 514 images (8.57%)
+Class 6: 608 images (10.13%)
+Class 7: 651 images (10.85%)
+Class 8: 551 images (9.18%)
+Class 9: 601 images (10.02%)
 ------------------
 
 
-Training Fold 1/10
-Epoch 1 - Average Loss: 2.3 - Validation Loss: 2.3 *(1)*
-Epoch 6 - Average Loss: 2.3 - Validation Loss: 2.3 *(6)*
-Epoch 10 - Average Loss: 2.3 - Validation Loss: 2.2 *(10)*
+Training Fold 1/3
+Epoch 1 - Average Loss: 1.7 - Validation Loss: 0.86 *(1)*
+Epoch 6 - Average Loss: 0.28 - Validation Loss: 0.4 *(6)*
+Epoch 10 - Average Loss: 0.16 - Validation Loss: 0.34 *(10)*
 
-Training Fold 2/10
-Epoch 1 - Average Loss: 2.2 - Validation Loss: 2.2 *(1)*
-Epoch 6 - Average Loss: 2.2 - Validation Loss: 2.2 *(6)*
-Epoch 10 - Average Loss: 2.2 - Validation Loss: 2.2 *(10)*
+Training Fold 2/3
+Epoch 1 - Average Loss: 0.25 - Validation Loss: 0.15 *(1)*
+Epoch 6 - Average Loss: 0.23 - Validation Loss: 0.15 *(6)*
+Epoch 10 - Average Loss: 0.22 - Validation Loss: 0.15 *(10)*
 
-Training Fold 3/10
-Epoch 1 - Average Loss: 2.2 - Validation Loss: 2.2
-Epoch 6 - Average Loss: 2.1 - Validation Loss: 2.1 *(6)*
-Epoch 10 - Average Loss: 2.1 - Validation Loss: 2.1 *(10)*
-
-Training Fold 4/10
-Epoch 1 - Average Loss: 2 - Validation Loss: 2.1
-Epoch 6 - Average Loss: 2 - Validation Loss: 2.1 *(6)*
-Epoch 10 - Average Loss: 1.9 - Validation Loss: 2.1 *(10)*
-
-Training Fold 5/10
-Epoch 1 - Average Loss: 1.9 - Validation Loss: 2 *(1)*
-Epoch 6 - Average Loss: 1.9 - Validation Loss: 2
-Epoch 10 - Average Loss: 1.9 - Validation Loss: 2 *(10)*
-
-Training Fold 6/10
-Epoch 1 - Average Loss: 1.9 - Validation Loss: 1.7 *(1)*
-Epoch 6 - Average Loss: 1.8 - Validation Loss: 1.8
-Epoch 10 - Average Loss: 1.8 - Validation Loss: 1.7
-
-Training Fold 7/10
-Epoch 1 - Average Loss: 1.8 - Validation Loss: 1.7 *(1)*
-Epoch 6 - Average Loss: 1.8 - Validation Loss: 1.8
-Epoch 10 - Average Loss: 1.8 - Validation Loss: 1.8
-
-Training Fold 8/10
-Epoch 1 - Average Loss: 1.8 - Validation Loss: 1.8
-Epoch 6 - Average Loss: 1.7 - Validation Loss: 1.9
-Epoch 10 - Average Loss: 1.7 - Validation Loss: 1.9
-
-Training Fold 9/10
-Epoch 1 - Average Loss: 1.8 - Validation Loss: 1.6 *(1)*
-Epoch 6 - Average Loss: 1.8 - Validation Loss: 1.6
-Epoch 10 - Average Loss: 1.8 - Validation Loss: 1.6
-
-Training Fold 10/10
-Epoch 1 - Average Loss: 1.7 - Validation Loss: 1.9
-Epoch 6 - Average Loss: 1.7 - Validation Loss: 1.9
-Epoch 10 - Average Loss: 1.7 - Validation Loss: 1.9
+Training Fold 3/3
+Epoch 1 - Average Loss: 0.22 - Validation Loss: 0.15
+Epoch 6 - Average Loss: 0.21 - Validation Loss: 0.15
+Epoch 10 - Average Loss: 0.21 - Validation Loss: 0.15
 
 Training Summary:
 ----------------
-Total Epochs: 100
-Average Validation Loss: 1.96
-Min Validation Loss: 1.55
-Max Validation Loss: 2.31
+Total Epochs: 30
+Average Validation Loss: 0.25
+Min Validation Loss: 0.15
+Max Validation Loss: 0.86
 ------------ Best State ------------
-Best Fold: 9
-Best Epoch: 1
-Loss [CCE]: 1.55
+Best Fold: 2
+Best Epoch: 10
+Loss [CCE]: 0.15
 ------------------------------------
-Total Training Time: 2 m 36.02 s
-Average Epoch Time: 1.51 s
-Min Epoch Time: 1.49 s
-Max Epoch Time: 1.77 s
-Throughput: 640.93 samples/s
-Loading CIFAR-10 Test Set...
+Total Training Time: 2 m 37.38 s
+Average Epoch Time: 4.53 s
+Min Epoch Time: 4.50 s
+Max Epoch Time: 4.64 s
+Throughput: 1.14K samples/s
+Loading MNIST Test Set...
 
-CIFAR-10 Dataset Information:
+MNIST Dataset Information:
 -------------------------
 Total images available: 10000
 Loading ratio: 100.00%
 Images to load: 10000
-Image dimensions: 32x32x3 (3072 values)
+Image dimensions: 28x28 (784 pixels)
 Number of classes: 10
 Memory usage (approx):
-  - Images: 117.19 MB
+  - Images: 29.91 MB
   - Labels: 0.38 MB
 -------------------------
 
 Label Distribution:
 ------------------
-Class 0 [airplane]: airplane images (10.00%)
-Class 1 [automobile]: automobile images (10.00%)
-Class 2 [bird]: bird images (10.00%)
-Class 3 [cat]: cat images (10.00%)
-Class 4 [deer]: deer images (10.00%)
-Class 5 [dog]: dog images (10.00%)
-Class 6 [frog]: frog images (10.00%)
-Class 7 [horse]: horse images (10.00%)
-Class 8 [ship]: ship images (10.00%)
-Class 9 [truck]: truck images (10.00%)
+Class 0: 980 images (9.80%)
+Class 1: 1135 images (11.35%)
+Class 2: 1032 images (10.32%)
+Class 3: 1010 images (10.10%)
+Class 4: 982 images (9.82%)
+Class 5: 892 images (8.92%)
+Class 6: 958 images (9.58%)
+Class 7: 1028 images (10.28%)
+Class 8: 974 images (9.74%)
+Class 9: 1009 images (10.09%)
 ------------------
 
 
@@ -176,74 +135,70 @@ Multi-class Classification Evaluation:
 ------------------------------------
 
  *~~~~~~~~~ Metrics ~~~~~~~~~*
- | Overall Accuracy: 29.97%
+ | Overall Accuracy: 93.26%
  | - - - - - - - - - - - -
- | Macro Precision:     32.30%
- | Macro Recall:        29.97%
- | Macro F1 Score:      27.77%
+ | Macro Precision:     93.23%
+ | Macro Recall:        93.18%
+ | Macro F1 Score:      93.19%
  | - - - - - - - - - - - -
- | Weighted Precision:  32.30%
- | Weighted Recall:     29.97%
- | Weighted F1 Score:   27.77%
+ | Weighted Precision:  93.27%
+ | Weighted Recall:     93.26%
+ | Weighted F1 Score:   93.25%
  *~~~~~~~~~~~~~~~~~~~~~~~~~~~~*
- | Latency Average : 441.06 us
- | Latency Std Dev: 34.03 us
- | Latency Skew: 0.00476166
- | Latency Mode: 440.98 us
+ | Latency Average : 330.46 us
+ | Latency Std Dev: 24.45 us
+ | Latency Skew: 0.00216942
+ | Latency Mode: 330.43 us
  *~~~~~~~~~~~~~~~~~~~~~~~~~~~~*
- | Input Bytes/s: 25.95 Gb
- | Output Bytes/s: 86.49 Mb
- | Throughput/s: 26.03 Gb
- | Forward/s: 2.3K
+ | Input Bytes/s: 8.84 Gb
+ | Output Bytes/s: 115.44 Mb
+ | Throughput/s: 8.95 Gb
+ | Forward/s: 3.0K
  *- - - - - - -  - - - - - - -*
- | Arithmetic Intensity: 0.00217663  SweetSpot∈[5;20]
- | FLOP/s: 138B
- | Throughput/Parm: 22K
+ | Arithmetic Intensity: 0.00390148  SweetSpot∈[5;20]
+ | FLOP/s: 113B
+ | Throughput/Parm: 21K
  *~~~~~~~~~~~~~~~~~~~~~~~~~~~~*
 
  *~~~~ Per-class Metrics ~~~~*
  | Class 0:
- |   Precision: 35.267%
- |   Recall: 53.5%
- |   F1 Score: 42.5109%
+ |   Precision: 92.6641%
+ |   Recall: 97.9592%
+ |   F1 Score: 95.2381%
  | Class 1:
- |   Precision: 36.4391%
- |   Recall: 39.5%
- |   F1 Score: 37.9079%
+ |   Precision: 97.0358%
+ |   Recall: 98.0617%
+ |   F1 Score: 97.546%
  | Class 2:
- |   Precision: 20.9738%
- |   Recall: 11.2%
- |   F1 Score: 14.6023%
+ |   Precision: 93.1885%
+ |   Recall: 91.4729%
+ |   F1 Score: 92.3227%
  | Class 3:
- |   Precision: 29.3706%
- |   Recall: 4.2%
- |   F1 Score: 7.34908%
+ |   Precision: 92.8358%
+ |   Recall: 92.3762%
+ |   F1 Score: 92.6055%
  | Class 4:
- |   Precision: 20.4678%
- |   Recall: 56%
- |   F1 Score: 29.9786%
+ |   Precision: 94.7477%
+ |   Recall: 93.6864%
+ |   F1 Score: 94.214%
  | Class 5:
- |   Precision: 39.661%
- |   Recall: 11.7%
- |   F1 Score: 18.0695%
+ |   Precision: 94.5627%
+ |   Recall: 89.6861%
+ |   F1 Score: 92.0598%
  | Class 6:
- |   Precision: 39.4148%
- |   Recall: 22.9%
- |   F1 Score: 28.969%
+ |   Precision: 92.8498%
+ |   Recall: 94.8852%
+ |   F1 Score: 93.8565%
  | Class 7:
- |   Precision: 27.9473%
- |   Recall: 40.3%
- |   F1 Score: 33.0057%
+ |   Precision: 91.9417%
+ |   Recall: 92.1206%
+ |   F1 Score: 92.0311%
  | Class 8:
- |   Precision: 34.6154%
- |   Recall: 36%
- |   F1 Score: 35.2941%
+ |   Precision: 91.9624%
+ |   Recall: 90.4517%
+ |   F1 Score: 91.2008%
  | Class 9:
- |   Precision: 38.8535%
- |   Recall: 24.4%
- |   F1 Score: 29.9754%
+ |   Precision: 90.5419%
+ |   Recall: 91.0803%
+ |   F1 Score: 90.8103%
 Would you like to save it [y/n]
-y
-Model and Architecture saved in:/home/moonfloww/Projects/NNs/Thot
-
-Process finished with exit code 0

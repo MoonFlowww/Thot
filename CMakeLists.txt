@@ -107,12 +107,10 @@ set(HEADERS
         Thot/headers/losses/losses.hpp
         Thot/headers/metrics/metrics.hpp
         Thot/headers/network.hpp
-
         Thot/headers/optimizations/details/adam.hpp
         Thot/headers/optimizations/details/sgd.hpp
         Thot/headers/optimizations/details/sgdm.hpp
         Thot/headers/optimizations/details/muon.hpp
-
         Thot/headers/optimizations/optimizations.hpp
         Thot/headers/tensor.hpp
         Thot/Thot.hpp
@@ -164,7 +162,8 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 ###################### TESTs ######################
 
-add_executable(cuda_tests tests/cuda_tests.cpp)
+add_executable(cuda_tests tests/cuda_tests.cpp
+        tests/fc_benchmark.cu)
 target_link_libraries(cuda_tests PRIVATE
         -Wl,--whole-archive thot_kernels -Wl,--no-whole-archive
         CUDA::cudart
@@ -178,4 +177,17 @@ target_compile_definitions(cuda_tests PRIVATE
         $<$<BOOL:${THOT_USE_CUDNN}>:THOT_WITH_CUDNN=1>
 )
 
+
 add_test(NAME cuda_tests COMMAND cuda_tests)
+
+add_executable(fc_benchmark tests/fc_benchmark.cu)
+target_link_libraries(fc_benchmark PRIVATE
+        -Wl,--whole-archive thot_kernels -Wl,--no-whole-archive
+        CUDA::cudart
+        $<$<BOOL:${THOT_USE_CUDNN}>:cudnn::cudnn>
+        pthread dl
+)
+set_target_properties(fc_benchmark PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+target_compile_definitions(fc_benchmark PRIVATE
+        $<$<BOOL:${THOT_USE_CUDNN}>:THOT_WITH_CUDNN=1>
+)

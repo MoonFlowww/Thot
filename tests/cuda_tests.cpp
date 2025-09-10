@@ -3,6 +3,9 @@
 //
 #include <sstream>
 #include <memory>
+#include <vector>
+#include <cmath>
+
 #define private public
 #define protected public
 #undef private
@@ -355,6 +358,46 @@ void test_dyt_layernorm() {
     std::cout << "[PASS] test_dyt_layernorm" << std::endl;
 }
 
+void test_softmax_numerical_stability() {
+    std::cout << "[RUN] test_softmax_numerical_stability" << std::endl;
+    Utils::Tensor input({1, 3});
+    input.upload({1000.0f, 1001.0f, 1002.0f});
+    Utils::Tensor output({1, 3});
+    Activations::apply_activation(input, output, Activation::Softmax);
+    auto host = output.download();
+
+    float maxv = std::max(std::max(1000.0f, 1001.0f), 1002.0f);
+    float e0 = std::exp(1000.0f - maxv);
+    float e1 = std::exp(1001.0f - maxv);
+    float e2 = std::exp(1002.0f - maxv);
+    float sum = e0 + e1 + e2;
+    std::vector<float> expected = {e0 / sum, e1 / sum, e2 / sum};
+
+    float total = 0.0f;
+    for (int i = 0; i < 3; ++i) {
+        total += host[i];
+        CHECK(!std::isnan(host[i]));
+        CHECK(std::fabs(host[i] - expected[i]) < 1e-6);
+    }
+    CHECK(std::fabs(total - 1.0f) < 1e-6);
+
+    Losses cce(Loss::CategoricalCrossEntropy);
+    Utils::Tensor targ({1, 3});
+    targ.upload({0.0f, 0.0f, 1.0f});
+    float loss = cce.compute(output, targ);
+    float expected_loss = -std::log(expected[2]);
+    CHECK(std::fabs(loss - expected_loss) < 1e-4);
+
+    Losses scce(Loss::SparseCategoricalCrossEntropy);
+    Utils::Tensor targ_s({1});
+    targ_s.upload({2.0f});
+    float loss_s = scce.compute(output, targ_s);
+    CHECK(std::fabs(loss_s - expected_loss) < 1e-4);
+
+    std::cout << "[PASS] test_softmax_numerical_stability" << std::endl;
+}
+
+
 int main() {
     test_rnn();
     test_fc();
@@ -362,6 +405,7 @@ int main() {
     test_rbm();
     test_activations();
     test_losses();
+    test_softmax_numerical_stability();
     test_mha();
     test_mla_4d_input();
     test_muon_optimizer();
