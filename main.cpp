@@ -26,7 +26,7 @@ int main() {
         model.add(Thot::Layer::FC(128, 10, Thot::Activation::Softmax, Thot::Initialization::Xavier)); // or no Softmax if CE expects logits
 
         model.set_loss(Thot::Loss::CategoricalCrossEntropy);
-        model.set_optimizer(Thot::Optimizer::AdaMuon(3e-5f, 0.9f, 0.999f, 0.0f, Thot::LrScheduler::OneCycleDecay(0.01f, (100*(2500/512), 0.3, 25, 1e4))));
+        model.set_optimizer(Thot::Optimizer::AdaMuon(3e-5f, 0.9f, 0.999f, 0.0f, Thot::LrScheduler::OneCycleDecay(0.01f, (30*(2500/2048), 0.3, 25, 1e4))));
 
     }
 

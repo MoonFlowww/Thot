@@ -34,6 +34,8 @@
 #include "LearningProcess/batch.hpp"
 #include "LearningProcess/kfold.hpp"
 
+#include "regularizers/regularizer.hpp"
+
 
 class Layer;
 class Optimizer;
@@ -60,7 +62,7 @@ private:
     size_t total_flops = 0;
     size_t total_parm = 0;
 
-
+    std::vector<Regularizers::RegularizerPtr> regularizers_;
 
     void print_vector(const std::vector<float> &vec) {
         std::cout << "[";
@@ -343,12 +345,85 @@ public:
                        const Utils::Tensor &targets) {
         float base = loss_function_->compute(predictions, targets);
         float reg = 0.0f;
-        for (const auto &L : layers_) { //TODO Impl Penalization
-            reg += L->regularization_loss(); // Sparce Con AE
-        }
-        return base + reg;
+        auto accumulate = [&](Utils::Tensor &t) {
+            for (auto &r : regularizers_) {
+                reg += r->compute(t);
+            }
+        };
 
+        for (const auto &L : layers_) {
+            if (auto fc = std::dynamic_pointer_cast<FCLayer>(L)) {
+                accumulate(fc->weights_);
+            } else if (auto conv = std::dynamic_pointer_cast<Conv2DLayer>(L)) {
+                accumulate(conv->weights_);
+            } else if (auto rcnn = std::dynamic_pointer_cast<RCNNLayer>(L)) {
+                accumulate(rcnn->weights());
+            } else if (auto rnn = std::dynamic_pointer_cast<RNNLayer>(L)) {
+                accumulate(rnn->weights_ih_);
+                accumulate(rnn->weights_hh_);
+            } else if (auto rbm = std::dynamic_pointer_cast<RBMLayer>(L)) {
+                accumulate(rbm->weights_);
+            } else if (auto scae = std::dynamic_pointer_cast<SparseContractiveAELayer>(L)) {
+                accumulate(scae->enc_weights_);
+                accumulate(scae->dec_weights_);
+            } else if (auto mha = std::dynamic_pointer_cast<MHAAttentionLayer>(L)) {
+                accumulate(mha->W_q());
+                accumulate(mha->W_k());
+                accumulate(mha->W_v());
+                accumulate(mha->W_o());
+            } else if (auto mla = std::dynamic_pointer_cast<MLAAttentionLayer>(L)) {
+                accumulate(mla->W_DKV());
+                accumulate(mla->W_UK());
+                accumulate(mla->W_UV());
+                accumulate(mla->W_Q());
+                accumulate(mla->W_O());
+            }
+
+            reg += L->regularization_loss();
+        }
     }
+
+    void add_regularizer(Regularizers::RegularizerPtr reg) {
+        regularizers_.push_back(std::move(reg));
+    }
+
+    void regularizer_step() {
+        auto call = [&](Utils::Tensor &t) {
+            for (auto &r : regularizers_) {
+                r->update_step(t);
+            }
+        };
+
+        for (const auto &layer : layers_) {
+            if (auto fc = std::dynamic_pointer_cast<FCLayer>(layer)) {
+                call(fc->weights_);
+            } else if (auto conv = std::dynamic_pointer_cast<Conv2DLayer>(layer)) {
+                call(conv->weights_);
+            } else if (auto rcnn = std::dynamic_pointer_cast<RCNNLayer>(layer)) {
+                call(rcnn->weights());
+            } else if (auto rnn = std::dynamic_pointer_cast<RNNLayer>(layer)) {
+                call(rnn->weights_ih_);
+                call(rnn->weights_hh_);
+            } else if (auto rbm = std::dynamic_pointer_cast<RBMLayer>(layer)) {
+                call(rbm->weights_);
+            } else if (auto scae = std::dynamic_pointer_cast<SparseContractiveAELayer>(layer)) {
+                call(scae->enc_weights_);
+                call(scae->dec_weights_);
+            } else if (auto mha = std::dynamic_pointer_cast<MHAAttentionLayer>(layer)) {
+                call(mha->W_q());
+                call(mha->W_k());
+                call(mha->W_v());
+                call(mha->W_o());
+            } else if (auto mla = std::dynamic_pointer_cast<MLAAttentionLayer>(layer)) {
+                call(mla->W_DKV());
+                call(mla->W_UK());
+                call(mla->W_UV());
+                call(mla->W_Q());
+                call(mla->W_O());
+            }
+        }
+    }
+
 
     Utils::Tensor compute_gradients(const Utils::Tensor &predictions,
                                     const Utils::Tensor &targets) {

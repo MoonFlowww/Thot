@@ -100,6 +100,7 @@ namespace Thot {
                         net.compute_gradients(prediction_tensor, target_tensor);
 
                     net.backward(std::move(grad_tensor));
+                    net.regularizer_step();
 
                     if (verbose) {
                         auto now = std::chrono::high_resolution_clock::now();

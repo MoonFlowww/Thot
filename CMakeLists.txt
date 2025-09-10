@@ -133,6 +133,8 @@ set(HEADERS
         Thot/headers/optimizations/lr_schedulers.hpp
         Thot/headers/layernorm/details/dyt.hpp
         Thot/headers/layernorm/details/rms.hpp
+        Thot/headers/regularizers/regularizer.hpp
+        Thot/headers/regularizers/regularizer_factory.hpp
 )
 
 add_library(thot_kernels STATIC ${KERNEL_SOURCES})
