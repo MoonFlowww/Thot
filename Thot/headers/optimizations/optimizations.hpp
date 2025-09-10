@@ -27,8 +27,7 @@ namespace Thot {
 
         void step_lr(int epoch, int fold) {
             if (lr_fn_) {
-                if (epoch > 0 && epoch % 10 == 0)
-                    learning_rate_ *= 0.1f;
+                learning_rate_ = lr_fn_(epoch, fold);
             }
         }
 

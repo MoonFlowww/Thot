@@ -52,6 +52,8 @@ namespace Evaluations {
 
         float total_latency = std::accumulate(latencies.begin(), latencies.end(), 0.0f);
         float avg_latency = total_latency / latencies.size();
+        float max_latency = *std::max_element(latencies.begin(), latencies.end());
+        float min_latency = *std::min_element(latencies.begin(), latencies.end());
         float sq_sum = std::inner_product(latencies.begin(), latencies.end(), latencies.begin(), 0.0f);
         float std_latency = std::sqrt(sq_sum / latencies.size() - avg_latency * avg_latency);
         float skew_latency = 0.0f;
@@ -80,6 +82,8 @@ namespace Evaluations {
             std::cout << " | Latency Std Dev: " << Thot::format_time(std_latency) << "\n";
             std::cout << " | Latency Skew: " << skew_latency << "\n";
             std::cout << " | Latency Mode: " << Thot::format_time(mode_latency) << "\n";
+            std::cout << " | Latency +: " << Thot::format_time(max_latency) << "\n";
+            std::cout << " | Latency -: " << Thot::format_time(min_latency) << "\n";
             std::cout << " *~~~~~~~~~~~~~~~~~~~~~~~~~~~~*" << std::endl;
 
             std::cout << " | Input Bytes/s: " << Thot::formatBytes(input_bps) << "\n";

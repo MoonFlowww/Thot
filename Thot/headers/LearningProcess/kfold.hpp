@@ -18,7 +18,6 @@ public:
 
     template <typename Net> void start_fold(Net &net, int fold) const {
         if (auto opt = net.get_optimizer()) {
-            opt->reset_lr();
             opt->step_lr(0, fold);
         }
     }
