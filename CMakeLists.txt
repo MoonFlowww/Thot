@@ -135,6 +135,7 @@ set(HEADERS
         Thot/headers/layernorm/details/rms.hpp
         Thot/headers/regularizers/regularizer.hpp
         Thot/headers/regularizers/regularizer_factory.hpp
+        Thot/headers/regularizers/details/regularizer_cublas.hpp
 )
 
 add_library(thot_kernels STATIC ${KERNEL_SOURCES})

@@ -11,6 +11,7 @@
 #include "headers/initializations/initializations.hpp"
 #include "headers/layernorm/layernorm.hpp"
 #include "headers/regularizers/regularizer_factory.hpp"
+#include "headers/regularizers/details/regularizer_cublas.hpp"
 
 #include "headers/data/data.hpp"
 
