@@ -18,7 +18,6 @@ target_link_libraries(Thot "${TORCH_LIBRARIES}" Boost::filesystem)
 target_include_directories(Thot PUBLIC ${CMAKE_SOURCE_DIR}/include ${TORCH_INCLUDE_DIRS})
 
 
-# --- test executable ---
 add_executable(test_Thot test/main.cpp
         src/core.hpp
         src/network.hpp
@@ -71,5 +70,11 @@ add_executable(test_Thot test/main.cpp
         src/regularization/details/mas.hpp
         src/regularization/details/l2.hpp
         src/utils/progressbar.hpp
-        src/training/kfold.hpp)
+        src/training/kfold.hpp
+        src/activation/details/relu.hpp
+        src/loss/details/mse.hpp
+        src/loss/details/ce.hpp
+        src/loss/details/cce.hpp
+        src/optimizer/details/sgd.hpp)
+
 target_link_libraries(test_Thot PRIVATE Thot)
