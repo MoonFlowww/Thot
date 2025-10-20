@@ -1,0 +1,75 @@
+cmake_minimum_required(VERSION 4.0)
+project(Thot)
+
+set(CMAKE_CXX_STANDARD 23)
+
+set(Torch_DIR "/opt/libtorch/share/cmake/Torch")
+find_package(Torch REQUIRED)
+find_package(Boost REQUIRED COMPONENTS filesystem)
+
+add_library(Thot SHARED
+        src/Thot.cpp
+        src/core.hpp
+        src/network.hpp)
+
+
+
+target_link_libraries(Thot "${TORCH_LIBRARIES}" Boost::filesystem)
+target_include_directories(Thot PUBLIC ${CMAKE_SOURCE_DIR}/include ${TORCH_INCLUDE_DIRS})
+
+
+# --- test executable ---
+add_executable(test_Thot test/main.cpp
+        src/core.hpp
+        src/network.hpp
+        src/layer/layer.hpp
+        src/loss/loss.hpp
+        src/lrscheduler/lrscheduler.hpp
+        src/metric/metric.hpp
+        src/optimizer/optimizer.hpp
+        src/regularization/regularization.hpp
+        src/utils/stresstest.hpp
+        src/utils/terminal.hpp
+        src/utils/gnuplot.hpp
+        src/initialization/initialization.hpp
+        src/evaluation/evaluation.hpp
+        src/evaluation/details/classification.hpp
+        src/evaluation/details/timeserie.hpp
+        src/data/data.hpp
+        src/data/details/generation.hpp
+        src/data/details/load.hpp
+        src/data/details/manipulation.hpp
+        src/data/details/dimreduction.hpp
+        src/calibration/calibration.hpp
+        src/block/block.hpp
+        src/block/details/transformers/classic.hpp
+        src/block/details/transformers/mamba.hpp
+        src/block/details/transformers/plusplus.hpp
+        src/block/details/transformers/titan.hpp
+        src/block/details/transformers/atlas.hpp
+        src/block/details/transformers/ebt.hpp
+        src/attention/attention.hpp
+        src/attention/details/kernel.hpp
+        src/attention/details/head.hpp
+        src/activation/activation.hpp
+        src/layer/details/fc.hpp
+        src/layer/details/conv.hpp
+        src/layer/details/statespace.hpp
+        src/layer/details/batchnorm.hpp
+        src/layer/details/residual.hpp
+        src/layer/details/flatten.hpp
+        src/layer/details/pooling.hpp
+        src/layer/details/positional_encoding.hpp
+        src/layer/details/dropout.hpp
+        src/lrscheduler/details/cosineannealing.hpp
+        src/lrscheduler/details/exponential.hpp
+        src/optimizer/details/muon.hpp
+        src/optimizer/details/adam.hpp
+        src/optimizer/details/sophia.hpp
+        src/regularization/details/ewc.hpp
+        src/regularization/details/si.hpp
+        src/regularization/details/mas.hpp
+        src/regularization/details/l2.hpp
+        src/utils/progressbar.hpp
+        src/training/kfold.hpp)
+target_link_libraries(test_Thot PRIVATE Thot)

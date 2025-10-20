@@ -1,0 +1,4 @@
+#ifndef THOT_GNUPLOT_HPP
+#define THOT_GNUPLOT_HPP
+
+#endif //THOT_GNUPLOT_HPP

@@ -1,0 +1,4 @@
+#ifndef THOT_POOLING_HPP
+#define THOT_POOLING_HPP
+
+#endif //THOT_POOLING_HPP

@@ -1,0 +1,4 @@
+#ifndef THOT_FLATTEN_HPP
+#define THOT_FLATTEN_HPP
+
+#endif //THOT_FLATTEN_HPP

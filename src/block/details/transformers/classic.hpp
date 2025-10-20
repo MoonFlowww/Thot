@@ -1,0 +1,4 @@
+#ifndef THOT_CLASSIC_HPP
+#define THOT_CLASSIC_HPP
+
+#endif //THOT_CLASSIC_HPP

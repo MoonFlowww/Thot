@@ -1,0 +1,4 @@
+#ifndef THOT_KERNEL_HPP
+#define THOT_KERNEL_HPP
+
+#endif //THOT_KERNEL_HPP
