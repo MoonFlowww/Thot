@@ -5,12 +5,13 @@
 namespace Thot::Loss::Details {
     enum class Reduction { Mean, Sum, None };
 
-    inline constexpr at::Reduction to_torch_reduction(Reduction r) {
+    inline constexpr at::Reduction::Reduction to_torch_reduction(Reduction r) {
+        using TorchReduction = at::Reduction::Reduction;
         switch (r) {
-            case Reduction::Sum:  return at::Reduction::Sum;
-            case Reduction::None: return at::Reduction::None;
+            case Reduction::Sum:  return TorchReduction::Sum;
+            case Reduction::None: return TorchReduction::None;
             case Reduction::Mean:
-            default:              return at::Reduction::Mean;
+            default:              return TorchReduction::Mean;
         }
     }
 }
