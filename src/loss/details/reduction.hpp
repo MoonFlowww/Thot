@@ -5,13 +5,16 @@
 namespace Thot::Loss::Details {
     enum class Reduction { Mean, Sum, None };
 
-    inline constexpr at::Reduction::Reduction to_torch_reduction(Reduction r) {
-        using TorchReduction = at::Reduction::Reduction;
+    inline constexpr torch::nn::functional::CrossEntropyFuncOptions::reduction_t to_torch_reduction(Reduction r) {
+        using ReductionOption = torch::nn::functional::CrossEntropyFuncOptions::reduction_t;
         switch (r) {
-            case Reduction::Sum:  return TorchReduction::Sum;
-            case Reduction::None: return TorchReduction::None;
+            case Reduction::Sum:
+                return ReductionOption{torch::kSum};
+            case Reduction::None:
+                return ReductionOption{torch::kNone};
             case Reduction::Mean:
-            default:              return TorchReduction::Mean;
+            default:
+                return ReductionOption{torch::kMean};
         }
     }
 }
