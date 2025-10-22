@@ -104,8 +104,7 @@ namespace Thot::Network {
                                                      std::make_index_sequence<size>{});
             }
         }
-
-    }  // namespace Details
+    }
 
     template <typename ModuleTuple>
     class Runtime;
@@ -136,6 +135,20 @@ namespace Thot::Network {
         [[nodiscard]] constexpr module_tuple_type& modules() noexcept { return modules_; }
         [[nodiscard]] constexpr const module_tuple_type& modules() const noexcept { return modules_; }
 
+
+        void set_device(const torch::Device& device) { device_ = device; }
+
+        void set_device(bool use_cuda = true)
+        {
+            if (use_cuda && torch::cuda::is_available()) {
+                device_ = torch::Device(torch::kCUDA, /*index=*/0);
+            } else {
+                device_ = torch::Device(torch::kCPU, /*index=*/0);
+            }
+        }
+
+        [[nodiscard]] const torch::Device& device() const noexcept { return device_; }
+
         template <std::size_t Index>
         [[nodiscard]] constexpr auto& module_at() noexcept
         {
@@ -163,7 +176,13 @@ namespace Thot::Network {
     [[nodiscard]] constexpr auto make_forward_pass(Runtime& runtime) noexcept
     {
         return [&runtime](auto&& input) -> decltype(auto) {
-            return Details::unroll_forward(runtime.modules(), std::forward<decltype(input)>(input));
+            auto tensor = std::forward<decltype(input)>(input);
+            if constexpr (requires { tensor.device(); }) {
+                if (tensor.device() != runtime.device()) {
+                    tensor = tensor.to(runtime.device());
+                }
+            }
+            return Details::unroll_forward(runtime.modules(), std::move(tensor));
         };
     }
 
@@ -171,7 +190,13 @@ namespace Thot::Network {
     [[nodiscard]] constexpr auto make_backward_pass(Runtime& runtime) noexcept
     {
         return [&runtime](auto&& gradient) -> decltype(auto) {
-            return Details::unroll_backward(runtime.modules(), std::forward<decltype(gradient)>(gradient));
+            auto tensor = std::forward<decltype(gradient)>(gradient);
+            if constexpr (requires { tensor.device(); }) {
+                if (tensor.device() != runtime.device()) {
+                    tensor = tensor.to(runtime.device());
+                }
+            }
+            return Details::unroll_backward(runtime.modules(), std::move(tensor));
         };
     }
 }

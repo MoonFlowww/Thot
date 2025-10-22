@@ -11,7 +11,7 @@ int main() {
 
     Thot::Model model;
 
-
+    model.device(torch::cuda::is_available());
     model.add(Thot::Layer::FC({2, 8}, Thot::Activation::ReLU));
     model.add(Thot::Layer::FC({8, 1}, Thot::Activation::Identity));
 

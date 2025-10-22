@@ -113,14 +113,19 @@ namespace Thot {
                     return Optimizer::Details::build_optimizer(*this, concrete_descriptor);
                 },
                 std::move(descriptor));
+            step_impl_ = &Model::step_without_scheduler;
             scheduler_.reset();
             if (scheduler.has_value()) {
                 scheduler_ = std::visit(
                     [&](const auto& concrete_descriptor) -> std::unique_ptr<LrScheduler::Details::Scheduler> {
                         return LrScheduler::Details::build_scheduler(*this, *optimizer_, concrete_descriptor);
-                    },
-                    std::move(*scheduler));
+                    }, std::move(*scheduler));
+                if (scheduler_) {
+                    step_impl_ = &Model::step_with_scheduler;
+                }
+
             }
+            configure_step_impl();
 
         }
 
@@ -135,8 +140,28 @@ namespace Thot {
             loss_descriptor_ = LossDescriptor{std::in_place_type<Decayed>, std::move(descriptor)};
         }
 
+        Model& device(bool use_cuda = true)
+        {
+            if (use_cuda) {
+                if (!torch::cuda::is_available()) {
+                    throw std::runtime_error("CUDA device requested but is unavailable.");
+                }
+                device_ = torch::Device(torch::kCUDA, /*index=*/0);
+            } else {
+                device_ = torch::Device(torch::kCPU, /*index=*/0);
+            }
+
+            this->to(device_);
+            return *this;
+        }
+
+        [[nodiscard]] const torch::Device& device() const noexcept { return device_; }
+
+
         [[nodiscard]] torch::Tensor forward(torch::Tensor input) {
             auto output = std::move(input);
+            if (output.device() != device_)
+                output = output.to(device_);
             for (auto& layer : layers_) {
                 output = layer.forward(std::move(output));
                 output = Activation::Details::apply(layer.activation, std::move(output));
@@ -164,13 +189,7 @@ namespace Thot {
             }
         }
 
-        void step() {
-            if (!optimizer_)
-                throw std::logic_error("Optimizer has not been configured.");
-            if (scheduler_)
-                scheduler_->step();
-            optimizer_->step();
-        }
+        void step() { (this->*step_impl_)(); }
 
         [[nodiscard]] bool has_optimizer() const noexcept { return static_cast<bool>(optimizer_); }
 
@@ -184,7 +203,7 @@ namespace Thot {
         }
 
         template <class Config, class Dataset = Core::SupervisedDataset>
-    void train(Dataset dataset) {
+        void train(Dataset dataset) {
             static_assert(Config::batch_size > 0, "Batch size must be greater than zero.");
 
             if (!has_optimizer()) {
@@ -197,19 +216,23 @@ namespace Thot {
                 return;
             }
 
-            const auto device = Config::DevicePolicy::select();
             torch::nn::Module::train();
-            this->to(device);
+            this->to(device_);
 
-            auto working_set = TrainingDetails::prepare_dataset<Config>(std::move(dataset), device);
+            if constexpr (Config::buffer_vram) {
+                if (!device_.is_cuda()) {
+                    throw std::runtime_error("VRAM buffering requires the model to be on a CUDA device.");
+                }
+            }
+
+            auto working_set = TrainingDetails::prepare_dataset<Config>(std::move(dataset), device_);
             auto rng = std::mt19937{std::random_device{}()};
 
             for (std::size_t epoch = 0; epoch < Config::epochs; ++epoch) {
                 TrainingDetails::maybe_shuffle<Config>(working_set, rng);
-                TrainingDetails::run_epoch<Config>(*this, working_set, device);
+                TrainingDetails::run_epoch<Config>(*this, working_set);
             }
         }
-
 
     private:
 
@@ -259,7 +282,8 @@ namespace Thot {
             }
 
             template <class Config, class Dataset>
-            static void run_epoch(Model& model, Dataset& dataset, const torch::Device& device) {
+            static void run_epoch(Model& model, Dataset& dataset) {
+                const auto& device = model.device();
                 const auto total_samples = dataset.size();
                 const auto batch_size = Config::batch_size;
 
@@ -287,6 +311,13 @@ namespace Thot {
                     auto inputs = torch::stack(batch_inputs);
                     auto targets = torch::stack(batch_targets);
 
+                    if (inputs.device() != device) {
+                        inputs = inputs.to(device);
+                    }
+                    if (targets.device() != device) {
+                        targets = targets.to(device);
+                    }
+
                     model.zero_grad();
                     auto prediction = model.forward(inputs);
 
@@ -306,8 +337,33 @@ namespace Thot {
         std::vector<Layer::Details::RegisteredLayer> layers_{};
         std::unique_ptr<torch::optim::Optimizer> optimizer_{};
         std::unique_ptr<LrScheduler::Details::Scheduler> scheduler_{};
+        using StepImpl = void (Model::*)();
+        StepImpl step_impl_{&Model::step_not_configured};
         using LossDescriptor = std::variant<Loss::MSEDescriptor, Loss::CrossEntropyDescriptor>;
         std::optional<LossDescriptor> loss_descriptor_{};
+        torch::Device device_{torch::kCPU, 0};
+
+
+
+        void configure_step_impl() noexcept {
+            if (!optimizer_) {
+                step_impl_ = &Model::step_not_configured;
+                return;
+            }
+            step_impl_ = scheduler_ ? &Model::step_configured<true> : &Model::step_configured<false>;
+        }
+
+        void step_not_configured() {
+            throw std::logic_error("Optimizer has not been configured.");
+        }
+
+        template <bool WithScheduler>
+        void step_configured() {
+            if constexpr (WithScheduler) {
+                scheduler_->step();
+            }
+            optimizer_->step();
+        }
     };
 }
 
