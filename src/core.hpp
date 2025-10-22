@@ -36,6 +36,7 @@
 #include "activation/activation.hpp"
 #include "activation/apply.hpp"
 #include "initialization/initialization.hpp"
+#include "initialization/apply.hpp"
 #include "layer/layer.hpp"
 #include "loss/loss.hpp"
 #include "loss/details/mse.hpp"
@@ -96,7 +97,7 @@ namespace Thot {
                                                     descriptor.options.out_features)
                                 .bias(descriptor.options.bias);
             auto layer = register_module("fc_" + std::to_string(index), torch::nn::Linear(options));
-            apply_initialization(layer, descriptor);
+            Initialization::Details::apply_module_initialization(layer, descriptor);
             dense_layers_.push_back(DenseLayer{layer, descriptor.activation.type});
         }
 
@@ -272,20 +273,6 @@ namespace Thot {
                 }
             }
         };
-
-        static void apply_initialization(const torch::nn::Linear& layer, const Layer::FCDescriptor& descriptor) {
-            switch (descriptor.initialization.type) {
-                case Initialization::Type::XavierNormal:
-                    torch::nn::init::xavier_normal_(layer->weight);
-                    if (descriptor.options.bias && layer->bias.defined()) {
-                        torch::nn::init::zeros_(layer->bias);
-                    }
-                    break;
-                case Initialization::Type::Default:
-                default:
-                    break;
-            }
-        }
 
         std::vector<DenseLayer> dense_layers_{};
         std::unique_ptr<torch::optim::Optimizer> optimizer_{};
