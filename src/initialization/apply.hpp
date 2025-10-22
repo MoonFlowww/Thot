@@ -32,15 +32,15 @@ namespace Thot::Initialization::Details {
             case ::Thot::Initialization::Type::KaimingNormal:
                 torch::nn::init::kaiming_normal_(module->weight,
                                                  /*a=*/0.0,
-                                                 torch::nn::init::FanModeType::FanIn,
-                                                 torch::nn::init::NonlinearityType::ReLU);
+                                                 torch::nn::init::FanModeType::kFanIn,
+                                                 torch::nn::init::NonlinearityType::kReLU);
                 detail::zero_bias_if_present(module);
                 break;
             case ::Thot::Initialization::Type::KaimingUniform:
                 torch::nn::init::kaiming_uniform_(module->weight,
                                                   /*a=*/0.0,
-                                                  torch::nn::init::FanModeType::FanIn,
-                                                  torch::nn::init::NonlinearityType::ReLU);
+                                                  torch::nn::init::FanModeType::kFanIn,
+                                                  torch::nn::init::NonlinearityType::kReLU);
                 detail::zero_bias_if_present(module);
                 break;
             case ::Thot::Initialization::Type::Dirac:
