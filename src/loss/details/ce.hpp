@@ -4,7 +4,7 @@
 #include <stdexcept>
 #include <torch/torch.h>
 
-#include "loss/details/reduction.hpp"
+#include "reduction.hpp"
 
 namespace Thot::Loss::Details {
     struct CrossEntropyOptions {

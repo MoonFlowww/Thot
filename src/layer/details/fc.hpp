@@ -3,8 +3,8 @@
 
 #include <cstdint>
 
-#include "activation/activation.hpp"
-#include "initialization/initialization.hpp"
+#include "../../activation/activation.hpp"
+#include "../../initialization/initialization.hpp"
 
 namespace Thot::Layer::Details {
 

@@ -4,9 +4,9 @@
 #include <optional>
 #include <stdexcept>
 #include <torch/torch.h>
-
+#include "reduction.hpp"
 namespace Thot::Loss::Details {
-    #include "loss/details/reduction.hpp"
+
 
     namespace Thot::Loss::Details {
 

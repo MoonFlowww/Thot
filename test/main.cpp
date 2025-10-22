@@ -1,7 +1,7 @@
 #include <iostream>
 
 #include <torch/torch.h>
-
+#include "../include/Thot.h"
 
 
 using DummyConfig = Thot::Core::TrainingConfig<200, 8, true, false>;
