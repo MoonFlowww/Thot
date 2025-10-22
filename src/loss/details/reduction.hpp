@@ -1,25 +1,17 @@
 #ifndef THOT_REDUCTION_HPP
 #define THOT_REDUCTION_HPP
 #include <torch/torch.h>
-
+#include <ATen/core/Reduction.h>
 namespace Thot::Loss::Details {
-    enum class Reduction {
-        Mean,
-        Sum,
-        None,
-    };
+    enum class Reduction { Mean, Sum, None };
 
-    inline constexpr auto to_torch_reduction(Reduction reduction) -> decltype(torch::kMean) {
-        switch (reduction) {
-            case Reduction::Sum:
-                return torch::kSum;
-            case Reduction::None:
-                return torch::kNone;
+    inline constexpr at::Reduction to_torch_reduction(Reduction r) {
+        switch (r) {
+            case Reduction::Sum:  return at::Reduction::Sum;
+            case Reduction::None: return at::Reduction::None;
             case Reduction::Mean:
-            default:
-                return torch::kMean;
+            default:              return at::Reduction::Mean;
         }
     }
 }
-
-#endif //THOT_REDUCTION_HPP
+#endif // THOT_REDUCTION_HPP
