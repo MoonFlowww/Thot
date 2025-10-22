@@ -9,7 +9,7 @@ namespace Thot::Loss::Details {
         None,
     };
 
-    inline constexpr torch::Reduction to_torch_reduction(Reduction reduction) {
+    inline constexpr auto to_torch_reduction(Reduction reduction) -> decltype(torch::kMean) {
         switch (reduction) {
             case Reduction::Sum:
                 return torch::kSum;

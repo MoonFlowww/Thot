@@ -1,6 +1,6 @@
 #ifndef THOT_SGD_HPP
 #define THOT_SGD_HPP
-
+#include <stdexcept>
 #include <torch/torch.h>
 
 namespace Thot::Optimizer::Details {
@@ -24,7 +24,8 @@ inline torch::optim::SGDOptions to_torch_options(const SGDOptions& options) {
     torch_options = torch_options.dampening(options.dampening);
     torch_options = torch_options.weight_decay(options.weight_decay);
     torch_options = torch_options.nesterov(options.nesterov);
-    torch_options = torch_options.maximize(options.maximize);
+    if (options.maximize)
+        throw std::invalid_argument("SGD maximize option is not supported by the configured libtorch version.");
     return torch_options;
 }
 

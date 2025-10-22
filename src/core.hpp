@@ -183,7 +183,7 @@ namespace Thot {
                 return;
             }
 
-            const auto device = typename Config::DevicePolicy::select();
+            const auto device = Config::DevicePolicy::select();
             torch::nn::Module::train();
             this->to(device);
 

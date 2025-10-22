@@ -28,7 +28,8 @@ namespace Thot::Loss::Details {
             if (!weight.has_value() || !weight->defined()) {
                 throw std::invalid_argument("CrossEntropy loss configured to use weight but no weight tensor was provided.");
             }
-            opts = opts.weight(*weight);
+            const auto weight_tensor = weight->to(prediction.device(), prediction.scalar_type());
+            opts = opts.weight(weight_tensor);
         }
         return torch::nn::functional::cross_entropy(prediction, target, opts);
     }

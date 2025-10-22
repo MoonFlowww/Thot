@@ -5,6 +5,7 @@
 namespace Thot::Initialization {
     enum class Type {
         Default,
+        XavierNormal,
         XavierUniform,
         KaimingNormal,
         KaimingUniform,
