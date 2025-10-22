@@ -1,5 +1,6 @@
-#ifndef THOT_REGISTRY_HPP
-#define THOT_REGISTRY_HPP
+#ifndef THOT_OPTIMIZER_REGISTRY_HPP
+#define THOT_OPTIMIZER_REGISTRY_HPP
+
 
 #include <memory>
 #include <type_traits>
@@ -22,4 +23,4 @@ namespace Thot::Optimizer::Details {
     }
 }
 
-#endif //THOT_REGISTRY_HPP
+#endif // THOT_OPTIMIZER_REGISTRY_HPP

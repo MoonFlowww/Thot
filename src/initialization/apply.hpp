@@ -1,5 +1,5 @@
-#ifndef THOT_APPLY_HPP
-#define THOT_APPLY_HPP
+#ifndef THOT_INITIALIZATION_APPLY_HPP
+#define THOT_INITIALIZATION_APPLY_HPP
 #include <torch/torch.h>
 
 #include "initialization.hpp"
@@ -62,4 +62,4 @@ namespace Thot::Initialization::Details {
         }
     }
 }
-#endif //THOT_APPLY_HPP
+#endif // THOT_INITIALIZATION_APPLY_HPP

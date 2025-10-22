@@ -1,5 +1,5 @@
-#ifndef THOT_REGISTRY_HPP
-#define THOT_REGISTRY_HPP
+#ifndef THOT_LAYER_REGISTRY_HPP
+#define THOT_LAYER_REGISTRY_HPP
 
 #include <cstddef>
 #include <functional>
@@ -44,4 +44,5 @@ namespace Thot::Layer::Details {
         return registered_layer;
     }
 }
-#endif //THOT_REGISTRY_HPP
+
+#endif // THOT_LAYER_REGISTRY_HPP

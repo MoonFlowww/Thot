@@ -1,5 +1,5 @@
-#ifndef THOT_APPLY_HPP
-#define THOT_APPLY_HPP
+#ifndef THOT_ACTIVATION_APPLY_HPP
+#define THOT_ACTIVATION_APPLY_HPP
 
 #include <torch/torch.h>
 
@@ -58,4 +58,4 @@ namespace Thot::Activation::Details {
         }
     }
 }
-#endif //THOT_APPLY_HPP
+#endif // THOT_ACTIVATION_APPLY_HPP
