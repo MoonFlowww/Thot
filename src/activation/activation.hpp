@@ -1,13 +1,19 @@
 #ifndef THOT_ACTIVATION_HPP
 #define THOT_ACTIVATION_HPP
-// This file is an factory, must exempt it from any logical-code. For functions look into "/details"
-
-#include "activation/details/relu.hpp"
+// This file is a factory, must exempt it from any logical-code. For functions look into "/details"
 
 namespace Thot::Activation {
-    [[nodiscard]] constexpr auto make_relu() -> ::Thot::Activation::Details::ReLU {
-        return {};
-    }
+    enum class Type {
+        Identity,
+        ReLU,
+    };
+
+    struct Descriptor {
+        Type type{Type::Identity};
+    };
+
+    inline constexpr Descriptor Identity{Type::Identity};
+    inline constexpr Descriptor ReLU{Type::ReLU};
 }
 
 #endif //THOT_ACTIVATION_HPP
