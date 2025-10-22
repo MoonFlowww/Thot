@@ -91,6 +91,8 @@ add_executable(test_Thot test/main.cpp
         src/activation/details/swish.hpp
         src/activation/details/tanh.hpp
         src/initialization/apply.hpp
-        src/loss/details/reduction.hpp)
+        src/loss/details/reduction.hpp
+        src/layer/registry.hpp
+        src/optimizer/registry.hpp)
 
 target_link_libraries(test_Thot PRIVATE Thot)

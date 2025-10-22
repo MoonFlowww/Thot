@@ -22,11 +22,13 @@
  */
 
 #include <algorithm>
+#include <functional>
 #include <cstddef>
 #include <memory>
 #include <optional>
 #include <random>
 #include <stdexcept>
+#include <type_traits>
 #include <string>
 #include <utility>
 #include <variant>
@@ -42,7 +44,6 @@
 #include "loss/loss.hpp"
 #include "loss/details/mse.hpp"
 #include "optimizer/optimizer.hpp"
-#include "optimizer/details/sgd.hpp"
 
 namespace Thot {
     namespace Core {
@@ -89,25 +90,25 @@ namespace Thot {
 
         using torch::nn::Module::train;
 
-        void add(const Layer::FCDescriptor& descriptor) {
-            if (descriptor.options.in_features <= 0 || descriptor.options.out_features <= 0) {
-                throw std::invalid_argument("Fully connected layers require positive in/out features.");
-            }
-            const auto index = dense_layers_.size();
-            auto options = torch::nn::LinearOptions(descriptor.options.in_features,
-                                                    descriptor.options.out_features)
-                                .bias(descriptor.options.bias);
-            auto layer = register_module("fc_" + std::to_string(index), torch::nn::Linear(options));
-            Initialization::Details::apply_module_initialization(layer, descriptor);
-            dense_layers_.push_back(DenseLayer{layer, descriptor.activation.type});
+        void add(Layer::Descriptor descriptor) {
+            const auto index = layers_.size();
+            auto registered_layer = std::visit(
+                [&](auto&& concrete_descriptor) {
+                    return Layer::Details::build_registered_layer(*this, concrete_descriptor, index);
+                },
+                std::move(descriptor));
+            layers_.push_back(std::move(registered_layer));
         }
 
-        void set_optimizer(const Optimizer::SGDDescriptor& descriptor) {
-            if (dense_layers_.empty()) {
+        void set_optimizer(Optimizer::Descriptor descriptor) {
+            if (layers_.empty()) {
                 throw std::logic_error("Cannot create optimizer before any layer has been registered.");
             }
-            auto options = Optimizer::Details::to_torch_options(descriptor.options);
-            optimizer_ = std::make_unique<torch::optim::SGD>(this->parameters(), options);
+            optimizer_ = std::visit(
+                [&](const auto& concrete_descriptor) -> std::unique_ptr<torch::optim::Optimizer> {
+                    return Optimizer::Details::build_optimizer(*this, concrete_descriptor);
+                },
+                std::move(descriptor));
         }
 
         template <class Descriptor>
@@ -123,8 +124,8 @@ namespace Thot {
 
         [[nodiscard]] torch::Tensor forward(torch::Tensor input) {
             auto output = std::move(input);
-            for (auto& layer : dense_layers_) {
-                output = layer.linear->forward(output);
+            for (auto& layer : layers_) {
+                output = layer.forward(std::move(output));
                 output = Activation::Details::apply(layer.activation, std::move(output));
             }
             return output;
@@ -197,10 +198,6 @@ namespace Thot {
 
 
     private:
-        struct DenseLayer {
-            torch::nn::Linear linear{nullptr};
-            Activation::Type activation{Activation::Type::Identity};
-        };
 
         template <bool ShouldShuffle>
     struct ShufflePolicy {
@@ -285,7 +282,7 @@ namespace Thot {
             }
         };
 
-        std::vector<DenseLayer> dense_layers_{};
+        std::vector<Layer::Details::RegisteredLayer> layers_{};
         std::unique_ptr<torch::optim::Optimizer> optimizer_{};
         using LossDescriptor = std::variant<Loss::MSEDescriptor, Loss::CrossEntropyDescriptor>;
         std::optional<LossDescriptor> loss_descriptor_{};

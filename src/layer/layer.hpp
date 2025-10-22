@@ -1,12 +1,15 @@
 #ifndef THOT_LAYER_HPP
 #define THOT_LAYER_HPP
 // This file is a factory, must exempt it from any logical-code. For functions look into "/details"
-
-#include "layer/details/fc.hpp"
+#include <variant>
+#include "details/fc.hpp"
+#include "registry.hpp"
 
 namespace Thot::Layer {
     using FCOptions = Details::FCOptions;
     using FCDescriptor = Details::FCDescriptor;
+
+    using Descriptor = std::variant<FCDescriptor>;
 
     [[nodiscard]] constexpr auto FC(const FCOptions& options,
                                     ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
