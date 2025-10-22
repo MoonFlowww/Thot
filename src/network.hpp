@@ -3,23 +3,20 @@
 /*
 * Pure network translation unit – meant to be compilable in isolation.
  * ---------------------------------------------------------------------------
- * Planned responsibilities:
- *  - Receive already-instantiated module functors (layers, activations, loss,
- *    optimizer hooks, regularisation terms, etc.) from core.hpp as raw pointers
- *    or inline objects.
- *  - Provide constexpr-driven assembly of the forward and backward pipelines
- *    using tuple/unrolled execution so that the emitted machine code contains
- *    zero runtime branching (all feature toggles handled at compile time).
- *  - Wrap libtorch CUDA kernels through thin façade types so call sites remain
- *    expression-template friendly and compatible with a lazy syntax DSL while
- *    still delegating heavy lifting to the underlying library.
- *  - Expose lightweight `constexpr` helpers to: initialise parameters, execute
- *    forward passes, accumulate gradients, and apply optimizer steps.
- *  - Keep the public API header-only for maximal inlining, while implementation
- *    details can be hidden in nested `Details` namespaces or dedicated headers
- *    if template complexity warrants separation.
- *  - Avoid any dependency on the wider runtime (logging, data loading, CLI) so
- *    that, once compiled, this TU can be lifted and reused independently.
+* Implemented responsibilities:
+ *  - Provide a lightweight `Runtime` wrapper that stores modules inside a
+ *    `std::tuple`, exposing constexpr accessors and utilities to inspect the
+ *    compile-time topology.
+ *  - Offer forwarding helpers that transparently call modules regardless of
+ *    whether they expose `operator()`, `.forward(...)`, or are held by pointer.
+ *  - Assemble branchless forward and backward pipelines by unrolling the tuple
+ *    and returning callable closures through `make_forward_pass` and
+ *    `make_backward_pass`.
+ *
+ * Not yet implemented:
+ *  - CUDA façade types or bindings around libtorch kernels.
+ *  - Optimizer/initialisation helpers beyond what is exposed by other modules.
+ *  - Wider runtime integrations (logging, data loading, CLI helpers).
  */
 
 

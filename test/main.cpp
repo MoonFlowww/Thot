@@ -4,7 +4,6 @@
 #include "../include/Thot.h"
 
 
-using DummyConfig = Thot::Core::TrainingConfig<200, 8, true, false>;
 
 int main() {
     torch::manual_seed(42);
@@ -28,7 +27,7 @@ int main() {
         dataset.emplace_back(input, target.unsqueeze(0));
     }
 
-    model.train<DummyConfig>(std::move(dataset));
+    model.train<Thot::Core::TrainingConfig<1000, 16, true, false>>(std::move(dataset));
 
     model.eval();
 
