@@ -10,16 +10,6 @@ find_package(Boost REQUIRED COMPONENTS filesystem)
 add_library(Thot SHARED
         src/Thot.cpp
         src/core.hpp
-        src/network.hpp)
-
-
-
-target_link_libraries(Thot "${TORCH_LIBRARIES}" Boost::filesystem)
-target_include_directories(Thot PUBLIC ${CMAKE_SOURCE_DIR}/include ${TORCH_INCLUDE_DIRS})
-
-
-add_executable(test_Thot test/main.cpp
-        src/core.hpp
         src/network.hpp
         src/layer/layer.hpp
         src/loss/loss.hpp
@@ -95,4 +85,11 @@ add_executable(test_Thot test/main.cpp
         src/layer/registry.hpp
         src/optimizer/registry.hpp)
 
+
+
+target_link_libraries(Thot "${TORCH_LIBRARIES}" Boost::filesystem)
+target_include_directories(Thot PUBLIC ${CMAKE_SOURCE_DIR}/include ${TORCH_INCLUDE_DIRS})
+
+#Test---------------
+add_executable(test_Thot test/main.cpp)
 target_link_libraries(test_Thot PRIVATE Thot)
