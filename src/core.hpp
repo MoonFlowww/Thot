@@ -275,6 +275,13 @@ namespace Thot {
 
                     model.zero_grad();
                     auto prediction = model.forward(inputs);
+                    
+                    if (!prediction.sizes().equals(targets.sizes())) {
+                        if (targets.numel() == prediction.numel()) {
+                            targets = targets.reshape_as(prediction);
+                        }
+                    }
+
                     auto loss = model.compute_loss(prediction, targets);
                     loss.backward();
                     model.step();
