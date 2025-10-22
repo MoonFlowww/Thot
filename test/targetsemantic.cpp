@@ -206,7 +206,7 @@ int instance() {
     model.fit(train_inputs, train_targets, train_opts, Thot::KFold::Classic(1));
 
 
-    model.rule({Thot::Algo::SSM::HiPPOProph});
+    model.rule({Thot::Algo::SSM::ELBO});
     //auto cx1= Thot::Data::Manipulation::Cutout(x1, {32, 32}, {8, 8}, 0.0, true, 0.3, false);
     //auto fcx1 = Thot::Data::Manipulation::Flip(cx1, {1}, true, 0.5, false);
     //auto ffcx1 = Thot::Data::Manipulation::Flip(cx1, {0}, true, 0.5, false);

@@ -44,6 +44,9 @@
 #include "loss/loss.hpp"
 #include "loss/details/mse.hpp"
 #include "optimizer/optimizer.hpp"
+#include "lrscheduler/lrscheduler.hpp"
+
+
 
 namespace Thot {
     namespace Core {
@@ -100,7 +103,7 @@ namespace Thot {
             layers_.push_back(std::move(registered_layer));
         }
 
-        void set_optimizer(Optimizer::Descriptor descriptor) {
+        void set_optimizer(Optimizer::Descriptor descriptor, std::optional<LrScheduler::Descriptor> scheduler = std::nullopt) {
             if (layers_.empty()) {
                 throw std::logic_error("Cannot create optimizer before any layer has been registered.");
             }
@@ -109,6 +112,15 @@ namespace Thot {
                     return Optimizer::Details::build_optimizer(*this, concrete_descriptor);
                 },
                 std::move(descriptor));
+            scheduler_.reset();
+            if (scheduler.has_value()) {
+                scheduler_ = std::visit(
+                    [&](const auto& concrete_descriptor) -> std::unique_ptr<LrScheduler::Details::Scheduler> {
+                        return LrScheduler::Details::build_scheduler(*this, *optimizer_, concrete_descriptor);
+                    },
+                    std::move(*scheduler));
+            }
+
         }
 
         template <class Descriptor>
@@ -152,8 +164,11 @@ namespace Thot {
         }
 
         void step() {
-            if (!optimizer_) {
+            if constexpr (!optimizer_) {
                 throw std::logic_error("Optimizer has not been configured.");
+            }
+            if constexpr (scheduler_) {
+                scheduler_->step();
             }
             optimizer_->step();
         }
@@ -275,7 +290,7 @@ namespace Thot {
 
                     model.zero_grad();
                     auto prediction = model.forward(inputs);
-                    
+
                     if (!prediction.sizes().equals(targets.sizes())) {
                         if (targets.numel() == prediction.numel()) {
                             targets = targets.reshape_as(prediction);
@@ -291,6 +306,7 @@ namespace Thot {
 
         std::vector<Layer::Details::RegisteredLayer> layers_{};
         std::unique_ptr<torch::optim::Optimizer> optimizer_{};
+        std::unique_ptr<LrScheduler::Details::Scheduler> scheduler_{};
         using LossDescriptor = std::variant<Loss::MSEDescriptor, Loss::CrossEntropyDescriptor>;
         std::optional<LossDescriptor> loss_descriptor_{};
     };

@@ -7,6 +7,7 @@
 
 #include <torch/torch.h>
 
+#include "details/adam.hpp"
 #include "details/sgd.hpp"
 
 namespace Thot::Optimizer::Details {
@@ -20,6 +21,12 @@ namespace Thot::Optimizer::Details {
     std::unique_ptr<torch::optim::Optimizer> build_optimizer(Owner& owner, const SGDDescriptor& descriptor) {
         auto options = to_torch_options(descriptor.options);
         return std::make_unique<torch::optim::SGD>(owner.parameters(), options);
+    }
+
+    template <class Owner>
+    std::unique_ptr<torch::optim::Optimizer> build_optimizer(Owner& owner, const AdamWDescriptor& descriptor) {
+        auto options = to_torch_options(descriptor.options);
+        return std::make_unique<torch::optim::AdamW>(owner.parameters(), options);
     }
 }
 

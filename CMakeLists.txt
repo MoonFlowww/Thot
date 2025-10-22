@@ -93,5 +93,10 @@ target_include_directories(Thot PUBLIC ${CMAKE_SOURCE_DIR}/include ${TORCH_INCLU
 
 #Test---------------
 add_executable(test_Thot test/main.cpp
-        test/semi_lazy.cpp)
+        test/semi_lazy.cpp
+        src/block/details/blocks/residual.hpp
+        src/block/details/blocks/sequential.hpp
+        src/lrscheduler/details/common.hpp
+        src/lrscheduler/registry.hpp
+)
 target_link_libraries(test_Thot PRIVATE Thot)

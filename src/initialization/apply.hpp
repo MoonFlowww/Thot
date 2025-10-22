@@ -43,6 +43,7 @@ namespace Thot::Initialization::Details {
                                                   torch::kReLU);
                 detail::zero_bias_if_present(module);
                 break;
+
             case ::Thot::Initialization::Type::Dirac:
                 if (module->weight.dim() >= 3) {
                     torch::nn::init::dirac_(module->weight);
