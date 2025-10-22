@@ -1,20 +1,19 @@
-#ifndef THOT_RELU_HPP
-#define THOT_RELU_HPP
+#ifndef THOT_GELU_HPP
+#define THOT_GELU_HPP
 
 #include <torch/torch.h>
 
 #include <utility>
 
 #include "../activation.hpp"
-
 namespace Thot::Activation::Details {
-    struct ReLU {
+
+    struct GeLU {
         [[nodiscard]] torch::Tensor operator()(torch::Tensor input) const {
-            return torch::relu(std::move(input));
+            return torch::gelu(std::move(input));
         }
     };
 
-
 }
 
-#endif //THOT_RELU_HPP
+#endif //THOT_GELU_HPP

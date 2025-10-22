@@ -1,5 +1,5 @@
-#ifndef THOT_RELU_HPP
-#define THOT_RELU_HPP
+#ifndef THOT_SWISH_HPP
+#define THOT_SWISH_HPP
 
 #include <torch/torch.h>
 
@@ -8,13 +8,14 @@
 #include "../activation.hpp"
 
 namespace Thot::Activation::Details {
-    struct ReLU {
+
+    struct Swish {
         [[nodiscard]] torch::Tensor operator()(torch::Tensor input) const {
-            return torch::relu(std::move(input));
+            auto tensor = std::move(input);
+            return tensor * torch::sigmoid(tensor);
         }
     };
 
-
 }
 
-#endif //THOT_RELU_HPP
+#endif //THOT_SWISH_HPP

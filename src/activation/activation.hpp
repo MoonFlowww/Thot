@@ -5,7 +5,20 @@
 namespace Thot::Activation {
     enum class Type {
         Identity,
+        Raw,
         ReLU,
+        Sigmoid,
+        Tanh,
+        LeakyReLU,
+        Softmax,
+        SiLU,
+        GeLU,
+        GLU,
+        SwiGLU,
+        dSiLU,
+        PSiLU,
+        Mish,
+        Swish,
     };
 
     struct Descriptor {
@@ -13,7 +26,20 @@ namespace Thot::Activation {
     };
 
     inline constexpr Descriptor Identity{Type::Identity};
+    inline constexpr Descriptor Raw{Type::Raw};
     inline constexpr Descriptor ReLU{Type::ReLU};
+    inline constexpr Descriptor Sigmoid{Type::Sigmoid};
+    inline constexpr Descriptor Tanh{Type::Tanh};
+    inline constexpr Descriptor LeakyReLU{Type::LeakyReLU};
+    inline constexpr Descriptor Softmax{Type::Softmax};
+    inline constexpr Descriptor SiLU{Type::SiLU};
+    inline constexpr Descriptor GeLU{Type::GeLU};
+    inline constexpr Descriptor GLU{Type::GLU};
+    inline constexpr Descriptor SwiGLU{Type::SwiGLU};
+    inline constexpr Descriptor dSiLU{Type::dSiLU};
+    inline constexpr Descriptor PSiLU{Type::PSiLU};
+    inline constexpr Descriptor Mish{Type::Mish};
+    inline constexpr Descriptor Swish{Type::Swish};
 }
 
 #endif //THOT_ACTIVATION_HPP

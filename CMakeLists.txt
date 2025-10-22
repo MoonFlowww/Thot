@@ -75,6 +75,20 @@ add_executable(test_Thot test/main.cpp
         src/loss/details/mse.hpp
         src/loss/details/ce.hpp
         src/loss/details/cce.hpp
-        src/optimizer/details/sgd.hpp)
+        src/optimizer/details/sgd.hpp
+        src/activation/apply.hpp
+        src/activation/details/dsilu.hpp
+        src/activation/details/gelu.hpp
+        src/activation/details/glu.hpp
+        src/activation/details/leaky_relu.hpp
+        src/activation/details/mish.hpp
+        src/activation/details/psilu.hpp
+        src/activation/details/raw.hpp
+        src/activation/details/sigmoid.hpp
+        src/activation/details/silu.hpp
+        src/activation/details/softmax.hpp
+        src/activation/details/swiglu.hpp
+        src/activation/details/swish.hpp
+        src/activation/details/tanh.hpp)
 
 target_link_libraries(test_Thot PRIVATE Thot)

@@ -34,7 +34,7 @@
 #include <torch/torch.h>
 
 #include "activation/activation.hpp"
-#include "activation/details/relu.hpp"
+#include "activation/apply.hpp"
 #include "initialization/initialization.hpp"
 #include "layer/layer.hpp"
 #include "loss/loss.hpp"
@@ -272,7 +272,7 @@ namespace Thot {
                 }
             }
         };
-    
+
         static void apply_initialization(const torch::nn::Linear& layer, const Layer::FCDescriptor& descriptor) {
             switch (descriptor.initialization.type) {
                 case Initialization::Type::XavierNormal:
