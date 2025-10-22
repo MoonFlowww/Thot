@@ -16,4 +16,4 @@ namespace Thot::Optimizer {
     }
 }
 
-#endif //THOT_OPTIMIZER_HPP
+#endif //THOT_OPTIMIZER_HP
