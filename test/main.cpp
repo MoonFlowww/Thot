@@ -2,10 +2,7 @@
 
 #include <torch/torch.h>
 
-#include "src/core.hpp"
-#include "src/layer/layer.hpp"
-#include "src/loss/loss.hpp"
-#include "src/optimizer/optimizer.hpp"
+
 
 using DummyConfig = Thot::Core::TrainingConfig<200, 8, true, false>;
 

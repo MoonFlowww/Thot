@@ -1,6 +1,12 @@
 #ifndef THOT_LIBRARY_H
 #define THOT_LIBRARY_H
 
+#include "../src/core.hpp"
+#include "../src/layer/layer.hpp"
+#include "../src/loss/loss.hpp"
+#include "../src/optimizer/optimizer.hpp"
+
+
 // Public umbrella header.
 // -----------------------------------------------------------------------------
 // Intention:
