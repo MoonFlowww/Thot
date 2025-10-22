@@ -8,7 +8,10 @@
 int main() {
     torch::manual_seed(42);
 
+
     Thot::Model model;
+
+
     model.add(Thot::Layer::FC({2, 8}, Thot::Activation::ReLU));
     model.add(Thot::Layer::FC({8, 1}, Thot::Activation::Identity));
 

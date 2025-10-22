@@ -84,7 +84,8 @@ namespace Thot {
         using SupervisedSample = std::pair<torch::Tensor, torch::Tensor>;
         using SupervisedDataset = std::vector<SupervisedSample>;
 
-        inline constexpr auto kDefaultTrainingConfig = TrainingConfig<10, 32, true, false>{};
+        using DefaultTrainingConfig = TrainingConfig<10, 32, true, false>;
+        inline constexpr auto kDefaultTrainingConfig = DefaultTrainingConfig{};
     }
 
     class Model : public torch::nn::Module {
@@ -164,12 +165,10 @@ namespace Thot {
         }
 
         void step() {
-            if constexpr (!optimizer_) {
+            if (!optimizer_)
                 throw std::logic_error("Optimizer has not been configured.");
-            }
-            if constexpr (scheduler_) {
+            if (scheduler_)
                 scheduler_->step();
-            }
             optimizer_->step();
         }
 

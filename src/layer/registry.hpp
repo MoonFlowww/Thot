@@ -1,6 +1,8 @@
 #ifndef THOT_LAYER_REGISTRY_HPP
 #define THOT_LAYER_REGISTRY_HPP
 
+#include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <functional>
 #include <stdexcept>
@@ -73,7 +75,24 @@ namespace Thot::Layer::Details {
         }
         options.groups(descriptor.options.groups);
         options.bias(descriptor.options.bias);
-        options.padding_mode(descriptor.options.padding_mode);
+        if (!descriptor.options.padding_mode.empty()) {
+            auto padding_mode = descriptor.options.padding_mode;
+            std::transform(padding_mode.begin(), padding_mode.end(), padding_mode.begin(),
+                           [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+
+            if (padding_mode == "zeros") {
+                options.padding_mode(torch::kZeros);
+            } else if (padding_mode == "reflect") {
+                options.padding_mode(torch::kReflect);
+            } else if (padding_mode == "replicate") {
+                options.padding_mode(torch::kReplicate);
+            } else if (padding_mode == "circular") {
+                options.padding_mode(torch::kCircular);
+            } else {
+                throw std::invalid_argument("Unsupported padding mode provided to Conv2d descriptor: " +
+                                            descriptor.options.padding_mode);
+            }
+        }
 
         auto module = owner.register_module("conv2d_" + std::to_string(index), torch::nn::Conv2d(options));
         ::Thot::Initialization::Details::apply_module_initialization(module, descriptor);

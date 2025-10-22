@@ -50,7 +50,7 @@ namespace Thot::LrScheduler::Details {
 
     private:
         void apply(std::size_t step) {
-            const auto& param_groups = optimizer_.param_groups();
+            auto& param_groups = optimizer_.param_groups();
             if (base_lrs_.size() != param_groups.size()) {
                 throw std::runtime_error("Optimizer param group count changed after scheduler creation.");
             }
