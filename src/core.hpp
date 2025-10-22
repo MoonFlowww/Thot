@@ -29,6 +29,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <torch/torch.h>
@@ -109,8 +110,15 @@ namespace Thot {
             optimizer_ = std::make_unique<torch::optim::SGD>(this->parameters(), options);
         }
 
-        void set_loss(const Loss::MSEDescriptor& descriptor) {
-            loss_descriptor_ = descriptor;
+        template <class Descriptor>
+        void set_loss(Descriptor descriptor) {
+            using Decayed = std::decay_t<Descriptor>;
+            constexpr bool kSupported = std::disjunction_v<
+                std::is_same<Decayed, Loss::MSEDescriptor>,
+                std::is_same<Decayed, Loss::CrossEntropyDescriptor>>;
+            static_assert(kSupported, "Unsupported loss descriptor type provided to Model::set_loss.");
+
+            loss_descriptor_ = LossDescriptor{std::in_place_type<Decayed>, std::move(descriptor)};
         }
 
         [[nodiscard]] torch::Tensor forward(torch::Tensor input) {
@@ -128,7 +136,10 @@ namespace Thot {
             if (!loss_descriptor_.has_value()) {
                 throw std::logic_error("Loss function has not been configured.");
             }
-            return Loss::Details::compute(*loss_descriptor_, prediction, target, weight);
+            return std::visit(
+                            [&](const auto& descriptor) {
+                                return Loss::Details::compute(descriptor, prediction, target, weight);
+                            }, *loss_descriptor_);
         }
 
         void zero_grad() {
@@ -276,7 +287,8 @@ namespace Thot {
 
         std::vector<DenseLayer> dense_layers_{};
         std::unique_ptr<torch::optim::Optimizer> optimizer_{};
-        std::optional<Loss::MSEDescriptor> loss_descriptor_{};
+        using LossDescriptor = std::variant<Loss::MSEDescriptor, Loss::CrossEntropyDescriptor>;
+        std::optional<LossDescriptor> loss_descriptor_{};
     };
 }
 
