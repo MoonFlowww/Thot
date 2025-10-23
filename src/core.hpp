@@ -734,6 +734,7 @@ namespace Thot {
                 using Utils::Terminal::Colors::kBrightBlue;
                 using Utils::Terminal::Colors::kBrightGreen;
                 using Utils::Terminal::Colors::kBrightYellow;
+                using Utils::Terminal::Colors::kReset;
 
                 std::ostringstream line;
                 line << "Epoch [" << epoch_index << "/" << total_epochs << "] | ";
@@ -757,9 +758,17 @@ namespace Thot {
                     line << "N/A";
                 }
 
-                if (improved) {
-                    line << " " << ApplyColor("∇", kBrightGreen);
-                }
+                const std::string nabla_symbol{"∇"};
+                const std::string grey{kBrightBlack};
+                const std::string green{kBrightGreen};
+                const std::string reset{kReset};
+
+                std::string nabla_indicator;
+
+                if (improved)
+                    line << grey << " (" << green << nabla_symbol <<grey << ")" << reset;
+                else
+                    line << grey << " (" << nabla_symbol << ")" << reset;
 
                 std::ostringstream duration_stream;
                 duration_stream << std::fixed << std::setprecision(2) << duration_seconds << "sec";

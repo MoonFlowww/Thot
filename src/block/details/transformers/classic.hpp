@@ -202,6 +202,92 @@ namespace Thot::Block::Details::Transformer::Classic {
     }
 
     namespace Detail {
+        struct SequenceShape {
+            bool added_sequence_dim{false};
+            bool flattened_spatial{false};
+            std::int64_t batch{0};
+            std::int64_t embed{0};
+            std::int64_t height{0};
+            std::int64_t width{0};
+        };
+
+        inline auto normalise_to_sequence(torch::Tensor input, std::int64_t expected_embed_dim)
+            -> std::pair<torch::Tensor, SequenceShape>
+        {
+            SequenceShape shape{};
+            if (!input.defined()) {
+                return {std::move(input), shape};
+            }
+
+            auto normalised = std::move(input);
+            switch (normalised.dim()) {
+            case 0:
+            case 1:
+                throw std::invalid_argument("Transformer encoder requires inputs with at least two dimensions.");
+            case 2:
+                shape.added_sequence_dim = true;
+                shape.batch = normalised.size(0);
+                shape.embed = normalised.size(1);
+                normalised = normalised.unsqueeze(1);
+                break;
+            case 3:
+                shape.batch = normalised.size(0);
+                shape.embed = normalised.size(2);
+                break;
+            case 4: {
+                shape.flattened_spatial = true;
+                shape.batch = normalised.size(0);
+                shape.embed = normalised.size(1);
+                shape.height = normalised.size(2);
+                shape.width = normalised.size(3);
+                normalised = normalised.contiguous()
+                                 .view({shape.batch, shape.embed, shape.height * shape.width})
+                                 .transpose(1, 2);
+                break;
+            }
+            default:
+                throw std::invalid_argument("Transformer encoder received input with unsupported rank " +
+                                            std::to_string(normalised.dim()) +
+                                            ". Expected 2D (batch, embed), 3D (batch, sequence, embed) or 4D "
+                                            "(batch, channels, height, width).");
+            }
+
+            normalised = normalised.contiguous();
+
+            const auto actual_embed_dim = normalised.size(-1);
+            if (expected_embed_dim > 0 && actual_embed_dim != expected_embed_dim) {
+                throw std::invalid_argument("Transformer encoder expected embedding dimension " +
+                                            std::to_string(expected_embed_dim) + " but received " +
+                                            std::to_string(actual_embed_dim) + ".");
+            }
+
+            if (shape.batch == 0) {
+                shape.batch = normalised.size(0);
+            }
+            shape.embed = actual_embed_dim;
+
+            return {std::move(normalised), shape};
+        }
+
+        inline torch::Tensor restore_from_sequence(torch::Tensor output, const SequenceShape& shape)
+        {
+            if (!output.defined()) {
+                return output;
+            }
+
+            auto restored = std::move(output);
+            if (shape.flattened_spatial) {
+                restored = restored.transpose(1, 2)
+                               .contiguous()
+                               .view({shape.batch, shape.embed, shape.height, shape.width});
+            }
+            if (shape.added_sequence_dim) {
+                restored = restored.squeeze(1);
+            }
+            return restored;
+        }
+
+
         class PositionalEncodingImpl : public torch::nn::Module {
         public:
             PositionalEncodingImpl(std::int64_t embed_dim, PositionalEncodingOptions options)
@@ -250,7 +336,8 @@ namespace Thot::Block::Details::Transformer::Classic {
             }
 
             torch::Tensor forward(torch::Tensor input) {
-                auto output = std::move(input);
+                auto [normalised_input, shape] = normalise_to_sequence(std::move(input), embed_dim_);
+                auto output = std::move(normalised_input);
                 if (options_.type == PositionalEncodingType::Sinusoidal) {
                     if (!output.defined()) {
                         return output;
@@ -384,7 +471,7 @@ namespace Thot::Block::Details::Transformer::Classic {
                 }
 
                 output = residual + feed_forward;
-                return output;
+                return restore_from_sequence(std::move(output), shape);
             }
 
         private:
@@ -433,7 +520,8 @@ namespace Thot::Block::Details::Transformer::Classic {
                                   const torch::Tensor& attn_mask = {},
                                   const torch::Tensor& key_padding_mask = {})
             {
-                auto output = std::move(input);
+                auto [normalised_input, shape] = normalise_to_sequence(std::move(input), options_.embed_dim);
+                auto output = std::move(normalised_input);
                 if (positional_encoding_) {
                     output = positional_encoding_->forward(std::move(output));
                 }
@@ -445,7 +533,7 @@ namespace Thot::Block::Details::Transformer::Classic {
                 if (final_layer_norm_) {
                     output = final_layer_norm_->forward(output);
                 }
-                return output;
+                return restore_from_sequence(std::move(output), shape);
             }
 
         private:
