@@ -41,16 +41,16 @@ int main() {
 
     model.add(Thot::Block::Residual({
         Thot::Layer::Conv2d(
-            {64, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
+{64, 128, {3, 3}, {2, 2}, {1, 1}, {1, 1}, 1, false},
             Thot::Activation::Raw,
             Thot::Initialization::KaimingNormal
         ),
         Thot::Layer::BatchNorm2d(
-            {64, 1e-5, 0.1, true, true},
+{128, 1e-5, 0.1, true, true},
             Thot::Activation::SiLU
         ),
         Thot::Layer::Conv2d(
-            {64, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
+{128, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
             Thot::Activation::Raw,
             Thot::Initialization::KaimingNormal
         )
@@ -60,11 +60,11 @@ int main() {
                 Thot::Activation::Raw,
                 Thot::Initialization::KaimingNormal
             )
-    }, { .final_activation = Thot::Activation::SiLU }));
+    }, {.final_activation = Thot::Activation::SiLU}));
 
     model.add(Thot::Block::Residual({
         Thot::Layer::Conv2d(
-            {64, 128, {3, 3}, {2, 2}, {1, 1}, {1, 1}, 1, false},
+{128, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
             Thot::Activation::Raw,
             Thot::Initialization::KaimingNormal
         ),
