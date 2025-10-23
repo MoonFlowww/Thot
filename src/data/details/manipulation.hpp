@@ -319,7 +319,7 @@ namespace Thot::Data::Check {
             flattened = flattened.to(torch::kLong);
         }
 
-        auto runs = torch::unique_consecutive(flattened);
+        auto runs = std::get<0>(torch::unique_consecutive(flattened));
         const auto run_ratio = static_cast<double>(runs.size(0)) / static_cast<double>(flattened.size(0));
 
         std::ostringstream oss;

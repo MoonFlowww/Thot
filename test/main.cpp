@@ -2,9 +2,8 @@
 #include <cstddef>
 #include <vector>
 #include <torch/torch.h>
+#include <utility>
 #include "../include/Thot.h"
-#include "../src/data/details/load.hpp"
-#include "../src/data/details/manipulation.hpp"
 
 
 namespace {
@@ -82,7 +81,7 @@ int main() {
 
     auto [fx2, fy2] = Thot::Data::Manipulation::Fraction(x2, y2, 0.05f);
 
-    model.train(x1, x1, {.epoch = 120, .batch_size = 32, .test={fx2, fy2}});
+    model.train(x1, y1, {.epoch = 120, .batch_size = 32, .test=std::make_pair(fx2, fy2)});
 
     model.eval();
 
