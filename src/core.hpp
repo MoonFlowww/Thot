@@ -104,10 +104,81 @@ namespace Thot {
 
         using ModuleDescriptor = std::variant<Layer::Descriptor, Block::Descriptor>;
         void add(ModuleDescriptor descriptor) {
-            if (std::holds_alternative<Layer::Descriptor>(descriptor)) {
-                add_layer(std::move(std::get<Layer::Descriptor>(descriptor)));
-            } else {
-                add_block(std::move(std::get<Block::Descriptor>(descriptor)));
+            auto register_layer = [this](auto&& concrete_descriptor) {
+                using DescriptorType = std::decay_t<decltype(concrete_descriptor)>;
+                auto registered = Layer::Details::build_registered_layer(
+                    *this,
+                    static_cast<const DescriptorType&>(concrete_descriptor),
+                    next_module_index());
+                layers_.push_back(std::move(registered));
+            };
+
+            auto handle_layer_descriptor = [&](Layer::Descriptor layer_descriptor) {
+                switch (layer_descriptor.index()) {
+                    case 0:
+                        register_layer(std::get<Layer::FCDescriptor>(std::move(layer_descriptor)));
+                        break;
+                    case 1:
+                        register_layer(std::get<Layer::Conv2dDescriptor>(std::move(layer_descriptor)));
+                        break;
+                    case 2:
+                        register_layer(std::get<Layer::BatchNorm2dDescriptor>(std::move(layer_descriptor)));
+                        break;
+                    case 3:
+                        register_layer(std::get<Layer::PoolingDescriptor>(std::move(layer_descriptor)));
+                        break;
+                    case 4:
+                        register_layer(std::get<Layer::DropoutDescriptor>(std::move(layer_descriptor)));
+                        break;
+                    case 5:
+                        register_layer(std::get<Layer::FlattenDescriptor>(std::move(layer_descriptor)));
+                        break;
+                    default:
+                        throw std::invalid_argument("Unsupported layer descriptor passed to Model::add.");
+                }
+            };
+
+            switch (descriptor.index()) {
+                case 0:
+                    handle_layer_descriptor(std::get<Layer::Descriptor>(std::move(descriptor)));
+                    break;
+                case 1: {
+                    auto block_descriptor = std::get<Block::Descriptor>(std::move(descriptor));
+                    switch (block_descriptor.index()) {
+                        case 0: {
+                            auto sequential = std::get<Block::SequentialDescriptor>(std::move(block_descriptor));
+                            for (auto& layer : sequential.layers) {
+                                handle_layer_descriptor(std::move(layer));
+                            }
+                            break;
+                        }
+                        case 1: {
+                            auto residual = std::get<Block::ResidualDescriptor>(std::move(block_descriptor));
+                            const auto index = next_module_index();
+                            auto module = register_module(
+                                "residual_block_" + std::to_string(index),
+                                Block::Details::ResidualBlock(std::move(residual)));
+
+                            Layer::Details::RegisteredLayer registered_layer{};
+                            registered_layer.activation = Activation::Type::Identity;
+                            registered_layer.forward = [module](torch::Tensor input) {
+                                return module->forward(std::move(input));
+                            };
+
+                            layers_.push_back(std::move(registered_layer));
+                            break;
+                        }
+                        case 2:
+                            throw std::invalid_argument("Transformer encoder blocks are not yet supported by Model::add.");
+                        case 3:
+                            throw std::invalid_argument("Transformer decoder blocks are not yet supported by Model::add.");
+                        default:
+                            throw std::invalid_argument("Unsupported block descriptor passed to Model::add.");
+                    }
+                    break;
+                }
+                default:
+                    throw std::invalid_argument("Unsupported module descriptor passed to Model::add.");
             }
         }
 
@@ -369,61 +440,6 @@ namespace Thot {
             optimizer_->step();
         }
         [[nodiscard]] std::size_t next_module_index() noexcept { return module_index_++; }
-
-        void add_layer(Layer::Descriptor descriptor)
-        {
-            std::visit(
-                [this](auto&& concrete) {
-                    using DescriptorType = std::decay_t<decltype(concrete)>;
-                    auto registered = Layer::Details::build_registered_layer(
-                        *this,
-                        static_cast<const DescriptorType&>(concrete),
-                        next_module_index());
-                    layers_.push_back(std::move(registered));
-                },
-                std::move(descriptor));
-        }
-
-        void add_block(Block::Descriptor descriptor)
-        {
-            std::visit(
-                [this](auto&& concrete) {
-                    this->add_block_impl(std::forward<decltype(concrete)>(concrete));
-                },
-                std::move(descriptor));
-        }
-
-        void add_block_impl(Block::Details::SequentialDescriptor descriptor)
-        {
-            for (auto& layer : descriptor.layers) {
-                add_layer(std::move(layer));
-            }
-        }
-
-        void add_block_impl(Block::Details::ResidualDescriptor descriptor)
-        {
-            const auto index = next_module_index();
-            auto module = register_module("residual_block_" + std::to_string(index),
-                                          Block::Details::ResidualBlock(std::move(descriptor)));
-
-            Layer::Details::RegisteredLayer registered_layer{};
-            registered_layer.activation = Activation::Type::Identity;
-            registered_layer.forward = [module](torch::Tensor input) {
-                return module->forward(std::move(input));
-            };
-
-            layers_.push_back(std::move(registered_layer));
-        }
-
-        void add_block_impl(Block::Transformer::Classic::EncoderDescriptor descriptor)
-        {
-            throw std::invalid_argument("Transformer encoder blocks are not yet supported by Model::add.");
-        }
-
-        void add_block_impl(Block::Transformer::Classic::DecoderDescriptor descriptor)
-        {
-            throw std::invalid_argument("Transformer decoder blocks are not yet supported by Model::add.");
-        }
     };
 }
 
