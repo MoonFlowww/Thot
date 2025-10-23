@@ -25,8 +25,6 @@ int main() {
     constexpr std::int64_t embed_dim = 32;
     constexpr std::int64_t output_dim = 1;
 
-    using TrainingConfig = Thot::Core::TrainingConfig<120, 32, true, false>;
-
 
     Thot::Model model;
     model.to_device(torch::cuda::is_available());
@@ -76,15 +74,11 @@ int main() {
     model.set_optimizer(Thot::Optimizer::AdamW(optimizer_options));
 
     model.set_loss(Thot::Loss::MSE());
-    Thot::Core::SupervisedDataset dataset{};
-    dataset.reserve(static_cast<std::size_t>(dataset_size));
-    for (std::int64_t index = 0; index < dataset_size; ++index) {
-        auto sample = torch::randn({sequence_length, input_dim});
-        auto target = sample.sum().unsqueeze(0);
-        dataset.emplace_back(std::move(sample), std::move(target));
-    }
 
-    model.train<TrainingConfig>(std::move(dataset));
+    auto train_inputs = torch::randn({dataset_size, sequence_length, input_dim});
+    auto train_targets = train_inputs.sum({1, 2}).unsqueeze(1);
+
+    model.train(train_inputs, train_targets, {.epoch = 120, .batch_size = 32});
 
     model.eval();
 

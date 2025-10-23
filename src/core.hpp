@@ -38,6 +38,7 @@
 
 #include <torch/torch.h>
 
+#include "utils/terminal.hpp"
 #include "activation/activation.hpp"
 #include "activation/apply.hpp"
 #include "initialization/initialization.hpp"
@@ -94,6 +95,16 @@ namespace Thot {
         using DefaultTrainingConfig = TrainingConfig<10, 32, true, false>;
         inline constexpr auto kDefaultTrainingConfig = DefaultTrainingConfig{};
     }
+
+    struct TrainOptions {
+        std::size_t epoch{Core::kDefaultTrainingConfig.epochs};
+        std::size_t batch_size{Core::kDefaultTrainingConfig.batch_size};
+        bool shuffle{Core::kDefaultTrainingConfig.shuffle};
+        bool buffer_vram{Core::kDefaultTrainingConfig.buffer_vram};
+        bool monitor{true};
+        std::optional<std::pair<torch::Tensor, torch::Tensor>> validation{};
+        std::ostream* stream{&std::cout};
+    };
 
     class Model : public torch::nn::Module {
     public:
@@ -293,119 +304,377 @@ namespace Thot {
         void train(Dataset dataset) {
             static_assert(Config::batch_size > 0, "Batch size must be greater than zero.");
 
+            if (dataset.empty()) {
+                return;
+            }
+
+            TrainOptions options{};
+            options.epoch = Config::epochs;
+            options.batch_size = Config::batch_size;
+            options.shuffle = Config::shuffle;
+            options.buffer_vram = Config::buffer_vram;
+            options.monitor = false;
+
+            auto packed = TrainingDetails::pack_dataset(std::move(dataset));
+            train(std::move(packed.inputs), std::move(packed.targets), options);
+        }
+
+        void train(torch::Tensor train_inputs,
+                   torch::Tensor train_targets,
+                   TrainOptions options = {})
+        {
+
             if (!has_optimizer()) {
                 throw std::logic_error("Cannot train without an optimizer.");
             }
             if (!has_loss()) {
                 throw std::logic_error("Cannot train without a loss function.");
             }
-            if (dataset.empty()) {
+            if (!train_inputs.defined() || !train_targets.defined()) {
+                throw std::invalid_argument("Training tensors must be defined.");
+            }
+
+            if (train_inputs.dim() == 0 || train_targets.dim() == 0) {
+                throw std::invalid_argument("Training tensors must not be scalars.");
+            }
+
+            if (train_inputs.size(0) != train_targets.size(0)) {
+                throw std::invalid_argument("Mismatched number of training samples between inputs and targets.");
+            }
+
+            if (options.batch_size == 0) {
+                throw std::invalid_argument("Batch size must be greater than zero.");
+            }
+
+            if (options.epoch == 0) {
+                return;
+            }
+
+            if (options.buffer_vram && !device_.is_cuda()) {
+                throw std::runtime_error("VRAM buffering requires the model to be on a CUDA device.");
+            }
+
+            const auto total_samples = train_inputs.size(0);
+            if (total_samples == 0) {
                 return;
             }
 
             torch::nn::Module::train();
             this->to(device_);
 
-            if constexpr (Config::buffer_vram) {
-                if (!device_.is_cuda()) {
-                    throw std::runtime_error("VRAM buffering requires the model to be on a CUDA device.");
+            TrainOptions effective_options = options;
+            if (effective_options.stream == nullptr) {
+                effective_options.monitor = false;
+            }
+            auto training_dataset = TrainingDetails::prepare_tensor_dataset(std::move(train_inputs), std::move(train_targets));
+            std::optional<typename TrainingDetails::TensorDataset> validation_dataset{};
+            if (options.validation.has_value()) {
+                const auto& validation = *options.validation;
+                if (!validation.first.defined() || !validation.second.defined()) {
+                    throw std::invalid_argument("Validation tensors must be defined when provided.");
                 }
+                if (validation.first.size(0) != validation.second.size(0)) {
+                    throw std::invalid_argument("Mismatched number of validation samples between inputs and targets.");
+                }
+                validation_dataset = TrainingDetails::prepare_tensor_dataset(validation.first, validation.second);
             }
 
-            auto working_set = TrainingDetails::prepare_dataset<Config>(std::move(dataset), device_);
-            auto rng = std::mt19937{std::random_device{}()};
-
-            for (std::size_t epoch = 0; epoch < Config::epochs; ++epoch) {
-                TrainingDetails::maybe_shuffle<Config>(working_set, rng);
-                TrainingDetails::run_epoch<Config>(*this, working_set);
-            }
-        }
-
-    private:
-
-        template <bool ShouldShuffle>
-    struct ShufflePolicy {
-            template <class Dataset, class RNG>
-            static void apply(Dataset& dataset, RNG& rng) {
-                if constexpr (ShouldShuffle) {
-                    if (dataset.size() > 1) {
-                        std::shuffle(dataset.begin(), dataset.end(), rng);
+            if (effective_options.buffer_vram) {
+                training_dataset = TrainingDetails::buffer_dataset(training_dataset, device_);
+                if (validation_dataset) {
+                    *validation_dataset = TrainingDetails::buffer_dataset(*validation_dataset, device_);
+                }
+            } else {
+                training_dataset = TrainingDetails::ensure_contiguous(std::move(training_dataset));
+                if (validation_dataset) {
+                    *validation_dataset = TrainingDetails::ensure_contiguous(std::move(*validation_dataset));
+                }
+                if (training_dataset.inputs.device().is_cuda()) {
+                    training_dataset.inputs = training_dataset.inputs.to(torch::kCPU);
+                }
+                if (training_dataset.targets.device().is_cuda()) {
+                    training_dataset.targets = training_dataset.targets.to(torch::kCPU);
+                }
+                if (validation_dataset) {
+                    if (validation_dataset->inputs.device().is_cuda()) {
+                        validation_dataset->inputs = validation_dataset->inputs.to(torch::kCPU);
+                    }
+                    if (validation_dataset->targets.device().is_cuda()) {
+                        validation_dataset->targets = validation_dataset->targets.to(torch::kCPU);
                     }
                 }
             }
-        };
-
-        template <bool BufferVRAM>
-        struct VRAMBufferPolicy {
-            template <class Sample>
-            static void prepare(Sample& sample, const torch::Device& device) {
-                if constexpr (BufferVRAM) {
-                    sample.first = sample.first.to(device);
-                    sample.second = sample.second.to(device);
-                }
+            if (effective_options.buffer_vram && !training_dataset.inputs.device().is_cuda()) {
+                training_dataset.inputs = training_dataset.inputs.to(device_);
+                training_dataset.targets = training_dataset.targets.to(device_);
             }
 
-            [[nodiscard]] static torch::Tensor to_device(const torch::Tensor& tensor, const torch::Device& device) {
-                if constexpr (BufferVRAM) {
-                    return tensor;
+            if (effective_options.buffer_vram && validation_dataset && !validation_dataset->inputs.device().is_cuda()) {
+                validation_dataset->inputs = validation_dataset->inputs.to(device_);
+                validation_dataset->targets = validation_dataset->targets.to(device_);
+            }
+
+            if (effective_options.shuffle) {
+                if (effective_options.buffer_vram) {
+                    TrainingDetails::run_epochs<true, true>(*this, training_dataset, validation_dataset, effective_options);
                 } else {
-                    return tensor.to(device);
+                    TrainingDetails::run_epochs<false, true>(*this, training_dataset, validation_dataset, effective_options);
+                }
+            } else {
+                if (effective_options.buffer_vram) {
+                    TrainingDetails::run_epochs<true, false>(*this, training_dataset, validation_dataset, effective_options);
+                } else {
+                    TrainingDetails::run_epochs<false, false>(*this, training_dataset, validation_dataset, effective_options);
                 }
             }
-        };
+        }
+private:
 
         struct TrainingDetails {
-            template <class Config, class Dataset>
-            static Dataset prepare_dataset(Dataset dataset, const torch::Device& device) {
-                for (auto& sample : dataset) {
-                    VRAMBufferPolicy<Config::buffer_vram>::prepare(sample, device);
+            struct TensorDataset {
+                torch::Tensor inputs;
+                torch::Tensor targets;
+            };
+
+            [[nodiscard]] static TensorDataset prepare_tensor_dataset(torch::Tensor inputs,
+                                                                      torch::Tensor targets)
+            {
+                return TensorDataset{std::move(inputs).contiguous(), std::move(targets).contiguous()};
+            }
+
+            [[nodiscard]] static TensorDataset ensure_contiguous(TensorDataset dataset)
+            {
+                dataset.inputs = dataset.inputs.contiguous();
+                dataset.targets = dataset.targets.contiguous();
+                return dataset;
+            }
+
+            [[nodiscard]] static TensorDataset buffer_dataset(TensorDataset dataset, const torch::Device& device)
+            {
+                if (dataset.inputs.device() != device) {
+                    dataset.inputs = dataset.inputs.to(device);
+                }
+                if (dataset.targets.device() != device) {
+                    dataset.targets = dataset.targets.to(device);
                 }
                 return dataset;
             }
 
-            template <class Config, class Dataset, class RNG>
-            static void maybe_shuffle(Dataset& dataset, RNG& rng) {
-                ShufflePolicy<Config::shuffle>::apply(dataset, rng);
+            template <class Dataset>
+            [[nodiscard]] static TensorDataset pack_dataset(Dataset dataset)
+            {
+                if (dataset.empty()) {
+                    return {};
+                }
+
+                std::vector<torch::Tensor> inputs;
+                std::vector<torch::Tensor> targets;
+                inputs.reserve(dataset.size());
+                targets.reserve(dataset.size());
+
+                for (auto& sample : dataset) {
+                    inputs.push_back(std::move(sample.first));
+                    targets.push_back(std::move(sample.second));
+                }
+
+                return TensorDataset{torch::stack(std::move(inputs)), torch::stack(std::move(targets))};
             }
 
-            template <class Config, class Dataset>
-            static void run_epoch(Model& model, Dataset& dataset) {
-                const auto& device = model.device();
-                const auto total_samples = dataset.size();
-                const auto batch_size = Config::batch_size;
+template <bool BufferVRAM, bool ShouldShuffle>
+            static void run_epochs(Model& model,
+                                   TensorDataset& train_dataset,
+                                   const std::optional<TensorDataset>& validation_dataset,
+                                   const TrainOptions& options)
+            {
+                const auto device = model.device();
+                const auto total_samples = train_dataset.inputs.size(0);
+                const auto batch_size = static_cast<std::int64_t>(options.batch_size);
 
-                for (std::size_t offset = 0; offset < total_samples; offset += batch_size) {
-                    const auto batch_end = std::min(offset + batch_size, total_samples);
-                    if (batch_end <= offset) {
-                        continue;
+                torch::TensorOptions index_options = torch::TensorOptions().dtype(torch::kLong);
+                if constexpr (BufferVRAM) {
+                    index_options = index_options.device(device);
+                }
+
+                auto best_validation = std::optional<double>{};
+
+                for (std::size_t epoch = 0; epoch < options.epoch; ++epoch) {
+                    const auto epoch_start = std::chrono::steady_clock::now();
+
+                    torch::Tensor epoch_indices;
+                    if constexpr (ShouldShuffle) {
+                        if (total_samples > 1) {
+                            epoch_indices = torch::randperm(total_samples, index_options);
+                        } else {
+                            epoch_indices = torch::arange(total_samples, index_options);
+                        }
                     }
 
-                    std::vector<torch::Tensor> batch_inputs;
-                    std::vector<torch::Tensor> batch_targets;
-                    batch_inputs.reserve(batch_end - offset);
-                    batch_targets.reserve(batch_end - offset);
+                    auto accumulation = torch::zeros({}, torch::TensorOptions().dtype(torch::kFloat64).device(device));
+                    std::int64_t weight = 0;
 
-                    for (std::size_t index = offset; index < batch_end; ++index) {
-                        const auto& sample = dataset[index];
-                        batch_inputs.push_back(VRAMBufferPolicy<Config::buffer_vram>::to_device(sample.first, device));
-                        batch_targets.push_back(VRAMBufferPolicy<Config::buffer_vram>::to_device(sample.second, device));
+                    for (std::int64_t offset = 0; offset < total_samples; offset += batch_size) {
+                        const auto remaining = total_samples - offset;
+                        const auto current_batch = std::min<std::int64_t>(batch_size, remaining);
+                        if (current_batch <= 0) {
+                            break;
+                        }
+
+                        torch::Tensor batch_inputs;
+                        torch::Tensor batch_targets;
+
+                        if constexpr (ShouldShuffle) {
+                            auto batch_indices = epoch_indices.narrow(0, offset, current_batch);
+                            if constexpr (BufferVRAM) {
+                                batch_inputs = train_dataset.inputs.index_select(0, batch_indices);
+                                batch_targets = train_dataset.targets.index_select(0, batch_indices);
+                            } else {
+                                auto cpu_indices = batch_indices.to(torch::kCPU);
+                                batch_inputs = train_dataset.inputs.index_select(0, cpu_indices);
+                                batch_targets = train_dataset.targets.index_select(0, cpu_indices);
+                            }
+                        } else {
+                            batch_inputs = train_dataset.inputs.narrow(0, offset, current_batch);
+                            batch_targets = train_dataset.targets.narrow(0, offset, current_batch);
+                        }
+
+                        if constexpr (!BufferVRAM) {
+                            if (batch_inputs.device() != device) {
+                                batch_inputs = batch_inputs.to(device);
+                            }
+                            if (batch_targets.device() != device) {
+                                batch_targets = batch_targets.to(device);
+                            }
+                        }
+
+                        if constexpr (BufferVRAM) {
+                            if (batch_inputs.device() != device) {
+                                batch_inputs = batch_inputs.to(device);
+                            }
+                            if (batch_targets.device() != device) {
+                                batch_targets = batch_targets.to(device);
+                            }
+                        }
+
+                        model.zero_grad();
+                        auto prediction = model.forward(batch_inputs);
+
+                        if (!prediction.sizes().equals(batch_targets.sizes())) {
+                            if (batch_targets.numel() == prediction.numel()) {
+                                batch_targets = batch_targets.reshape_as(prediction);
+                            }
+                        }
+
+                        auto loss = model.compute_loss(prediction, batch_targets);
+                        if (loss.dim() != 0) {
+                            loss = loss.mean();
+                        }
+
+                        loss.backward();
+                        model.step();
+
+                        auto loss_tensor = loss.detach();
+                        if (loss_tensor.device() != accumulation.device()) {
+                            loss_tensor = loss_tensor.to(accumulation.device());
+                        }
+                        loss_tensor = loss_tensor.to(torch::kFloat64);
+                        loss_tensor.mul_(static_cast<double>(current_batch));
+                        accumulation.add_(loss_tensor);
+                        weight += current_batch;
                     }
 
-                    if (batch_inputs.empty() || batch_targets.empty()) {
-                        continue;
+                    const auto train_loss = weight > 0
+                        ? accumulation.item<double>() / static_cast<double>(weight)
+                        : 0.0;
+
+                    std::optional<double> validation_loss{};
+                    if (validation_dataset) {
+                        validation_loss = compute_dataset_loss<BufferVRAM>(model, *validation_dataset, options.batch_size);
                     }
 
-                    auto inputs = torch::stack(batch_inputs);
-                    auto targets = torch::stack(batch_targets);
-
-                    if (inputs.device() != device) {
-                        inputs = inputs.to(device);
+                    bool improved = false;
+                    std::optional<double> delta{};
+                    if (validation_loss) {
+                        if (!best_validation) {
+                            improved = true;
+                            best_validation = validation_loss;
+                        } else {
+                            const auto previous_best = *best_validation;
+                            delta = *validation_loss - previous_best;
+                            if (*validation_loss < previous_best) {
+                                improved = true;
+                                best_validation = validation_loss;
+                            }
+                        }
                     }
-                    if (targets.device() != device) {
-                        targets = targets.to(device);
+
+                    const auto duration_seconds = std::chrono::duration<double>(
+                                            std::chrono::steady_clock::now() - epoch_start).count();
+
+                    if (options.monitor && options.stream) {
+                        log_epoch(*options.stream,
+                                  epoch + 1,
+                                  options.epoch,
+                                  train_loss,
+                                  validation_loss,
+                                  delta,
+                                  improved,
+                                  duration_seconds);
+                    }
+                }
+            }
+
+
+            template <bool BufferVRAM>
+                        static std::optional<double> compute_dataset_loss(Model& model,
+                                                                          const TensorDataset& dataset,
+                                                                          std::size_t batch_size)
+            {
+                if (!dataset.inputs.defined() || !dataset.targets.defined()) {
+                    return std::nullopt;
+                }
+                if (dataset.inputs.size(0) == 0) {
+                    return std::nullopt;
+                }
+
+                const auto device = model.device();
+                const auto total_samples = dataset.inputs.size(0);
+                const auto local_batch = static_cast<std::int64_t>(batch_size);
+
+                torch::NoGradGuard no_grad;
+                const bool was_training = model.is_training();
+                model.eval();
+
+                auto accumulation = torch::zeros({}, torch::TensorOptions().dtype(torch::kFloat64).device(device));
+                std::int64_t weight = 0;
+
+                for (std::int64_t offset = 0; offset < total_samples; offset += local_batch) {
+                    const auto remaining = total_samples - offset;
+                    const auto current_batch = std::min<std::int64_t>(local_batch, remaining);
+                    if (current_batch <= 0) {
+                        break;
+                    }
+                    torch::Tensor inputs;
+                    torch::Tensor targets;
+
+                    inputs = dataset.inputs.narrow(0, offset, current_batch);
+                    targets = dataset.targets.narrow(0, offset, current_batch);
+
+                    if constexpr (!BufferVRAM) {
+                        if (inputs.device() != device) {
+                            inputs = inputs.to(device);
+                        }
+                        if (targets.device() != device) {
+                            targets = targets.to(device);
+                        }
+                    } else {
+                        if (inputs.device() != device) {
+                            inputs = inputs.to(device);
+                        }
+                        if (targets.device() != device) {
+                            targets = targets.to(device);
+                        }
                     }
 
-                    model.zero_grad();
                     auto prediction = model.forward(inputs);
 
                     if (!prediction.sizes().equals(targets.sizes())) {
@@ -415,9 +684,79 @@ namespace Thot {
                     }
 
                     auto loss = model.compute_loss(prediction, targets);
-                    loss.backward();
-                    model.step();
+                    if (loss.dim() != 0) {
+                        loss = loss.mean();
+                    }
+
+                    auto loss_tensor = loss.detach();
+                    if (loss_tensor.device() != accumulation.device()) {
+                        loss_tensor = loss_tensor.to(accumulation.device());
+                    }
+                    loss_tensor = loss_tensor.to(torch::kFloat64);
+                    loss_tensor.mul_(static_cast<double>(current_batch));
+                    accumulation.add_(loss_tensor);
+                    weight += current_batch;
                 }
+if (was_training) {
+                    model.train();
+                } else {
+                    model.eval();
+                }
+
+                if (weight == 0) {
+                    return std::nullopt;
+                }
+
+                return accumulation.item<double>() / static_cast<double>(weight);
+            }
+
+            static void log_epoch(std::ostream& stream,
+                                  std::size_t epoch_index,
+                                  std::size_t total_epochs,
+                                  double train_loss,
+                                  const std::optional<double>& validation_loss,
+                                  const std::optional<double>& delta,
+                                  bool improved,
+                                  double duration_seconds)
+            {
+                using Utils::Terminal::ApplyColor;
+                using Utils::Terminal::Colors::kBrightBlack;
+                using Utils::Terminal::Colors::kBrightBlue;
+                using Utils::Terminal::Colors::kBrightGreen;
+                using Utils::Terminal::Colors::kBrightYellow;
+
+                std::ostringstream line;
+                line << "Epoch [" << epoch_index << "/" << total_epochs << "] | ";
+                line << ApplyColor("Train", kBrightYellow) << " loss: "
+                     << std::fixed << std::setprecision(6) << train_loss << " | ";
+                line << ApplyColor("Test", kBrightBlue) << " loss: ";
+                if (validation_loss) {
+                    line << std::fixed << std::setprecision(6) << *validation_loss;
+                } else {
+                    line << "N/A";
+                }
+
+                line << " | ΔLoss: ";
+                if (validation_loss && delta) {
+                    std::ostringstream delta_stream;
+                    delta_stream << std::showpos << std::fixed << std::setprecision(6) << *delta;
+                    line << delta_stream.str();
+                } else if (validation_loss) {
+                    line << "N/A";
+                } else {
+                    line << "N/A";
+                }
+
+                if (improved) {
+                    line << " " << ApplyColor("∇", kBrightGreen);
+                }
+
+                std::ostringstream duration_stream;
+                duration_stream << std::fixed << std::setprecision(2) << duration_seconds << "sec";
+                line << " | "
+                     << ApplyColor("duration: " + duration_stream.str(), kBrightBlack);
+
+                stream << line.str() << '\n';
             }
         };
 
