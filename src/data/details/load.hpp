@@ -120,8 +120,8 @@ namespace Thot::Data::Load {
             if (tensor.size(0) <= static_cast<int64_t>(count)) {
                 return tensor;
             }
-            using torch::indexing::Slice;
-            return tensor.index({Slice(0, static_cast<int64_t>(count))}).clone();
+            const auto copy_count = static_cast<int64_t>(count);
+            return tensor.narrow(0, 0, copy_count).clone();
         }
 
         inline torch::Tensor normalise_inputs(const torch::Tensor& tensor) {

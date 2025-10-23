@@ -18,18 +18,12 @@ namespace {
 
 
 int main() {
-    torch::manual_seed(42);
-    constexpr std::int64_t dataset_size = 512;
-    constexpr std::int64_t sequence_length = 6;
-    constexpr std::int64_t input_dim = 8;
-    constexpr std::int64_t embed_dim = 32;
-    constexpr std::int64_t output_dim = 1;
 
 
     Thot::Model model;
     model.to_device(torch::cuda::is_available());
 
-    Thot::Layer::FCOptions input_projection_options{input_dim, embed_dim, true};
+    Thot::Layer::FCOptions input_projection_options{32*32, 32*32, true};
     model.add(Thot::Layer::FC(input_projection_options, Thot::Activation::GeLU));
 
     Thot::Layer::DropoutOptions input_dropout_options{};
@@ -38,7 +32,7 @@ int main() {
 
     Thot::Block::Transformer::Classic::EncoderOptions encoder_options{};
     encoder_options.layers = 2;
-    encoder_options.embed_dim = embed_dim;
+    encoder_options.embed_dim = 64;
     encoder_options.attention.num_heads = 4;
     encoder_options.attention.dropout = 0.1;
     encoder_options.feed_forward.mlp_ratio = 2.0;

@@ -163,17 +163,18 @@ namespace Thot::Data::DimReduction {
             data = data - mean;
         }
 
-        auto svd = torch::linalg::svd(data, /*full_matrices=*/false);
+        auto svd = torch::linalg_svd(data, /*full_matrices=*/false);
         auto U = std::get<0>(svd);
         auto S = std::get<1>(svd);
         auto Vh = std::get<2>(svd);
 
 
-        auto selected_singular = S.index({torch::indexing::Slice(0, static_cast<int64_t>(components))});
-        auto components_matrix = Vh.index({torch::indexing::Slice(0, static_cast<int64_t>(components))});
+        const auto component_count = static_cast<int64_t>(components);
+        auto selected_singular = S.narrow(0, 0, component_count);
+        auto components_matrix = Vh.narrow(0, 0, component_count);
 
         auto explained_variance = (selected_singular.pow(2)) / std::max<int64_t>(samples - 1, 1);
-        auto transformed = U.index({torch::indexing::Slice(), torch::indexing::Slice(0, static_cast<int64_t>(components))}) * selected_singular;
+        auto transformed = U.narrow(1, 0, component_count) * selected_singular;
 
         if (whiten) {
             auto eps = 1e-12f;

@@ -103,12 +103,7 @@ namespace Thot::Data::Manipulation {
             return output;
         }
 
-        using torch::indexing::Slice;
-        std::vector<torch::indexing::TensorIndex> indices(output.dim(), Slice());
-        indices[height_dim] = Slice(y0, y1);
-        indices[width_dim] = Slice(x0, x1);
-
-        output.index_put_(indices, fill_value);
+        output.slice(height_dim, y0, y1).slice(width_dim, x0, x1).fill_(fill_value);
         return output;
     }
 
@@ -166,9 +161,8 @@ namespace Thot::Data::Manipulation {
             return {inputs.clone(), targets.clone()};
         }
 
-        using torch::indexing::Slice;
-        auto fraction_inputs = inputs.index({Slice(0, desired_samples)}).clone();
-        auto fraction_targets = targets.index({Slice(0, desired_samples)}).clone();
+        auto fraction_inputs = inputs.narrow(0, 0, desired_samples).clone();
+        auto fraction_targets = targets.narrow(0, 0, desired_samples).clone();
         return {fraction_inputs, fraction_targets};
     }
 

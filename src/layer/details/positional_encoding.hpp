@@ -8,7 +8,6 @@
 #include <stdexcept>
 #include <utility>
 
-#include <c10/util/Optional.h>
 
 #include <torch/torch.h>
 
@@ -55,7 +54,7 @@ namespace Thot::Layer::Details {
                 throw std::out_of_range("Input sequence length exceeds the configured maximum for sinusoidal positional encoding.");
             }
 
-            auto positional = positional_encoding_.index({torch::indexing::Slice(0, seq_len)});
+            auto positional = positional_encoding_.narrow(0, 0, seq_len);
             positional = positional.to(input.device(), input.dtype());
 
             if (options_.batch_first) {
@@ -81,10 +80,11 @@ namespace Thot::Layer::Details {
             auto sin_terms = torch::sin(position.unsqueeze(1) * div_term);
             auto cos_terms = torch::cos(position.unsqueeze(1) * div_term);
 
-            using torch::indexing::Slice;
-            encoding.index_put_({Slice(), Slice(0, c10::nullopt, 2)}, sin_terms);
+            const auto feature_size = encoding.size(1);
+            encoding.slice(1, 0, feature_size, 2).copy_(sin_terms);
             if (embedding_dim > 1) {
-                encoding.index_put_({Slice(), Slice(1, c10::nullopt, 2)}, cos_terms);
+                encoding.slice(1, 1, feature_size, 2).copy_(cos_terms);
+
             }
 
             return encoding;
@@ -128,7 +128,7 @@ namespace Thot::Layer::Details {
                 throw std::out_of_range("Input sequence length exceeds the configured maximum for learned positional encoding.");
             }
 
-            auto positional = positional_embedding_.index({torch::indexing::Slice(0, seq_len)});
+            auto positional = positional_embedding_.narrow(0, 0, seq_len);
             positional = positional.to(input.device(), input.dtype());
 
             if (options_.batch_first) {
