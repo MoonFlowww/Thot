@@ -444,7 +444,7 @@ namespace Thot::Block::Details::Transformer::Classic {
                                   const torch::Tensor& attn_mask = {},
                                   const torch::Tensor& key_padding_mask = {})
             {
-                auto output = std::move(input);
+                auto [output, shape] = normalise_to_sequence(std::move(input), embed_dim_);
 
                 auto residual = output;
                 auto normalised = norm1_->forward(residual);
