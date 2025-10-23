@@ -32,6 +32,7 @@
 #include <stdexcept>
 #include <type_traits>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -103,6 +104,7 @@ namespace Thot {
         bool buffer_vram{Core::kDefaultTrainingConfig.buffer_vram};
         bool monitor{true};
         std::optional<std::pair<torch::Tensor, torch::Tensor>> validation{};
+        std::optional<std::pair<torch::Tensor, torch::Tensor>> test{};
         std::ostream* stream{&std::cout};
     };
 
@@ -367,27 +369,34 @@ namespace Thot {
                 effective_options.monitor = false;
             }
             auto training_dataset = TrainingDetails::prepare_tensor_dataset(std::move(train_inputs), std::move(train_targets));
-            std::optional<typename TrainingDetails::TensorDataset> validation_dataset{};
-            if (options.validation.has_value()) {
-                const auto& validation = *options.validation;
-                if (!validation.first.defined() || !validation.second.defined()) {
-                    throw std::invalid_argument("Validation tensors must be defined when provided.");
+            std::optional<typename TrainingDetails::TensorDataset> test_dataset{};
+            auto build_evaluation_dataset = [&](const std::pair<torch::Tensor, torch::Tensor>& dataset,
+                                                std::string_view name) {
+                if (!dataset.first.defined() || !dataset.second.defined()) {
+                    throw std::invalid_argument(std::string(name) + " tensors must be defined when provided.");
                 }
-                if (validation.first.size(0) != validation.second.size(0)) {
-                    throw std::invalid_argument("Mismatched number of validation samples between inputs and targets.");
+                if (dataset.first.size(0) != dataset.second.size(0)) {
+                    throw std::invalid_argument("Mismatched number of " + std::string(name)
+                                                + " samples between inputs and targets.");
                 }
-                validation_dataset = TrainingDetails::prepare_tensor_dataset(validation.first, validation.second);
+                return TrainingDetails::prepare_tensor_dataset(dataset.first, dataset.second);
+            };
+
+            if (options.test.has_value()) {
+                test_dataset = build_evaluation_dataset(*options.test, "test");
+            } else if (options.validation.has_value()) {
+                test_dataset = build_evaluation_dataset(*options.validation, "validation");
             }
 
             if (effective_options.buffer_vram) {
                 training_dataset = TrainingDetails::buffer_dataset(training_dataset, device_);
-                if (validation_dataset) {
-                    *validation_dataset = TrainingDetails::buffer_dataset(*validation_dataset, device_);
+                if (test_dataset) {
+                    *test_dataset = TrainingDetails::buffer_dataset(*test_dataset, device_);
                 }
             } else {
                 training_dataset = TrainingDetails::ensure_contiguous(std::move(training_dataset));
-                if (validation_dataset) {
-                    *validation_dataset = TrainingDetails::ensure_contiguous(std::move(*validation_dataset));
+                if (test_dataset) {
+                    *test_dataset = TrainingDetails::ensure_contiguous(std::move(*test_dataset));
                 }
                 if (training_dataset.inputs.device().is_cuda()) {
                     training_dataset.inputs = training_dataset.inputs.to(torch::kCPU);
@@ -395,12 +404,12 @@ namespace Thot {
                 if (training_dataset.targets.device().is_cuda()) {
                     training_dataset.targets = training_dataset.targets.to(torch::kCPU);
                 }
-                if (validation_dataset) {
-                    if (validation_dataset->inputs.device().is_cuda()) {
-                        validation_dataset->inputs = validation_dataset->inputs.to(torch::kCPU);
+                if (test_dataset) {
+                    if (test_dataset->inputs.device().is_cuda()) {
+                        test_dataset->inputs = test_dataset->inputs.to(torch::kCPU);
                     }
-                    if (validation_dataset->targets.device().is_cuda()) {
-                        validation_dataset->targets = validation_dataset->targets.to(torch::kCPU);
+                    if (test_dataset->targets.device().is_cuda()) {
+                        test_dataset->targets = test_dataset->targets.to(torch::kCPU);
                     }
                 }
             }
@@ -409,26 +418,27 @@ namespace Thot {
                 training_dataset.targets = training_dataset.targets.to(device_);
             }
 
-            if (effective_options.buffer_vram && validation_dataset && !validation_dataset->inputs.device().is_cuda()) {
-                validation_dataset->inputs = validation_dataset->inputs.to(device_);
-                validation_dataset->targets = validation_dataset->targets.to(device_);
+            if (effective_options.buffer_vram && test_dataset && !test_dataset->inputs.device().is_cuda()) {
+                test_dataset->inputs = test_dataset->inputs.to(device_);
+                test_dataset->targets = test_dataset->targets.to(device_);
             }
 
             if (effective_options.shuffle) {
                 if (effective_options.buffer_vram) {
-                    TrainingDetails::run_epochs<true, true>(*this, training_dataset, validation_dataset, effective_options);
+                    TrainingDetails::run_epochs<true, true>(*this, training_dataset, test_dataset, effective_options);
                 } else {
-                    TrainingDetails::run_epochs<false, true>(*this, training_dataset, validation_dataset, effective_options);
+                    TrainingDetails::run_epochs<false, true>(*this, training_dataset, test_dataset, effective_options);
+
                 }
             } else {
                 if (effective_options.buffer_vram) {
-                    TrainingDetails::run_epochs<true, false>(*this, training_dataset, validation_dataset, effective_options);
+                    TrainingDetails::run_epochs<true, false>(*this, training_dataset, test_dataset, effective_options);
                 } else {
-                    TrainingDetails::run_epochs<false, false>(*this, training_dataset, validation_dataset, effective_options);
+                    TrainingDetails::run_epochs<false, false>(*this, training_dataset, test_dataset, effective_options);
                 }
             }
         }
-private:
+    private:
 
         struct TrainingDetails {
             struct TensorDataset {
@@ -480,10 +490,10 @@ private:
                 return TensorDataset{torch::stack(std::move(inputs)), torch::stack(std::move(targets))};
             }
 
-template <bool BufferVRAM, bool ShouldShuffle>
+            template <bool BufferVRAM, bool ShouldShuffle>
             static void run_epochs(Model& model,
                                    TensorDataset& train_dataset,
-                                   const std::optional<TensorDataset>& validation_dataset,
+                                   const std::optional<TensorDataset>& test_dataset,
                                    const TrainOptions& options)
             {
                 const auto device = model.device();
@@ -495,7 +505,7 @@ template <bool BufferVRAM, bool ShouldShuffle>
                     index_options = index_options.device(device);
                 }
 
-                auto best_validation = std::optional<double>{};
+                auto best_test = std::optional<double>{};
 
                 for (std::size_t epoch = 0; epoch < options.epoch; ++epoch) {
                     const auto epoch_start = std::chrono::steady_clock::now();
@@ -586,23 +596,23 @@ template <bool BufferVRAM, bool ShouldShuffle>
                         ? accumulation.item<double>() / static_cast<double>(weight)
                         : 0.0;
 
-                    std::optional<double> validation_loss{};
-                    if (validation_dataset) {
-                        validation_loss = compute_dataset_loss<BufferVRAM>(model, *validation_dataset, options.batch_size);
+                    std::optional<double> test_loss{};
+                    if (test_dataset) {
+                        test_loss = compute_dataset_loss<BufferVRAM>(model, *test_dataset, options.batch_size);
                     }
 
                     bool improved = false;
                     std::optional<double> delta{};
-                    if (validation_loss) {
-                        if (!best_validation) {
+                    if (test_loss) {
+                        if (!best_test) {
                             improved = true;
-                            best_validation = validation_loss;
+                            best_test = test_loss;
                         } else {
-                            const auto previous_best = *best_validation;
-                            delta = *validation_loss - previous_best;
-                            if (*validation_loss < previous_best) {
+                            const auto previous_best = *best_test;
+                            delta = *test_loss - previous_best;
+                            if (*test_loss < previous_best) {
                                 improved = true;
-                                best_validation = validation_loss;
+                                best_test = test_loss;
                             }
                         }
                     }
@@ -615,7 +625,7 @@ template <bool BufferVRAM, bool ShouldShuffle>
                                   epoch + 1,
                                   options.epoch,
                                   train_loss,
-                                  validation_loss,
+                                  test_loss,
                                   delta,
                                   improved,
                                   duration_seconds);
@@ -697,7 +707,7 @@ template <bool BufferVRAM, bool ShouldShuffle>
                     accumulation.add_(loss_tensor);
                     weight += current_batch;
                 }
-if (was_training) {
+                if (was_training) {
                     model.train();
                 } else {
                     model.eval();
@@ -714,7 +724,7 @@ if (was_training) {
                                   std::size_t epoch_index,
                                   std::size_t total_epochs,
                                   double train_loss,
-                                  const std::optional<double>& validation_loss,
+                                  const std::optional<double>& test_loss,
                                   const std::optional<double>& delta,
                                   bool improved,
                                   double duration_seconds)
@@ -730,18 +740,18 @@ if (was_training) {
                 line << ApplyColor("Train", kBrightYellow) << " loss: "
                      << std::fixed << std::setprecision(6) << train_loss << " | ";
                 line << ApplyColor("Test", kBrightBlue) << " loss: ";
-                if (validation_loss) {
-                    line << std::fixed << std::setprecision(6) << *validation_loss;
+                if (test_loss) {
+                    line << std::fixed << std::setprecision(6) << *test_loss;
                 } else {
                     line << "N/A";
                 }
 
                 line << " | ΔLoss: ";
-                if (validation_loss && delta) {
+                if (test_loss && delta) {
                     std::ostringstream delta_stream;
                     delta_stream << std::showpos << std::fixed << std::setprecision(6) << *delta;
                     line << delta_stream.str();
-                } else if (validation_loss) {
+                } else if (test_loss) {
                     line << "N/A";
                 } else {
                     line << "N/A";
@@ -794,5 +804,4 @@ if (was_training) {
         [[nodiscard]] std::size_t next_module_index() noexcept { return module_index_++; }
     };
 }
-
 #endif //THOT_CORE_HPP

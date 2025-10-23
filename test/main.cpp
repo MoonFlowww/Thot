@@ -3,7 +3,8 @@
 #include <vector>
 #include <torch/torch.h>
 #include "../include/Thot.h"
-
+#include "../src/data/details/load.hpp"
+#include "../src/data/details/manipulation.hpp"
 
 
 namespace {
@@ -75,35 +76,24 @@ int main() {
 
     model.set_loss(Thot::Loss::MSE());
 
-    auto train_inputs = torch::randn({dataset_size, sequence_length, input_dim});
-    auto train_targets = train_inputs.sum({1, 2}).unsqueeze(1);
+    auto [x1, y1, x2, y2] = Thot::Data::Load::CIFAR10("/home/moonfloww/Projects/DATASETS/CIFAR10", 1.f, 1.f, true);
 
-    model.train(train_inputs, train_targets, {.epoch = 120, .batch_size = 32});
+
+
+    auto [fx2, fy2] = Thot::Data::Manipulation::Fraction(x2, y2, 0.05f);
+
+    model.train(x1, x1, {.epoch = 120, .batch_size = 32, .test={fx2, fy2}});
 
     model.eval();
 
     torch::NoGradGuard no_grad;
 
-    auto test_inputs = torch::tensor(
-        {{{0.1F, -0.2F, 0.3F, 0.4F, -0.1F, 0.2F, 0.0F, 0.05F},
-          {0.2F, 0.1F, -0.3F, 0.5F, 0.2F, -0.4F, 0.1F, -0.05F},
-          {0.3F, -0.1F, 0.2F, -0.2F, 0.3F, 0.2F, -0.1F, 0.4F},
-          {0.0F, 0.2F, -0.1F, 0.1F, -0.2F, 0.3F, 0.2F, -0.3F},
-          {-0.1F, 0.0F, 0.1F, -0.2F, 0.2F, -0.1F, 0.3F, 0.1F},
-          {0.05F, -0.05F, 0.2F, 0.1F, -0.3F, 0.4F, -0.2F, 0.0F}},
-         {{-0.2F, 0.3F, -0.1F, 0.2F, -0.3F, 0.1F, 0.2F, -0.1F},
-          {0.4F, -0.2F, 0.1F, 0.0F, 0.3F, -0.4F, 0.1F, 0.2F},
-          {0.1F, 0.2F, -0.3F, 0.4F, -0.1F, 0.2F, 0.3F, -0.2F},
-          {-0.3F, 0.1F, 0.2F, -0.1F, 0.4F, 0.0F, -0.2F, 0.3F},
-          {0.2F, -0.1F, 0.0F, 0.3F, -0.2F, 0.1F, 0.4F, -0.3F},
-          {0.1F, 0.0F, 0.3F, -0.2F, 0.2F, -0.1F, 0.0F, 0.2F}}},
-        torch::TensorOptions().dtype(torch::kFloat32));
 
-    auto test_targets = test_inputs.sum({1, 2}).unsqueeze(1);
-    auto predictions = model.forward(test_inputs.to(model.device()));
+
+    auto predictions = model.forward(x2.to(model.device()));
 
     std::cout << "Predictions:\n" << predictions.cpu().squeeze() << '\n';
-    std::cout << "Expected:\n" << test_targets.squeeze() << '\n';
+    std::cout << "Expected:\n" << y2.squeeze() << '\n';
 
     return 0;
 }

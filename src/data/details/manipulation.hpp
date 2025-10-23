@@ -137,6 +137,42 @@ namespace Thot::Data::Manipulation {
         return {shuffled_inputs, shuffled_targets};
     }
 
+    inline std::pair<torch::Tensor, torch::Tensor> Fraction(const torch::Tensor& inputs,
+                                                            const torch::Tensor& targets,
+                                                            float fraction)
+    {
+        if (!inputs.defined() || !targets.defined()) {
+            throw std::invalid_argument("Fraction expects both input and target tensors to be defined.");
+        }
+
+        if (inputs.dim() == 0 || targets.dim() == 0) {
+            throw std::invalid_argument("Fraction expects tensors with at least one dimension.");
+        }
+
+        if (inputs.size(0) != targets.size(0)) {
+            throw std::invalid_argument("Inputs and targets must contain the same number of samples to extract a fraction.");
+        }
+
+        const auto total_samples = inputs.size(0);
+        if (total_samples == 0) {
+            return {inputs.clone(), targets.clone()};
+        }
+
+        const auto clamped_fraction = std::clamp(fraction, 0.0f, 1.0f);
+        auto desired_samples = static_cast<int64_t>(std::round(static_cast<double>(total_samples) * static_cast<double>(clamped_fraction)));
+        desired_samples = std::clamp<int64_t>(desired_samples, 0, total_samples);
+
+        if (desired_samples == total_samples) {
+            return {inputs.clone(), targets.clone()};
+        }
+
+        using torch::indexing::Slice;
+        auto fraction_inputs = inputs.index({Slice(0, desired_samples)}).clone();
+        auto fraction_targets = targets.index({Slice(0, desired_samples)}).clone();
+        return {fraction_inputs, fraction_targets};
+    }
+
+
     inline torch::Tensor Upsample(const torch::Tensor& input,
                                   const std::vector<double>& scale_factors,
                                   torch::nn::functional::InterpolateFuncOptions::mode_t mode = torch::kNearest,
