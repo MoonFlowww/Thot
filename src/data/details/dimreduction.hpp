@@ -168,6 +168,7 @@ namespace Thot::Data::DimReduction {
         auto S = std::get<1>(svd);
         auto Vh = std::get<2>(svd);
 
+
         auto selected_singular = S.index({torch::indexing::Slice(0, static_cast<int64_t>(components))});
         auto components_matrix = Vh.index({torch::indexing::Slice(0, static_cast<int64_t>(components))});
 

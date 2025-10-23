@@ -7,8 +7,8 @@
 #include <variant>
 #include <vector>
 
-#include "details/residual.hpp"
-#include "details/sequential.hpp"
+#include "details/blocks/residual.hpp"
+#include "details/blocks/sequential.hpp"
 #include "details/transformers/classic.hpp"
 
 namespace Thot::Block {

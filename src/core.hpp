@@ -36,7 +36,6 @@
 #include <variant>
 #include <vector>
 
-#include <torch/indexing.h>
 #include <torch/torch.h>
 
 #include "activation/activation.hpp"
