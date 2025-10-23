@@ -24,6 +24,8 @@
 #include <algorithm>
 #include <functional>
 #include <cstddef>
+
+#include <cmath>
 #include <memory>
 #include <optional>
 #include <random>
@@ -34,17 +36,22 @@
 #include <variant>
 #include <vector>
 
+#include <torch/indexing.h>
 #include <torch/torch.h>
 
 #include "activation/activation.hpp"
 #include "activation/apply.hpp"
 #include "initialization/initialization.hpp"
+#include "attention/details/head.hpp"
+#include "block/block.hpp"
 #include "initialization/apply.hpp"
 #include "layer/layer.hpp"
 #include "loss/loss.hpp"
 #include "loss/details/mse.hpp"
 #include "optimizer/optimizer.hpp"
 #include "lrscheduler/lrscheduler.hpp"
+#include "block/block.hpp"
+#include "layer/details/positional_encoding.hpp"
 
 
 
@@ -94,14 +101,14 @@ namespace Thot {
 
         using torch::nn::Module::train;
 
-        void add(Layer::Descriptor descriptor) {
-            const auto index = layers_.size();
-            auto registered_layer = std::visit(
-                [&](auto&& concrete_descriptor) {
-                    return Layer::Details::build_registered_layer(*this, concrete_descriptor, index);
-                },
-                std::move(descriptor));
-            layers_.push_back(std::move(registered_layer));
+        void add(Layer::Descriptor descriptor)
+        {
+            layers_.push_back(build_layer(*this, std::move(descriptor)));
+        }
+
+        void block(Block::Descriptor descriptor)
+        {
+            std::visit([&](auto&& concrete) { add_block(std::move(concrete)); }, std::move(descriptor));
         }
 
         void set_optimizer(Optimizer::Descriptor descriptor, std::optional<LrScheduler::Descriptor> scheduler = std::nullopt) {
@@ -113,16 +120,12 @@ namespace Thot {
                     return Optimizer::Details::build_optimizer(*this, concrete_descriptor);
                 },
                 std::move(descriptor));
-            step_impl_ = &Model::step_without_scheduler;
             scheduler_.reset();
             if (scheduler.has_value()) {
                 scheduler_ = std::visit(
                     [&](const auto& concrete_descriptor) -> std::unique_ptr<LrScheduler::Details::Scheduler> {
                         return LrScheduler::Details::build_scheduler(*this, *optimizer_, concrete_descriptor);
                     }, std::move(*scheduler));
-                if (scheduler_) {
-                    step_impl_ = &Model::step_with_scheduler;
-                }
 
             }
             configure_step_impl();
@@ -140,7 +143,7 @@ namespace Thot {
             loss_descriptor_ = LossDescriptor{std::in_place_type<Decayed>, std::move(descriptor)};
         }
 
-        Model& device(bool use_cuda = true)
+        Model& to_device(bool use_cuda = true)
         {
             if (use_cuda) {
                 if (!torch::cuda::is_available()) {

@@ -6,6 +6,9 @@
 #include "../src/loss/loss.hpp"
 #include "../src/optimizer/optimizer.hpp"
 
+#include "../src/attention/attention.hpp"
+#include "../src/block/block.hpp"
+
 
 // Public umbrella header.
 // -----------------------------------------------------------------------------

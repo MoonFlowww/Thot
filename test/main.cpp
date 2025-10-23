@@ -11,7 +11,7 @@ int main() {
 
     Thot::Model model;
 
-    model.device(torch::cuda::is_available());
+    model.to_device(torch::cuda::is_available());
     model.add(Thot::Layer::FC({2, 8}, Thot::Activation::ReLU));
     model.add(Thot::Layer::FC({8, 1}, Thot::Activation::Identity));
 
@@ -19,12 +19,12 @@ int main() {
     model.set_optimizer(Thot::Optimizer::SGD({.learning_rate = 0.1}));
 
     Thot::Core::SupervisedDataset dataset;
-    dataset.reserve(32);
+    dataset.reserve(256);
 
     const auto weight = torch::tensor({2.0F, -3.0F});
     const auto bias = torch::tensor({0.5F});
 
-    for (int64_t i = 0; i < 32; ++i) {
+    for (int64_t i = 0; i < 256; ++i) {
         auto input = torch::randn({2});
         auto target = torch::dot(input, weight) + bias;
         dataset.emplace_back(input, target.unsqueeze(0));

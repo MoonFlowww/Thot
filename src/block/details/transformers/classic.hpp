@@ -6,22 +6,30 @@
 #include <cstddef>
 #include <cstdint>
 #include <cmath>
+#include <stdexcept>
+#include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
+
+#include <torch/torch.h>
+
+
 #include "../../../activation/activation.hpp"
+#include "../../../activation/apply.hpp"
+#include "../../../attention/details/head.hpp"
 #include "../../../attention/attention.hpp"
 #include "../../../initialization/initialization.hpp"
+#include "../../../layer/details/positional_encoding.hpp"
 #include "../../../layer/layer.hpp"
-#include "../residual.hpp"
-#include "../sequential.hpp"
+#include "../../../layer/registry.hpp"
+#include "../blocks/residual.hpp"
+#include "../blocks/sequential.hpp"
 
 namespace Thot::Block::Details::Transformer::Classic {
-    enum class PositionalEncodingType {
-        None,
-        Sinusoidal,
-        Learned,
-    };
+    using PositionalEncodingType = ::Thot::Layer::Details::PositionalEncodingType;
+    using PositionalEncodingOptions = ::Thot::Layer::Details::PositionalEncodingOptions;
 
     struct AttentionOptions {
         std::int64_t embed_dim{512};
@@ -45,11 +53,7 @@ namespace Thot::Block::Details::Transformer::Classic {
         bool elementwise_affine{true};
     };
 
-    struct PositionalEncodingOptions {
-        PositionalEncodingType type{PositionalEncodingType::None};
-        double dropout{0.0};
-        std::size_t max_length{2048};
-    };
+
 
     struct EncoderLayerDescriptor {
         ::Thot::Attention::Descriptor attention;
@@ -196,5 +200,267 @@ namespace Thot::Block::Details::Transformer::Classic {
 
         return descriptor;
     }
+
+    namespace Detail {
+        class PositionalEncodingImpl : public torch::nn::Module {
+        public:
+            PositionalEncodingImpl(std::int64_t embed_dim, PositionalEncodingOptions options)
+                : embed_dim_(embed_dim),
+                  options_(std::move(options))
+            {
+                if (embed_dim_ <= 0) {
+                    throw std::invalid_argument("Positional encoding requires a positive embedding dimension.");
+                }
+
+                dropout_ = register_module(
+                    "dropout",
+                    torch::nn::Dropout(torch::nn::DropoutOptions(options_.dropout)));
+
+                if (options_.type == PositionalEncodingType::Sinusoidal) {
+                    if (options_.max_length == 0) {
+                        throw std::invalid_argument("Sinusoidal positional encoding requires a positive max length.");
+                    }
+
+                    auto encoding = torch::zeros({static_cast<long>(options_.max_length), embed_dim_},
+                                                 torch::TensorOptions().dtype(torch::kFloat32));
+                    auto accessor = encoding.accessor<float, 2>();
+
+                    for (std::size_t position = 0; position < options_.max_length; ++position) {
+                        for (std::int64_t dimension = 0; dimension < embed_dim_; ++dimension) {
+                            const auto div_term = std::pow(10000.0,
+                                                           (2.0 * std::floor(static_cast<double>(dimension) / 2.0)) /
+                                                               static_cast<double>(embed_dim_));
+                            const auto angle = static_cast<double>(position) / div_term;
+                            accessor[position][dimension] = (dimension % 2 == 0)
+                                                                 ? static_cast<float>(std::sin(angle))
+                                                                 : static_cast<float>(std::cos(angle));
+                        }
+                    }
+
+                    encoding_ = encoding.unsqueeze(0);
+                    register_buffer("encoding", encoding_);
+                } else if (options_.type == PositionalEncodingType::Learned) {
+                    if (options_.max_length == 0) {
+                        throw std::invalid_argument("Learned positional encoding requires a positive max length.");
+                    }
+                    embedding_ = register_module(
+                        "embedding",
+                        torch::nn::Embedding(torch::nn::EmbeddingOptions(options_.max_length, embed_dim_)));
+                }
+            }
+
+            torch::Tensor forward(torch::Tensor input) {
+                auto output = std::move(input);
+                if (options_.type == PositionalEncodingType::Sinusoidal) {
+                    if (!output.defined()) {
+                        return output;
+                    }
+                    const auto sequence_length = output.size(1);
+                    if (sequence_length > static_cast<long>(options_.max_length)) {
+                        throw std::invalid_argument("Input sequence length exceeds configured positional encoding max length.");
+                    }
+                    auto encoding = encoding_.narrow(1, 0, sequence_length);
+                    encoding = encoding.to(output.device(), output.scalar_type());
+                    output = output + encoding;
+                } else if (options_.type == PositionalEncodingType::Learned) {
+                    if (!output.defined()) {
+                        return output;
+                    }
+                    const auto sequence_length = output.size(1);
+                    if (sequence_length > static_cast<long>(options_.max_length)) {
+                        throw std::invalid_argument("Input sequence length exceeds configured positional encoding max length.");
+                    }
+                    if (!embedding_) {
+                        throw std::logic_error("Learned positional encoding is not initialised.");
+                    }
+                    auto positions = torch::arange(sequence_length,
+                                                   torch::TensorOptions().dtype(torch::kLong).device(output.device()));
+                    positions = positions.unsqueeze(0).expand({output.size(0), sequence_length});
+                    auto encoding = embedding_->forward(positions);
+                    output = output + encoding;
+                }
+
+                if (dropout_) {
+                    output = dropout_->forward(output);
+                }
+                return output;
+            }
+
+        private:
+            std::int64_t embed_dim_{};
+            PositionalEncodingOptions options_{};
+            torch::nn::Dropout dropout_{nullptr};
+            torch::nn::Embedding embedding_{nullptr};
+            torch::Tensor encoding_{};
+        };
+
+        TORCH_MODULE(PositionalEncoding);
+
+        class TransformerEncoderLayerImpl : public torch::nn::Module {
+        public:
+            TransformerEncoderLayerImpl(EncoderLayerDescriptor descriptor, const EncoderOptions& options)
+                : embed_dim_(options.embed_dim),
+                  layer_norm_options_(options.layer_norm)
+            {
+                if (embed_dim_ <= 0) {
+                    throw std::invalid_argument("Transformer encoder layer requires a positive embedding dimension.");
+                }
+
+                auto norm_options = torch::nn::LayerNormOptions(std::vector<int64_t>{embed_dim_})
+                                         .eps(layer_norm_options_.eps)
+                                         .elementwise_affine(layer_norm_options_.elementwise_affine);
+
+                norm1_ = register_module("norm1", torch::nn::LayerNorm(norm_options));
+                norm2_ = register_module("norm2", torch::nn::LayerNorm(norm_options));
+
+                attention_ = std::visit(
+                    [&](auto&& attention_descriptor) {
+                        using Descriptor = std::decay_t<decltype(attention_descriptor)>;
+                        if constexpr (std::is_same_v<Descriptor, ::Thot::Attention::MultiHeadDescriptor>) {
+                            ::Thot::Attention::Details::MultiHeadAttentionOptions attention_options{};
+                            attention_options.embed_dim = attention_descriptor.options.embed_dim;
+                            attention_options.num_heads = attention_descriptor.options.num_heads;
+                            attention_options.dropout = attention_descriptor.options.dropout;
+                            attention_options.bias = attention_descriptor.options.bias;
+                            attention_options.batch_first = attention_descriptor.options.batch_first;
+                            attention_options.variant = attention_descriptor.options.variant;
+                            return register_module("self_attention",
+                                                   ::Thot::Attention::Details::MultiHeadAttention(attention_options));
+                        } else {
+                            throw std::invalid_argument("Unsupported attention descriptor provided to transformer encoder layer.");
+                        }
+                    },
+                    std::move(descriptor.attention));
+
+                std::size_t module_index = 0;
+                auto register_layer = [&](::Thot::Layer::Descriptor layer_descriptor) {
+                    return std::visit(
+                        [&](const auto& concrete_descriptor) {
+                            return ::Thot::Layer::Details::build_registered_layer(*this,
+                                                                                  concrete_descriptor,
+                                                                                  module_index++);
+                        },
+                        std::move(layer_descriptor));
+                };
+
+                attention_dropout_ = register_layer(std::move(descriptor.attention_dropout));
+
+                feed_forward_layers_.reserve(descriptor.feed_forward.size());
+                for (auto& layer : descriptor.feed_forward) {
+                    feed_forward_layers_.push_back(register_layer(std::move(layer)));
+                }
+
+                feed_forward_dropout_ = register_layer(std::move(descriptor.feed_forward_dropout));
+            }
+
+            torch::Tensor forward(torch::Tensor input,
+                                  const torch::Tensor& attn_mask = {},
+                                  const torch::Tensor& key_padding_mask = {})
+            {
+                auto output = std::move(input);
+
+                auto residual = output;
+                auto normalised = norm1_->forward(residual);
+                auto attention = attention_->forward(normalised, normalised, normalised, attn_mask, key_padding_mask);
+                if (attention_dropout_.forward) {
+                    attention = attention_dropout_.forward(std::move(attention));
+                    attention = ::Thot::Activation::Details::apply(attention_dropout_.activation, std::move(attention));
+                }
+                output = residual + attention;
+
+                residual = output;
+                auto feed_forward = norm2_->forward(output);
+                for (auto& layer : feed_forward_layers_) {
+                    if (!layer.forward) {
+                        continue;
+                    }
+                    feed_forward = layer.forward(std::move(feed_forward));
+                    feed_forward = ::Thot::Activation::Details::apply(layer.activation, std::move(feed_forward));
+                }
+                if (feed_forward_dropout_.forward) {
+                    feed_forward = feed_forward_dropout_.forward(std::move(feed_forward));
+                    feed_forward = ::Thot::Activation::Details::apply(feed_forward_dropout_.activation,
+                                                                      std::move(feed_forward));
+                }
+
+                output = residual + feed_forward;
+                return output;
+            }
+
+        private:
+            std::int64_t embed_dim_{};
+            LayerNormOptions layer_norm_options_{};
+            ::Thot::Attention::Details::MultiHeadAttention attention_{nullptr};
+            torch::nn::LayerNorm norm1_{nullptr};
+            torch::nn::LayerNorm norm2_{nullptr};
+            ::Thot::Layer::Details::RegisteredLayer attention_dropout_{};
+            std::vector<::Thot::Layer::Details::RegisteredLayer> feed_forward_layers_{};
+            ::Thot::Layer::Details::RegisteredLayer feed_forward_dropout_{};
+        };
+
+        TORCH_MODULE(TransformerEncoderLayer);
+
+        class TransformerEncoderImpl : public torch::nn::Module {
+        public:
+            explicit TransformerEncoderImpl(EncoderDescriptor descriptor)
+                : options_(std::move(descriptor.options))
+            {
+                if (options_.embed_dim <= 0) {
+                    throw std::invalid_argument("Transformer encoder requires a positive embedding dimension.");
+                }
+
+                if (options_.positional_encoding.type != PositionalEncodingType::None ||
+                    options_.positional_encoding.dropout > 0.0) {
+                    positional_encoding_ = register_module(
+                        "positional_encoding",
+                        PositionalEncoding(options_.embed_dim, options_.positional_encoding));
+                    }
+
+                auto norm_options = torch::nn::LayerNormOptions(std::vector<int64_t>{options_.embed_dim})
+                                         .eps(options_.layer_norm.eps)
+                                         .elementwise_affine(options_.layer_norm.elementwise_affine);
+                final_layer_norm_ = register_module("final_layer_norm", torch::nn::LayerNorm(norm_options));
+
+                layers_.reserve(descriptor.layers.size());
+                for (std::size_t index = 0; index < descriptor.layers.size(); ++index) {
+                    auto layer = register_module("layer_" + std::to_string(index),
+                                                 TransformerEncoderLayer(std::move(descriptor.layers[index]), options_));
+                    layers_.push_back(std::move(layer));
+                }
+            }
+
+            torch::Tensor forward(torch::Tensor input,
+                                  const torch::Tensor& attn_mask = {},
+                                  const torch::Tensor& key_padding_mask = {})
+            {
+                auto output = std::move(input);
+                if (positional_encoding_) {
+                    output = positional_encoding_->forward(std::move(output));
+                }
+
+                for (auto& layer : layers_) {
+                    output = layer->forward(std::move(output), attn_mask, key_padding_mask);
+                }
+
+                if (final_layer_norm_) {
+                    output = final_layer_norm_->forward(output);
+                }
+                return output;
+            }
+
+        private:
+            EncoderOptions options_{};
+            std::vector<TransformerEncoderLayer> layers_{};
+            PositionalEncoding positional_encoding_{nullptr};
+            torch::nn::LayerNorm final_layer_norm_{nullptr};
+        };
+
+        TORCH_MODULE(TransformerEncoder);
+    }
+
+    using PositionalEncoding = Detail::PositionalEncoding;
+    using TransformerEncoderLayer = Detail::TransformerEncoderLayer;
+    using TransformerEncoder = Detail::TransformerEncoder;
 }
+
 #endif //THOT_CLASSIC_HPP
