@@ -167,8 +167,22 @@ namespace Thot {
                             layers_.push_back(std::move(registered_layer));
                             break;
                         }
-                        case 2:
-                            throw std::invalid_argument("Transformer encoder blocks are not yet supported by Model::add.");
+                        case 2: {
+                            auto encoder_descriptor = std::get<Block::Transformer::Classic::EncoderDescriptor>(std::move(block_descriptor));
+                            const auto index = next_module_index();
+                            auto module = register_module(
+                                "transformer_encoder_" + std::to_string(index),
+                                Block::Transformer::Classic::TransformerEncoder(std::move(encoder_descriptor)));
+
+                            Layer::Details::RegisteredLayer registered_layer{};
+                            registered_layer.activation = Activation::Type::Identity;
+                            registered_layer.forward = [module](torch::Tensor input) {
+                                return module->forward(std::move(input));
+                            };
+
+                            layers_.push_back(std::move(registered_layer));
+                            break;
+                        }
                         case 3:
                             throw std::invalid_argument("Transformer decoder blocks are not yet supported by Model::add.");
                         default:
