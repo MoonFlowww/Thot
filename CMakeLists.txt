@@ -4,7 +4,12 @@ project(Thot)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 23)
 
-set(Torch_DIR "/opt/libtorch/share/cmake/Torch")
+set(_libtorch_root "/opt/libtorch")
+if (EXISTS "${_libtorch_root}/share/cmake/Torch/TorchConfig.cmake")
+    list(PREPEND CMAKE_PREFIX_PATH "${_libtorch_root}")
+    set(Torch_DIR "${_libtorch_root}/share/cmake/Torch")
+endif()
+
 find_package(Torch REQUIRED)
 find_package(Boost REQUIRED COMPONENTS filesystem)
 
