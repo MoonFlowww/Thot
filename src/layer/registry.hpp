@@ -34,6 +34,20 @@ namespace Thot::Layer::Details {
         return {};
     }
 
+
+    template <class Owner, class... DescriptorTypes>
+    RegisteredLayer build_registered_layer(Owner& owner,
+                                           const std::variant<DescriptorTypes...>& descriptor,
+                                           std::size_t index)
+    {
+        return std::visit(
+            [&](const auto& concrete_descriptor) {
+                return build_registered_layer(owner, concrete_descriptor, index);
+            },
+            descriptor);
+    }
+
+
     template <class Owner>
     RegisteredLayer build_registered_layer(Owner& owner, const FCDescriptor& descriptor, std::size_t index) {
         if (descriptor.options.in_features <= 0 || descriptor.options.out_features <= 0) {
