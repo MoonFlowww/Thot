@@ -54,7 +54,13 @@ int main() {
             Thot::Activation::Raw,
             Thot::Initialization::KaimingNormal
         )
-    }, 3, {.use_projection = true}, { .final_activation = Thot::Activation::SiLU }));
+    }, 1, {.use_projection = true,
+        .projection = Thot::Layer::Conv2d(
+                {64, 128, {1, 1}, {2, 2}, {0, 0}, {1, 1}, 1, false},
+                Thot::Activation::Raw,
+                Thot::Initialization::KaimingNormal
+            )
+    }, { .final_activation = Thot::Activation::SiLU }));
 
     model.add(Thot::Block::Residual({
         Thot::Layer::Conv2d(
