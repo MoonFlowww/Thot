@@ -46,6 +46,7 @@
 #include "block/block.hpp"
 #include "initialization/apply.hpp"
 #include "layer/layer.hpp"
+#include "block/details/blocks/residual.hpp"
 #include "loss/loss.hpp"
 #include "loss/details/mse.hpp"
 #include "optimizer/optimizer.hpp"
@@ -101,14 +102,13 @@ namespace Thot {
 
         using torch::nn::Module::train;
 
-        void add(Layer::Descriptor descriptor)
-        {
-            layers_.push_back(build_layer(*this, std::move(descriptor)));
-        }
-
-        void block(Block::Descriptor descriptor)
-        {
-            std::visit([&](auto&& concrete) { add_block(std::move(concrete)); }, std::move(descriptor));
+        using ModuleDescriptor = std::variant<Layer::Descriptor, Block::Descriptor>;
+        void add(ModuleDescriptor descriptor) {
+            if (std::holds_alternative<Layer::Descriptor>(descriptor)) {
+                add_layer(std::move(std::get<Layer::Descriptor>(descriptor)));
+            } else {
+                add_block(std::move(std::get<Block::Descriptor>(descriptor)));
+            }
         }
 
         void set_optimizer(Optimizer::Descriptor descriptor, std::optional<LrScheduler::Descriptor> scheduler = std::nullopt) {
@@ -338,6 +338,7 @@ namespace Thot {
         };
 
         std::vector<Layer::Details::RegisteredLayer> layers_{};
+        std::size_t module_index_{0};
         std::unique_ptr<torch::optim::Optimizer> optimizer_{};
         std::unique_ptr<LrScheduler::Details::Scheduler> scheduler_{};
         using StepImpl = void (Model::*)();
@@ -366,6 +367,62 @@ namespace Thot {
                 scheduler_->step();
             }
             optimizer_->step();
+        }
+        [[nodiscard]] std::size_t next_module_index() noexcept { return module_index_++; }
+
+        void add_layer(Layer::Descriptor descriptor)
+        {
+            std::visit(
+                [this](auto&& concrete) {
+                    using DescriptorType = std::decay_t<decltype(concrete)>;
+                    auto registered = Layer::Details::build_registered_layer(
+                        *this,
+                        static_cast<const DescriptorType&>(concrete),
+                        next_module_index());
+                    layers_.push_back(std::move(registered));
+                },
+                std::move(descriptor));
+        }
+
+        void add_block(Block::Descriptor descriptor)
+        {
+            std::visit(
+                [this](auto&& concrete) {
+                    this->add_block_impl(std::forward<decltype(concrete)>(concrete));
+                },
+                std::move(descriptor));
+        }
+
+        void add_block_impl(Block::Details::SequentialDescriptor descriptor)
+        {
+            for (auto& layer : descriptor.layers) {
+                add_layer(std::move(layer));
+            }
+        }
+
+        void add_block_impl(Block::Details::ResidualDescriptor descriptor)
+        {
+            const auto index = next_module_index();
+            auto module = register_module("residual_block_" + std::to_string(index),
+                                          Block::Details::ResidualBlock(std::move(descriptor)));
+
+            Layer::Details::RegisteredLayer registered_layer{};
+            registered_layer.activation = Activation::Type::Identity;
+            registered_layer.forward = [module](torch::Tensor input) {
+                return module->forward(std::move(input));
+            };
+
+            layers_.push_back(std::move(registered_layer));
+        }
+
+        void add_block_impl(Block::Transformer::Classic::EncoderDescriptor descriptor)
+        {
+            throw std::invalid_argument("Transformer encoder blocks are not yet supported by Model::add.");
+        }
+
+        void add_block_impl(Block::Transformer::Classic::DecoderDescriptor descriptor)
+        {
+            throw std::invalid_argument("Transformer decoder blocks are not yet supported by Model::add.");
         }
     };
 }
