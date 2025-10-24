@@ -15,6 +15,7 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+#include <tuple>
 
 #include <torch/torch.h>
 
@@ -22,7 +23,6 @@
 #include "../../utils/terminal.hpp"
 
 namespace Thot::Evaluation::Details::Classification {
-
     struct Descriptor { };
 
     struct Options {
@@ -75,19 +75,60 @@ namespace Thot::Evaluation::Details::Classification {
             using MetricKind = Metric::Classification::Kind;
             switch (kind) {
                 case MetricKind::Accuracy: return "Accuracy";
-                case MetricKind::Precision: return "Precision";
-                case MetricKind::Recall: return "Recall";
+                case MetricKind::AUCROC: return "AUC ROC";
+                case MetricKind::BalancedAccuracy: return "Balanced accuracy";
+                case MetricKind::BalancedErrorRate: return "Balanced error rate";
                 case MetricKind::F1: return "F1 score";
-                case MetricKind::TruePositiveRate: return "True positive rate";
-                case MetricKind::TrueNegativeRate: return "True negative rate";
+                case MetricKind::FBeta0Point5: return "F0.5 score";
+                case MetricKind::FBeta2: return "F2 score";
+                case MetricKind::FalseDiscoveryRate: return "False discovery rate";
+                case MetricKind::FalseNegativeRate: return "False negative rate";
+                case MetricKind::FalseOmissionRate: return "False omission rate";
+                case MetricKind::FalsePositiveRate: return "False positive rate";
+                case MetricKind::FowlkesMallows: return "Fowlkes-Mallows";
+                case MetricKind::HammingLoss: return "Hamming loss";
+                case MetricKind::Informedness: return "Informedness";
+                case MetricKind::JaccardIndexMicro: return "Jaccard index (micro)";
+                case MetricKind::JaccardIndexMacro: return "Jaccard index (macro)";
+                case MetricKind::Markness: return "Markness";
+                case MetricKind::Matthews: return "Matthews correlation";
+                case MetricKind::NegativeLikelihoodRatio: return "Negative likelihood ratio";
+                case MetricKind::NegativePredictiveValue: return "Negative predictive value";
+                case MetricKind::PositiveLikelihoodRatio: return "Positive likelihood ratio";
+                case MetricKind::PositivePredictiveValue: return "Positive predictive value";
+                case MetricKind::Precision: return "Precision";
+                case MetricKind::Prevalence: return "Prevalence";
+                case MetricKind::Recall: return "Recall";
+                case MetricKind::Top1Error: return "Top-1 error";
+                case MetricKind::Top3Error: return "Top-3 error";
+                case MetricKind::Top5Error: return "Top-5 error";
                 case MetricKind::Top1Accuracy: return "Top-1 accuracy";
-                case MetricKind::ExpectedCalibrationError: return "Expected calibration error";
-                case MetricKind::MaximumCalibrationError: return "Maximum calibration error";
-                case MetricKind::CohensKappa: return "Cohen's kappa";
+                case MetricKind::Top3Accuracy: return "Top-3 accuracy";
+                case MetricKind::Top5Accuracy: return "Top-5 accuracy";
+                case MetricKind::Specificity: return "Specificity";
+                case MetricKind::ThreatScore: return "Threat score";
+                case MetricKind::TrueNegativeRate: return "True negative rate";
+                case MetricKind::TruePositiveRate: return "True positive rate";
+                case MetricKind::YoudenIndex: return "Youden index";
                 case MetricKind::LogLoss: return "Log loss";
                 case MetricKind::BrierScore: return "Brier score";
-                default: return "Metric";
+                case MetricKind::BrierSkillScore: return "Brier skill score";
+                case MetricKind::ExpectedCalibrationError: return "Expected calibration error";
+                case MetricKind::MaximumCalibrationError: return "Maximum calibration error";
+                case MetricKind::CalibrationSlope: return "Calibration slope";
+                case MetricKind::CalibrationIntercept: return "Calibration intercept";
+                case MetricKind::HosmerLemeshowPValue: return "Hosmer-Lemeshow p-value";
+                case MetricKind::KolmogorovSmirnovStatistic: return "Kolmogorov-Smirnov statistic";
+                case MetricKind::CohensKappa: return "Cohen's kappa";
+                case MetricKind::ConfusionEntropy: return "Confusion entropy";
+                case MetricKind::CoverageError: return "Coverage error";
+                case MetricKind::LabelRankingAveragePrecision: return "Label ranking average precision";
+                case MetricKind::SubsetAccuracy: return "Subset accuracy";
+                case MetricKind::AUPRC: return "AUPRC";
+                case MetricKind::AUPRG: return "AUPRG";
+                case MetricKind::GiniCoefficient: return "Gini coefficient";
             }
+            return "Metric";
         }
 
         inline std::string format_double(double value) {
@@ -113,7 +154,296 @@ namespace Thot::Evaluation::Details::Classification {
             double log_loss_sum{0.0};
             double brier_sum{0.0};
         };
-    } // namespace detail
+
+        struct ProbabilityCurveData {
+            std::vector<double> scores{};
+            std::vector<int> labels{};
+        };
+
+        inline double compute_auc(const ProbabilityCurveData& data) {
+            const std::size_t total = data.labels.size();
+            if (total == 0) {
+                return std::numeric_limits<double>::quiet_NaN();
+            }
+            std::size_t positives = 0;
+            for (int label : data.labels) {
+                positives += (label == 1) ? 1 : 0;
+            }
+            const std::size_t negatives = total - positives;
+            if (positives == 0 || negatives == 0) {
+                return std::numeric_limits<double>::quiet_NaN();
+            }
+
+            std::vector<std::pair<double, int>> pairs(total);
+            for (std::size_t i = 0; i < total; ++i) {
+                pairs[i] = {data.scores[i], data.labels[i]};
+            }
+            std::sort(pairs.begin(), pairs.end(), [](const auto& a, const auto& b) {
+                if (a.first == b.first) {
+                    return a.second > b.second;
+                }
+                return a.first > b.first;
+            });
+
+            double auc = 0.0;
+            double tp = 0.0;
+            double fp = 0.0;
+            double prev_tpr = 0.0;
+            double prev_fpr = 0.0;
+            double prev_score = std::numeric_limits<double>::infinity();
+            for (const auto& [score, label] : pairs) {
+                if (score != prev_score) {
+                    const double tpr = tp / static_cast<double>(positives);
+                    const double fpr = fp / static_cast<double>(negatives);
+                    auc += (fpr - prev_fpr) * (tpr + prev_tpr) * 0.5;
+                    prev_tpr = tpr;
+                    prev_fpr = fpr;
+                    prev_score = score;
+                }
+                if (label == 1) {
+                    tp += 1.0;
+                } else {
+                    fp += 1.0;
+                }
+            }
+            const double tpr = tp / static_cast<double>(positives);
+            const double fpr = fp / static_cast<double>(negatives);
+            auc += (fpr - prev_fpr) * (tpr + prev_tpr) * 0.5;
+            return std::clamp(auc, 0.0, 1.0);
+        }
+
+
+        inline double compute_average_precision(const ProbabilityCurveData& data) {
+            const std::size_t total = data.labels.size();
+            if (total == 0) {
+                return std::numeric_limits<double>::quiet_NaN();
+            }
+            std::size_t positives = 0;
+            for (int label : data.labels) {
+                positives += (label == 1) ? 1 : 0;
+            }
+            if (positives == 0) {
+                return std::numeric_limits<double>::quiet_NaN();
+            }
+
+            std::vector<std::pair<double, int>> pairs(total);
+            for (std::size_t i = 0; i < total; ++i) {
+                pairs[i] = {data.scores[i], data.labels[i]};
+            }
+            std::sort(pairs.begin(), pairs.end(), [](const auto& a, const auto& b) {
+                if (a.first == b.first) {
+                    return a.second > b.second;
+                }
+                return a.first > b.first;
+            });
+
+            double tp = 0.0;
+            double fp = 0.0;
+            double sum_precision = 0.0;
+            for (const auto& [_, label] : pairs) {
+                if (label == 1) {
+                    tp += 1.0;
+                    sum_precision += tp / (tp + fp);
+                } else {
+                    fp += 1.0;
+
+                }
+            }
+            return sum_precision / static_cast<double>(positives);
+        }
+
+        void Print(const Report& report, const Options& options);
+
+        inline double compute_gini(double auc) {
+            if (!std::isfinite(auc)) {
+                return std::numeric_limits<double>::quiet_NaN();
+            }
+            return (2.0 * auc) - 1.0;
+        }
+
+        inline double compute_mcc(const std::vector<std::vector<std::size_t>>& confusion,
+                                   std::size_t total_samples) {
+            if (total_samples == 0) {
+                return 0.0;
+            }
+            const std::size_t num_classes = confusion.size();
+            double diag_sum = 0.0;
+            std::vector<double> row_sums(num_classes, 0.0);
+            std::vector<double> col_sums(num_classes, 0.0);
+            for (std::size_t i = 0; i < num_classes; ++i) {
+                for (std::size_t j = 0; j < num_classes; ++j) {
+                    const double value = static_cast<double>(confusion[i][j]);
+                    if (i == j) {
+                        diag_sum += value;
+                    }
+                    row_sums[i] += value;
+                    col_sums[j] += value;
+                }
+            }
+            double sum_row_sq = 0.0;
+            double sum_col_sq = 0.0;
+            double row_col_product = 0.0;
+            for (std::size_t i = 0; i < num_classes; ++i) {
+                sum_row_sq += row_sums[i] * row_sums[i];
+                sum_col_sq += col_sums[i] * col_sums[i];
+                row_col_product += row_sums[i] * col_sums[i];
+            }
+            const double n = static_cast<double>(total_samples);
+            const double numerator = (n * diag_sum) - row_col_product;
+            const double denominator = std::sqrt((n * n - sum_row_sq) * (n * n - sum_col_sq));
+            if (std::abs(denominator) < 1e-12) {
+                return 0.0;
+            }
+            return numerator / denominator;
+        }
+
+
+        inline double compute_confusion_entropy(const std::vector<std::vector<std::size_t>>& confusion,
+                                                std::size_t total_samples) {
+            if (total_samples == 0) {
+                return 0.0;
+            }
+            const std::size_t num_classes = confusion.size();
+            std::vector<double> row_prob(num_classes, 0.0);
+            std::vector<double> col_prob(num_classes, 0.0);
+            for (std::size_t i = 0; i < num_classes; ++i) {
+                for (std::size_t j = 0; j < num_classes; ++j) {
+                    const double value = static_cast<double>(confusion[i][j]) / static_cast<double>(total_samples);
+                    row_prob[i] += value;
+                    col_prob[j] += value;
+                }
+            }
+
+            double entropy = 0.0;
+            constexpr double kEps = 1e-12;
+            for (std::size_t i = 0; i < num_classes; ++i) {
+                for (std::size_t j = 0; j < num_classes; ++j) {
+                    const double pij = static_cast<double>(confusion[i][j]) / static_cast<double>(total_samples);
+                    if (pij <= 0.0) {
+                        continue;
+                    }
+                    const double denom = row_prob[i] * col_prob[j];
+                    if (denom <= 0.0) {
+                        continue;
+                    }
+                    entropy -= pij * std::log((pij + kEps) / (denom + kEps));
+                }
+            }
+            return entropy;
+        }
+
+        inline double compute_jaccard_micro(std::size_t total_tp,
+                                             std::size_t total_fp,
+                                             std::size_t total_fn) {
+            const double numerator = static_cast<double>(total_tp);
+            const double denominator = static_cast<double>(total_tp + total_fp + total_fn);
+            return safe_div(numerator, denominator);
+        }
+
+        inline double compute_brier_baseline(const std::vector<std::size_t>& support,
+                                             double total_samples) {
+            if (total_samples <= 0.0) {
+                return std::numeric_limits<double>::quiet_NaN();
+            }
+            double sum_sq = 0.0;
+            for (auto value : support) {
+                const double freq = static_cast<double>(value);
+                sum_sq += freq * freq;
+            }
+            const double denom = total_samples * total_samples;
+            return 1.0 - (sum_sq / denom);
+        }
+
+        inline std::pair<double, double> compute_calibration_coefficients(const std::vector<double>& probs,
+                                                                          const std::vector<int>& outcomes) {
+            if (probs.empty() || probs.size() != outcomes.size()) {
+                return {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN()};
+            }
+            std::vector<double> x(probs.size(), 0.0);
+            for (std::size_t i = 0; i < probs.size(); ++i) {
+                const double p = std::clamp(probs[i], 1e-12, 1.0 - 1e-12);
+                x[i] = std::log(p / (1.0 - p));
+            }
+
+            double beta0 = 0.0;
+            double beta1 = 1.0;
+            for (int iter = 0; iter < 25; ++iter) {
+                double grad0 = 0.0;
+                double grad1 = 0.0;
+                double h00 = 0.0;
+                double h01 = 0.0;
+                double h11 = 0.0;
+
+                for (std::size_t i = 0; i < x.size(); ++i) {
+                    const double linear = beta0 + beta1 * x[i];
+                    const double pred = 1.0 / (1.0 + std::exp(-linear));
+                    const double diff = pred - static_cast<double>(outcomes[i]);
+                    const double weight = pred * (1.0 - pred);
+                    grad0 += diff;
+                    grad1 += diff * x[i];
+                    h00 += weight;
+                    h01 += weight * x[i];
+                    h11 += weight * x[i] * x[i];
+                }
+
+                const double det = h00 * h11 - h01 * h01;
+                if (std::abs(det) < 1e-12) {
+                    break;
+                }
+                const double delta0 = ( grad0 * h11 - grad1 * h01) / det;
+                const double delta1 = (-grad0 * h01 + grad1 * h00) / det;
+                beta0 -= delta0;
+                beta1 -= delta1;
+                if (std::abs(delta0) < 1e-8 && std::abs(delta1) < 1e-8) {
+                    break;
+                }
+            }
+            return {beta1, beta0};
+        }
+
+        inline double compute_kolmogorov_smirnov(const std::vector<double>& probs,
+                                                      const std::vector<int>& outcomes) {
+            if (probs.empty() || probs.size() != outcomes.size()) {
+                return std::numeric_limits<double>::quiet_NaN();
+            }
+            std::vector<double> positive;
+            std::vector<double> negative;
+            for (std::size_t i = 0; i < probs.size(); ++i) {
+                if (outcomes[i] == 1) {
+                    positive.push_back(probs[i]);
+                } else {
+                    negative.push_back(probs[i]);
+                }
+            }
+            if (positive.empty() || negative.empty()) {
+                return std::numeric_limits<double>::quiet_NaN();
+            }
+            std::sort(positive.begin(), positive.end());
+            std::sort(negative.begin(), negative.end());
+
+            std::size_t i = 0;
+            std::size_t j = 0;
+            double max_diff = 0.0;
+            while (i < positive.size() || j < negative.size()) {
+                double threshold = 0.0;
+                if (j >= negative.size() || (i < positive.size() && positive[i] <= negative[j])) {
+                    threshold = positive[i];
+                    while (i < positive.size() && positive[i] <= threshold) {
+                        ++i;
+                    }
+                } else {
+                    threshold = negative[j];
+                    while (j < negative.size() && negative[j] <= threshold) {
+                        ++j;
+                    }
+                }
+                const double cdf_pos = static_cast<double>(i) / static_cast<double>(positive.size());
+                const double cdf_neg = static_cast<double>(j) / static_cast<double>(negative.size());
+                max_diff = std::max(max_diff, std::abs(cdf_pos - cdf_neg));
+            }
+            return max_diff;
+        }
+    }
 
     template <class Container>
     [[nodiscard]] auto normalise_requests(const Container& metrics)
@@ -132,7 +462,7 @@ namespace Thot::Evaluation::Details::Classification {
                                 torch::Tensor inputs,
                                 torch::Tensor targets,
                                 const std::vector<Metric::Classification::Descriptor>& descriptors,
-                                const Options& options = Options{}) -> Report
+                                const Options& options) -> Report
     {
         using MetricKind = Metric::Classification::Kind;
 
@@ -140,11 +470,9 @@ namespace Thot::Evaluation::Details::Classification {
         if (metric_order.empty()) {
             throw std::invalid_argument("At least one classification metric must be requested for evaluation.");
         }
-
         if (!inputs.defined() || !targets.defined()) {
             throw std::invalid_argument("Evaluation inputs and targets must be defined.");
         }
-
         if (inputs.size(0) != targets.size(0)) {
             throw std::invalid_argument("Evaluation inputs and targets must have the same number of samples.");
         }
@@ -152,7 +480,6 @@ namespace Thot::Evaluation::Details::Classification {
         Report report{};
         report.order = metric_order;
         report.total_samples = static_cast<std::size_t>(inputs.size(0));
-
         if (report.total_samples == 0) {
             return report;
         }
@@ -161,17 +488,19 @@ namespace Thot::Evaluation::Details::Classification {
         const std::size_t batch_size = options.batch_size > 0 ? options.batch_size : total_samples;
 
         bool needs_probabilities = false;
-        bool needs_calibration = false;
+        bool needs_probability_curves = false;
+        bool needs_calibration_bins = false;
         bool needs_log_loss = false;
         bool needs_brier = false;
+        bool needs_brier_skill = false;
+        bool needs_rank_metrics = false;
+        bool needs_top3 = false;
+        bool needs_top5 = false;
+        bool needs_calibration_coefficients = false;
+        bool needs_ks = false;
 
         for (auto kind : metric_order) {
             switch (kind) {
-                case MetricKind::ExpectedCalibrationError:
-                case MetricKind::MaximumCalibrationError:
-                    needs_probabilities = true;
-                    needs_calibration = true;
-                    break;
                 case MetricKind::LogLoss:
                     needs_probabilities = true;
                     needs_log_loss = true;
@@ -180,9 +509,57 @@ namespace Thot::Evaluation::Details::Classification {
                     needs_probabilities = true;
                     needs_brier = true;
                     break;
+                case MetricKind::BrierSkillScore:
+                    needs_probabilities = true;
+                    needs_brier = true;
+                    needs_brier_skill = true;
+                    break;
+                case MetricKind::AUCROC:
+                case MetricKind::AUPRC:
+                case MetricKind::AUPRG:
+                case MetricKind::GiniCoefficient:
+                    needs_probabilities = true;
+                    needs_probability_curves = true;
+                    break;
+                case MetricKind::ExpectedCalibrationError:
+                case MetricKind::MaximumCalibrationError:
+                    needs_probabilities = true;
+                    needs_calibration_bins = true;
+                    break;
+                case MetricKind::CalibrationSlope:
+                case MetricKind::CalibrationIntercept:
+                case MetricKind::HosmerLemeshowPValue:
+                    needs_probabilities = true;
+                    needs_calibration_coefficients = true;
+                    break;
+                case MetricKind::KolmogorovSmirnovStatistic:
+                    needs_probabilities = true;
+                    needs_ks = true;
+                    break;
+                case MetricKind::CoverageError:
+                case MetricKind::LabelRankingAveragePrecision:
+                    needs_probabilities = true;
+                    needs_rank_metrics = true;
+                    break;
+                case MetricKind::SubsetAccuracy:
+                    needs_probabilities = true;
+                    break;
+                case MetricKind::Top3Accuracy:
+                case MetricKind::Top3Error:
+                    needs_top3 = true;
+                    break;
+                case MetricKind::Top5Accuracy:
+                case MetricKind::Top5Error:
+                    needs_top5 = true;
+                    break;
                 default:
                     break;
             }
+        }
+
+
+        if (needs_top5) {
+            needs_top3 = true;
         }
 
         torch::NoGradGuard guard;
@@ -192,6 +569,7 @@ namespace Thot::Evaluation::Details::Classification {
         std::size_t num_classes = 0;
         std::vector<detail::ClassCounts> class_counts;
         std::vector<std::int64_t> class_labels;
+        std::vector<std::vector<std::size_t>> confusion_matrix;
 
         std::vector<std::vector<std::size_t>> class_bin_counts;
         std::vector<std::vector<double>> class_bin_confidence;
@@ -200,7 +578,22 @@ namespace Thot::Evaluation::Details::Classification {
         std::vector<double> global_bin_confidence;
         std::vector<double> global_bin_correct;
 
-        double total_correct = 0.0;
+        std::vector<detail::ProbabilityCurveData> probability_curves;
+        std::vector<double> predicted_max_probabilities;
+        std::vector<int> predicted_correct;
+        if (needs_calibration_coefficients || needs_ks) {
+            predicted_max_probabilities.reserve(total_samples);
+            predicted_correct.reserve(total_samples);
+        }
+
+        double coverage_sum = 0.0;
+        double lrap_sum = 0.0;
+
+        std::size_t top3_hits = 0;
+        std::size_t top5_hits = 0;
+        std::size_t total_correct = 0;
+
+
         double total_log_loss = 0.0;
         double total_brier = 0.0;
 
@@ -231,23 +624,30 @@ namespace Thot::Evaluation::Details::Classification {
                 class_counts.assign(num_classes, {});
                 class_labels.resize(num_classes);
                 std::iota(class_labels.begin(), class_labels.end(), 0);
+                confusion_matrix.assign(num_classes, std::vector<std::size_t>(num_classes, 0));
 
-                if (needs_calibration) {
+                if (needs_calibration_bins) {
                     const auto bins = std::max<std::size_t>(1, options.calibration_bins);
                     class_bin_counts.assign(num_classes, std::vector<std::size_t>(bins, 0));
                     class_bin_confidence.assign(num_classes, std::vector<double>(bins, 0.0));
                     class_bin_correct.assign(num_classes, std::vector<double>(bins, 0.0));
-
                     global_bin_counts.assign(bins, 0);
                     global_bin_confidence.assign(bins, 0.0);
                     global_bin_correct.assign(bins, 0.0);
                 }
-            } else if (num_classes != batch_classes) {
-                throw std::runtime_error("Inconsistent number of classes encountered during evaluation.");
+
+                if (needs_probability_curves) {
+                    probability_curves.assign(num_classes, {});
+                    for (auto& curve : probability_curves) {
+                        curve.scores.reserve(total_samples);
+                        curve.labels.reserve(total_samples);
+                    }
+                } else if (num_classes != batch_classes) {
+                    throw std::runtime_error("Inconsistent number of classes encountered during evaluation.");
+                }
             }
 
-            auto predicted = logits.argmax(1);
-            predicted = predicted.to(torch::kCPU, torch::kLong);
+            auto predicted = logits.argmax(1).to(torch::kCPU, torch::kLong);
 
             torch::Tensor probabilities;
             double* probabilities_ptr = nullptr;
@@ -256,6 +656,13 @@ namespace Thot::Evaluation::Details::Classification {
                 probabilities = torch::softmax(logits, 1).contiguous().to(torch::kDouble);
                 probabilities_ptr = probabilities.data_ptr<double>();
                 probability_stride = probabilities.size(1);
+            }
+
+            torch::Tensor topk_indices_tensor;
+            if (needs_top3) {
+                const auto topk = static_cast<long>(needs_top5 ? 5 : 3);
+                auto topk_result = logits.topk(topk, 1, true, true);
+                topk_indices_tensor = std::get<1>(topk_result).to(torch::kCPU, torch::kLong);
             }
 
             auto target_cpu = target_batch.to(torch::kCPU);
@@ -269,6 +676,7 @@ namespace Thot::Evaluation::Details::Classification {
                 target_cpu = target_cpu.to(torch::kLong);
             }
 
+
             if (target_cpu.dim() > 1) {
                 if (target_cpu.size(1) == 1) {
                     target_cpu = target_cpu.squeeze(1);
@@ -280,9 +688,12 @@ namespace Thot::Evaluation::Details::Classification {
             if (target_cpu.sizes() != predicted.sizes()) {
                 throw std::runtime_error("Evaluation targets and predictions must share the same leading shape.");
             }
-
             auto pred_accessor = predicted.accessor<long, 1>();
             auto target_accessor = target_cpu.accessor<long, 1>();
+            torch::TensorAccessor<long, 2> topk_accessor = torch::TensorAccessor<long, 2>(nullptr, nullptr, nullptr);
+            if (needs_top3) {
+                topk_accessor = topk_indices_tensor.accessor<long, 2>();
+            }
 
             for (std::size_t i = 0; i < current_batch; ++i) {
                 const auto label = target_accessor[i];
@@ -295,29 +706,61 @@ namespace Thot::Evaluation::Details::Classification {
                     throw std::out_of_range("Encountered classification prediction outside the configured range.");
                 }
 
-                auto& label_counts = class_counts[static_cast<std::size_t>(label)];
-                auto& pred_counts = class_counts[static_cast<std::size_t>(pred)];
+                const auto label_index = static_cast<std::size_t>(label);
+                const auto pred_index = static_cast<std::size_t>(pred);
+
+                auto& label_counts = class_counts[label_index];
+                auto& pred_counts = class_counts[pred_index];
 
                 label_counts.support += 1;
                 pred_counts.predicted += 1;
+                confusion_matrix[label_index][pred_index] += 1;
 
                 if (label == pred) {
                     label_counts.tp += 1;
-                    total_correct += 1.0;
+                    total_correct += 1;
                 } else {
                     label_counts.fn += 1;
                     pred_counts.fp += 1;
                 }
 
+                if (needs_top3) {
+                    const auto k_dim = static_cast<std::size_t>(topk_accessor.size(1));
+                    bool counted3 = false;
+                    bool counted5 = false;
+                    for (std::size_t k = 0; k < k_dim; ++k) {
+                        const auto top_value = topk_accessor[i][static_cast<long>(k)];
+                        if (top_value == label) {
+                            if (k < 3) {
+                                counted3 = true;
+                            }
+
+                            if (needs_top5 && k < 5) {
+                                counted5 = true;
+                            }
+
+                            if (!needs_top5) {
+                                counted5 = counted3;
+                            }
+                            break;
+                        }
+                    }
+                    if (counted3) {
+                        top3_hits += 1;
+                    }
+                    if (needs_top5 && counted5) {
+                        top5_hits += 1;
+                    }
+                }
+
                 if (needs_probabilities) {
                     const double* row = probabilities_ptr + static_cast<std::size_t>(i) * probability_stride;
-                    const auto label_index = static_cast<std::size_t>(label);
+                    const double true_probability = std::clamp(row[label_index], 1e-12, 1.0);
 
                     if (needs_log_loss) {
-                        const double prob_true = std::clamp(row[label_index], 1e-12, 1.0);
-                        const double loss = -std::log(prob_true);
-                        label_counts.log_loss_sum += loss;
+                        const double loss = -std::log(true_probability);
                         total_log_loss += loss;
+                        label_counts.log_loss_sum += loss;
                     }
 
                     if (needs_brier) {
@@ -331,9 +774,9 @@ namespace Thot::Evaluation::Details::Classification {
                         total_brier += sample_brier;
                     }
 
-                    if (needs_calibration) {
+                    if (needs_calibration_bins) {
                         const auto bins = global_bin_counts.size();
-                        const double confidence = std::clamp(row[static_cast<std::size_t>(pred)], 0.0, 1.0);
+                        const double confidence = std::clamp(row[pred_index], 0.0, 1.0);
                         const auto bin = detail::clamp_bin(confidence, bins);
                         global_bin_counts[bin] += 1;
                         global_bin_confidence[bin] += confidence;
@@ -347,6 +790,37 @@ namespace Thot::Evaluation::Details::Classification {
                             class_bin_correct[cls][class_bin] += (cls == label_index) ? 1.0 : 0.0;
                         }
                     }
+
+                    if (needs_probability_curves) {
+                        for (std::size_t cls = 0; cls < num_classes; ++cls) {
+                            probability_curves[cls].scores.push_back(row[cls]);
+                            probability_curves[cls].labels.push_back(cls == label_index ? 1 : 0);
+                        }
+                    }
+
+                    if (needs_calibration_coefficients || needs_ks) {
+                        const double predicted_probability = std::clamp(row[pred_index], 1e-12, 1.0 - 1e-12);
+                        predicted_max_probabilities.push_back(predicted_probability);
+                        predicted_correct.push_back(label == pred ? 1 : 0);
+                    }
+
+                    if (needs_rank_metrics) {
+                        const double true_score = row[label_index];
+                        std::size_t rank = 1;
+                        for (std::size_t cls = 0; cls < num_classes; ++cls) {
+                            if (cls == label_index) {
+                                continue;
+                            }
+                            const double score = row[cls];
+                            if (score > true_score + 1e-12) {
+                                rank += 1;
+                            } else if (std::abs(score - true_score) <= 1e-12) {
+                                rank += 1;
+                            }
+                        }
+                        coverage_sum += static_cast<double>(rank);
+                        lrap_sum += detail::safe_div(1.0, static_cast<double>(rank));
+                    }
                 }
             }
         }
@@ -357,14 +831,14 @@ namespace Thot::Evaluation::Details::Classification {
             counts.tn = remainder;
         }
 
-        std::vector<double> per_class_ece(num_classes, 0.0);
-        std::vector<double> per_class_mce(num_classes, 0.0);
-        double global_ece = 0.0;
-        double global_mce = 0.0;
-
-        if (needs_calibration) {
-            const auto bins = global_bin_counts.size();
-            for (std::size_t b = 0; b < bins; ++b) {
+        std::vector<double> per_class_ece_values(num_classes, std::numeric_limits<double>::quiet_NaN());
+        std::vector<double> per_class_mce_values(num_classes, std::numeric_limits<double>::quiet_NaN());
+        double global_ece = std::numeric_limits<double>::quiet_NaN();
+        double global_mce = std::numeric_limits<double>::quiet_NaN();
+        if (needs_calibration_bins) {
+            global_ece = 0.0;
+            global_mce = 0.0;
+            for (std::size_t b = 0; b < global_bin_counts.size(); ++b) {
                 const double count = static_cast<double>(global_bin_counts[b]);
                 if (count <= 0.0) {
                     continue;
@@ -376,10 +850,10 @@ namespace Thot::Evaluation::Details::Classification {
                 global_mce = std::max(global_mce, diff);
             }
 
+            per_class_ece_values.assign(num_classes, 0.0);
+            per_class_mce_values.assign(num_classes, 0.0);
             for (std::size_t cls = 0; cls < num_classes; ++cls) {
-                double ece = 0.0;
-                double mce = 0.0;
-                for (std::size_t b = 0; b < bins; ++b) {
+                for (std::size_t b = 0; b < class_bin_counts[cls].size(); ++b) {
                     const double count = static_cast<double>(class_bin_counts[cls][b]);
                     if (count <= 0.0) {
                         continue;
@@ -387,139 +861,367 @@ namespace Thot::Evaluation::Details::Classification {
                     const double mean_confidence = class_bin_confidence[cls][b] / count;
                     const double accuracy = class_bin_correct[cls][b] / count;
                     const double diff = std::abs(mean_confidence - accuracy);
-                    ece += (count / total_samples_d) * diff;
-                    mce = std::max(mce, diff);
+                    per_class_ece_values[cls] += (count / total_samples_d) * diff;
+                    per_class_mce_values[cls] = std::max(per_class_mce_values[cls], diff);
                 }
-                per_class_ece[cls] = ece;
-                per_class_mce[cls] = mce;
             }
         }
 
-        std::vector<std::vector<double>> per_class_values(metric_order.size(), std::vector<double>(num_classes, 0.0));
-        std::vector<Report::SummaryRow> summary;
-        summary.reserve(metric_order.size());
+        std::vector<double> auc_per_class(num_classes, std::numeric_limits<double>::quiet_NaN());
+        std::vector<double> auprc_per_class(num_classes, std::numeric_limits<double>::quiet_NaN());
+        std::vector<double> auprg_per_class(num_classes, std::numeric_limits<double>::quiet_NaN());
+        std::vector<double> gini_per_class(num_classes, std::numeric_limits<double>::quiet_NaN());
+        if (needs_probability_curves) {
+            for (std::size_t cls = 0; cls < num_classes; ++cls) {
+                const double auc = detail::compute_auc(probability_curves[cls]);
+                const double auprc = detail::compute_average_precision(probability_curves[cls]);
+                const double auprg = std::numeric_limits<double>::quiet_NaN();
+                const double gini = detail::compute_gini(auc);
+                auc_per_class[cls] = auc;
+                auprc_per_class[cls] = auprc;
+                auprg_per_class[cls] = auprg;
+                gini_per_class[cls] = gini;
+            }
+        }
+
+        std::vector<std::size_t> support_values;
+        support_values.reserve(num_classes);
+        std::size_t total_fp = 0;
+        std::size_t total_fn = 0;
+        for (const auto& counts : class_counts) {
+            support_values.push_back(counts.support);
+            total_fp += counts.fp;
+            total_fn += counts.fn;
+        }
 
         const double total_support = std::accumulate(
-            class_counts.begin(), class_counts.end(), 0.0,
-            [](double acc, const detail::ClassCounts& counts) {
-                return acc + static_cast<double>(counts.support);
+            support_values.begin(), support_values.end(), 0.0,
+            [](double acc, std::size_t value) {
+                return acc + static_cast<double>(value);
             });
 
-        const double accuracy_global = detail::safe_div(total_correct, total_samples_d);
-        const double top1_global = accuracy_global;
+        const double accuracy_global = detail::safe_div(static_cast<double>(total_correct), total_samples_d);
+        const double top1_accuracy = accuracy_global;
+        const double top3_accuracy = needs_top3 ? detail::safe_div(static_cast<double>(top3_hits), total_samples_d) : top1_accuracy;
+        const double top5_accuracy = needs_top5 ? detail::safe_div(static_cast<double>(top5_hits), total_samples_d) : top3_accuracy;
+        const double top1_error = 1.0 - top1_accuracy;
+        const double top3_error = 1.0 - top3_accuracy;
+        const double top5_error = 1.0 - top5_accuracy;
+        const double hamming_global = 1.0 - top1_accuracy;
 
-        double global_kappa = 0.0;
-        {
-            double pe = 0.0;
-            for (const auto& counts : class_counts) {
-                const double actual = detail::safe_div(static_cast<double>(counts.support), total_samples_d);
-                const double predicted = detail::safe_div(static_cast<double>(counts.predicted), total_samples_d);
-                pe += actual * predicted;
-            }
-            const double numerator = accuracy_global - pe;
-            const double denominator = 1.0 - pe;
-            global_kappa = detail::safe_div(numerator, denominator);
+        double pe = 0.0;
+        for (const auto& counts : class_counts) {
+            const double actual = detail::safe_div(static_cast<double>(counts.support), total_samples_d);
+            const double predicted = detail::safe_div(static_cast<double>(counts.predicted), total_samples_d);
+            pe += actual * predicted;
+        }
+        const double global_kappa = detail::safe_div(accuracy_global - pe, 1.0 - pe);
+
+        const double log_loss_global = needs_log_loss ? detail::safe_div(total_log_loss, total_samples_d)
+                                                      : std::numeric_limits<double>::quiet_NaN();
+        const double brier_global = needs_brier ? detail::safe_div(total_brier, total_samples_d)
+                                                : std::numeric_limits<double>::quiet_NaN();
+        const double coverage_error = needs_rank_metrics ? detail::safe_div(coverage_sum, total_samples_d)
+                                                         : std::numeric_limits<double>::quiet_NaN();
+        const double lrap = needs_rank_metrics ? detail::safe_div(lrap_sum, total_samples_d)
+                                               : std::numeric_limits<double>::quiet_NaN();
+        const double subset_accuracy = top1_accuracy;
+
+        const double jaccard_micro = detail::compute_jaccard_micro(total_correct, total_fp, total_fn);
+
+        const double brier_baseline = needs_brier_skill
+            ? detail::compute_brier_baseline(support_values, total_samples_d)
+            : std::numeric_limits<double>::quiet_NaN();
+        double brier_skill_global = std::numeric_limits<double>::quiet_NaN();
+        if (needs_brier_skill && std::isfinite(brier_global) && std::isfinite(brier_baseline) && std::abs(brier_baseline) > 1e-12) {
+            brier_skill_global = 1.0 - (brier_global / brier_baseline);
         }
 
-        const double log_loss_global = needs_log_loss ? detail::safe_div(total_log_loss, total_samples_d) : 0.0;
-        const double brier_global = needs_brier ? detail::safe_div(total_brier, total_samples_d) : 0.0;
+        double ks_stat = std::numeric_limits<double>::quiet_NaN();
+        if (needs_ks) {
+            ks_stat = detail::compute_kolmogorov_smirnov(predicted_max_probabilities, predicted_correct);
+        }
+
+        double cal_slope = std::numeric_limits<double>::quiet_NaN();
+        double cal_intercept = std::numeric_limits<double>::quiet_NaN();
+        if (needs_calibration_coefficients) {
+            std::tie(cal_slope, cal_intercept) = detail::compute_calibration_coefficients(
+                predicted_max_probabilities, predicted_correct);
+        }
+
+        const double hosmer_p_value = std::numeric_limits<double>::quiet_NaN();
+        const double mcc_global = detail::compute_mcc(confusion_matrix, total_samples);
+        const double confusion_entropy_global = detail::compute_confusion_entropy(confusion_matrix, total_samples);
+
+        std::vector<double> precision_per_class(num_classes, 0.0);
+        std::vector<double> recall_per_class(num_classes, 0.0);
+        std::vector<double> specificity_per_class(num_classes, 0.0);
+        std::vector<double> f1_per_class(num_classes, 0.0);
+        std::vector<double> fbeta05_per_class(num_classes, 0.0);
+        std::vector<double> fbeta2_per_class(num_classes, 0.0);
+        std::vector<double> fdr_per_class(num_classes, 0.0);
+        std::vector<double> fnr_per_class(num_classes, 0.0);
+        std::vector<double> for_per_class(num_classes, 0.0);
+        std::vector<double> fpr_per_class(num_classes, 0.0);
+        std::vector<double> npv_per_class(num_classes, 0.0);
+        std::vector<double> prevalence_per_class(num_classes, 0.0);
+        std::vector<double> threat_per_class(num_classes, 0.0);
+        std::vector<double> informedness_per_class(num_classes, 0.0);
+        std::vector<double> markness_per_class(num_classes, 0.0);
+        std::vector<double> youden_per_class(num_classes, 0.0);
+        std::vector<double> jaccard_per_class(num_classes, 0.0);
+        std::vector<double> fowlkes_per_class(num_classes, 0.0);
+        std::vector<double> accuracy_per_class(num_classes, 0.0);
+        std::vector<double> mcc_per_class(num_classes, 0.0);
+        std::vector<double> balanced_accuracy_per_class(num_classes, 0.0);
+        std::vector<double> balanced_error_per_class(num_classes, 0.0);
+        std::vector<double> hamming_per_class(num_classes, 0.0);
+        std::vector<double> neg_likelihood_per_class(num_classes, 0.0);
+        std::vector<double> pos_likelihood_per_class(num_classes, 0.0);
+        std::vector<double> brier_per_class(num_classes, std::numeric_limits<double>::quiet_NaN());
+        std::vector<double> log_loss_per_class(num_classes, std::numeric_limits<double>::quiet_NaN());
+
+        for (std::size_t cls = 0; cls < num_classes; ++cls) {
+            const auto& counts = class_counts[cls];
+            const double tp = static_cast<double>(counts.tp);
+            const double fp = static_cast<double>(counts.fp);
+            const double fn = static_cast<double>(counts.fn);
+            const double tn = static_cast<double>(counts.tn);
+            const double support = static_cast<double>(counts.support);
+
+            const double precision = detail::safe_div(tp, tp + fp);
+            const double recall = detail::safe_div(tp, tp + fn);
+            const double specificity = detail::safe_div(tn, tn + fp);
+            const double f1 = (precision + recall > 0.0) ? detail::safe_div(2.0 * precision * recall, precision + recall) : 0.0;
+            const double fbeta05 = detail::safe_div(1.25 * tp, 1.25 * tp + 0.25 * fn + fp);
+            const double fbeta2 = detail::safe_div(5.0 * tp, 5.0 * tp + 4.0 * fn + fp);
+            const double fdr = detail::safe_div(fp, tp + fp);
+            const double fnr = detail::safe_div(fn, tp + fn);
+            const double forate = detail::safe_div(fn, fn + tn);
+            const double fpr = detail::safe_div(fp, fp + tn);
+            const double npv = detail::safe_div(tn, tn + fn);
+            const double prevalence = detail::safe_div(support, total_samples_d);
+            const double threat = detail::safe_div(tp, tp + fp + fn);
+            const double informedness = recall + specificity - 1.0;
+            const double markness = precision + npv - 1.0;
+            const double youden = informedness;
+            const double jaccard = detail::safe_div(tp, tp + fp + fn);
+            const double fowlkes = (precision > 0.0 && recall > 0.0) ? std::sqrt(precision * recall) : 0.0;
+            const double accuracy_cls = detail::safe_div(tp + tn, total_samples_d);
+            double mcc = 0.0;
+            const double denom = std::sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn));
+            if (denom > 0.0) {
+                mcc = detail::safe_div(tp * tn - fp * fn, denom);
+            }
+            const double balanced_accuracy = 0.5 * (recall + specificity);
+            const double balanced_error = 1.0 - balanced_accuracy;
+            const double hamming = detail::safe_div(fp + fn, total_samples_d);
+            const double neg_likelihood = detail::safe_div(1.0 - recall, specificity);
+            const double pos_likelihood = detail::safe_div(recall, 1.0 - specificity);
+
+            precision_per_class[cls] = precision;
+            recall_per_class[cls] = recall;
+            specificity_per_class[cls] = specificity;
+            f1_per_class[cls] = f1;
+            fbeta05_per_class[cls] = fbeta05;
+            fbeta2_per_class[cls] = fbeta2;
+            fdr_per_class[cls] = fdr;
+            fnr_per_class[cls] = fnr;
+            for_per_class[cls] = forate;
+            fpr_per_class[cls] = fpr;
+            npv_per_class[cls] = npv;
+            prevalence_per_class[cls] = prevalence;
+            threat_per_class[cls] = threat;
+            informedness_per_class[cls] = informedness;
+            markness_per_class[cls] = markness;
+            youden_per_class[cls] = youden;
+            jaccard_per_class[cls] = jaccard;
+            fowlkes_per_class[cls] = fowlkes;
+            accuracy_per_class[cls] = accuracy_cls;
+            mcc_per_class[cls] = mcc;
+            balanced_accuracy_per_class[cls] = balanced_accuracy;
+            balanced_error_per_class[cls] = balanced_error;
+            hamming_per_class[cls] = hamming;
+            neg_likelihood_per_class[cls] = neg_likelihood;
+            pos_likelihood_per_class[cls] = pos_likelihood;
+
+            if (needs_brier && counts.support > 0) {
+                brier_per_class[cls] = counts.brier_sum / support;
+            }
+            if (needs_log_loss && counts.support > 0) {
+                log_loss_per_class[cls] = counts.log_loss_sum / support;
+            }
+        }
+
+        std::vector<std::vector<double>> per_class_values(
+            metric_order.size(),
+            std::vector<double>(num_classes, std::numeric_limits<double>::quiet_NaN()));
+        std::vector<Report::SummaryRow> summary;
+        summary.reserve(metric_order.size());
 
         for (std::size_t metric_index = 0; metric_index < metric_order.size(); ++metric_index) {
             const auto kind = metric_order[metric_index];
             double macro_sum = 0.0;
             double macro_count = 0.0;
             double weighted_sum = 0.0;
+            auto& dest = per_class_values[metric_index];
 
             for (std::size_t cls = 0; cls < num_classes; ++cls) {
-                const auto& counts = class_counts[cls];
-                double value = 0.0;
+                double value = std::numeric_limits<double>::quiet_NaN();
                 switch (kind) {
                     case MetricKind::Accuracy:
-                    case MetricKind::Top1Accuracy: {
-                        value = detail::safe_div(static_cast<double>(counts.tp + counts.tn), total_samples_d);
+                    case MetricKind::Top1Accuracy:
+                    case MetricKind::SubsetAccuracy:
+                        value = accuracy_per_class[cls];
                         break;
-                    }
-                    case MetricKind::Precision: {
-                        value = detail::safe_div(static_cast<double>(counts.tp),
-                                                 static_cast<double>(counts.tp + counts.fp));
+                    case MetricKind::BalancedAccuracy:
+                        value = balanced_accuracy_per_class[cls];
                         break;
-                    }
+                    case MetricKind::BalancedErrorRate:
+                        value = balanced_error_per_class[cls];
+                        break;
+                    case MetricKind::F1:
+                        value = f1_per_class[cls];
+                        break;
+                    case MetricKind::FBeta0Point5:
+                        value = fbeta05_per_class[cls];
+                        break;
+                    case MetricKind::FBeta2:
+                        value = fbeta2_per_class[cls];
+                        break;
+                    case MetricKind::FalseDiscoveryRate:
+                        value = fdr_per_class[cls];
+                        break;
+                    case MetricKind::FalseNegativeRate:
+                        value = fnr_per_class[cls];
+                        break;
+                    case MetricKind::FalseOmissionRate:
+                        value = for_per_class[cls];
+                        break;
+                    case MetricKind::FalsePositiveRate:
+                        value = fpr_per_class[cls];
+                        break;
+                    case MetricKind::FowlkesMallows:
+                        value = fowlkes_per_class[cls];
+                        break;
+                    case MetricKind::HammingLoss:
+                        value = hamming_per_class[cls];
+                        break;
+                    case MetricKind::Informedness:
+                    case MetricKind::YoudenIndex:
+                        value = informedness_per_class[cls];
+                        break;
+                    case MetricKind::JaccardIndexMicro:
+                    case MetricKind::JaccardIndexMacro:
+                    case MetricKind::ThreatScore:
+                        value = jaccard_per_class[cls];
+                        break;
+                    case MetricKind::Markness:
+                        value = markness_per_class[cls];
+                        break;
+                    case MetricKind::Matthews:
+                        value = mcc_per_class[cls];
+                        break;
+                    case MetricKind::NegativeLikelihoodRatio:
+                        value = neg_likelihood_per_class[cls];
+                        break;
+                    case MetricKind::NegativePredictiveValue:
+                        value = npv_per_class[cls];
+                        break;
+                    case MetricKind::PositiveLikelihoodRatio:
+                        value = pos_likelihood_per_class[cls];
+                        break;
+                    case MetricKind::PositivePredictiveValue:
+                    case MetricKind::Precision:
+                        value = precision_per_class[cls];
+                        break;
+                    case MetricKind::Prevalence:
+                        value = prevalence_per_class[cls];
+                        break;
                     case MetricKind::Recall:
-                    case MetricKind::TruePositiveRate: {
-                        value = detail::safe_div(static_cast<double>(counts.tp),
-                                                 static_cast<double>(counts.tp + counts.fn));
+                    case MetricKind::TruePositiveRate:
+                        value = recall_per_class[cls];
                         break;
-                    }
-                    case MetricKind::F1: {
-                        const double precision = detail::safe_div(static_cast<double>(counts.tp),
-                                                                  static_cast<double>(counts.tp + counts.fp));
-                        const double recall = detail::safe_div(static_cast<double>(counts.tp),
-                                                               static_cast<double>(counts.tp + counts.fn));
-                        const double denom = precision + recall;
-                        value = (denom > 0.0) ? ((2.0 * precision * recall) / denom) : 0.0;
+                    case MetricKind::Specificity:
+                    case MetricKind::TrueNegativeRate:
+                        value = specificity_per_class[cls];
                         break;
-                    }
-                    case MetricKind::TrueNegativeRate: {
-                        value = detail::safe_div(static_cast<double>(counts.tn),
-                                                 static_cast<double>(counts.tn + counts.fp));
+                    case MetricKind::Top1Error:
+                        value = 1.0 - accuracy_per_class[cls];
                         break;
-                    }
-                    case MetricKind::CohensKappa: {
-                        const double po = detail::safe_div(static_cast<double>(counts.tp + counts.tn), total_samples_d);
-                        const double pred_pos = detail::safe_div(static_cast<double>(counts.tp + counts.fp), total_samples_d);
-                        const double actual_pos = detail::safe_div(static_cast<double>(counts.tp + counts.fn), total_samples_d);
-                        const double pred_neg = 1.0 - pred_pos;
-                        const double actual_neg = 1.0 - actual_pos;
-                        const double pe = pred_pos * actual_pos + pred_neg * actual_neg;
-                        value = detail::safe_div(po - pe, 1.0 - pe);
+                    case MetricKind::LogLoss:
+                        value = log_loss_per_class[cls];
                         break;
-                    }
-                    case MetricKind::LogLoss: {
-                        value = counts.support > 0
-                            ? detail::safe_div(counts.log_loss_sum, static_cast<double>(counts.support))
-                            : 0.0;
+                    case MetricKind::BrierScore:
+                        value = brier_per_class[cls];
                         break;
-                    }
-                    case MetricKind::BrierScore: {
-                        value = counts.support > 0
-                            ? detail::safe_div(counts.brier_sum, static_cast<double>(counts.support))
-                            : 0.0;
+                    case MetricKind::ExpectedCalibrationError:
+                        value = per_class_ece_values[cls];
                         break;
-                    }
-                    case MetricKind::ExpectedCalibrationError: {
-                        value = per_class_ece[cls];
+                    case MetricKind::MaximumCalibrationError:
+                        value = per_class_mce_values[cls];
                         break;
-                    }
-                    case MetricKind::MaximumCalibrationError: {
-                        value = per_class_mce[cls];
+                    case MetricKind::AUCROC:
+                        value = auc_per_class[cls];
                         break;
-                    }
+                    case MetricKind::AUPRC:
+                        value = auprc_per_class[cls];
+                        break;
+                    case MetricKind::AUPRG:
+                        value = auprg_per_class[cls];
+                        break;
+                    case MetricKind::GiniCoefficient:
+                        value = gini_per_class[cls];
+                        break;
+                    default:
+                        break;
                 }
 
-                per_class_values[metric_index][cls] = value;
-
+                dest[cls] = value;
                 if (std::isfinite(value)) {
                     macro_sum += value;
                     macro_count += 1.0;
-                    weighted_sum += value * static_cast<double>(counts.support);
+                    weighted_sum += value * static_cast<double>(class_counts[cls].support);
                 }
             }
 
-            double macro = (macro_count > 0.0) ? (macro_sum / macro_count) : 0.0;
-            double weighted = (total_support > 0.0) ? (weighted_sum / total_support) : 0.0;
+            double macro = (macro_count > 0.0) ? (macro_sum / macro_count) : std::numeric_limits<double>::quiet_NaN();
+            double weighted = (total_support > 0.0) ? (weighted_sum / total_support) : std::numeric_limits<double>::quiet_NaN();
 
             switch (kind) {
                 case MetricKind::Accuracy:
-                    macro = accuracy_global;
-                    weighted = accuracy_global;
-                    break;
                 case MetricKind::Top1Accuracy:
-                    macro = top1_global;
-                    weighted = top1_global;
+                case MetricKind::SubsetAccuracy:
+                    macro = top1_accuracy;
+                    weighted = top1_accuracy;
                     break;
-                case MetricKind::CohensKappa:
-                    macro = global_kappa;
-                    weighted = global_kappa;
+                case MetricKind::Top1Error:
+                    macro = top1_error;
+                    weighted = top1_error;
+                    break;
+                case MetricKind::Top3Accuracy:
+                    macro = top3_accuracy;
+                    weighted = top3_accuracy;
+                    break;
+                case MetricKind::Top3Error:
+                    macro = top3_error;
+                    weighted = top3_error;
+                    break;
+                case MetricKind::Top5Accuracy:
+                    macro = top5_accuracy;
+                    weighted = top5_accuracy;
+                    break;
+                case MetricKind::Top5Error:
+                    macro = top5_error;
+                    weighted = top5_error;
+                    break;
+                case MetricKind::HammingLoss:
+                    macro = hamming_global;
+                    weighted = hamming_global;
+                    break;
+                case MetricKind::JaccardIndexMicro:
+                    macro = jaccard_micro;
+                    weighted = jaccard_micro;
                     break;
                 case MetricKind::ExpectedCalibrationError:
                     macro = global_ece;
@@ -529,6 +1231,38 @@ namespace Thot::Evaluation::Details::Classification {
                     macro = global_mce;
                     weighted = global_mce;
                     break;
+                case MetricKind::CalibrationSlope:
+                    macro = cal_slope;
+                    weighted = cal_slope;
+                    break;
+                case MetricKind::CalibrationIntercept:
+                    macro = cal_intercept;
+                    weighted = cal_intercept;
+                    break;
+                case MetricKind::HosmerLemeshowPValue:
+                    macro = hosmer_p_value;
+                    weighted = hosmer_p_value;
+                    break;
+                case MetricKind::KolmogorovSmirnovStatistic:
+                    macro = ks_stat;
+                    weighted = ks_stat;
+                    break;
+                case MetricKind::CohensKappa:
+                    macro = global_kappa;
+                    weighted = global_kappa;
+                    break;
+                case MetricKind::ConfusionEntropy:
+                    macro = confusion_entropy_global;
+                    weighted = confusion_entropy_global;
+                    break;
+                case MetricKind::CoverageError:
+                    macro = coverage_error;
+                    weighted = coverage_error;
+                    break;
+                case MetricKind::LabelRankingAveragePrecision:
+                    macro = lrap;
+                    weighted = lrap;
+                    break;
                 case MetricKind::LogLoss:
                     macro = log_loss_global;
                     weighted = log_loss_global;
@@ -537,6 +1271,14 @@ namespace Thot::Evaluation::Details::Classification {
                     macro = brier_global;
                     weighted = brier_global;
                     break;
+                case MetricKind::BrierSkillScore:
+                    macro = brier_skill_global;
+                    weighted = brier_skill_global;
+                    break;
+                case MetricKind::Matthews:
+                    macro = mcc_global;
+                    weighted = mcc_global;
+                    break;
                 default:
                     break;
             }
@@ -544,14 +1286,10 @@ namespace Thot::Evaluation::Details::Classification {
             summary.push_back(Report::SummaryRow{kind, macro, weighted});
         }
 
-        report.summary = std::move(summary);
-        report.per_class = std::move(per_class_values);
-        report.labels = std::move(class_labels);
-        report.support.clear();
-        report.support.reserve(class_counts.size());
-        for (const auto& counts : class_counts) {
-            report.support.push_back(counts.support);
-        }
+        report.summary = summary;
+        report.per_class = per_class_values;
+        report.labels = class_labels;
+        report.support = support_values;
 
         if (was_training) {
             model.train();
@@ -657,12 +1395,12 @@ namespace Thot::Evaluation::Details::Classification {
                 headers.push_back(std::move(label));
             }
 
-            std::vector<std::string> support_values;
-            support_values.reserve(num_classes);
+            std::vector<std::string> support_values_strings;
+            support_values_strings.reserve(num_classes);
             for (std::size_t i = 0; i < num_classes; ++i) {
                 auto value = detail::format_size(report.support[i]);
                 class_widths[i] = std::max(class_widths[i], value.size());
-                support_values.push_back(std::move(value));
+                support_values_strings.push_back(std::move(value));
             }
 
             for (std::size_t metric_index = 0; metric_index < metric_count && metric_index < report.per_class.size(); ++metric_index) {
@@ -723,5 +1461,4 @@ namespace Thot::Evaluation::Details::Classification {
         }
     }
 }
-
 #endif //THOT_CLASSIFICATION_HPP

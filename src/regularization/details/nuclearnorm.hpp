@@ -26,8 +26,7 @@ namespace Thot::Regularization::Details {
         } else if (tensor.dim() > 2) {
             tensor = tensor.flatten(0, tensor.dim() - 2);
         }
-
-        auto singular_values = torch::linalg::svdvals(tensor);
+        auto singular_values = torch::linalg_svdvals(tensor);
         auto norm = singular_values.sum();
         return norm.mul(options.strength);
     }

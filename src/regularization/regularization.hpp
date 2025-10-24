@@ -6,7 +6,7 @@
 #include "details/ewc.hpp"
 #include "details/l2.hpp"
 #include "details/mas.hpp"
-#include "details/nuclear_norm.hpp"
+#include "details/nuclearnorm.hpp"
 #include "details/si.hpp"
 
 namespace Thot::Regularization {
@@ -31,8 +31,7 @@ namespace Thot::Regularization {
         EWCDescriptor,
         MASDescriptor,
         SIDescriptor,
-        NuclearNormDescriptor
-    >;
+        NuclearNormDescriptor>;
 
     [[nodiscard]] constexpr auto L2(const L2Options& options = {}) noexcept -> L2Descriptor {
         return {options};
