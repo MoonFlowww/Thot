@@ -157,13 +157,6 @@ namespace Thot {
                     break;
                 case 1: {
                     auto block_descriptor = std::get<Block::Descriptor>(std::move(descriptor));
-                    auto to_shared_module = [](const auto& module_like) {
-                        if constexpr (requires { module_like.ptr(); }) {
-                            return std::static_pointer_cast<torch::nn::Module>(module_like.ptr());
-                        } else {
-                            return std::static_pointer_cast<torch::nn::Module>(module_like);
-                        }
-                    };
                     switch (block_descriptor.index()) {
                         case 0: {
                             auto sequential = std::get<Block::SequentialDescriptor>(std::move(block_descriptor));
@@ -193,7 +186,7 @@ namespace Thot {
 
                             Layer::Details::RegisteredLayer registered_layer{};
                             registered_layer.activation = Activation::Type::Identity;
-                            registered_layer.module = to_shared_module(module);
+                            registered_layer.module = std::static_pointer_cast<torch::nn::Module>(module.ptr());
                             registered_layer.local = std::move(residual_local);
                             registered_layer.forward = [module](torch::Tensor input) {
                                 return module->forward(std::move(input));
@@ -211,7 +204,7 @@ namespace Thot {
 
                             Layer::Details::RegisteredLayer registered_layer{};
                             registered_layer.activation = Activation::Type::Identity;
-                            registered_layer.module = to_shared_module(module);
+                            registered_layer.module = std::static_pointer_cast<torch::nn::Module>(module.ptr());
                             registered_layer.forward = [module](torch::Tensor input) {
                                 return module->forward(std::move(input));
                             };
