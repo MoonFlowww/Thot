@@ -36,19 +36,85 @@ namespace Thot::Data::Manipulation {
             std::bernoulli_distribution distribution(clamped_probability);
             return distribution(rng);
         }
+
+        inline int64_t axis_token_to_dim(const std::string& token, int64_t tensor_dim) {
+            if (token.empty()) {
+                throw std::invalid_argument("Flip axis tokens must not be empty.");
+            }
+
+            try {
+                std::size_t processed = 0;
+                const auto value = std::stoll(token, &processed, 10);
+                if (processed == token.size()) {
+                    auto normalized = value;
+                    if (normalized < 0) {
+                        normalized += tensor_dim;
+                    }
+                    if (normalized < 0 || normalized >= tensor_dim) {
+                        throw std::out_of_range("Flip axis index out of range.");
+                    }
+                    return normalized;
+                }
+            } catch (const std::invalid_argument&) {
+                // Continue below for named axes.
+            } catch (const std::out_of_range&) {
+                throw std::out_of_range("Flip axis index out of range.");
+            }
+
+            std::string lowered = token;
+            std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+
+            int64_t offset = 0;
+            if (lowered == "x") {
+                offset = -1;
+            } else if (lowered == "y") {
+                offset = -2;
+            } else if (lowered == "z") {
+                offset = -3;
+            } else {
+                throw std::invalid_argument("Unsupported flip axis token: " + token);
+            }
+
+            const auto dim_index = tensor_dim + offset;
+            if (dim_index < 0 || dim_index >= tensor_dim) {
+                throw std::out_of_range("Flip axis token is incompatible with tensor rank.");
+            }
+
+            return dim_index;
+        }
+
+        inline std::vector<int64_t> parse_flip_axes(const std::vector<std::string>& axes, int64_t tensor_dim) {
+            std::vector<int64_t> dims;
+            dims.reserve(axes.size());
+            for (const auto& axis : axes) {
+                dims.push_back(axis_token_to_dim(axis, tensor_dim));
+            }
+            return dims;
+        }
     }
 
-    inline torch::Tensor Flip(torch::Tensor tensor, const std::vector<int64_t>& dims, std::optional<double> probability = 0.3f, std::optional<bool> data_augment = true, bool show_progress = true) {
+    inline std::pair<torch::Tensor, torch::Tensor> Flip(torch::Tensor tensor, torch::Tensor target,
+                                                            const std::vector<std::string>& axes,
+                                                            std::optional<double> probability = 0.3f,
+                                                            std::optional<bool> data_augment = true, bool show_progress = true) {
         [[maybe_unused]] const bool show = show_progress;
         if (!Details::should_apply(probability, data_augment)) {
-            return tensor;
+            return {std::move(tensor), std::move(target)};
         }
 
+        if (axes.empty()) {
+            return {std::move(tensor), std::move(target)};
+        }
+
+        const auto dims = Details::parse_flip_axes(axes, tensor.dim());
         if (dims.empty()) {
-            return tensor;
+            return {std::move(tensor), std::move(target)};
         }
 
-        return tensor.flip(dims);
+        auto flipped = tensor.flip(dims);
+        return {std::move(flipped), std::move(target)};
     }
 
     inline std::pair<torch::Tensor, torch::Tensor> Cutout(const torch::Tensor& inputs, const torch::Tensor& targets,
