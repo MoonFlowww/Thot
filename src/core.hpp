@@ -890,9 +890,9 @@ namespace Thot {
                 binding.descriptor);
         }
 
-        void update_regularization_states(std::size_t step_index)
+        void update_regularization_states(std::size_t step_index, bool regularization_active = false)
         {
-            if (!has_regularization()) {
+            if (!regularization_active && !has_regularization()) {
                 return;
             }
 
@@ -980,6 +980,8 @@ namespace Thot {
 
                 std::size_t step_index = 0;
 
+                const bool regularization_active = model.has_regularization();
+
                 for (std::size_t epoch = 0; epoch < options.epoch; ++epoch) {
                     const auto epoch_start = std::chrono::steady_clock::now();
 
@@ -1051,7 +1053,7 @@ namespace Thot {
                         if (loss.dim() != 0) {
                             loss = loss.mean();
                         }
-                        if (model.has_regularization()) {
+                        if (regularization_active) {
                             auto regularization_penalty = model.compute_regularization_penalty();
                             if (regularization_penalty.defined()) {
                                 if (regularization_penalty.device() != loss.device()) {
@@ -1068,8 +1070,8 @@ namespace Thot {
                         model.step();
 
 
-                        if (model.has_regularization()) {
-                            model.update_regularization_states(step_index);
+                        if (regularization_active) {
+                            model.update_regularization_states(step_index, true);
                         }
                         ++step_index;
 
@@ -1141,6 +1143,7 @@ namespace Thot {
                 const auto device = model.device();
                 const auto total_samples = dataset.inputs.size(0);
                 const auto local_batch = static_cast<std::int64_t>(batch_size);
+                const bool regularization_active = model.has_regularization();
 
                 torch::NoGradGuard no_grad;
                 const bool was_training = model.is_training();
@@ -1189,7 +1192,7 @@ namespace Thot {
                     if (loss.dim() != 0) {
                         loss = loss.mean();
                     }
-                    if (model.has_regularization()) {
+                    if (regularization_active) {
                         auto regularization_penalty = model.compute_regularization_penalty();
                         if (regularization_penalty.defined()) {
                             if (regularization_penalty.device() != loss.device()) {
