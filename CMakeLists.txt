@@ -106,5 +106,9 @@ add_executable(test_Thot test/main.cpp
         src/common/local.hpp
         src/regularization/apply.hpp
         src/regularization/details/nuclearnorm.hpp
+        src/regularization/details/fge.hpp
+        src/regularization/details/sfge.hpp
+        src/regularization/details/swa.hpp
+        src/regularization/details/swag.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)

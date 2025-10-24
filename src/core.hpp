@@ -145,16 +145,16 @@ namespace Thot {
 
     class Model : public torch::nn::Module {
 
-        using RegularizationState = std::variant<
-            std::monostate,
-            Regularization::Details::EWCState,
-            Regularization::Details::MASState,
-            Regularization::Details::SIState>;
+        using RegularizationState = Regularization::StateVariant;
+        using RegularizationStateStorage = std::shared_ptr<std::vector<RegularizationState>>;
+        using RegularizationAccumulator = Regularization::Accumulator;
 
         struct RegularizationBinding {
-            Regularization::Descriptor descriptor;
-            RegularizationState state{std::monostate{}};
+            Regularization::Descriptor descriptor{};
+            RegularizationStateStorage states{};
+            RegularizationAccumulator accumulator{};
         };
+
 
     public:
         Model() = default;
@@ -163,6 +163,8 @@ namespace Thot {
 
         using ModuleDescriptor = std::variant<Layer::Descriptor, Block::Descriptor>;
         void add(ModuleDescriptor descriptor) {
+            if (regularization_configured_)
+                throw std::logic_error("Cannot add modules after regularization has been configured.");
             auto register_layer = [this](auto&& concrete_descriptor) {
                 using DescriptorType = std::decay_t<decltype(concrete_descriptor)>;
                 auto registered = Layer::Details::build_registered_layer(
@@ -170,6 +172,7 @@ namespace Thot {
                     static_cast<const DescriptorType&>(concrete_descriptor),
                     next_module_index());
                 layers_.push_back(std::move(registered));
+                register_layer_runtime(layers_.back());
             };
 
             auto handle_layer_descriptor = [&](Layer::Descriptor layer_descriptor) {
@@ -232,6 +235,7 @@ namespace Thot {
                                 };
 
                                 layers_.push_back(std::move(registered_layer));
+                                register_layer_runtime(layers_.back());
                             } else {
                                 if (block_declares_local_optimizer) {
                                     for (auto& layer : sequential.layers) {
@@ -269,6 +273,7 @@ namespace Thot {
                             };
 
                             layers_.push_back(std::move(registered_layer));
+                            register_layer_runtime(layers_.back());
                             break;
                         }
                         case 2: {
@@ -286,6 +291,7 @@ namespace Thot {
                             };
 
                             layers_.push_back(std::move(registered_layer));
+                            register_layer_runtime(layers_.back());
                             break;
                         }
                         case 3:
@@ -383,95 +389,80 @@ namespace Thot {
         }
 
         template <class Descriptor, class State = std::monostate>
-        void add_regularization(Descriptor descriptor, State state = {})
+        void set_regularization(std::vector<Regularization::Descriptor> descriptors)
         {
-            using DescriptorType = std::decay_t<Descriptor>;
-            constexpr bool kSupported = std::disjunction_v<
-                std::is_same<DescriptorType, Regularization::L2Descriptor>,
-                std::is_same<DescriptorType, Regularization::EWCDescriptor>,
-                std::is_same<DescriptorType, Regularization::MASDescriptor>,
-                std::is_same<DescriptorType, Regularization::SIDescriptor>,
-                std::is_same<DescriptorType, Regularization::NuclearNormDescriptor>>;
-            static_assert(kSupported, "Unsupported regularization descriptor type provided to Model::add_regularization.");
+            if (regularization_configured_)
+                throw std::logic_error("Regularization descriptors have already been configured.");
+            regularization_configured_ = true;
+            global_regularization_parameters_ = collect_global_trainable_parameters();
+            global_regularization_bindings_.clear();
+            global_regularization_bindings_.reserve(descriptors.size());
 
-            using StateType = std::decay_t<State>;
-            if constexpr (std::is_same_v<DescriptorType, Regularization::EWCDescriptor>) {
-                static_assert(std::is_same_v<StateType, Regularization::Details::EWCState>,
-                              "EWC regularization requires an EWCState argument.");
-            } else if constexpr (std::is_same_v<DescriptorType, Regularization::MASDescriptor>) {
-                static_assert(std::is_same_v<StateType, Regularization::Details::MASState>,
-                              "MAS regularization requires a MASState argument.");
-            } else if constexpr (std::is_same_v<DescriptorType, Regularization::SIDescriptor>) {
-                static_assert(std::is_same_v<StateType, Regularization::Details::SIState>,
-                              "SI regularization requires an SIState argument.");
-            } else {
-                static_assert(std::is_same_v<StateType, std::monostate>,
-                              "This regularization descriptor does not accept an associated state.");
+            for (auto& descriptor : descriptors) {
+                global_regularization_bindings_.push_back(
+                    make_regularization_binding(std::move(descriptor), global_regularization_parameters_));
             }
-
-            RegularizationBinding binding{};
-            binding.descriptor = Regularization::Descriptor{std::in_place_type<DescriptorType>, std::move(descriptor)};
-            if constexpr (!std::is_same_v<StateType, std::monostate>) {
-                binding.state = RegularizationState{std::move(state)};
-            }
-            regularization_bindings_.push_back(std::move(binding));
         }
 
         void clear_regularization() noexcept { regularization_bindings_.clear(); }
 
-        [[nodiscard]] bool has_regularization() const noexcept { return !regularization_bindings_.empty(); }
+        [[nodiscard]] bool has_regularization() const noexcept {
+            if (!global_regularization_bindings_.empty())
+                return true;
+            return std::any_of(
+                layer_regularization_bindings_.begin(),
+                layer_regularization_bindings_.end(),
+                [](const auto& bindings) { return !bindings.empty(); });
+        }
 
-        [[nodiscard]] torch::Tensor compute_regularization_penalty()
-        {
+        [[nodiscard]] torch::Tensor compute_regularization_penalty() const {
             const auto fallback_options = torch::TensorOptions().dtype(torch::kFloat32).device(device_);
             const auto fallback = std::optional<torch::TensorOptions>{fallback_options};
 
-            if (regularization_bindings_.empty()) {
-                return torch::zeros({}, fallback_options);
-            }
 
-            auto parameters = this->parameters();
-            std::vector<torch::Tensor> trainable;
-            trainable.reserve(parameters.size());
-            for (auto& parameter : parameters) {
-                if (parameter.requires_grad()) {
-                    trainable.push_back(parameter);
-                }
-            }
 
             torch::Tensor total;
             bool initialised = false;
 
-            for (const auto& binding : regularization_bindings_) {
-                auto penalty = std::visit(
-                    [&](const auto& descriptor) -> torch::Tensor {
-                        using DescriptorType = std::decay_t<decltype(descriptor)>;
-                        if constexpr (std::is_same_v<DescriptorType, Regularization::EWCDescriptor>) {
-                            const auto& state = std::get<Regularization::Details::EWCState>(binding.state);
-                            return Regularization::accumulate(descriptor, trainable, fallback, state);
-                        } else if constexpr (std::is_same_v<DescriptorType, Regularization::MASDescriptor>) {
-                            const auto& state = std::get<Regularization::Details::MASState>(binding.state);
-                            return Regularization::accumulate(descriptor, trainable, fallback, state);
-                        } else if constexpr (std::is_same_v<DescriptorType, Regularization::SIDescriptor>) {
-                            const auto& state = std::get<Regularization::Details::SIState>(binding.state);
-                            return Regularization::accumulate(descriptor, trainable, fallback, state);
-                        } else {
-                            return Regularization::accumulate(descriptor, trainable, fallback);
-                        }
-                    },
-                    binding.descriptor);
+            auto accumulate_penalty = [&](const RegularizationBinding& binding, const std::vector<torch::Tensor>& parameters) {
+                if (!binding.accumulator) {
+                    return;
+                }
+
+                auto penalty = binding.accumulator(parameters, fallback);
+                if (!penalty.defined()) {
+                    return;
+                }
+
 
                 if (!initialised) {
                     total = penalty;
                     initialised = true;
-                } else {
-                    if (penalty.device() != total.device()) {
-                        penalty = penalty.to(total.device());
-                    }
-                    if (penalty.scalar_type() != total.scalar_type()) {
-                        penalty = penalty.to(total.scalar_type());
-                    }
-                    total = total + penalty;
+                    return;
+                }
+
+                if (penalty.device() != total.device()) {
+                    penalty = penalty.to(total.device());
+                }
+                if (penalty.scalar_type() != total.scalar_type()) {
+                    penalty = penalty.to(total.scalar_type());
+                }
+                total = total + penalty;
+            };
+
+            for (const auto& binding : global_regularization_bindings_) {
+                accumulate_penalty(binding, global_regularization_parameters_);
+            }
+
+            for (std::size_t index = 0; index < layer_regularization_bindings_.size(); ++index) {
+                const auto& bindings = layer_regularization_bindings_[index];
+                if (bindings.empty()) {
+                    continue;
+                }
+
+                const auto& parameters = layer_parameters_[index];
+                for (const auto& binding : bindings) {
+                    accumulate_penalty(binding, parameters);
                 }
             }
 
@@ -707,6 +698,101 @@ namespace Thot {
             }
         }
     private:
+
+        void register_layer_runtime(const Layer::Details::RegisteredLayer& layer)
+        {
+            layer_parameters_.push_back(collect_layer_parameters(layer));
+            layer_regularization_bindings_.push_back(
+                bind_local_regularization(layer.local.regularization, layer_parameters_.back()));
+        }
+
+        static std::vector<torch::Tensor> collect_layer_parameters(const Layer::Details::RegisteredLayer& layer)
+        {
+            std::vector<torch::Tensor> parameters;
+            if (!layer.module) {
+                return parameters;
+            }
+
+            for (auto& parameter : layer.module->parameters()) {
+                if (parameter.requires_grad()) {
+                    parameters.push_back(parameter);
+                }
+            }
+
+            return parameters;
+        }
+
+        std::vector<torch::Tensor> collect_global_trainable_parameters() const
+        {
+            std::vector<torch::Tensor> parameters;
+            for (auto& parameter : this->parameters()) {
+                if (parameter.requires_grad()) {
+                    parameters.push_back(parameter);
+                }
+            }
+            return parameters;
+        }
+
+        RegularizationStateStorage prepare_regularization_states(const Regularization::Descriptor& descriptor,
+                                                                 const std::vector<torch::Tensor>& parameters) const
+        {
+            return std::visit(
+                [&](const auto& concrete_descriptor) -> RegularizationStateStorage {
+                    using DescriptorType = std::decay_t<decltype(concrete_descriptor)>;
+
+                    if constexpr (std::is_same_v<DescriptorType, Regularization::EWCDescriptor>
+                                  || std::is_same_v<DescriptorType, Regularization::MASDescriptor>
+                                  || std::is_same_v<DescriptorType, Regularization::SIDescriptor>) {
+                        auto storage = std::make_shared<std::vector<RegularizationState>>();
+                        storage->reserve(parameters.size());
+                        for (const auto& parameter : parameters) {
+                            if constexpr (std::is_same_v<DescriptorType, Regularization::EWCDescriptor>) {
+                                Regularization::Details::EWCState state{};
+                                state.reference = parameter.detach().clone();
+                                state.fisher_information = torch::zeros_like(parameter);
+                                storage->emplace_back(std::move(state));
+                            } else if constexpr (std::is_same_v<DescriptorType, Regularization::MASDescriptor>) {
+                                Regularization::Details::MASState state{};
+                                state.reference = parameter.detach().clone();
+                                state.importance = torch::zeros_like(parameter);
+                                storage->emplace_back(std::move(state));
+                            } else if constexpr (std::is_same_v<DescriptorType, Regularization::SIDescriptor>) {
+                                Regularization::Details::SIState state{};
+                                state.reference = parameter.detach().clone();
+                                state.importance = torch::zeros_like(parameter);
+                                storage->emplace_back(std::move(state));
+                            }
+                        }
+                        return storage;
+                    } else {
+                        return {};
+                    }
+                },
+                descriptor);
+        }
+
+        RegularizationBinding make_regularization_binding(Regularization::Descriptor descriptor,
+                                                          const std::vector<torch::Tensor>& parameters) const
+        {
+            RegularizationBinding binding{};
+            binding.descriptor = std::move(descriptor);
+            binding.states = prepare_regularization_states(binding.descriptor, parameters);
+            binding.accumulator = Regularization::bind_accumulator(binding.descriptor, binding.states);
+            return binding;
+        }
+
+        std::vector<RegularizationBinding> bind_local_regularization(
+            const std::vector<Regularization::Descriptor>& descriptors,
+            const std::vector<torch::Tensor>& parameters) const
+        {
+            std::vector<RegularizationBinding> bindings;
+            bindings.reserve(descriptors.size());
+            for (const auto& descriptor : descriptors) {
+                bindings.push_back(make_regularization_binding(descriptor, parameters));
+            }
+            return bindings;
+        }
+
 
         struct TrainingDetails {
             struct TensorDataset {
@@ -977,6 +1063,18 @@ namespace Thot {
                     if (loss.dim() != 0) {
                         loss = loss.mean();
                     }
+                    if (model.has_regularization()) {
+                        auto regularization_penalty = model.compute_regularization_penalty();
+                        if (regularization_penalty.defined()) {
+                            if (regularization_penalty.device() != loss.device()) {
+                                regularization_penalty = regularization_penalty.to(loss.device());
+                            }
+                            if (regularization_penalty.scalar_type() != loss.scalar_type()) {
+                                regularization_penalty = regularization_penalty.to(loss.scalar_type());
+                            }
+                            loss = loss + regularization_penalty;
+                        }
+                    }
 
                     auto loss_tensor = loss.detach();
                     if (loss_tensor.device() != accumulation.device()) {
@@ -1060,7 +1158,10 @@ namespace Thot {
         };
 
         std::vector<Layer::Details::RegisteredLayer> layers_{};
-        std::vector<RegularizationBinding> regularization_bindings_{};
+        std::vector<std::vector<torch::Tensor>> layer_parameters_{};
+        std::vector<std::vector<RegularizationBinding>> layer_regularization_bindings_{};
+        std::vector<torch::Tensor> global_regularization_parameters_{};
+        std::vector<RegularizationBinding> global_regularization_bindings_{};
         std::size_t module_index_{0};
         std::unique_ptr<torch::optim::Optimizer> optimizer_{};
         std::vector<std::unique_ptr<torch::optim::Optimizer>> local_optimizers_{};
@@ -1070,6 +1171,7 @@ namespace Thot {
         using LossDescriptor = std::variant<Loss::MSEDescriptor, Loss::CrossEntropyDescriptor>;
         std::optional<LossDescriptor> loss_descriptor_{};
         torch::Device device_{torch::kCPU, 0};
+        bool regularization_configured_{false};
 
 
 

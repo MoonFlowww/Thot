@@ -8,6 +8,10 @@
 #include "details/mas.hpp"
 #include "details/nuclearnorm.hpp"
 #include "details/si.hpp"
+#include "details/fge.hpp"
+#include "details/sfge.hpp"
+#include "details/swa.hpp"
+#include "details/swag.hpp"
 
 namespace Thot::Regularization {
 
@@ -26,12 +30,28 @@ namespace Thot::Regularization {
     using NuclearNormOptions = Details::NuclearNormOptions;
     using NuclearNormDescriptor = Details::NuclearNormDescriptor;
 
+    using SWAOptions = Details::SWAOptions;
+    using SWADescriptor = Details::SWADescriptor;
+
+    using SWAGOptions = Details::SWAGOptions;
+    using SWAGDescriptor = Details::SWAGDescriptor;
+
+    using FGEOptions = Details::FGEOptions;
+    using FGEDescriptor = Details::FGEDescriptor;
+
+    using SFGEOptions = Details::SFGEOptions;
+    using SFGEDescriptor = Details::SFGEDescriptor;
+
     using Descriptor = std::variant<
         L2Descriptor,
         EWCDescriptor,
         MASDescriptor,
         SIDescriptor,
-        NuclearNormDescriptor>;
+        NuclearNormDescriptor,
+        SWADescriptor,
+        SWAGDescriptor,
+        FGEDescriptor,
+        SFGEDescriptor>;
 
     [[nodiscard]] constexpr auto L2(const L2Options& options = {}) noexcept -> L2Descriptor {
         return {options};
@@ -51,6 +71,22 @@ namespace Thot::Regularization {
 
     [[nodiscard]] constexpr auto NuclearNorm(const NuclearNormOptions& options = {}) noexcept
         -> NuclearNormDescriptor {
+        return {options};
+    }
+
+    [[nodiscard]] constexpr auto SWA(const SWAOptions& options = {}) noexcept -> SWADescriptor {
+        return {options};
+    }
+
+    [[nodiscard]] constexpr auto SWAG(const SWAGOptions& options = {}) noexcept -> SWAGDescriptor {
+        return {options};
+    }
+
+    [[nodiscard]] constexpr auto FGE(const FGEOptions& options = {}) noexcept -> FGEDescriptor {
+        return {options};
+    }
+
+    [[nodiscard]] constexpr auto SFGE(const SFGEOptions& options = {}) noexcept -> SFGEDescriptor {
         return {options};
     }
 
