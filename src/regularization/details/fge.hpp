@@ -19,6 +19,12 @@ namespace Thot::Regularization::Details {
         std::vector<torch::Tensor> snapshots;
     };
 
+
+    [[nodiscard]] inline torch::Tensor penalty(const FGEDescriptor&, const torch::Tensor& params) {
+        return params.new_zeros({});
+    }
+
+
     [[nodiscard]] inline torch::Tensor penalty(const FGEDescriptor& descriptor,
                                                const torch::Tensor& params,
                                                const FGEState& state) {

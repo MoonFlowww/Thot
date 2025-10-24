@@ -21,6 +21,10 @@ namespace Thot::Regularization::Details {
         std::vector<double> weights;
     };
 
+    [[nodiscard]] inline torch::Tensor penalty(const SFGEDescriptor&, const torch::Tensor& params) {
+        return params.new_zeros({});
+    }
+
     [[nodiscard]] inline torch::Tensor penalty(const SFGEDescriptor& descriptor,
                                                const torch::Tensor& params,
                                                const SFGEState& state) {

@@ -19,6 +19,10 @@ namespace Thot::Regularization::Details {
         torch::Tensor variance;
     };
 
+    [[nodiscard]] inline torch::Tensor penalty(const SWAGDescriptor&, const torch::Tensor& params) {
+        return params.new_zeros({});
+    }
+
     [[nodiscard]] inline torch::Tensor penalty(const SWAGDescriptor& descriptor,
                                                const torch::Tensor& params,
                                                const SWAGState& state) {

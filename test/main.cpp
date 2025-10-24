@@ -115,6 +115,7 @@ int main() {
     model.set_optimizer(Thot::Optimizer::AdamW({.learning_rate = 1e-3, .weight_decay = 2e-2}));
     model.set_loss(Thot::Loss::CrossEntropy({.label_smoothing=0.1f}));
 
+
     auto [train_images, train_labels, test_images, test_labels] = Thot::Data::Load::CIFAR10("/home/moonfloww/Projects/DATASETS/CIFAR10", 1.f, 1.f, true);
     auto [validation_images, validation_labels] = Thot::Data::Manipulation::Fraction(test_images, test_labels, 0.1f);
 
