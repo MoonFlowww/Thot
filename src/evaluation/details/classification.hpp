@@ -457,6 +457,8 @@ namespace Thot::Evaluation::Details::Classification {
         return kinds;
     }
 
+    void Print(const Report& report, const Options& options);
+
     template <class Model>
     [[nodiscard]] auto Evaluate(Model& model,
                                 torch::Tensor inputs,
@@ -688,11 +690,11 @@ namespace Thot::Evaluation::Details::Classification {
             if (target_cpu.sizes() != predicted.sizes()) {
                 throw std::runtime_error("Evaluation targets and predictions must share the same leading shape.");
             }
-            auto pred_accessor = predicted.accessor<long, 1>();
-            auto target_accessor = target_cpu.accessor<long, 1>();
-            torch::TensorAccessor<long, 2> topk_accessor = torch::TensorAccessor<long, 2>(nullptr, nullptr, nullptr);
+            auto pred_accessor = predicted.template accessor<long, 1>();
+            auto target_accessor = target_cpu.template accessor<long, 1>();
+            torch::TensorAccessor<long, 2> topk_accessor{nullptr, nullptr, nullptr};
             if (needs_top3) {
-                topk_accessor = topk_indices_tensor.accessor<long, 2>();
+                topk_accessor = topk_indices_tensor.template accessor<long, 2>();
             }
 
             for (std::size_t i = 0; i < current_batch; ++i) {
@@ -1440,7 +1442,7 @@ namespace Thot::Evaluation::Details::Classification {
             stream << mid << '\n';
             print_row("Metric", headers);
             stream << mid << '\n';
-            print_row("Support", support_values);
+            print_row("Support", support_values_strings);
 
             if (!report.per_class.empty()) {
                 stream << mid << '\n';
