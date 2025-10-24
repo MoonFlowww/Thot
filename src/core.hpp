@@ -407,16 +407,22 @@ namespace Thot {
                             }, *loss_descriptor_);
         }
 
-        void zero_grad() {
-            if (local_optimizers_.empty()) {
-                torch::nn::Module::zero_grad();
-                return;
-            }
+        void zero_grad(bool set_to_none = false) {
+            bool handled{false};
+
             if (optimizer_) {
-                optimizer_->zero_grad();
+                optimizer_->zero_grad(set_to_none);
+                handled = true;
             }
-            for (auto& optimizer : local_optimizers_) {
-                optimizer->zero_grad();
+            if (!local_optimizers_.empty()) {
+                handled = true;
+                for (auto& optimizer : local_optimizers_) {
+                    optimizer->zero_grad(set_to_none);
+                }
+            }
+
+            if (!handled) {
+                torch::nn::Module::zero_grad(set_to_none);
             }
         }
 
