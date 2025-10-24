@@ -388,7 +388,6 @@ namespace Thot {
             loss_descriptor_ = LossDescriptor{std::in_place_type<Decayed>, std::move(descriptor)};
         }
 
-        template <class Descriptor, class State = std::monostate>
         void set_regularization(std::vector<Regularization::Descriptor> descriptors)
         {
             if (regularization_configured_)
