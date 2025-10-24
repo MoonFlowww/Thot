@@ -446,13 +446,6 @@ namespace Thot {
                     initialised = true;
                     return;
                 }
-
-                if (penalty.device() != total.device()) {
-                    penalty = penalty.to(total.device());
-                }
-                if (penalty.scalar_type() != total.scalar_type()) {
-                    penalty = penalty.to(total.scalar_type());
-                }
                 if (penalty.device() != total.device()) {
                     penalty = penalty.to(total.device());
                 }
