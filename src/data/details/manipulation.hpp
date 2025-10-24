@@ -18,8 +18,7 @@
 
 namespace Thot::Data::Manipulation {
     namespace Details {
-        inline bool should_apply(const std::optional<double>& probability,
-                                 const std::optional<bool>& data_augment) {
+        inline bool should_apply(const std::optional<double>& probability, const std::optional<bool>& data_augment) {
             if (data_augment.has_value() && !data_augment.value()) {
                 return false;
             }
@@ -39,11 +38,7 @@ namespace Thot::Data::Manipulation {
         }
     }
 
-    inline torch::Tensor Flip(torch::Tensor tensor,
-                              const std::vector<int64_t>& dims,
-                              std::optional<double> probability = 0.3f,
-                              std::optional<bool> data_augment = true,
-                              bool show_progress = true) {
+    inline torch::Tensor Flip(torch::Tensor tensor, const std::vector<int64_t>& dims, std::optional<double> probability = 0.3f, std::optional<bool> data_augment = true, bool show_progress = true) {
         [[maybe_unused]] const bool show = show_progress;
         if (!Details::should_apply(probability, data_augment)) {
             return tensor;
