@@ -24,7 +24,7 @@
 #include <algorithm>
 #include <functional>
 #include <cstddef>
-#include <iterator>
+
 #include <cmath>
 #include <memory>
 #include <optional>
@@ -35,7 +35,6 @@
 #include <string_view>
 #include <utility>
 #include <variant>
-#include <unordered_map>
 #include <vector>
 
 #include <torch/torch.h>
@@ -289,8 +288,7 @@ namespace Thot {
             if (layers_.empty()) {
                 throw std::logic_error("Cannot create optimizer before any layer has been registered.");
             }
-auto build_optimizer_for = [](const Optimizer::Descriptor& config,
-                                          std::vector<torch::Tensor> parameters) {
+            auto build_optimizer_for = [](const Optimizer::Descriptor& config, std::vector<torch::Tensor> parameters) {
                 return std::visit(
                     [&](const auto& concrete_descriptor) -> std::unique_ptr<torch::optim::Optimizer> {
                         using DescriptorType = std::decay_t<decltype(concrete_descriptor)>;
@@ -303,15 +301,14 @@ auto build_optimizer_for = [](const Optimizer::Descriptor& config,
                         } else {
                             static_assert(sizeof(DescriptorType) == 0, "Unsupported optimizer descriptor provided to Model::set_optimizer.");
                         }
-                    },
-                    config);
+                    }, config);
             };
+
 
             optimizer_.reset();
             local_optimizers_.clear();
 
             std::vector<torch::Tensor> global_parameters{};
-            std::unordered_map<Optimizer::Descriptor, std::vector<torch::Tensor>, Optimizer::DescriptorHash, Optimizer::DescriptorEqual> local_parameter_groups{};
             for (const auto& layer : layers_) {
                 if (!layer.module) {
                     if (layer.local.optimizer.has_value()) {
@@ -334,18 +331,11 @@ auto build_optimizer_for = [](const Optimizer::Descriptor& config,
                 }
 
                 if (layer.local.optimizer.has_value()) {
-                    auto& parameter_group = local_parameter_groups[*layer.local.optimizer];
-                    parameter_group.insert( parameter_group.end(), std::make_move_iterator(parameters.begin()), std::make_move_iterator(parameters.end()));
+                    local_optimizers_.push_back(build_optimizer_for(*layer.local.optimizer, std::move(parameters)));
                 } else {
                     global_parameters.insert(global_parameters.end(), parameters.begin(), parameters.end());
                 }
             }
-
-            local_optimizers_.reserve(local_parameter_groups.size());
-            for (auto& [descriptor_key, parameter_group] : local_parameter_groups) {
-                local_optimizers_.push_back(build_optimizer_for(descriptor_key, std::move(parameter_group)));
-            }
-
 
             if (!global_parameters.empty()) {
                 optimizer_ = build_optimizer_for(descriptor, std::move(global_parameters));
