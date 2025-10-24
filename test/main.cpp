@@ -9,8 +9,6 @@
 
 
 int main() {
-
-
     Thot::Model model;
     model.to_device(torch::cuda::is_available());
 
@@ -114,6 +112,13 @@ int main() {
 
     model.set_optimizer(Thot::Optimizer::AdamW({.learning_rate = 1e-3, .weight_decay = 2e-2}));
     model.set_loss(Thot::Loss::CrossEntropy({.label_smoothing=0.1f}));
+
+    model.set_regularization({Thot::Regularization::SWAG({
+            .coefficient = 1e-3,
+            .variance_epsilon = 1e-6,
+            .start_step = ((32 + 64 - 1) / 64) * 45,
+            .accumulation_stride = ((32 + 64 - 1) / 64) * 2,
+            .max_snapshots = 30})});
 
 
     auto [train_images, train_labels, test_images, test_labels] = Thot::Data::Load::CIFAR10("/home/moonfloww/Projects/DATASETS/CIFAR10", 1.f, 1.f, true);

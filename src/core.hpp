@@ -771,6 +771,14 @@ namespace Thot {
                             }
                         }
                         return storage;
+                            } else if constexpr (std::is_same_v<DescriptorType, Regularization::SWAGDescriptor>) {
+                                auto storage = std::make_shared<std::vector<RegularizationState>>();
+                                storage->reserve(parameters.size());
+                                for (std::size_t index = 0; index < parameters.size(); ++index) {
+                                    storage->emplace_back(Regularization::Details::SWAGState{});
+                                }
+                                return storage;
+
                     } else {
                         return {};
                     }
@@ -799,6 +807,109 @@ namespace Thot {
             }
             return bindings;
         }
+
+        void update_regularization_binding_states(RegularizationBinding& binding,
+                                                  const std::vector<torch::Tensor>& parameters,
+                                                  std::size_t step_index)
+        {
+            if (parameters.empty()) {
+                return;
+            }
+
+            std::visit(
+                [&](auto& concrete_descriptor) {
+                    using DescriptorType = std::decay_t<decltype(concrete_descriptor)>;
+                    if constexpr (std::is_same_v<DescriptorType, Regularization::SWAGDescriptor>) {
+                        const auto& options = concrete_descriptor.options;
+                        if (options.coefficient == 0.0) {
+                            return;
+                        }
+
+                        const std::size_t stride = options.accumulation_stride == 0 ? std::size_t{1}
+                                                                                       : options.accumulation_stride;
+                        if (step_index < options.start_step) {
+                            return;
+                        }
+                        const auto adjusted_step = step_index - options.start_step;
+                        if (adjusted_step % stride != 0) {
+                            return;
+                        }
+                        if (!binding.states) {
+                            return;
+                        }
+
+                        auto& state_storage = *binding.states;
+                        const auto limit = std::min(parameters.size(), state_storage.size());
+                        for (std::size_t index = 0; index < limit; ++index) {
+                            auto& state_variant = state_storage[index];
+                            if (!std::holds_alternative<Regularization::Details::SWAGState>(state_variant)) {
+                                continue;
+                            }
+
+                            auto& state = std::get<Regularization::Details::SWAGState>(state_variant);
+                            if (options.max_snapshots > 0 && state.snapshot_count >= options.max_snapshots) {
+                                continue;
+                            }
+
+                            auto snapshot = parameters[index].detach();
+                            if (!snapshot.defined()) {
+                                continue;
+                            }
+
+                            auto snapshot_tensor = snapshot.clone();
+                            if (!snapshot_tensor.defined()) {
+                                continue;
+                            }
+
+                            if (state.snapshot_count == 0 || !state.mean.defined()) {
+                                state.mean = snapshot_tensor;
+                                state.variance = torch::zeros_like(state.mean);
+                                state.snapshot_count = 1;
+                                continue;
+                            }
+
+                            if (!state.variance.defined()) {
+                                state.variance = torch::zeros_like(state.mean);
+                            }
+
+                            if (snapshot_tensor.device() != state.mean.device()) {
+                                snapshot_tensor = snapshot_tensor.to(state.mean.device());
+                            }
+                            if (snapshot_tensor.scalar_type() != state.mean.scalar_type()) {
+                                snapshot_tensor = snapshot_tensor.to(state.mean.scalar_type());
+                            }
+
+                            auto delta = snapshot_tensor - state.mean;
+                            const double next_count = static_cast<double>(state.snapshot_count + 1);
+                            state.mean = state.mean + delta / next_count;
+                            auto delta2 = snapshot_tensor - state.mean;
+                            state.variance = state.variance + delta * delta2;
+                            state.snapshot_count += 1;
+                        }
+                    }
+                },
+                binding.descriptor);
+        }
+
+        void update_regularization_states(std::size_t step_index)
+        {
+            if (!has_regularization()) {
+                return;
+            }
+
+            for (auto& binding : global_regularization_bindings_) {
+                update_regularization_binding_states(binding, global_regularization_parameters_, step_index);
+            }
+
+            for (std::size_t index = 0; index < layer_regularization_bindings_.size(); ++index) {
+                auto& bindings = layer_regularization_bindings_[index];
+                auto& parameters = layer_parameters_[index];
+                for (auto& binding : bindings) {
+                    update_regularization_binding_states(binding, parameters, step_index);
+                }
+            }
+        }
+
 
 
         struct TrainingDetails {
@@ -867,6 +978,8 @@ namespace Thot {
                 }
 
                 auto best_test = std::optional<double>{};
+
+                std::size_t step_index = 0;
 
                 for (std::size_t epoch = 0; epoch < options.epoch; ++epoch) {
                     const auto epoch_start = std::chrono::steady_clock::now();
@@ -954,6 +1067,13 @@ namespace Thot {
 
                         loss.backward();
                         model.step();
+
+
+                        if (model.has_regularization()) {
+                            model.update_regularization_states(step_index);
+                        }
+                        ++step_index;
+
 
                         auto loss_tensor = loss.detach();
                         if (loss_tensor.device() != accumulation.device()) {

@@ -8,6 +8,9 @@ namespace Thot::Regularization::Details {
     struct SWAGOptions {
         double coefficient{0.0};
         double variance_epsilon{1e-8};
+        std::size_t start_step{0};
+        std::size_t accumulation_stride{1};
+        std::size_t max_snapshots{0};
     };
 
     struct SWAGDescriptor {
@@ -17,6 +20,7 @@ namespace Thot::Regularization::Details {
     struct SWAGState {
         torch::Tensor mean;
         torch::Tensor variance;
+        std::size_t snapshot_count{0};
     };
 
     [[nodiscard]] inline torch::Tensor penalty(const SWAGDescriptor&, const torch::Tensor& params) {
@@ -27,7 +31,7 @@ namespace Thot::Regularization::Details {
                                                const torch::Tensor& params,
                                                const SWAGState& state) {
         const auto& options = descriptor.options;
-        if (options.coefficient == 0.0 || !state.mean.defined() || !state.variance.defined()) {
+        if (options.coefficient == 0.0 || !state.mean.defined() || !state.variance.defined() || state.snapshot_count < 2) {
             return params.new_zeros({});
         }
 
@@ -37,8 +41,11 @@ namespace Thot::Regularization::Details {
         TORCH_CHECK(mean.sizes() == params.sizes(), "SWAG mean tensor must match parameter shape.");
         TORCH_CHECK(variance.sizes() == params.sizes(), "SWAG variance tensor must match parameter shape.");
 
+        const auto normalization = static_cast<double>(state.snapshot_count - 1);
+        auto unbiased_variance = variance / normalization;
+
         auto diff = params - mean;
-        auto safe_variance = variance + options.variance_epsilon;
+        auto safe_variance = unbiased_variance + options.variance_epsilon;
         auto scaled = diff.pow(2) / safe_variance;
         return scaled.mean().mul(options.coefficient);
     }

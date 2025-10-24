@@ -78,13 +78,8 @@ namespace Thot::Regularization {
 
         return total;
     }
-    using StateVariant = std::variant<std::monostate,
-                                      Details::EWCState,
-                                      Details::MASState,
-                                      Details::SIState>;
-
+    using StateVariant = std::variant<std::monostate, Details::EWCState, Details::MASState, Details::SIState, Details::SWAGState>;
     using ParameterList = std::vector<torch::Tensor>;
-
     using Accumulator = std::function<torch::Tensor(const ParameterList&, const std::optional<torch::TensorOptions>&)>;
 
     namespace detail {
@@ -194,6 +189,35 @@ namespace Thot::Regularization {
                         if (!initialized) {
                             return torch::zeros({}, fallback_options);
                         }
+                        return total;
+                    };
+                } else if constexpr (std::is_same_v<DescriptorType, Details::SWAGDescriptor>) {
+                    return [descriptor = concrete_descriptor, states = std::move(states)](const ParameterList& parameters,
+                                                                                        const std::optional<torch::TensorOptions>& fallback) {
+                        const auto fallback_options = fallback.value_or(torch::TensorOptions().dtype(torch::kFloat32));
+                        if (!states || states->empty() || parameters.empty()) {
+                            return torch::zeros({}, fallback_options);
+                        }
+
+                        torch::Tensor total;
+                        bool initialized = false;
+                        const auto limit = std::min(states->size(), parameters.size());
+
+                        for (std::size_t index = 0; index < limit; ++index) {
+                            const auto& state_variant = states->at(index);
+                            if (!std::holds_alternative<Details::SWAGState>(state_variant)) {
+                                continue;
+                            }
+
+                            const auto& state = std::get<Details::SWAGState>(state_variant);
+                            auto penalty = apply(descriptor, parameters[index], state);
+                            total = detail::combine_penalty(total, penalty, fallback_options, initialized);
+                        }
+
+                        if (!initialized) {
+                            return torch::zeros({}, fallback_options);
+                        }
+
 
                         return total;
                     };
