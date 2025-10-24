@@ -38,7 +38,6 @@ int main() {
 
     model.add(Thot::Layer::Dropout({ .probability = 0.3 }));
 
-
     model.add(Thot::Block::Residual({
         Thot::Layer::Conv2d(
 {64, 128, {3, 3}, {2, 2}, {1, 1}, {1, 1}, 1, false},
@@ -121,7 +120,7 @@ int main() {
     auto [train_images, train_labels, test_images, test_labels] = Thot::Data::Load::CIFAR10("/home/moonfloww/Projects/DATASETS/CIFAR10", 1.f, 1.f, true);
     auto [validation_images, validation_labels] = Thot::Data::Manipulation::Fraction(test_images, test_labels, 0.1f);
 
-    model.train(train_images, train_labels, {.epoch = 90, .batch_size = 64, .shuffle = true, .test = std::make_pair(validation_images, validation_labels)});
+    model.train(train_images, train_labels, {.epoch = 90, .batch_size = 64, .shuffle = false, .test = std::make_pair(validation_images, validation_labels)});
 
     return 0;
 }
