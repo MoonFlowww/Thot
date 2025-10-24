@@ -57,6 +57,9 @@
 #include "block/block.hpp"
 #include "layer/details/positional_encoding.hpp"
 
+#include "../src/regularization/regularization.hpp"
+#include "../src/regularization/apply.hpp"
+
 
 
 namespace Thot {

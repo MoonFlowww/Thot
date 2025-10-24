@@ -104,5 +104,7 @@ add_executable(test_Thot test/main.cpp
         src/lrscheduler/details/common.hpp
         src/lrscheduler/registry.hpp
         src/common/local.hpp
+        src/regularization/apply.hpp
+        src/regularization/details/nuclearnorm.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)
