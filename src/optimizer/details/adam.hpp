@@ -4,7 +4,8 @@
 // Adan: https://arxiv.org/pdf/2208.06677
 
 #include <tuple>
-
+#include <functional>
+#include <type_traits>
 #include <torch/torch.h>
 
 namespace Thot::Optimizer::Details {

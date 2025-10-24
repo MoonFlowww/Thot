@@ -5,6 +5,8 @@
 #include "details/adam.hpp"
 #include "details/sgd.hpp"
 #include "registry.hpp"
+#include <functional>
+#include <type_traits>
 
 namespace Thot::Optimizer {
     using SGDOptions = Details::SGDOptions;
@@ -13,6 +15,8 @@ namespace Thot::Optimizer {
     using AdamWDescriptor = Details::AdamWDescriptor;
 
     using Descriptor = std::variant<SGDDescriptor, AdamWDescriptor>;
+
+
 
     [[nodiscard]] constexpr auto SGD(const SGDOptions& options = {}) noexcept -> SGDDescriptor {
         return {options};

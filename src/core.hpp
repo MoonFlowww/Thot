@@ -24,7 +24,7 @@
 #include <algorithm>
 #include <functional>
 #include <cstddef>
-
+#include <iterator>
 #include <cmath>
 #include <memory>
 #include <optional>
@@ -35,6 +35,7 @@
 #include <string_view>
 #include <utility>
 #include <variant>
+#include <unordered_map>
 #include <vector>
 
 #include <torch/torch.h>
@@ -310,6 +311,7 @@ auto build_optimizer_for = [](const Optimizer::Descriptor& config,
             local_optimizers_.clear();
 
             std::vector<torch::Tensor> global_parameters{};
+            std::unordered_map<Optimizer::Descriptor, std::vector<torch::Tensor>, Optimizer::DescriptorHash, Optimizer::DescriptorEqual> local_parameter_groups{};
             for (const auto& layer : layers_) {
                 if (!layer.module) {
                     if (layer.local.optimizer.has_value()) {
@@ -332,11 +334,18 @@ auto build_optimizer_for = [](const Optimizer::Descriptor& config,
                 }
 
                 if (layer.local.optimizer.has_value()) {
-                    local_optimizers_.push_back(build_optimizer_for(*layer.local.optimizer, std::move(parameters)));
+                    auto& parameter_group = local_parameter_groups[*layer.local.optimizer];
+                    parameter_group.insert( parameter_group.end(), std::make_move_iterator(parameters.begin()), std::make_move_iterator(parameters.end()));
                 } else {
                     global_parameters.insert(global_parameters.end(), parameters.begin(), parameters.end());
                 }
             }
+
+            local_optimizers_.reserve(local_parameter_groups.size());
+            for (auto& [descriptor_key, parameter_group] : local_parameter_groups) {
+                local_optimizers_.push_back(build_optimizer_for(descriptor_key, std::move(parameter_group)));
+            }
+
 
             if (!global_parameters.empty()) {
                 optimizer_ = build_optimizer_for(descriptor, std::move(global_parameters));
