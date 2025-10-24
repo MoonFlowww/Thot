@@ -97,14 +97,16 @@ namespace Thot::Layer::Details {
         auto options = torch::nn::LinearOptions(descriptor.options.in_features, descriptor.options.out_features)
                             .bias(descriptor.options.bias);
         auto module = owner.register_module("fc_" + std::to_string(index), torch::nn::Linear(options));
+        auto module_ptr = module.ptr();
         ::Thot::Initialization::Details::apply_module_initialization(module, descriptor);
 
         RegisteredLayer registered_layer{};
         registered_layer.activation = descriptor.activation.type;
-        registered_layer.module = std::static_pointer_cast<torch::nn::Module>(module.ptr());
+        registered_layer.module = std::static_pointer_cast<torch::nn::Module>(module_ptr);
+
         registered_layer.local = descriptor.local;
-        registered_layer.forward = [module](torch::Tensor input) {
-            return module->forward(std::move(input));
+        registered_layer.forward = [module_ptr](torch::Tensor input) {
+            return module_ptr->forward(std::move(input));
         };
         return registered_layer;
     }
