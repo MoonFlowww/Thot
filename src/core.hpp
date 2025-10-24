@@ -49,6 +49,7 @@
 #include "initialization/apply.hpp"
 #include "layer/layer.hpp"
 #include "block/details/blocks/residual.hpp"
+#include "evaluation/evaluation.hpp"
 #include "loss/loss.hpp"
 #include "loss/details/mse.hpp"
 #include "optimizer/optimizer.hpp"
@@ -405,6 +406,16 @@ namespace Thot {
                             [&](const auto& descriptor) {
                                 return Loss::Details::compute(descriptor, prediction, target, weight);
                             }, *loss_descriptor_);
+        }
+
+        [[nodiscard]] auto evaluate(torch::Tensor evaluation_inputs, torch::Tensor evaluation_targets, Evaluation::ClassificationDescriptor descriptor, std::vector<Metric::Classification::Descriptor> metrics, Evaluation::Options options = {}) -> Evaluation::ClassificationReport {
+            return Evaluation::Evaluate(
+                *this,
+                std::move(evaluation_inputs),
+                std::move(evaluation_targets),
+                descriptor,
+                std::move(metrics),
+                options);
         }
 
         void zero_grad(bool set_to_none = false) {
