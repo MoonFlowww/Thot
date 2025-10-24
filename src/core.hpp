@@ -404,7 +404,14 @@ namespace Thot {
             }
         }
 
-        void clear_regularization() noexcept { regularization_bindings_.clear(); }
+        void clear_regularization() noexcept {
+            for (auto& bindings : layer_regularization_bindings_) {
+                bindings.clear();
+            }
+            global_regularization_bindings_.clear();
+            global_regularization_parameters_.clear();
+            regularization_configured_ = false;
+        }
 
         [[nodiscard]] bool has_regularization() const noexcept {
             if (!global_regularization_bindings_.empty())

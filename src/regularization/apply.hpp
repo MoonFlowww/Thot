@@ -39,8 +39,8 @@ namespace Thot::Regularization {
         [[nodiscard]] inline torch::Tensor apply_descriptor(const Descriptor&,
                                                             const torch::Tensor&,
                                                             Args&&...) {
-            static_assert(always_false_v<Descriptor>,
-                          "No penalty implementation matches the provided descriptor/state combination.");
+            static_assert(always_false_v<Descriptor>, "No penalty implementation matches the provided descriptor/state combination.");
+            return {};
         }
     }
 
