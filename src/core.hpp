@@ -408,15 +408,15 @@ namespace Thot {
         }
 
         void zero_grad() {
-            const bool has_any_optimizer = optimizer_ || !local_optimizers_.empty();
+            if (local_optimizers_.empty()) {
+                torch::nn::Module::zero_grad();
+                return;
+            }
             if (optimizer_) {
                 optimizer_->zero_grad();
             }
             for (auto& optimizer : local_optimizers_) {
                 optimizer->zero_grad();
-            }
-            if (!has_any_optimizer) {
-                torch::nn::Module::zero_grad();
             }
         }
 
