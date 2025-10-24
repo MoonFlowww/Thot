@@ -453,7 +453,13 @@ namespace Thot {
                 if (penalty.scalar_type() != total.scalar_type()) {
                     penalty = penalty.to(total.scalar_type());
                 }
-                total = total + penalty;
+                if (penalty.device() != total.device()) {
+                    penalty = penalty.to(total.device());
+                }
+                if (penalty.scalar_type() != total.scalar_type()) {
+                    penalty = penalty.to(total.scalar_type());
+                }
+                total.add_(penalty);
             };
 
             for (const auto& binding : global_regularization_bindings_) {

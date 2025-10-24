@@ -18,93 +18,80 @@
 
 namespace Thot::Data::Manipulation {
     namespace Details {
-        inline torch::Tensor maybe_clone(const torch::Tensor& tensor,
-                                         bool should_clone,
-                                         bool preserve_memory_format) {
-            if (!should_clone) {
-                return tensor;
+        inline bool should_apply(const std::optional<double>& probability,
+                                 const std::optional<bool>& data_augment) {
+            if (data_augment.has_value() && !data_augment.value()) {
+                return false;
             }
-            if (preserve_memory_format) {
-                return tensor.clone(torch::MemoryFormat::Preserve);
-            }
-            return tensor.clone();
-        }
-
-        inline bool should_apply(double probability) {
-            probability = std::clamp(probability, 0.0, 1.0);
-            if (probability >= 1.0) {
+            if (!probability.has_value()) {
                 return true;
             }
-            if (probability <= 0.0) {
+            auto clamped_probability = std::clamp(probability.value(), 0.0, 1.0);
+            if (clamped_probability >= 1.0) {
+                return true;
+            }
+            if (clamped_probability <= 0.0) {
                 return false;
             }
             static thread_local std::mt19937 rng{std::random_device{}()};
-            std::bernoulli_distribution distribution(probability);
+            std::bernoulli_distribution distribution(clamped_probability);
             return distribution(rng);
         }
     }
 
-    inline torch::Tensor Flip(const torch::Tensor& input,
-                              std::initializer_list<int64_t> dims,
-                              bool clone_tensor = true,
-                              double probability = 1.0,
-                              bool preserve_memory_format = false) {
-        if (!Details::should_apply(probability)) {
-            return Details::maybe_clone(input, clone_tensor, preserve_memory_format);
+    inline torch::Tensor Flip(torch::Tensor tensor,
+                              const std::vector<int64_t>& dims,
+                              std::optional<double> probability = 0.3f,
+                              std::optional<bool> data_augment = true,
+                              bool show_progress = true) {
+        [[maybe_unused]] const bool show = show_progress;
+        if (!Details::should_apply(probability, data_augment)) {
+            return tensor;
         }
 
-        auto dims_vector = std::vector<int64_t>(dims.begin(), dims.end());
-        if (dims_vector.empty()) {
-            return Details::maybe_clone(input, clone_tensor, preserve_memory_format);
+        if (dims.empty()) {
+            return tensor;
         }
 
-        auto flipped = input.flip(dims_vector);
-        return Details::maybe_clone(flipped, clone_tensor, preserve_memory_format);
+        return tensor.flip(dims);
     }
 
-    inline torch::Tensor Cutout(const torch::Tensor& input,
-                                std::array<int64_t, 2> offset,
-                                std::array<int64_t, 2> cutout_size,
-                                double fill_value = 0.0,
-                                bool clamp_region = true,
-                                double probability = 1.0,
-                                bool preserve_memory_format = false) {
-        if (!Details::should_apply(probability)) {
-            return Details::maybe_clone(input, true, preserve_memory_format);
+    inline torch::Tensor Cutout(torch::Tensor tensor, const std::vector<int64_t>& offsets, const std::vector<int64_t>& sizes, double fill_value = 0.0, std::optional<double> probability = 0.3f, std::optional<bool> data_augment = true, bool show_progress = true) {
+        [[maybe_unused]] const bool show = show_progress;
+        if (!Details::should_apply(probability, data_augment)) {
+            return tensor;
         }
 
-        auto output = Details::maybe_clone(input, true, preserve_memory_format);
-
-        if (output.dim() < 2) {
-            return output;
+        if (!tensor.defined() || tensor.dim() < 2) {
+            return tensor;
         }
 
-        const auto height_dim = output.dim() - 2;
-        const auto width_dim = output.dim() - 1;
-        const auto height = output.size(height_dim);
-        const auto width = output.size(width_dim);
+        auto result = tensor.clone();
 
-        auto y0 = offset[0];
-        auto x0 = offset[1];
-        auto h = cutout_size[0];
-        auto w = cutout_size[1];
+        const auto height_dim = result.dim() - 2;
+        const auto width_dim = result.dim() - 1;
+        const auto height = result.size(height_dim);
+        const auto width = result.size(width_dim);
 
-        if (clamp_region) {
-            y0 = std::clamp<int64_t>(y0, 0, height);
-            x0 = std::clamp<int64_t>(x0, 0, width);
-            h = std::clamp<int64_t>(h, 0, height);
-            w = std::clamp<int64_t>(w, 0, width);
-        }
+        auto y0 = offsets.size() > 0 ? offsets[0] : int64_t{0};
+        auto x0 = offsets.size() > 1 ? offsets[1] : int64_t{0};
+        auto h = sizes.size() > 0 ? sizes[0] : height;
+        auto w = sizes.size() > 1 ? sizes[1] : width;
+
+        y0 = std::clamp<int64_t>(y0, 0, height);
+        x0 = std::clamp<int64_t>(x0, 0, width);
+        h = std::clamp<int64_t>(h, 0, height);
+        w = std::clamp<int64_t>(w, 0, width);
 
         const auto y1 = std::min<int64_t>(height, y0 + h);
         const auto x1 = std::min<int64_t>(width, x0 + w);
 
         if (y0 >= y1 || x0 >= x1) {
-            return output;
+            return result;
         }
 
-        output.slice(height_dim, y0, y1).slice(width_dim, x0, x1).fill_(fill_value);
-        return output;
+        result.slice(height_dim, y0, y1).slice(width_dim, x0, x1).fill_(fill_value);
+        return result;
     }
 
     inline std::pair<torch::Tensor, torch::Tensor> Shuffle(const torch::Tensor& inputs,

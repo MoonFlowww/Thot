@@ -124,7 +124,8 @@ int main() {
     auto [train_images, train_labels, test_images, test_labels] = Thot::Data::Load::CIFAR10("/home/moonfloww/Projects/DATASETS/CIFAR10", 1.f, 1.f, true);
     auto [validation_images, validation_labels] = Thot::Data::Manipulation::Fraction(test_images, test_labels, 0.1f);
 
-    Thot::Data::Manipulation::Cutout(train_images, {32,32}, {8,8}, 0, true, 1.f, )
+    auto augmented = Thot::Data::Manipulation::Cutout(train_images, {16, 16}, {8, 8}, 0.0, {0.5}, true, false);
+    train_images = torch::cat({train_images, augmented}, 0);
 
     model.train(train_images, train_labels, {.epoch = 90, .batch_size = 64, .shuffle = false, .test = std::make_pair(validation_images, validation_labels)});
 
