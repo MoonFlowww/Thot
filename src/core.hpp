@@ -39,6 +39,7 @@
 
 #include <torch/torch.h>
 
+
 #include "utils/terminal.hpp"
 #include "activation/activation.hpp"
 #include "activation/apply.hpp"
@@ -159,6 +160,17 @@ namespace Thot {
                     switch (block_descriptor.index()) {
                         case 0: {
                             auto sequential = std::get<Block::SequentialDescriptor>(std::move(block_descriptor));
+                            if (sequential.local.optimizer.has_value()) {
+                                for (auto& layer : sequential.layers) {
+                                    std::visit(
+                                        [&](auto& concrete_layer) {
+                                            if (!concrete_layer.local.optimizer.has_value()) {
+                                                concrete_layer.local = sequential.local;
+                                            }
+                                        },
+                                        layer);
+                                }
+                            }
                             for (auto& layer : sequential.layers) {
                                 handle_layer_descriptor(std::move(layer));
                             }
@@ -166,6 +178,7 @@ namespace Thot {
                         }
                         case 1: {
                             auto residual = std::get<Block::ResidualDescriptor>(std::move(block_descriptor));
+                            auto residual_local = residual.local;
                             const auto index = next_module_index();
                             auto module = register_module(
                                 "residual_block_" + std::to_string(index),
@@ -173,6 +186,8 @@ namespace Thot {
 
                             Layer::Details::RegisteredLayer registered_layer{};
                             registered_layer.activation = Activation::Type::Identity;
+                            registered_layer.module = std::static_pointer_cast<torch::nn::Module>(module.ptr());
+                            registered_layer.local = std::move(residual_local);
                             registered_layer.forward = [module](torch::Tensor input) {
                                 return module->forward(std::move(input));
                             };
@@ -189,6 +204,7 @@ namespace Thot {
 
                             Layer::Details::RegisteredLayer registered_layer{};
                             registered_layer.activation = Activation::Type::Identity;
+                            registered_layer.module = std::static_pointer_cast<torch::nn::Module>(module.ptr());
                             registered_layer.forward = [module](torch::Tensor input) {
                                 return module->forward(std::move(input));
                             };
@@ -212,13 +228,59 @@ namespace Thot {
             if (layers_.empty()) {
                 throw std::logic_error("Cannot create optimizer before any layer has been registered.");
             }
-            optimizer_ = std::visit(
-                [&](const auto& concrete_descriptor) -> std::unique_ptr<torch::optim::Optimizer> {
-                    return Optimizer::Details::build_optimizer(*this, concrete_descriptor);
-                },
-                std::move(descriptor));
+auto build_optimizer_for = [](const Optimizer::Descriptor& config,
+                                          std::vector<torch::Tensor> parameters) {
+                return std::visit(
+                    [&](const auto& concrete_descriptor) -> std::unique_ptr<torch::optim::Optimizer> {
+                        using DescriptorType = std::decay_t<decltype(concrete_descriptor)>;
+                        if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::SGDDescriptor>) {
+                            auto options = Optimizer::Details::to_torch_options(concrete_descriptor.options);
+                            return std::make_unique<torch::optim::SGD>(std::move(parameters), options);
+                        } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::AdamWDescriptor>) {
+                            auto options = Optimizer::Details::to_torch_options(concrete_descriptor.options);
+                            return std::make_unique<torch::optim::AdamW>(std::move(parameters), options);
+                        } else {
+                            static_assert(sizeof(DescriptorType) == 0, "Unsupported optimizer descriptor provided to Model::set_optimizer.");
+                        }
+                    },
+                    config);
+            };
+
+            optimizer_.reset();
+            local_optimizers_.clear();
+
+            std::vector<torch::Tensor> global_parameters{};
+            for (const auto& layer : layers_) {
+                if (!layer.module) {
+                    if (layer.local.optimizer.has_value()) {
+                        throw std::logic_error("Local optimizer requested for a layer without a registered module.");
+                    }
+                    continue;
+                }
+
+                auto parameters = layer.module->parameters();
+                if (parameters.empty()) {
+                    if (layer.local.optimizer.has_value()) {
+                        throw std::logic_error("Local optimizer requested for a layer without trainable parameters.");
+                    }
+                    continue;
+                }
+
+                if (layer.local.optimizer.has_value()) {
+                    local_optimizers_.push_back(build_optimizer_for(*layer.local.optimizer, std::move(parameters)));
+                } else {
+                    global_parameters.insert(global_parameters.end(), parameters.begin(), parameters.end());
+                }
+            }
+
+            if (!global_parameters.empty()) {
+                optimizer_ = build_optimizer_for(descriptor, std::move(global_parameters));
+            }
+
             scheduler_.reset();
             if (scheduler.has_value()) {
+                if (!optimizer_)
+                    throw std::logic_error("Cannot attach a scheduler without a global optimizer.");
                 scheduler_ = std::visit(
                     [&](const auto& concrete_descriptor) -> std::unique_ptr<LrScheduler::Details::Scheduler> {
                         return LrScheduler::Details::build_scheduler(*this, *optimizer_, concrete_descriptor);
@@ -282,16 +344,23 @@ namespace Thot {
         }
 
         void zero_grad() {
+            const bool has_any_optimizer = optimizer_ || !local_optimizers_.empty();
             if (optimizer_) {
                 optimizer_->zero_grad();
-            } else {
+            }
+            for (auto& optimizer : local_optimizers_) {
+                optimizer->zero_grad();
+            }
+            if (!has_any_optimizer) {
                 torch::nn::Module::zero_grad();
             }
         }
 
         void step() { (this->*step_impl_)(); }
 
-        [[nodiscard]] bool has_optimizer() const noexcept { return static_cast<bool>(optimizer_); }
+        [[nodiscard]] bool has_optimizer() const noexcept {
+            return static_cast<bool>(optimizer_) || !local_optimizers_.empty();
+        }
 
         [[nodiscard]] bool has_loss() const noexcept { return loss_descriptor_.has_value(); }
 
@@ -782,6 +851,7 @@ namespace Thot {
         std::vector<Layer::Details::RegisteredLayer> layers_{};
         std::size_t module_index_{0};
         std::unique_ptr<torch::optim::Optimizer> optimizer_{};
+        std::vector<std::unique_ptr<torch::optim::Optimizer>> local_optimizers_{};
         std::unique_ptr<LrScheduler::Details::Scheduler> scheduler_{};
         using StepImpl = void (Model::*)();
         StepImpl step_impl_{&Model::step_not_configured};
@@ -792,7 +862,7 @@ namespace Thot {
 
 
         void configure_step_impl() noexcept {
-            if (!optimizer_) {
+            if (!optimizer_ && local_optimizers_.empty()) {
                 step_impl_ = &Model::step_not_configured;
                 return;
             }
@@ -806,9 +876,16 @@ namespace Thot {
         template <bool WithScheduler>
         void step_configured() {
             if constexpr (WithScheduler) {
-                scheduler_->step();
+                if (scheduler_) {
+                    scheduler_->step();
+                }
             }
-            optimizer_->step();
+            if (optimizer_) {
+                optimizer_->step();
+            }
+            for (auto& optimizer : local_optimizers_) {
+                optimizer->step();
+            }
         }
         [[nodiscard]] std::size_t next_module_index() noexcept { return module_index_++; }
     };

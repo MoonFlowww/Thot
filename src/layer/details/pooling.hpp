@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "../../activation/activation.hpp"
+#include "../../common/local.hpp"
 
 namespace Thot::Layer::Details {
 
@@ -37,6 +38,7 @@ namespace Thot::Layer::Details {
     struct PoolingDescriptor {
         PoolingOptions options{};
         ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
+        ::Thot::LocalConfig local{};
     };
 
 }

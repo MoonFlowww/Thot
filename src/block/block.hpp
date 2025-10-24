@@ -7,6 +7,7 @@
 #include <variant>
 #include <vector>
 
+#include "../common/local.hpp"
 #include "details/blocks/residual.hpp"
 #include "details/blocks/sequential.hpp"
 #include "details/transformers/classic.hpp"
@@ -22,43 +23,39 @@ namespace Thot::Block {
                                     Transformer::Classic::EncoderDescriptor,
                                     Transformer::Classic::DecoderDescriptor>;
 
-    [[nodiscard]] inline auto Sequential(std::initializer_list<::Thot::Layer::Descriptor> layers)
-        -> SequentialDescriptor
-    {
-        return SequentialDescriptor{std::vector<::Thot::Layer::Descriptor>(layers.begin(), layers.end())};
+    [[nodiscard]] inline auto Sequential(std::initializer_list<::Thot::Layer::Descriptor> layers, ::Thot::LocalConfig local = {}) -> SequentialDescriptor {
+        SequentialDescriptor descriptor{};
+        descriptor.layers.assign(layers.begin(), layers.end());
+        descriptor.local = std::move(local);
+        return descriptor;
     }
 
-    [[nodiscard]] inline auto Sequential(std::vector<::Thot::Layer::Descriptor> layers)
-        -> SequentialDescriptor
-    {
-        return SequentialDescriptor{std::move(layers)};
+    [[nodiscard]] inline auto Sequential(std::vector<::Thot::Layer::Descriptor> layers, ::Thot::LocalConfig local = {}) -> SequentialDescriptor {
+        SequentialDescriptor descriptor{};
+        descriptor.layers = std::move(layers);
+        descriptor.local = std::move(local);
+        return descriptor;
     }
 
     [[nodiscard]] inline auto Residual(std::initializer_list<::Thot::Layer::Descriptor> layers,
-                                       std::size_t repeats = 1,
-                                       Details::ResidualSkipOptions skip = {},
-                                       Details::ResidualOutputOptions output = {})
-        -> ResidualDescriptor
-    {
+            std::size_t repeats = 1, Details::ResidualSkipOptions skip = {}, Details::ResidualOutputOptions output = {}, ::Thot::LocalConfig local = {}) -> ResidualDescriptor {
         ResidualDescriptor descriptor{};
         descriptor.layers.assign(layers.begin(), layers.end());
         descriptor.repeats = repeats;
         descriptor.skip = std::move(skip);
         descriptor.output = std::move(output);
+        descriptor.local = std::move(local);
         return descriptor;
     }
 
     [[nodiscard]] inline auto Residual(std::vector<::Thot::Layer::Descriptor> layers,
-                                       std::size_t repeats = 1,
-                                       Details::ResidualSkipOptions skip = {},
-                                       Details::ResidualOutputOptions output = {})
-        -> ResidualDescriptor
-    {
+            std::size_t repeats = 1, Details::ResidualSkipOptions skip = {}, Details::ResidualOutputOptions output = {}, ::Thot::LocalConfig local = {}) -> ResidualDescriptor {
         ResidualDescriptor descriptor{};
         descriptor.layers = std::move(layers);
         descriptor.repeats = repeats;
         descriptor.skip = std::move(skip);
         descriptor.output = std::move(output);
+        descriptor.local = std::move(local);
         return descriptor;
     }
 }

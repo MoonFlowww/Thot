@@ -10,6 +10,7 @@
 
 
 #include <torch/torch.h>
+#include "../../common/local.hpp"
 
 namespace Thot::Layer::Details {
     enum class PositionalEncodingType {
@@ -151,6 +152,7 @@ namespace Thot::Layer::Details {
         PositionalEncodingOptions options_{};
         torch::Tensor positional_embedding_{};
         torch::nn::Dropout dropout_{nullptr};
+        ::Thot::LocalConfig local{};
     };
 
     TORCH_MODULE(LearnedPositionalEncoding);

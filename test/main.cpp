@@ -63,7 +63,7 @@ int main() {
 
     model.add(Thot::Block::Residual({
         Thot::Layer::Conv2d(
-{128, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
+        {128, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
             Thot::Activation::Raw,
             Thot::Initialization::KaimingNormal
         ),

@@ -5,6 +5,7 @@
 
 #include "../../activation/activation.hpp"
 #include "../../initialization/initialization.hpp"
+#include "../../common/local.hpp"
 
 namespace Thot::Layer::Details {
 
@@ -18,6 +19,7 @@ struct FCDescriptor {
     FCOptions options;
     ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
     ::Thot::Initialization::Descriptor initialization{::Thot::Initialization::Default};
+    ::Thot::LocalConfig local{};
 };
 
 }  // namespace Thot::Layer::Details

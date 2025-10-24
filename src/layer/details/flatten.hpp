@@ -6,6 +6,7 @@
 
 #include <torch/nn/pimpl.h>
 #include "../../activation/activation.hpp"
+#include "../../common/local.hpp"
 
 namespace Thot::Layer::Details {
 
@@ -50,6 +51,7 @@ namespace Thot::Layer::Details {
     struct FlattenDescriptor {
         FlattenOptions options{};
         ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
+        ::Thot::LocalConfig local{};
     };
 
 }

@@ -9,7 +9,7 @@
 
 #include <torch/torch.h>
 
-
+#include "../../../common/local.hpp"
 #include "../../../activation/activation.hpp"
 #include "../../../activation/apply.hpp"
 #include "../../../layer/layer.hpp"
@@ -30,6 +30,7 @@ namespace Thot::Block::Details {
         std::size_t repeats{1};
         ResidualSkipOptions skip{};
         ResidualOutputOptions output{};
+        ::Thot::LocalConfig local{};
     };
 
      class ResidualBlockImpl : public torch::nn::Module {

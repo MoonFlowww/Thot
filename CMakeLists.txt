@@ -103,5 +103,6 @@ add_executable(test_Thot test/main.cpp
         src/block/details/blocks/sequential.hpp
         src/lrscheduler/details/common.hpp
         src/lrscheduler/registry.hpp
+        src/common/local.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)
