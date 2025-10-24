@@ -18,6 +18,16 @@ namespace Thot::Regularization::Details {
     };
 
     [[nodiscard]] inline torch::Tensor penalty(const SWADescriptor& descriptor,
+                                           const torch::Tensor& params) {
+        const auto& options = descriptor.options;
+        if (options.coefficient == 0.0) {
+            return params.new_zeros({});
+        }
+
+        return params.new_zeros({});
+    }
+
+    [[nodiscard]] inline torch::Tensor penalty(const SWADescriptor& descriptor,
                                                const torch::Tensor& params,
                                                const SWAState& state) {
         const auto& options = descriptor.options;
