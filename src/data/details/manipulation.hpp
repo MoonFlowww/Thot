@@ -51,17 +51,20 @@ namespace Thot::Data::Manipulation {
         return tensor.flip(dims);
     }
 
-    inline torch::Tensor Cutout(torch::Tensor tensor, const std::vector<int64_t>& offsets, const std::vector<int64_t>& sizes, double fill_value = 0.0, std::optional<double> probability = 0.3f, std::optional<bool> data_augment = true, bool show_progress = true) {
+    inline std::pair<torch::Tensor, torch::Tensor> Cutout(const torch::Tensor& inputs, const torch::Tensor& targets,
+                                                            const std::vector<int64_t>& offsets, const std::vector<int64_t>& sizes,
+                                                            double fill_value = 0.0, std::optional<double> probability = 0.3f,
+                                                            std::optional<bool> data_augment = true, bool show_progress = true) {
         [[maybe_unused]] const bool show = show_progress;
         if (!Details::should_apply(probability, data_augment)) {
-            return tensor;
+            return {inputs, targets};
         }
 
-        if (!tensor.defined() || tensor.dim() < 2) {
-            return tensor;
+        if (!inputs.defined() || inputs.dim() < 2) {
+            return {inputs, targets};
         }
 
-        auto result = tensor.clone();
+        auto result = inputs.clone();
 
         const auto height_dim = result.dim() - 2;
         const auto width_dim = result.dim() - 1;
@@ -82,11 +85,11 @@ namespace Thot::Data::Manipulation {
         const auto x1 = std::min<int64_t>(width, x0 + w);
 
         if (y0 >= y1 || x0 >= x1) {
-            return result;
+            return {result, targets};
         }
 
         result.slice(height_dim, y0, y1).slice(width_dim, x0, x1).fill_(fill_value);
-        return result;
+        return {result, targets};
     }
 
     inline std::pair<torch::Tensor, torch::Tensor> Shuffle(const torch::Tensor& inputs,
