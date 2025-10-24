@@ -25,6 +25,42 @@
 #include "details/pooling.hpp"
 
 namespace Thot::Layer::Details {
+
+    namespace detail {
+        template <class Descriptor>
+        struct is_supported_descriptor : std::false_type {};
+
+        template <class Descriptor>
+        using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<Descriptor>>;
+
+        template <class Descriptor>
+        inline constexpr bool dependent_false_v = false;
+
+        template <class Descriptor>
+        inline constexpr bool is_supported_descriptor_v =
+            is_supported_descriptor<remove_cvref_t<Descriptor>>::value;
+
+        template <class Descriptor>
+        struct is_variant : std::false_type {};
+        template <class... Types>
+        struct is_variant<std::variant<Types...>> : std::true_type {};
+        template <class Descriptor>
+        inline constexpr bool is_variant_v = is_variant<remove_cvref_t<Descriptor>>::value;
+
+        template <>
+        struct is_supported_descriptor<FCDescriptor> : std::true_type {};
+        template <>
+        struct is_supported_descriptor<Conv2dDescriptor> : std::true_type {};
+        template <>
+        struct is_supported_descriptor<BatchNorm2dDescriptor> : std::true_type {};
+        template <>
+        struct is_supported_descriptor<PoolingDescriptor> : std::true_type {};
+        template <>
+        struct is_supported_descriptor<DropoutDescriptor> : std::true_type {};
+        template <>
+        struct is_supported_descriptor<FlattenDescriptor> : std::true_type {};
+    }
+
     struct RegisteredLayer {
         std::function<torch::Tensor(torch::Tensor)> forward{};
         ::Thot::Activation::Type activation{::Thot::Activation::Type::Identity};
@@ -32,9 +68,9 @@ namespace Thot::Layer::Details {
         ::Thot::LocalConfig local{};
     };
 
-    template <class Owner, class Descriptor>
+    template <class Owner, class Descriptor, std::enable_if_t<!detail::is_supported_descriptor_v<Descriptor> && !detail::is_variant_v<Descriptor>, int> = 0>
     RegisteredLayer build_registered_layer(Owner&, const Descriptor&, std::size_t) {
-        static_assert(sizeof(Descriptor) == 0, "Unsupported layer descriptor provided to build_registered_layer.");
+        static_assert(detail::dependent_false_v<Descriptor>, "Unsupported layer descriptor provided to build_registered_layer.");
         return {};
     }
 
