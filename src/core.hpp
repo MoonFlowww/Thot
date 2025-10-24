@@ -448,15 +448,15 @@ namespace Thot {
                         using DescriptorType = std::decay_t<decltype(descriptor)>;
                         if constexpr (std::is_same_v<DescriptorType, Regularization::EWCDescriptor>) {
                             const auto& state = std::get<Regularization::Details::EWCState>(binding.state);
-                            return Regularization::accumulate(binding.descriptor, trainable, fallback, state);
+                            return Regularization::accumulate(descriptor, trainable, fallback, state);
                         } else if constexpr (std::is_same_v<DescriptorType, Regularization::MASDescriptor>) {
                             const auto& state = std::get<Regularization::Details::MASState>(binding.state);
-                            return Regularization::accumulate(binding.descriptor, trainable, fallback, state);
+                            return Regularization::accumulate(descriptor, trainable, fallback, state);
                         } else if constexpr (std::is_same_v<DescriptorType, Regularization::SIDescriptor>) {
                             const auto& state = std::get<Regularization::Details::SIState>(binding.state);
-                            return Regularization::accumulate(binding.descriptor, trainable, fallback, state);
+                            return Regularization::accumulate(descriptor, trainable, fallback, state);
                         } else {
-                            return Regularization::accumulate(binding.descriptor, trainable, fallback);
+                            return Regularization::accumulate(descriptor, trainable, fallback);
                         }
                     },
                     binding.descriptor);
