@@ -25,6 +25,24 @@
 #include "details/pooling.hpp"
 
 namespace Thot::Layer::Details {
+    template <class Impl>
+    [[nodiscard]] inline std::shared_ptr<torch::nn::Module>
+    to_shared_module_ptr(const torch::nn::ModuleHolder<Impl>& holder)
+    {
+        static_assert(std::is_base_of_v<torch::nn::Module, Impl>,
+                      "ModuleHolder implementation must derive from torch::nn::Module.");
+        return std::static_pointer_cast<torch::nn::Module>(holder.ptr());
+    }
+
+    template <class Impl>
+    [[nodiscard]] inline std::shared_ptr<torch::nn::Module>
+    to_shared_module_ptr(const std::shared_ptr<Impl>& pointer)
+    {
+        static_assert(std::is_base_of_v<torch::nn::Module, Impl>,
+                      "Shared pointer implementation must derive from torch::nn::Module.");
+        return std::static_pointer_cast<torch::nn::Module>(pointer);
+    }
+
     struct RegisteredLayer {
         std::function<torch::Tensor(torch::Tensor)> forward{};
         ::Thot::Activation::Type activation{::Thot::Activation::Type::Identity};
@@ -65,7 +83,7 @@ namespace Thot::Layer::Details {
 
         RegisteredLayer registered_layer{};
         registered_layer.activation = descriptor.activation.type;
-        registered_layer.module = std::static_pointer_cast<torch::nn::Module>(module.ptr());
+        registered_layer.module = to_shared_module_ptr(module);
         registered_layer.local = descriptor.local;
         registered_layer.forward = [module](torch::Tensor input) {
             return module->forward(std::move(input));
@@ -119,7 +137,7 @@ namespace Thot::Layer::Details {
 
         RegisteredLayer registered_layer{};
         registered_layer.activation = descriptor.activation.type;
-        registered_layer.module = std::static_pointer_cast<torch::nn::Module>(module.ptr());
+        registered_layer.module = to_shared_module_ptr(module);
         registered_layer.local = descriptor.local;
         registered_layer.forward = [module](torch::Tensor input) {
             return module->forward(std::move(input));
@@ -145,7 +163,7 @@ namespace Thot::Layer::Details {
 
         RegisteredLayer registered_layer{};
         registered_layer.activation = descriptor.activation.type;
-        registered_layer.module = std::static_pointer_cast<torch::nn::Module>(module.ptr());
+        registered_layer.module = to_shared_module_ptr(module);
         registered_layer.local = descriptor.local;
         registered_layer.forward = [module](torch::Tensor input) {
             return module->forward(std::move(input));
@@ -178,7 +196,7 @@ namespace Thot::Layer::Details {
                     }
 
                     auto module = owner.register_module("maxpool2d_" + std::to_string(index), torch::nn::MaxPool2d(torch_options));
-                    registered_layer.module = std::static_pointer_cast<torch::nn::Module>(module.ptr());
+                    registered_layer.module = to_shared_module_ptr(module);
                     registered_layer.forward = [module](torch::Tensor input) {
                         return module->forward(std::move(input));
                     };
@@ -194,21 +212,21 @@ namespace Thot::Layer::Details {
                     }
 
                     auto module = owner.register_module("avgpool2d_" + std::to_string(index), torch::nn::AvgPool2d(torch_options));
-                    registered_layer.module = std::static_pointer_cast<torch::nn::Module>(module.ptr());
+                    registered_layer.module = to_shared_module_ptr(module);
                     registered_layer.forward = [module](torch::Tensor input) {
                         return module->forward(std::move(input));
                     };
                 } else if constexpr (std::is_same_v<OptionType, AdaptiveAvgPool2dOptions>) {
                     auto module = owner.register_module("adaptive_avgpool2d_" + std::to_string(index),
                                                         torch::nn::AdaptiveAvgPool2d(options.output_size));
-                    registered_layer.module = std::static_pointer_cast<torch::nn::Module>(module.ptr());
+                    registered_layer.module = to_shared_module_ptr(module);
                     registered_layer.forward = [module](torch::Tensor input) {
                         return module->forward(std::move(input));
                     };
                 } else if constexpr (std::is_same_v<OptionType, AdaptiveMaxPool2dOptions>) {
                     auto module = owner.register_module("adaptive_maxpool2d_" + std::to_string(index),
                                                         torch::nn::AdaptiveMaxPool2d(options.output_size));
-                    registered_layer.module = std::static_pointer_cast<torch::nn::Module>(module.ptr());
+                    registered_layer.module = to_shared_module_ptr(module);
                     registered_layer.forward = [module](torch::Tensor input) {
                         return module->forward(std::move(input));
                     };
@@ -231,7 +249,7 @@ namespace Thot::Layer::Details {
 
         RegisteredLayer registered_layer{};
         registered_layer.activation = descriptor.activation.type;
-        registered_layer.module = std::static_pointer_cast<torch::nn::Module>(module.ptr());
+        registered_layer.module = to_shared_module_ptr(module);
         registered_layer.local = descriptor.local;
         registered_layer.forward = [module](torch::Tensor input) {
             return module->forward(std::move(input));
@@ -247,7 +265,7 @@ namespace Thot::Layer::Details {
 
         RegisteredLayer registered_layer{};
         registered_layer.activation = descriptor.activation.type;
-        registered_layer.module = std::static_pointer_cast<torch::nn::Module>(module.ptr());
+        registered_layer.module = to_shared_module_ptr(module);
         registered_layer.local = descriptor.local;
         registered_layer.forward = [module](torch::Tensor input) {
             return module->forward(std::move(input));
