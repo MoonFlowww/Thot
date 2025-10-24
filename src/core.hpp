@@ -98,6 +98,36 @@ namespace Thot {
         inline constexpr auto kDefaultTrainingConfig = DefaultTrainingConfig{};
     }
 
+    namespace ModelDetails {
+        class SequentialBlockModuleImpl : public torch::nn::Module {
+        public:
+            explicit SequentialBlockModuleImpl(std::vector<Layer::Descriptor> layers)
+            {
+                std::size_t index{0};
+                block_layers_.reserve(layers.size());
+                for (auto& descriptor : layers) {
+                    auto registered_layer = Layer::Details::build_registered_layer(*this, descriptor, index++);
+                    block_layers_.push_back(std::move(registered_layer));
+                }
+            }
+
+            torch::Tensor forward(torch::Tensor input)
+            {
+                auto output = std::move(input);
+                for (auto& layer : block_layers_) {
+                    output = layer.forward(std::move(output));
+                    output = Activation::Details::apply(layer.activation, std::move(output));
+                }
+                return output;
+            }
+
+        private:
+            std::vector<Layer::Details::RegisteredLayer> block_layers_{};
+        };
+
+        TORCH_MODULE(SequentialBlockModule);
+    }
+
     struct TrainOptions {
         std::size_t epoch{Core::kDefaultTrainingConfig.epochs};
         std::size_t batch_size{Core::kDefaultTrainingConfig.batch_size};
@@ -160,19 +190,49 @@ namespace Thot {
                     switch (block_descriptor.index()) {
                         case 0: {
                             auto sequential = std::get<Block::SequentialDescriptor>(std::move(block_descriptor));
-                            if (sequential.local.optimizer.has_value()) {
-                                for (auto& layer : sequential.layers) {
-                                    std::visit(
-                                        [&](auto& concrete_layer) {
-                                            if (!concrete_layer.local.optimizer.has_value()) {
-                                                concrete_layer.local = sequential.local;
-                                            }
-                                        },
-                                        layer);
+                            const bool block_declares_local_optimizer = sequential.local.optimizer.has_value();
+                            const bool any_layer_declares_local_optimizer = std::any_of(
+                                sequential.layers.begin(),
+                                sequential.layers.end(),
+                                [](const Layer::Descriptor& layer_descriptor) {
+                                    return std::visit(
+                                        [](const auto& concrete_layer) {
+                                            return concrete_layer.local.optimizer.has_value();
+                                        }, layer_descriptor);
+                                });
+
+                            if (block_declares_local_optimizer && !any_layer_declares_local_optimizer) {
+                                const auto index = next_module_index();
+                                auto module = register_module(
+                                    "sequential_block_" + std::to_string(index),
+                                    ModelDetails::SequentialBlockModule(std::move(sequential.layers)));
+
+                                Layer::Details::RegisteredLayer registered_layer{};
+                                registered_layer.activation = Activation::Type::Identity;
+                                registered_layer.module = Layer::Details::to_shared_module_ptr(module);
+                                registered_layer.local = std::move(sequential.local);
+                                registered_layer.forward = [module](torch::Tensor input) {
+                                    return module->forward(std::move(input));
+                                };
+
+                                layers_.push_back(std::move(registered_layer));
+                            } else {
+                                if (block_declares_local_optimizer) {
+                                    for (auto& layer : sequential.layers) {
+                                        std::visit(
+                                            [&](auto& concrete_layer) {
+                                                if (!concrete_layer.local.optimizer.has_value()) {
+                                                    concrete_layer.local = sequential.local;
+                                                }
+                                            },
+                                            layer);
+                                    }
                                 }
-                            }
-                            for (auto& layer : sequential.layers) {
-                                handle_layer_descriptor(std::move(layer));
+
+                                for (auto& layer : sequential.layers) {
+                                    handle_layer_descriptor(std::move(layer));
+                                }
+
                             }
                             break;
                         }
@@ -258,7 +318,12 @@ auto build_optimizer_for = [](const Optimizer::Descriptor& config,
                     continue;
                 }
 
-                auto parameters = layer.module->parameters();
+                auto parameters = [&]() {
+                    if (auto sequential_block = std::dynamic_pointer_cast<ModelDetails::SequentialBlockModuleImpl>(layer.module)) {
+                        return sequential_block->parameters();
+                    }
+                    return layer.module->parameters();
+                }();
                 if (parameters.empty()) {
                     if (layer.local.optimizer.has_value()) {
                         throw std::logic_error("Local optimizer requested for a layer without trainable parameters.");
@@ -360,6 +425,9 @@ auto build_optimizer_for = [](const Optimizer::Descriptor& config,
 
         [[nodiscard]] bool has_optimizer() const noexcept {
             return static_cast<bool>(optimizer_) || !local_optimizers_.empty();
+        }
+        [[nodiscard]] std::size_t local_optimizer_count() const noexcept {
+            return local_optimizers_.size();
         }
 
         [[nodiscard]] bool has_loss() const noexcept { return loss_descriptor_.has_value(); }
