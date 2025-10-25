@@ -116,9 +116,11 @@ int main() {
     model.set_regularization({Thot::Regularization::SWAG({
             .coefficient = 1e-3,
             .variance_epsilon = 1e-6,
-            .start_step = ((32 + 64 - 1) / 64) * 45,
-            .accumulation_stride = ((32 + 64 - 1) / 64) * 2,
-            .max_snapshots = 30})});
+            .start_step = 140,
+            .accumulation_stride = 3,
+            .max_snapshots = 40
+        })});
+
 
 
     auto [train_images, train_labels, test_images, test_labels] = Thot::Data::Load::CIFAR10("/home/moonfloww/Projects/DATASETS/CIFAR10", 1.f, 1.f, true);
@@ -129,7 +131,22 @@ int main() {
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {"x"}, 1.0f, true, false);
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {"y"}, 0.5f, true, false);
 
-    model.train(train_images, train_labels, {.epoch = 90, .batch_size = 64, .shuffle = false, .test = std::make_pair(validation_images, validation_labels)});
+    model.train(train_images, train_labels, {.epoch = 200, .batch_size = 256, .shuffle = true, .test = std::make_pair(validation_images, validation_labels)});
+
+    (void) model.evaluate(test_images, test_labels, Thot::Evaluation::Classification,{
+    Thot::Metric::Classification::Accuracy,
+    Thot::Metric::Classification::Precision,
+    Thot::Metric::Classification::Recall,
+    Thot::Metric::Classification::F1,
+    Thot::Metric::Classification::TruePositiveRate,
+    Thot::Metric::Classification::TrueNegativeRate,
+    Thot::Metric::Classification::Top1Accuracy,
+    Thot::Metric::Classification::ExpectedCalibrationError,
+    Thot::Metric::Classification::MaximumCalibrationError,
+    Thot::Metric::Classification::CohensKappa,
+    Thot::Metric::Classification::LogLoss,
+    Thot::Metric::Classification::BrierScore,
+    });
 
     return 0;
 }
