@@ -225,7 +225,7 @@ namespace Thot::Utils {
 
         void plot(const std::vector<double>& y,
                   const std::string& title = {},
-                  PlotStyle style = {}) {
+                  PlotStyle style = PlotStyle{}) {
             std::vector<double> x(y.size());
             for (std::size_t i = 0; i < y.size(); ++i) {
                 x[i] = static_cast<double>(i);
@@ -236,7 +236,7 @@ namespace Thot::Utils {
         void plot(const std::vector<double>& x,
                   const std::vector<double>& y,
                   const std::string& title = {},
-                  PlotStyle style = {}) {
+                  PlotStyle style = PlotStyle{}) {
             if (x.size() != y.size()) {
                 throw std::invalid_argument("X and Y data vectors must have the same size");
             }
@@ -265,7 +265,7 @@ namespace Thot::Utils {
                    const std::vector<double>& y,
                    const std::vector<double>& z,
                    const std::string& title = {},
-                   PlotStyle style = {}) {
+                   PlotStyle style = PlotStyle{}) {
             if (x.size() != y.size() || x.size() != z.size()) {
                 throw std::invalid_argument("X, Y, and Z data vectors must have the same size");
             }
@@ -281,7 +281,7 @@ namespace Thot::Utils {
 
         void plotEquation(const std::string& expression,
                           const std::string& title = {},
-                          PlotStyle style = {}) {
+                          PlotStyle style = PlotStyle{}) {
             ensureValid();
             std::ostringstream stream;
             stream << "plot " << expression << ' ';
