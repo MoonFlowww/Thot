@@ -138,6 +138,7 @@ namespace Thot {
         bool shuffle{Core::kDefaultTrainingConfig.shuffle};
         bool buffer_vram{Core::kDefaultTrainingConfig.buffer_vram};
         bool monitor{true};
+        bool restore_best_state{false};
         std::optional<std::pair<torch::Tensor, torch::Tensor>> validation{};
         std::optional<std::pair<torch::Tensor, torch::Tensor>> test{};
         std::ostream* stream{&std::cout};
@@ -976,6 +977,9 @@ namespace Thot {
                 }
 
                 auto best_test = std::optional<double>{};
+                std::vector<torch::Tensor> best_parameters;
+                std::vector<torch::Tensor> best_buffers;
+                bool best_state_captured = false;
 
                 std::size_t step_index = 0;
 
@@ -1110,6 +1114,32 @@ namespace Thot {
                         }
                     }
 
+                    if (improved && options.restore_best_state) {
+                        best_parameters.clear();
+                        best_buffers.clear();
+                        best_parameters.reserve(model.parameters().size());
+                        best_buffers.reserve(model.buffers().size());
+
+                        for (auto& parameter : model.parameters()) {
+                            if (parameter.defined()) {
+                                best_parameters.push_back(parameter.detach().clone());
+                            } else {
+                                best_parameters.push_back({});
+                            }
+                        }
+
+                        for (auto& buffer : model.buffers()) {
+                            if (buffer.defined()) {
+                                best_buffers.push_back(buffer.detach().clone());
+                            } else {
+                                best_buffers.push_back({});
+                            }
+                        }
+
+                        best_state_captured = true;
+                    }
+
+
                     const auto duration_seconds = std::chrono::duration<double>(
                                             std::chrono::steady_clock::now() - epoch_start).count();
 
@@ -1124,14 +1154,34 @@ namespace Thot {
                                   duration_seconds);
                     }
                 }
+                if (options.restore_best_state && best_state_captured) {
+                    auto parameters = model.parameters();
+                    const auto parameter_limit = std::min(parameters.size(), best_parameters.size());
+                    for (std::size_t index = 0; index < parameter_limit; ++index) {
+                        auto& target = parameters[index];
+                        const auto& source = best_parameters[index];
+                        if (target.defined() && source.defined()) {
+                            target.detach_();
+                            target.copy_(source);
+                        }
+                    }
+
+                    auto buffers = model.buffers();
+                    const auto buffer_limit = std::min(buffers.size(), best_buffers.size());
+                    for (std::size_t index = 0; index < buffer_limit; ++index) {
+                        auto& target = buffers[index];
+                        const auto& source = best_buffers[index];
+                        if (target.defined() && source.defined()) {
+                            target.detach_();
+                            target.copy_(source);
+                        }
+                    }
+                }
             }
 
 
             template <bool BufferVRAM>
-                        static std::optional<double> compute_dataset_loss(Model& model,
-                                                                          const TensorDataset& dataset,
-                                                                          std::size_t batch_size)
-            {
+            static std::optional<double> compute_dataset_loss(Model& model, const TensorDataset& dataset, std::size_t batch_size) {
                 if (!dataset.inputs.defined() || !dataset.targets.defined()) {
                     return std::nullopt;
                 }

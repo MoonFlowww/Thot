@@ -120,10 +120,11 @@ int main() {
     model.set_regularization({Thot::Regularization::SWAG({
             .coefficient = 1e-3,
             .variance_epsilon = 1e-6,
-            .start_step = 140,
-            .accumulation_stride = 3,
-            .max_snapshots = 40
+            .start_step = 55,
+            .accumulation_stride = 2,
+            .max_snapshots = 30,
         })});
+
 
 
 
@@ -138,7 +139,7 @@ int main() {
 
     (void)Thot::Data::Check::Size(train_images, "Input train size after augment");
 
-    model.train(train_images, train_labels, {.epoch = 200, .batch_size = 128, .shuffle = false, .test = std::make_pair(validation_images, validation_labels)});
+    model.train(train_images, train_labels, {.epoch = 200, .batch_size = 128, .shuffle = false, .restore_best_state = true, .test = std::make_pair(validation_images, validation_labels)});
 
     (void) model.evaluate(test_images, test_labels, Thot::Evaluation::Classification,{
         Thot::Metric::Classification::Accuracy,
@@ -147,7 +148,7 @@ int main() {
         Thot::Metric::Classification::F1,
         Thot::Metric::Classification::TruePositiveRate,
         Thot::Metric::Classification::TrueNegativeRate,
-        Thot::Metric::Classification::Top1Accuracy,
+        Thot::Metric::Classification::Top1Error,
         Thot::Metric::Classification::ExpectedCalibrationError,
         Thot::Metric::Classification::MaximumCalibrationError,
         Thot::Metric::Classification::CohensKappa,
