@@ -2,16 +2,25 @@
 #define THOT_CALIBRATION_HPP
 // This file is an factory, must exempt it from any logical-code. For functions look into "/details"
 
+#include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstddef>
+#include <functional>
+#include <iomanip>
 #include <memory>
+#include <optional>
 #include <ostream>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include <torch/torch.h>
+
+#include "../utils/gnuplot.hpp"
+
 
 namespace Thot::Calibration {
     template <class...>
@@ -36,7 +45,229 @@ namespace Thot::Calibration {
 
     using MethodPtr = std::shared_ptr<Method>;
 
+    struct Options {
+        std::size_t reliability_bins{15};
+        std::ostream* stream{nullptr};
+    };
+
+
     namespace Details {
+
+        struct ReliabilityBin {
+            double confidence_sum{0.0};
+            double accuracy_sum{0.0};
+            std::size_t count{0};
+        };
+
+        inline std::size_t clamp_bin_index(double confidence, std::size_t bins)
+        {
+            if (bins == 0) {
+                return 0;
+            }
+
+            const double clamped = std::clamp(confidence, 0.0, 1.0);
+            auto index = static_cast<std::size_t>(clamped * static_cast<double>(bins));
+            if (index >= bins) {
+                index = bins - 1;
+            }
+            return index;
+        }
+
+        inline torch::Tensor normalise_targets(torch::Tensor targets, std::int64_t num_classes)
+        {
+            if (!targets.defined()) {
+                throw std::invalid_argument("Calibration requires defined target tensor.");
+            }
+
+            auto prepared = targets.detach();
+            if (prepared.device().type() != torch::kCPU) {
+                prepared = prepared.to(torch::kCPU);
+            }
+
+            if (prepared.dim() > 1) {
+                const auto last_dim = prepared.dim() - 1;
+                if (prepared.size(last_dim) == num_classes) {
+                    prepared = prepared.argmax(last_dim);
+                } else if (prepared.size(last_dim) == 1) {
+                    prepared = prepared.squeeze(last_dim);
+                } else {
+                    prepared = prepared.reshape({prepared.size(0)});
+                }
+            }
+
+            if (prepared.dtype() != torch::kLong) {
+                prepared = prepared.to(torch::kLong);
+            }
+
+            if (prepared.dim() != 1) {
+                throw std::runtime_error("Calibration targets must be reducible to a one-dimensional tensor.");
+            }
+
+            return prepared.contiguous();
+        }
+
+        inline std::vector<ReliabilityBin> compute_reliability_bins(torch::Tensor logits,
+                                                                    torch::Tensor targets,
+                                                                    std::size_t bin_count)
+        {
+            if (!logits.defined()) {
+                throw std::invalid_argument("Calibration requires defined logits tensor.");
+            }
+
+            if (logits.dim() == 1) {
+                logits = logits.unsqueeze(1);
+            } else if (logits.dim() > 2) {
+                logits = logits.reshape({logits.size(0), -1});
+            }
+
+            if (logits.size(0) == 0) {
+                return {};
+            }
+
+            const auto classes = logits.size(1);
+            auto prepared_targets = normalise_targets(std::move(targets), classes);
+            if (prepared_targets.size(0) != logits.size(0)) {
+                throw std::runtime_error("Calibration logits and targets must share the same number of samples.");
+            }
+
+            auto logits_cpu = logits.detach().to(torch::kCPU, torch::kFloat64).contiguous();
+            auto probabilities = torch::softmax(logits_cpu, 1);
+            auto max_result = probabilities.max(1);
+            auto confidences = std::get<0>(max_result).to(torch::kCPU).contiguous();
+            auto predictions = std::get<1>(max_result).to(torch::kCPU, torch::kLong).contiguous();
+
+            const auto total = confidences.size(0);
+            const auto* confidence_ptr = confidences.data_ptr<double>();
+            const auto* prediction_ptr = predictions.data_ptr<long>();
+            const auto* target_ptr = prepared_targets.data_ptr<long>();
+
+            const std::size_t bins = std::max<std::size_t>(1, bin_count);
+            std::vector<ReliabilityBin> bucket(bins);
+
+            for (std::int64_t idx = 0; idx < total; ++idx) {
+                const double confidence = confidence_ptr[idx];
+                const std::size_t bin_index = clamp_bin_index(confidence, bins);
+                auto& entry = bucket[bin_index];
+                entry.count += 1;
+                entry.confidence_sum += confidence;
+                entry.accuracy_sum += (prediction_ptr[idx] == target_ptr[idx]) ? 1.0 : 0.0;
+            }
+
+            return bucket;
+        }
+
+        inline void plot_reliability_diagram(const Method& method,
+                                             const std::pair<torch::Tensor, torch::Tensor>& validation,
+                                             const Options& options,
+                                             const torch::Device& device)
+        {
+            auto logits = validation.first;
+            auto targets = validation.second;
+
+            if (!logits.defined() || !targets.defined()) {
+                throw std::invalid_argument("Validation logits and targets must be defined for reliability plotting.");
+            }
+
+            auto device_logits = logits;
+            if (device_logits.device() != device) {
+                device_logits = device_logits.to(device);
+            }
+
+            torch::NoGradGuard guard;
+            auto transformed = method.transform(std::move(device_logits)).detach().to(torch::kCPU);
+
+            auto bins = compute_reliability_bins(std::move(transformed), std::move(targets), options.reliability_bins);
+            std::size_t total_samples{0};
+            for (const auto& bin : bins) {
+                total_samples += bin.count;
+            }
+
+            if (total_samples == 0) {
+                if (options.stream != nullptr) {
+                    *options.stream << "Calibration: no validation samples available for reliability plotting." << '\n';
+                }
+                return;
+            }
+
+            std::vector<double> confidence_points;
+            std::vector<double> accuracy_points;
+            confidence_points.reserve(bins.size());
+            accuracy_points.reserve(bins.size());
+
+            double ece{0.0};
+            double mce{0.0};
+
+            for (const auto& bin : bins) {
+                if (bin.count == 0) {
+                    continue;
+                }
+
+                const double avg_confidence = bin.confidence_sum / static_cast<double>(bin.count);
+                const double avg_accuracy = bin.accuracy_sum / static_cast<double>(bin.count);
+                confidence_points.push_back(avg_confidence);
+                accuracy_points.push_back(avg_accuracy);
+
+                const double difference = std::abs(avg_confidence - avg_accuracy);
+                ece += difference * (static_cast<double>(bin.count) / static_cast<double>(total_samples));
+                mce = std::max(mce, difference);
+            }
+
+            if (options.stream != nullptr) {
+                auto& out = *options.stream;
+                const auto previous_flags = out.flags();
+                const auto previous_precision = out.precision();
+                out << std::fixed << std::setprecision(6)
+                    << "Calibration ECE: " << ece
+                    << ", MCE: " << mce << '\n';
+                out.flags(previous_flags);
+                out.precision(previous_precision);
+            }
+
+            if (confidence_points.empty()) {
+                if (options.stream != nullptr) {
+                    *options.stream << "Calibration: insufficient populated bins for reliability plot." << '\n';
+                }
+                return;
+            }
+
+            Utils::Gnuplot plotter{};
+            plotter.setTitle("Reliability diagram");
+            plotter.setXLabel("Confidence");
+            plotter.setYLabel("Accuracy");
+            plotter.command("set xrange [0:1]");
+            plotter.command("set yrange [0:1]");
+            plotter.command("set key top left");
+            plotter.command("set grid");
+
+            Utils::Gnuplot::PlotStyle diagonal_style{};
+            diagonal_style.mode = Utils::Gnuplot::PlotMode::Lines;
+            diagonal_style.lineWidth = 1.5;
+            diagonal_style.lineColor = "rgb '#7f7f7f'";
+
+            Utils::Gnuplot::PlotStyle model_style{};
+            model_style.mode = Utils::Gnuplot::PlotMode::LinesPoints;
+            model_style.lineWidth = 2.0;
+            model_style.pointType = 7;
+            model_style.pointSize = 1.2;
+            model_style.lineColor = "rgb '#1f77b4'";
+
+            Utils::Gnuplot::DataSet2D diagonal{
+                std::vector<double>{0.0, 1.0},
+                std::vector<double>{0.0, 1.0},
+                "Perfect calibration",
+                diagonal_style
+            };
+
+            Utils::Gnuplot::DataSet2D model_curve{
+                std::move(confidence_points),
+                std::move(accuracy_points),
+                "Calibrated model",
+                model_style
+            };
+
+            plotter.plot({std::move(diagonal), std::move(model_curve)});
+        }
+
 
         class TemperatureScalingModuleImpl : public torch::nn::Module {
         public:
@@ -179,15 +410,51 @@ namespace Thot::Calibration {
             descriptor);
     }
 
-    inline MethodPtr calibrate(torch::nn::Module& model,
-                               const torch::Device& device,
-                               const Descriptor& descriptor,
-                               const torch::Tensor& logits,
-                               const torch::Tensor& targets)
-    {
+    using CalibrationDataCallback = std::function<std::pair<torch::Tensor, torch::Tensor>(torch::nn::Module&)>;
+
+    inline MethodPtr Calibrate(torch::nn::Module& model,
+                        const torch::Device& device,
+                        const Descriptor& descriptor,
+                        CalibrationDataCallback data_callback,
+                        std::optional<std::pair<torch::Tensor, torch::Tensor>> validation = std::nullopt,
+                        Options options = {},
+                        bool plot = false) {
+        if (!data_callback) {
+            throw std::invalid_argument("Calibration requires a valid logits callback.");
+        }
+
         auto method = make_method(descriptor);
         method->attach(model, device);
+        auto calibration_pair = data_callback(model);
+        auto& logits = calibration_pair.first;
+        auto& targets = calibration_pair.second;
+        if (!logits.defined() || !targets.defined()) {
+            throw std::invalid_argument("Calibration callback returned undefined logits or targets.");
+        }
+
         method->fit(logits, targets);
+
+        if (options.stream != nullptr) {
+            *options.stream << "Calibration method: ";
+            method->plot(*options.stream);
+            *options.stream << '\n';
+        }
+
+        if (plot) {
+            if (!validation.has_value()) {
+                if (options.stream != nullptr) {
+                    *options.stream << "Calibration: validation data required for reliability plot." << '\n';
+                }
+            } else {
+                try {
+                    Details::plot_reliability_diagram(*method, *validation, options, device);
+                } catch (const std::exception& ex) {
+                    if (options.stream != nullptr) {
+                        *options.stream << "Calibration: failed to plot reliability diagram: " << ex.what() << '\n';
+                    }
+                }
+            }
+        }
         return method;
     }
 }

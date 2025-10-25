@@ -519,7 +519,13 @@ namespace Thot {
                const torch::Tensor& logits,
                const torch::Tensor& targets)
         {
-            auto method = Calibration::calibrate(*this, device_, descriptor, logits, targets);
+            auto method = Calibration::Calibrate(
+            *this,
+            device_,
+            descriptor,
+            [&logits, &targets](torch::nn::Module&) {
+                return std::pair<torch::Tensor, torch::Tensor>{logits, targets};
+            });
             calibration_methods_.push_back(std::move(method));
         }
 

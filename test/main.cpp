@@ -134,7 +134,17 @@ int main() {
         Thot::Metric::Classification::BrierScore,
     });
 
+    {
+        torch::NoGradGuard guard;
+        model.eval();
 
+        auto calibration_logits = model.forward(test_images);
+        auto descriptor = Thot::Calibration::Descriptor{
+            Thot::Calibration::TemperatureScalingDescriptor{}
+        };
+
+        model.calibrate(descriptor, calibration_logits, test_labels);
+    }
     return 0;
 }
 
