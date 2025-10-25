@@ -25,13 +25,29 @@ namespace Thot::Utils {
         };
 
         struct PlotStyle {
-            PlotMode mode{PlotMode::Lines};
-            std::optional<int> lineType{};
-            std::optional<double> lineWidth{};
-            std::optional<std::string> lineColor{};
-            std::optional<int> pointType{};
-            std::optional<double> pointSize{};
-            std::optional<std::string> extra{};
+            PlotMode mode;
+            std::optional<int> lineType;
+            std::optional<double> lineWidth;
+            std::optional<std::string> lineColor;
+            std::optional<int> pointType;
+            std::optional<double> pointSize;
+            std::optional<std::string> extra;
+
+            constexpr PlotStyle(
+                PlotMode mode = PlotMode::Lines,
+                std::optional<int> lineType = std::nullopt,
+                std::optional<double> lineWidth = std::nullopt,
+                std::optional<std::string> lineColor = std::nullopt,
+                std::optional<int> pointType = std::nullopt,
+                std::optional<double> pointSize = std::nullopt,
+                std::optional<std::string> extra = std::nullopt)
+                : mode(mode),
+                  lineType(std::move(lineType)),
+                  lineWidth(std::move(lineWidth)),
+                  lineColor(std::move(lineColor)),
+                  pointType(std::move(pointType)),
+                  pointSize(std::move(pointSize)),
+                  extra(std::move(extra)) {}
         };
 
         struct DataSet2D {
