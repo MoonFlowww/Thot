@@ -77,12 +77,17 @@ int main() {
     model.add(Thot::Layer::FC({256, 512, true}, Thot::Activation::SiLU, Thot::Initialization::KaimingNormal));
     model.add(Thot::Layer::Dropout({ .probability = 0.5 }));
     model.add(Thot::Layer::FC({512, 10, true}, Thot::Activation::Raw, Thot::Initialization::KaimingNormal));
+    <
 
-
-
-
-    model.set_optimizer( Thot::Optimizer::AdamW({.learning_rate = 1e-3, .weight_decay = 2e-2}),
-    Thot::LrScheduler::CosineAnnealing({ .T_max = 200 * ((50000+256-1)/256), .eta_min = 1e-5, .warmup_steps = 5 * ((50000+256-1)/256), .warmup_start_factor = 0.1}));
+    model.set_optimizer(
+        Thot::Optimizer::AdamW({ .learning_rate = 3e-3, .weight_decay = 5e-3 }), // see §3
+        Thot::LrScheduler::CosineAnnealing({
+            .T_max = 200 * (150000 + 128 - 1) / 128,
+            .eta_min = 3e-5,
+            .warmup_steps = 5 * (150000 + 128 - 1) / 128,
+            .warmup_start_factor = 0.1
+        })
+    );
 
     model.set_loss(Thot::Loss::CrossEntropy({.label_smoothing=0.1f}));
 
@@ -103,12 +108,17 @@ int main() {
 
 
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Cutout(train_images, train_labels, {-1, -1}, {8, 8}, -1, 1.f, true, false);
+    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Shuffle(train_images, train_labels);
+
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {"x"}, 0.5f, true, false);
+    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Shuffle(train_images, train_labels);
+
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {"y"}, 0.5f, false, false);
+    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Shuffle(train_images, train_labels);
+
 
     (void)Thot::Data::Check::Size(train_images, "Input train size after augment");
 
-    Thot::Data::Manipulation::Shuffle(train_images, train_labels);
 
     model.train(train_images, train_labels, {.epoch = 200, .batch_size = 128, .shuffle = true, .restore_best_state = true, .test = std::make_pair(validation_images, validation_labels)});
 

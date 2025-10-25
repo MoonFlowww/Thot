@@ -22,34 +22,29 @@ namespace Thot::Data::Manipulation {
             return !(data_augment.has_value() && !data_augment.value());
         }
 
-        inline double clamp_probability(const std::optional<double>& probability) {
-            if (!probability.has_value()) {
+        inline double clamp_frequency(const std::optional<double>& frequency) {
+            if (!frequency.has_value())
                 return 1.0;
-            }
-            return std::clamp(probability.value(), 0.0, 1.0);
+            return std::clamp(frequency.value(), 0.0, 1.0);
         }
 
-        inline torch::Tensor select_augmented_indices(int64_t batch_size, const std::optional<double>& probability,
-                                                      const torch::Device& device) {
+
+        inline torch::Tensor select_indices_by_frequency(int64_t batch_size, const std::optional<double>& frequency,
+                                                         const torch::Device& device) {
             const auto long_options = torch::TensorOptions().dtype(torch::kLong).device(device);
             if (batch_size <= 0) {
                 return torch::empty({0}, long_options);
             }
-            const auto clamped_probability = clamp_probability(probability);
-            if (clamped_probability <= 0.0) {
+            const double f = clamp_frequency(frequency);
+            if (f <= 0.0) {
                 return torch::empty({0}, long_options);
             }
-            if (clamped_probability >= 1.0) {
+            if (f >= 1.0) {
                 return torch::arange(batch_size, long_options);
             }
-
-            const auto float_options = torch::TensorOptions().dtype(torch::kFloat32).device(device);
-            auto mask = torch::rand({batch_size}, float_options) < clamped_probability;
-            auto indices = mask.nonzero().squeeze(1).to(torch::kLong);
-            if (indices.device() != device) {
-                indices = indices.to(device);
-            }
-            return indices;
+            int64_t stride = static_cast<int64_t>(std::round(1.0 / f));
+            stride = std::max<int64_t>(1, stride);
+            return torch::arange(0,batch_size,stride, long_options);
         }
 
         inline int64_t axis_token_to_dim(const std::string& token, int64_t tensor_dim) {
@@ -110,23 +105,18 @@ namespace Thot::Data::Manipulation {
         }
     }
 
-    inline std::pair<torch::Tensor, torch::Tensor> Flip(const torch::Tensor& tensor, const torch::Tensor& target,
-                                                        const std::vector<std::string>& axes,
-                                                        std::optional<double> probability = 0.3f,
-                                                        std::optional<bool> data_augment = true, bool show_progress = true){
+    inline std::pair<torch::Tensor, torch::Tensor> Flip(const torch::Tensor& tensor, const torch::Tensor& target, const std::vector<std::string>& axes,
+                                                        std::optional<double> frequency = 0.3, std::optional<bool> data_augment = true, bool show_progress = true) {
         [[maybe_unused]] const bool show = show_progress;
         if (!Details::augmentation_enabled(data_augment)) {
             return {tensor, target};
         }
-
         if (!tensor.defined() || !target.defined() || tensor.dim() == 0 || target.dim() == 0) {
             return {tensor, target};
         }
-
         if (tensor.size(0) != target.size(0)) {
             throw std::invalid_argument("Inputs and targets must have matching batch dimensions for Flip augmentation.");
         }
-
         if (axes.empty()) {
             return {tensor, target};
         }
@@ -136,16 +126,13 @@ namespace Thot::Data::Manipulation {
             return {tensor, target};
         }
 
-        auto selected_indices = Details::select_augmented_indices(tensor.size(0), probability, tensor.device());
+        auto selected_indices = Details::select_indices_by_frequency(tensor.size(0), frequency, tensor.device());
         if (selected_indices.numel() == 0) {
             return {tensor, target};
         }
 
         auto selected_inputs = tensor.index_select(0, selected_indices).clone();
-        auto target_indices = selected_indices;
-        if (target.device() != selected_indices.device()) {
-            target_indices = selected_indices.to(target.device());
-        }
+        auto target_indices = selected_indices.device() == target.device() ? selected_indices : selected_indices.to(target.device());
         auto selected_targets = target.index_select(0, target_indices).clone();
 
         auto flipped = selected_inputs.flip(dims);
@@ -155,32 +142,27 @@ namespace Thot::Data::Manipulation {
     }
 
     inline std::pair<torch::Tensor, torch::Tensor> Cutout(const torch::Tensor& inputs, const torch::Tensor& targets,
-                                                            const std::vector<int64_t>& offsets, const std::vector<int64_t>& sizes,
-                                                            double fill_value = 0.0, std::optional<double> probability = 0.3f,
-                                                            std::optional<bool> data_augment = true, bool show_progress = true) {
+                                                      const std::vector<int64_t>& offsets, const std::vector<int64_t>& sizes,
+                                                      double fill_value = 0.0, std::optional<double> frequency = 0.3,
+                                                      std::optional<bool> data_augment = true, bool show_progress = true) {
         [[maybe_unused]] const bool show = show_progress;
         if (!Details::augmentation_enabled(data_augment)) {
             return {inputs, targets};
         }
-
         if (!inputs.defined() || inputs.dim() < 2) {
             return {inputs, targets};
         }
-
         if (inputs.size(0) != targets.size(0)) {
             throw std::invalid_argument("Inputs and targets must have matching batch dimensions for Cutout augmentation.");
         }
 
-        auto selected_indices = Details::select_augmented_indices(inputs.size(0), probability, inputs.device());
+        auto selected_indices = Details::select_indices_by_frequency(inputs.size(0), frequency, inputs.device());
         if (selected_indices.numel() == 0) {
             return {inputs, targets};
         }
 
         auto selected_inputs = inputs.index_select(0, selected_indices).clone();
-        auto target_indices = selected_indices;
-        if (targets.device() != selected_indices.device()) {
-            target_indices = selected_indices.to(targets.device());
-        }
+        auto target_indices = selected_indices.device() == targets.device() ? selected_indices : selected_indices.to(targets.device());
         auto selected_targets = targets.index_select(0, target_indices).clone();
 
         auto result = selected_inputs.clone();
@@ -192,13 +174,13 @@ namespace Thot::Data::Manipulation {
 
         auto y0 = offsets.size() > 0 ? offsets[0] : int64_t{0};
         auto x0 = offsets.size() > 1 ? offsets[1] : int64_t{0};
-        auto h = sizes.size() > 0 ? sizes[0] : height;
-        auto w = sizes.size() > 1 ? sizes[1] : width;
+        auto h  = sizes.size()   > 0 ? sizes[0]   : height;
+        auto w  = sizes.size()   > 1 ? sizes[1]   : width;
 
         y0 = std::clamp<int64_t>(y0, 0, height);
         x0 = std::clamp<int64_t>(x0, 0, width);
-        h = std::clamp<int64_t>(h, 0, height);
-        w = std::clamp<int64_t>(w, 0, width);
+        h  = std::clamp<int64_t>(h,  0, height);
+        w  = std::clamp<int64_t>(w,  0, width);
 
         static thread_local std::mt19937 rng{std::random_device{}()};
 
@@ -206,27 +188,22 @@ namespace Thot::Data::Manipulation {
             std::uniform_int_distribution<int64_t> distribution(0, height - h);
             y0 = distribution(rng);
         }
-
         if (offsets.size() > 1 && offsets[1] < 0 && w <= width) {
             std::uniform_int_distribution<int64_t> distribution(0, width - w);
             x0 = distribution(rng);
         }
 
         const auto y1 = std::min<int64_t>(height, y0 + h);
-        const auto x1 = std::min<int64_t>(width, x0 + w);
+        const auto x1 = std::min<int64_t>(width,  x0 + w);
 
-        if (y0 >= y1 || x0 >= x1) {
-            auto augmented_inputs = torch::cat({inputs, result}, 0);
-            auto augmented_targets = torch::cat({targets, selected_targets}, 0);
-            return {std::move(augmented_inputs), std::move(augmented_targets)};
-        }
-
-        auto patch = result.slice(height_dim, y0, y1).slice(width_dim, x0, x1);
-        if (fill_value == -1.0) {
-            auto noise = torch::rand_like(patch);
-            patch.copy_(noise);
-        } else {
-            patch.fill_(fill_value);
+        if (y0 < y1 && x0 < x1) {
+            auto patch = result.slice(height_dim, y0, y1).slice(width_dim, x0, x1);
+            if (fill_value == -1.0) {
+                auto noise = torch::rand_like(patch);
+                patch.copy_(noise);
+            } else {
+                patch.fill_(fill_value);
+            }
         }
 
         auto augmented_inputs = torch::cat({inputs, result}, 0);
