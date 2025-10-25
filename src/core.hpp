@@ -61,6 +61,7 @@
 #include "../src/regularization/regularization.hpp"
 #include "../src/regularization/apply.hpp"
 
+#include "utils/check.hpp"
 
 
 namespace Thot {
