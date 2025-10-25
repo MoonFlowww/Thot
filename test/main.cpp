@@ -132,9 +132,9 @@ int main() {
     (void)Thot::Data::Check::Size(train_images, "Input train size raw");
 
 
-    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Cutout(train_images, train_labels, {16, 16}, {8, 8}, 0.0, 1.f, true, false);
-    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {"x"}, 1.0f, true, false);
-    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {"y"}, 1.f, true, false);
+    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Cutout(train_images, train_labels, {-1, -1}, {8, 8}, -1, 1.f, true, false);
+    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {"x"}, 0.5f, true, false);
+    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {"y"}, 0.5f, false, false);
 
     (void)Thot::Data::Check::Size(train_images, "Input train size after augment");
 

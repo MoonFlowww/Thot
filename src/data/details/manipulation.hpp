@@ -95,26 +95,36 @@ namespace Thot::Data::Manipulation {
         }
     }
 
-    inline std::pair<torch::Tensor, torch::Tensor> Flip(torch::Tensor tensor, torch::Tensor target,
-                                                            const std::vector<std::string>& axes,
-                                                            std::optional<double> probability = 0.3f,
-                                                            std::optional<bool> data_augment = true, bool show_progress = true) {
+    inline std::pair<torch::Tensor, torch::Tensor> Flip(const torch::Tensor& tensor, const torch::Tensor& target,
+                                                        const std::vector<std::string>& axes,
+                                                        std::optional<double> probability = 0.3f,
+                                                        std::optional<bool> data_augment = true, bool show_progress = true){
         [[maybe_unused]] const bool show = show_progress;
         if (!Details::should_apply(probability, data_augment)) {
-            return {std::move(tensor), std::move(target)};
+            return {tensor, target};
+        }
+
+        if (!tensor.defined() || !target.defined() || tensor.dim() == 0 || target.dim() == 0) {
+            return {tensor, target};
+        }
+
+        if (tensor.size(0) != target.size(0)) {
+            throw std::invalid_argument("Inputs and targets must have matching batch dimensions for Flip augmentation.");
         }
 
         if (axes.empty()) {
-            return {std::move(tensor), std::move(target)};
+            return {tensor, target};
         }
 
         const auto dims = Details::parse_flip_axes(axes, tensor.dim());
         if (dims.empty()) {
-            return {std::move(tensor), std::move(target)};
+            return {tensor, target};
         }
 
         auto flipped = tensor.flip(dims);
-        return {std::move(flipped), std::move(target)};
+        auto augmented_inputs = torch::cat({tensor, flipped}, 0);
+        auto augmented_targets = torch::cat({target, target.clone()}, 0);
+        return {std::move(augmented_inputs), std::move(augmented_targets)};
     }
 
     inline std::pair<torch::Tensor, torch::Tensor> Cutout(const torch::Tensor& inputs, const torch::Tensor& targets,
@@ -128,6 +138,10 @@ namespace Thot::Data::Manipulation {
 
         if (!inputs.defined() || inputs.dim() < 2) {
             return {inputs, targets};
+        }
+
+        if (inputs.size(0) != targets.size(0)) {
+            throw std::invalid_argument("Inputs and targets must have matching batch dimensions for Cutout augmentation.");
         }
 
         auto result = inputs.clone();
@@ -147,15 +161,38 @@ namespace Thot::Data::Manipulation {
         h = std::clamp<int64_t>(h, 0, height);
         w = std::clamp<int64_t>(w, 0, width);
 
+        static thread_local std::mt19937 rng{std::random_device{}()};
+
+        if (offsets.size() > 0 && offsets[0] < 0 && h <= height) {
+            std::uniform_int_distribution<int64_t> distribution(0, height - h);
+            y0 = distribution(rng);
+        }
+
+        if (offsets.size() > 1 && offsets[1] < 0 && w <= width) {
+            std::uniform_int_distribution<int64_t> distribution(0, width - w);
+            x0 = distribution(rng);
+        }
+
         const auto y1 = std::min<int64_t>(height, y0 + h);
         const auto x1 = std::min<int64_t>(width, x0 + w);
 
         if (y0 >= y1 || x0 >= x1) {
-            return {result, targets};
+            auto augmented_inputs = torch::cat({inputs, result}, 0);
+            auto augmented_targets = torch::cat({targets, targets.clone()}, 0);
+            return {std::move(augmented_inputs), std::move(augmented_targets)};
         }
 
-        result.slice(height_dim, y0, y1).slice(width_dim, x0, x1).fill_(fill_value);
-        return {result, targets};
+        auto patch = result.slice(height_dim, y0, y1).slice(width_dim, x0, x1);
+        if (fill_value == -1.0) {
+            auto noise = torch::rand_like(patch);
+            patch.copy_(noise);
+        } else {
+            patch.fill_(fill_value);
+        }
+
+        auto augmented_inputs = torch::cat({inputs, result}, 0);
+        auto augmented_targets = torch::cat({targets, targets.clone()}, 0);
+        return {std::move(augmented_inputs), std::move(augmented_targets)};
     }
 
     inline std::pair<torch::Tensor, torch::Tensor> Shuffle(const torch::Tensor& inputs,
