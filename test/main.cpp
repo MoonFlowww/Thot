@@ -76,7 +76,7 @@ int main() {
 
     const int64_t N = 200000;
     const int64_t B = 258;
-    const int64_t epochs = 30;
+    const int64_t epochs = 15;
 
     const int64_t steps_per_epoch = (N + B - 1) / B;
 
