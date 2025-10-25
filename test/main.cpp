@@ -108,8 +108,9 @@ int main() {
 
     (void)Thot::Data::Check::Size(train_images, "Input train size after augment");
 
+    Thot::Data::Manipulation::Shuffle(train_images, train_labels);
 
-    model.train(train_images, train_labels, {.epoch = 200, .batch_size = 128, .shuffle = false, .restore_best_state = true, .test = std::make_pair(validation_images, validation_labels)});
+    model.train(train_images, train_labels, {.epoch = 200, .batch_size = 128, .shuffle = true, .restore_best_state = true, .test = std::make_pair(validation_images, validation_labels)});
 
     (void) model.evaluate(test_images, test_labels, Thot::Evaluation::Classification,{
         Thot::Metric::Classification::Accuracy,
