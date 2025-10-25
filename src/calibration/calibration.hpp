@@ -276,8 +276,7 @@ namespace Thot::Calibration {
                 log_temperature_ = register_parameter("log_temperature", torch::zeros({1}));
             }
 
-            torch::Tensor forward(torch::Tensor logits)
-            {
+            torch::Tensor forward(torch::Tensor logits) const {
                 const auto temperature = torch::exp(log_temperature_);
                 return logits / temperature;
             }
