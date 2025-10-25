@@ -704,6 +704,7 @@ namespace Thot {
                     TrainingDetails::run_epochs<false, false>(*this, training_dataset, test_dataset, effective_options);
                 }
             }
+
         }
     private:
         static std::vector<int64_t> tensor_shape_vector(const torch::Tensor& tensor);
