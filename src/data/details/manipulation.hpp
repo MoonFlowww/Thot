@@ -373,6 +373,17 @@ namespace Thot::Data::Check {
             << " (unique-consecutive ratio=" << run_ratio << ")";
         return oss.str();
     }
+
+    [[nodiscard]] inline std::vector<int> Size(const torch::Tensor&x, const std::string& title="Tensor Shape") {
+        at::IntArrayRef sizes = x.sizes();
+        std::cout << title << ": (";
+        for (size_t i = 0; i < sizes.size(); i++) {
+            std::cout << sizes[i];
+            if (i + 1 < sizes.size()) std::cout << ", ";
+        }
+        std::cout << ")" << std::endl;
+        return {x.sizes().begin(), x.sizes().end()};
+    }
 }
 
 #endif //THOT_MANIPULATION_HPP
