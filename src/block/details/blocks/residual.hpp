@@ -3,10 +3,10 @@
 
 #include <cstddef>
 #include <optional>
-#include <vector>
+#include <sstream>
 #include <stdexcept>
 #include <utility>
-
+#include <vector>
 #include <torch/torch.h>
 
 #include "../../../common/local.hpp"
@@ -91,6 +91,31 @@ namespace Thot::Block::Details {
                     skip_connection = projection_layer_->forward(std::move(skip_connection));
                     skip_connection = ::Thot::Activation::Details::apply(
                         projection_layer_->activation, std::move(skip_connection));
+                }
+
+                if (branch.sizes() != skip_connection.sizes()) {
+                    auto format_shape = [](const torch::Tensor& tensor) {
+                        std::ostringstream stream;
+                        stream << '(';
+                        bool first = true;
+                        for (const auto dimension : tensor.sizes()) {
+                            if (!first) {
+                                stream << ", ";
+                            }
+                            first = false;
+                            stream << dimension;
+                        }
+                        stream << ')';
+                        return stream.str();
+                    };
+
+                    std::ostringstream message;
+                    message << "Residual block skip connection shape mismatch: branch output "
+                            << format_shape(branch)
+                            << " vs. skip connection "
+                            << format_shape(skip_connection)
+                            << ". Consider providing a projection layer or adjusting the block configuration.";
+                    throw std::runtime_error(message.str());
                 }
 
                 branch = std::move(branch) + std::move(skip_connection);

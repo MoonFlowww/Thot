@@ -160,39 +160,8 @@ namespace Thot {
 
     public:
         Model() = default;
-
-        struct LayerCheck {
-            std::size_t index{};
-            std::string module_name{};
-            std::string activation{};
-            std::vector<int64_t> input_shape{};
-            std::vector<int64_t> expected_input_shape{};
-            std::vector<int64_t> output_shape{};
-            std::vector<int64_t> expected_output_shape{};
-            bool ok{false};
-            std::string message{};
-        };
-
-        struct CheckReport {
-            bool ok{true};
-            bool backward_ok{true};
-            std::string backward_message{};
-            std::vector<LayerCheck> layers{};
-            std::vector<std::string> warnings{};
-
-            [[nodiscard]] std::string to_string() const;
-        };
-
-
         using torch::nn::Module::train;
 
-        [[nodiscard]] CheckReport check() const;
-
-        [[nodiscard]] CheckReport check(const torch::Tensor& prototype_input) const;
-
-        [[nodiscard]] CheckReport check(const std::vector<int64_t>& input_shape) const;
-
-        [[nodiscard]] CheckReport check(std::initializer_list<int64_t> input_shape) const;
 
         using ModuleDescriptor = std::variant<Layer::Descriptor, Block::Descriptor>;
         void add(ModuleDescriptor descriptor) {
@@ -530,11 +499,6 @@ namespace Thot {
 
 
         [[nodiscard]] torch::Tensor forward(torch::Tensor input) {
-            if (input.defined()) {
-                last_input_shape_ = tensor_shape_vector(input);
-            } else {
-                last_input_shape_.reset();
-            }
             auto output = std::move(input);
             if (output.device() != device_)
                 output = output.to(device_);
@@ -725,7 +689,6 @@ namespace Thot {
                 test_dataset->targets = test_dataset->targets.to(device_);
             }
 
-            last_input_shape_ = tensor_shape_vector(training_dataset.inputs);
 
             if (effective_options.shuffle) {
                 if (effective_options.buffer_vram) {
@@ -743,9 +706,6 @@ namespace Thot {
             }
         }
     private:
-
-        [[nodiscard]] CheckReport check_with_shape(const std::optional<std::vector<int64_t>>& shape) const;
-        [[nodiscard]] CheckReport run_diagnostics(torch::Tensor prototype_input) const;
         static std::vector<int64_t> tensor_shape_vector(const torch::Tensor& tensor);
         static std::string describe_activation(Activation::Type type);
         static std::string describe_module(const Layer::Details::RegisteredLayer& layer);

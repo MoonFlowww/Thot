@@ -14,95 +14,70 @@ int main() {
 
     model.add(Thot::Block::Sequential({
         Thot::Layer::Conv2d(
-            {3, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
+            {3, 64, {3,3}, {1,1}, {1,1}, {1,1}, 1, false},
             Thot::Activation::Raw,
             Thot::Initialization::KaimingNormal
         ),
-        Thot::Layer::BatchNorm2d(
-            {64, 1e-5, 0.1, true, true},
-            Thot::Activation::SiLU
-        ),
+        Thot::Layer::BatchNorm2d({64, 1e-5, 0.1, true, true}, Thot::Activation::SiLU),
         Thot::Layer::Conv2d(
-            {64, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
+            {64, 64, {3,3}, {1,1}, {1,1}, {1,1}, 1, false}, // bias false under BN
             Thot::Activation::Raw,
             Thot::Initialization::KaimingNormal
         ),
-        Thot::Layer::BatchNorm2d(
-            {64, 1e-5, 0.1, true, true},
-            Thot::Activation::SiLU
-        ),
-        Thot::Layer::MaxPool2d({{2, 2}, {2, 2}})
+        Thot::Layer::BatchNorm2d({64, 1e-5, 0.1, true, true}, Thot::Activation::SiLU),
+        Thot::Layer::MaxPool2d({{2,2}, {2,2}})
     }));
 
     model.add(Thot::Layer::Dropout({ .probability = 0.3 }));
 
     model.add(Thot::Block::Residual({
         Thot::Layer::Conv2d(
-            {64, 128, {3, 3}, {2, 2}, {1, 1}, {1, 1}, 1, false},
+            {64, 128, {3,3}, {2,2}, {1,1}, {1,1}, 1, false}, // in=64, out=128, s=2
             Thot::Activation::Raw,
             Thot::Initialization::KaimingNormal
         ),
-        Thot::Layer::BatchNorm2d(
-            {128, 1e-5, 0.1, true, true},
-            Thot::Activation::SiLU
-        ),
+        Thot::Layer::BatchNorm2d({128, 1e-5, 0.1, true, true}, Thot::Activation::SiLU),
         Thot::Layer::Conv2d(
-            {128, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
+            {128, 128, {3,3}, {1,1}, {1,1}, {1,1}, 1, false},
             Thot::Activation::Raw,
             Thot::Initialization::KaimingNormal
         )
-        }));
+    }, 1, {
+        .projection = Thot::Layer::Conv2d(
+            {64, 128, {1,1}, {2,2}, {0,0}, {1,1}, 1, false},   // match stride/channels on skip
+            Thot::Activation::Raw,
+            Thot::Initialization::KaimingNormal
+        )
+    }, { .final_activation = Thot::Activation::SiLU }));
 
     model.add(Thot::Block::Residual({
         Thot::Layer::Conv2d(
-        {128, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
+            {128, 256, {3,3}, {2,2}, {1,1}, {1,1}, 1, false}, // in=128, out=256, s=2
             Thot::Activation::Raw,
             Thot::Initialization::KaimingNormal
         ),
-        Thot::Layer::BatchNorm2d(
-            {128, 1e-5, 0.1, true, true},
-            Thot::Activation::SiLU
-        ),
+        Thot::Layer::BatchNorm2d({256, 1e-5, 0.1, true, true}, Thot::Activation::SiLU),
         Thot::Layer::Conv2d(
-            {128, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
+            {256, 256, {3,3}, {1,1}, {1,1}, {1,1}, 1, false},
             Thot::Activation::Raw,
             Thot::Initialization::KaimingNormal
         )
-    }, 1, {}, { .final_activation = Thot::Activation::SiLU }));
+    }, 1, {
+        .projection = Thot::Layer::Conv2d(
+            {128, 256, {1,1}, {2,2}, {0,0}, {1,1}, 1, false},
+            Thot::Activation::Raw,
+            Thot::Initialization::KaimingNormal
+        )
+    }, { .final_activation = Thot::Activation::SiLU }));
 
     model.add(Thot::Layer::Dropout({ .probability = 0.3 }));
 
-    model.add(Thot::Block::Sequential({
-        Thot::Layer::Conv2d(
-            {128, 256, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
-            Thot::Activation::Raw,
-            Thot::Initialization::KaimingNormal
-        ),
-        Thot::Layer::BatchNorm2d(
-            {256, 1e-5, 0.1, true, true},
-            Thot::Activation::SiLU
-        ),
-        Thot::Layer::AdaptiveAvgPool2d({{1, 1}})
-    }));
-
-    model.add(Thot::Block::Sequential({
-        Thot::Layer::Conv2d(
-            {256, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
-            Thot::Activation::Raw,
-            Thot::Initialization::KaimingNormal
-        ),
-        Thot::Layer::BatchNorm2d(
-            {128, 1e-5, 0.1, true, true},
-            Thot::Activation::SiLU
-        ),
-        Thot::Layer::AdaptiveAvgPool2d({{1, 1}})
-    }));
-
-    model.add(Thot::Layer::Flatten());
-
-    model.add(Thot::Layer::FC({128, 512, true}, Thot::Activation::SiLU, Thot::Initialization::KaimingNormal));
-    model.add(Thot::Layer::Dropout({.probability = 0.5}));
+    model.add(Thot::Layer::AdaptiveAvgPool2d({{1, 1}}));
+    model.add(Thot::Layer::Flatten());                    // [B,256]
+    model.add(Thot::Layer::FC({256, 512, true}, Thot::Activation::SiLU, Thot::Initialization::KaimingNormal));
+    model.add(Thot::Layer::Dropout({ .probability = 0.5 }));
     model.add(Thot::Layer::FC({512, 10, true}, Thot::Activation::Raw, Thot::Initialization::KaimingNormal));
+
 
 
 
@@ -133,7 +108,6 @@ int main() {
 
     (void)Thot::Data::Check::Size(train_images, "Input train size after augment");
 
-    (void) model.check();
 
     model.train(train_images, train_labels, {.epoch = 200, .batch_size = 128, .shuffle = false, .restore_best_state = true, .test = std::make_pair(validation_images, validation_labels)});
 
