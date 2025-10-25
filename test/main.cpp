@@ -82,7 +82,7 @@ int main() {
 
 
     model.set_optimizer( Thot::Optimizer::AdamW({.learning_rate = 1e-3, .weight_decay = 2e-2}),
-    Thot::LrScheduler::CosineAnnealing({ .T_max = 200 * ((50000+256-1)/256), .eta_min = 5e-6, .warmup_steps = 5 * ((50000+256-1)/256), .warmup_start_factor = 0.1}));
+    Thot::LrScheduler::CosineAnnealing({ .T_max = 200 * ((50000+256-1)/256), .eta_min = 1e-5, .warmup_steps = 5 * ((50000+256-1)/256), .warmup_start_factor = 0.1}));
 
     model.set_loss(Thot::Loss::CrossEntropy({.label_smoothing=0.1f}));
 

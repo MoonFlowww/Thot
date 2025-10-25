@@ -18,23 +18,38 @@
 
 namespace Thot::Data::Manipulation {
     namespace Details {
-        inline bool should_apply(const std::optional<double>& probability, const std::optional<bool>& data_augment) {
-            if (data_augment.has_value() && !data_augment.value()) {
-                return false;
-            }
+        inline bool augmentation_enabled(const std::optional<bool>& data_augment) {
+            return !(data_augment.has_value() && !data_augment.value());
+        }
+
+        inline double clamp_probability(const std::optional<double>& probability) {
             if (!probability.has_value()) {
-                return true;
+                return 1.0;
             }
-            auto clamped_probability = std::clamp(probability.value(), 0.0, 1.0);
-            if (clamped_probability >= 1.0) {
-                return true;
+            return std::clamp(probability.value(), 0.0, 1.0);
+        }
+
+        inline torch::Tensor select_augmented_indices(int64_t batch_size, const std::optional<double>& probability,
+                                                      const torch::Device& device) {
+            const auto long_options = torch::TensorOptions().dtype(torch::kLong).device(device);
+            if (batch_size <= 0) {
+                return torch::empty({0}, long_options);
             }
+            const auto clamped_probability = clamp_probability(probability);
             if (clamped_probability <= 0.0) {
-                return false;
+                return torch::empty({0}, long_options);
             }
-            static thread_local std::mt19937 rng{std::random_device{}()};
-            std::bernoulli_distribution distribution(clamped_probability);
-            return distribution(rng);
+            if (clamped_probability >= 1.0) {
+                return torch::arange(batch_size, long_options);
+            }
+
+            const auto float_options = torch::TensorOptions().dtype(torch::kFloat32).device(device);
+            auto mask = torch::rand({batch_size}, float_options) < clamped_probability;
+            auto indices = mask.nonzero().squeeze(1).to(torch::kLong);
+            if (indices.device() != device) {
+                indices = indices.to(device);
+            }
+            return indices;
         }
 
         inline int64_t axis_token_to_dim(const std::string& token, int64_t tensor_dim) {
@@ -100,7 +115,7 @@ namespace Thot::Data::Manipulation {
                                                         std::optional<double> probability = 0.3f,
                                                         std::optional<bool> data_augment = true, bool show_progress = true){
         [[maybe_unused]] const bool show = show_progress;
-        if (!Details::should_apply(probability, data_augment)) {
+        if (!Details::augmentation_enabled(data_augment)) {
             return {tensor, target};
         }
 
@@ -121,9 +136,21 @@ namespace Thot::Data::Manipulation {
             return {tensor, target};
         }
 
-        auto flipped = tensor.flip(dims);
+        auto selected_indices = Details::select_augmented_indices(tensor.size(0), probability, tensor.device());
+        if (selected_indices.numel() == 0) {
+            return {tensor, target};
+        }
+
+        auto selected_inputs = tensor.index_select(0, selected_indices).clone();
+        auto target_indices = selected_indices;
+        if (target.device() != selected_indices.device()) {
+            target_indices = selected_indices.to(target.device());
+        }
+        auto selected_targets = target.index_select(0, target_indices).clone();
+
+        auto flipped = selected_inputs.flip(dims);
         auto augmented_inputs = torch::cat({tensor, flipped}, 0);
-        auto augmented_targets = torch::cat({target, target.clone()}, 0);
+        auto augmented_targets = torch::cat({target, selected_targets}, 0);
         return {std::move(augmented_inputs), std::move(augmented_targets)};
     }
 
@@ -132,7 +159,7 @@ namespace Thot::Data::Manipulation {
                                                             double fill_value = 0.0, std::optional<double> probability = 0.3f,
                                                             std::optional<bool> data_augment = true, bool show_progress = true) {
         [[maybe_unused]] const bool show = show_progress;
-        if (!Details::should_apply(probability, data_augment)) {
+        if (!Details::augmentation_enabled(data_augment)) {
             return {inputs, targets};
         }
 
@@ -144,7 +171,19 @@ namespace Thot::Data::Manipulation {
             throw std::invalid_argument("Inputs and targets must have matching batch dimensions for Cutout augmentation.");
         }
 
-        auto result = inputs.clone();
+        auto selected_indices = Details::select_augmented_indices(inputs.size(0), probability, inputs.device());
+        if (selected_indices.numel() == 0) {
+            return {inputs, targets};
+        }
+
+        auto selected_inputs = inputs.index_select(0, selected_indices).clone();
+        auto target_indices = selected_indices;
+        if (targets.device() != selected_indices.device()) {
+            target_indices = selected_indices.to(targets.device());
+        }
+        auto selected_targets = targets.index_select(0, target_indices).clone();
+
+        auto result = selected_inputs.clone();
 
         const auto height_dim = result.dim() - 2;
         const auto width_dim = result.dim() - 1;
@@ -178,7 +217,7 @@ namespace Thot::Data::Manipulation {
 
         if (y0 >= y1 || x0 >= x1) {
             auto augmented_inputs = torch::cat({inputs, result}, 0);
-            auto augmented_targets = torch::cat({targets, targets.clone()}, 0);
+            auto augmented_targets = torch::cat({targets, selected_targets}, 0);
             return {std::move(augmented_inputs), std::move(augmented_targets)};
         }
 
@@ -191,7 +230,7 @@ namespace Thot::Data::Manipulation {
         }
 
         auto augmented_inputs = torch::cat({inputs, result}, 0);
-        auto augmented_targets = torch::cat({targets, targets.clone()}, 0);
+        auto augmented_targets = torch::cat({targets, selected_targets}, 0);
         return {std::move(augmented_inputs), std::move(augmented_targets)};
     }
 
