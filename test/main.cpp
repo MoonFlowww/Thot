@@ -51,13 +51,7 @@ int main() {
             Thot::Activation::Raw,
             Thot::Initialization::KaimingNormal
         )
-        }, 1, {.use_projection = true,
-            .projection = Thot::Layer::Conv2d(
-                {64, 128, {1, 1}, {2, 2}, {0, 0}, {1, 1}, 1, false},
-                Thot::Activation::Raw,
-                Thot::Initialization::KaimingNormal
-            )
-    }, {.final_activation = Thot::Activation::SiLU}));
+        }));
 
     model.add(Thot::Block::Residual({
         Thot::Layer::Conv2d(
@@ -138,6 +132,8 @@ int main() {
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {"y"}, 0.5f, false, false);
 
     (void)Thot::Data::Check::Size(train_images, "Input train size after augment");
+
+    (void) model.check();
 
     model.train(train_images, train_labels, {.epoch = 200, .batch_size = 128, .shuffle = false, .restore_best_state = true, .test = std::make_pair(validation_images, validation_labels)});
 
