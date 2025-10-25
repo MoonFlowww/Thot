@@ -166,13 +166,17 @@ namespace Thot {
             std::string module_name{};
             std::string activation{};
             std::vector<int64_t> input_shape{};
+            std::vector<int64_t> expected_input_shape{};
             std::vector<int64_t> output_shape{};
+            std::vector<int64_t> expected_output_shape{};
             bool ok{false};
             std::string message{};
         };
 
         struct CheckReport {
             bool ok{true};
+            bool backward_ok{true};
+            std::string backward_message{};
             std::vector<LayerCheck> layers{};
             std::vector<std::string> warnings{};
 
