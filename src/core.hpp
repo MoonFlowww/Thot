@@ -37,6 +37,8 @@
 #include <utility>
 #include <variant>
 #include <vector>
+#include <deque>
+
 
 #include <torch/torch.h>
 
@@ -65,10 +67,10 @@
 
 namespace Thot {
     namespace Core {
-        template <bool BufferVRAM>
+        template <std::size_t BufferVRAMBatches>
         struct DevicePolicy {
             [[nodiscard]] static torch::Device select() {
-                if constexpr (BufferVRAM) {
+                if constexpr (BufferVRAMBatches > 0) {
                     if (!torch::cuda::is_available()) {
                         throw std::runtime_error("CUDA device requested for VRAM buffering but is unavailable.");
                     }
@@ -80,10 +82,10 @@ namespace Thot {
         };
 
         template <std::size_t Epochs,
-                  std::size_t BatchSize,
-                  bool Shuffle,
-                  bool BufferVRAM,
-                  class DevicePolicyT = DevicePolicy<BufferVRAM>>
+                std::size_t BatchSize,
+                bool Shuffle,
+                std::size_t BufferVRAMBatches,
+                class DevicePolicyT = DevicePolicy<BufferVRAMBatches>>
         struct TrainingConfig {
             static_assert(Epochs > 0, "TrainingConfig requires at least one epoch.");
             static_assert(BatchSize > 0, "TrainingConfig requires a positive batch size.");
@@ -91,7 +93,7 @@ namespace Thot {
             static constexpr std::size_t epochs = Epochs;
             static constexpr std::size_t batch_size = BatchSize;
             static constexpr bool shuffle = Shuffle;
-            static constexpr bool buffer_vram = BufferVRAM;
+            static constexpr std::size_t buffer_vram = BufferVRAMBatches;
 
             using DevicePolicy = DevicePolicyT;
         };
@@ -99,7 +101,7 @@ namespace Thot {
         using SupervisedSample = std::pair<torch::Tensor, torch::Tensor>;
         using SupervisedDataset = std::vector<SupervisedSample>;
 
-        using DefaultTrainingConfig = TrainingConfig<10, 32, true, false>;
+        using DefaultTrainingConfig = TrainingConfig<10, 32, true, 0>;
         inline constexpr auto kDefaultTrainingConfig = DefaultTrainingConfig{};
     }
 
@@ -137,7 +139,7 @@ namespace Thot {
         std::size_t epoch{Core::kDefaultTrainingConfig.epochs};
         std::size_t batch_size{Core::kDefaultTrainingConfig.batch_size};
         bool shuffle{Core::kDefaultTrainingConfig.shuffle};
-        bool buffer_vram{Core::kDefaultTrainingConfig.buffer_vram};
+        std::size_t buffer_vram{Core::kDefaultTrainingConfig.buffer_vram};
         bool monitor{true};
         bool restore_best_state{false};
         std::optional<std::pair<torch::Tensor, torch::Tensor>> validation{};
@@ -618,7 +620,7 @@ namespace Thot {
                 return;
             }
 
-            if (options.buffer_vram && !device_.is_cuda()) {
+            if (options.buffer_vram > 0 && !device_.is_cuda()) {
                 throw std::runtime_error("VRAM buffering requires the model to be on a CUDA device.");
             }
 
@@ -654,51 +656,26 @@ namespace Thot {
                 test_dataset = build_evaluation_dataset(*options.validation, "validation");
             }
 
-            if (effective_options.buffer_vram) {
-                training_dataset = TrainingDetails::buffer_dataset(training_dataset, device_);
-                if (test_dataset) {
-                    *test_dataset = TrainingDetails::buffer_dataset(*test_dataset, device_);
-                }
-            } else {
-                training_dataset = TrainingDetails::ensure_contiguous(std::move(training_dataset));
-                if (test_dataset) {
-                    *test_dataset = TrainingDetails::ensure_contiguous(std::move(*test_dataset));
-                }
-                if (training_dataset.inputs.device().is_cuda()) {
-                    training_dataset.inputs = training_dataset.inputs.to(torch::kCPU);
-                }
-                if (training_dataset.targets.device().is_cuda()) {
-                    training_dataset.targets = training_dataset.targets.to(torch::kCPU);
-                }
-                if (test_dataset) {
-                    if (test_dataset->inputs.device().is_cuda()) {
-                        test_dataset->inputs = test_dataset->inputs.to(torch::kCPU);
-                    }
-                    if (test_dataset->targets.device().is_cuda()) {
-                        test_dataset->targets = test_dataset->targets.to(torch::kCPU);
-                    }
-                }
-            }
-            if (effective_options.buffer_vram && !training_dataset.inputs.device().is_cuda()) {
-                training_dataset.inputs = training_dataset.inputs.to(device_);
-                training_dataset.targets = training_dataset.targets.to(device_);
-            }
+            const bool use_buffer = effective_options.buffer_vram > 0;
 
-            if (effective_options.buffer_vram && test_dataset && !test_dataset->inputs.device().is_cuda()) {
-                test_dataset->inputs = test_dataset->inputs.to(device_);
-                test_dataset->targets = test_dataset->targets.to(device_);
+            training_dataset = TrainingDetails::ensure_contiguous(std::move(training_dataset));
+            training_dataset = TrainingDetails::ensure_cpu(std::move(training_dataset));
+
+            if (test_dataset) {
+                *test_dataset = TrainingDetails::ensure_contiguous(std::move(*test_dataset));
+                *test_dataset = TrainingDetails::ensure_cpu(std::move(*test_dataset));
             }
 
 
             if (effective_options.shuffle) {
-                if (effective_options.buffer_vram) {
+                if (use_buffer) {
                     TrainingDetails::run_epochs<true, true>(*this, training_dataset, test_dataset, effective_options);
                 } else {
                     TrainingDetails::run_epochs<false, true>(*this, training_dataset, test_dataset, effective_options);
 
                 }
             } else {
-                if (effective_options.buffer_vram) {
+                if (use_buffer) {
                     TrainingDetails::run_epochs<true, false>(*this, training_dataset, test_dataset, effective_options);
                 } else {
                     TrainingDetails::run_epochs<false, false>(*this, training_dataset, test_dataset, effective_options);
@@ -936,13 +913,13 @@ namespace Thot {
                 return dataset;
             }
 
-            [[nodiscard]] static TensorDataset buffer_dataset(TensorDataset dataset, const torch::Device& device)
+            [[nodiscard]] static TensorDataset ensure_cpu(TensorDataset dataset)
             {
-                if (dataset.inputs.device() != device) {
-                    dataset.inputs = dataset.inputs.to(device);
+                if (!dataset.inputs.device().is_cpu()) {
+                    dataset.inputs = dataset.inputs.to(torch::kCPU);
                 }
-                if (dataset.targets.device() != device) {
-                    dataset.targets = dataset.targets.to(device);
+                if (!dataset.targets.device().is_cpu()) {
+                    dataset.targets = dataset.targets.to(torch::kCPU);
                 }
                 return dataset;
             }
@@ -978,9 +955,7 @@ namespace Thot {
                 const auto batch_size = static_cast<std::int64_t>(options.batch_size);
 
                 torch::TensorOptions index_options = torch::TensorOptions().dtype(torch::kLong);
-                if constexpr (BufferVRAM) {
-                    index_options = index_options.device(device);
-                }
+
 
                 auto best_test = std::optional<double>{};
                 std::vector<torch::Tensor> best_parameters;
@@ -1006,11 +981,16 @@ namespace Thot {
                     auto accumulation = torch::zeros({}, torch::TensorOptions().dtype(torch::kFloat64).device(device));
                     std::int64_t weight = 0;
 
-                    for (std::int64_t offset = 0; offset < total_samples; offset += batch_size) {
+                    const std::size_t total_batches = total_samples > 0
+                        ? static_cast<std::size_t>((total_samples + batch_size - 1) / batch_size)
+                        : 0;
+
+                    auto fetch_batch = [&](std::size_t batch_index) {
+                        const auto offset = static_cast<std::int64_t>(batch_index) * batch_size;
                         const auto remaining = total_samples - offset;
                         const auto current_batch = std::min<std::int64_t>(batch_size, remaining);
                         if (current_batch <= 0) {
-                            break;
+                            return std::pair<torch::Tensor, torch::Tensor>{torch::Tensor{}, torch::Tensor{}};
                         }
 
                         torch::Tensor batch_inputs;
@@ -1018,35 +998,34 @@ namespace Thot {
 
                         if constexpr (ShouldShuffle) {
                             auto batch_indices = epoch_indices.narrow(0, offset, current_batch);
-                            if constexpr (BufferVRAM) {
-                                batch_inputs = train_dataset.inputs.index_select(0, batch_indices);
-                                batch_targets = train_dataset.targets.index_select(0, batch_indices);
-                            } else {
-                                auto cpu_indices = batch_indices.to(torch::kCPU);
-                                batch_inputs = train_dataset.inputs.index_select(0, cpu_indices);
-                                batch_targets = train_dataset.targets.index_select(0, cpu_indices);
+                            if (!batch_indices.device().is_cpu()) {
+                                batch_indices = batch_indices.to(torch::kCPU);
                             }
+                            batch_inputs = train_dataset.inputs.index_select(0, batch_indices);
+                            batch_targets = train_dataset.targets.index_select(0, batch_indices);
                         } else {
                             batch_inputs = train_dataset.inputs.narrow(0, offset, current_batch);
                             batch_targets = train_dataset.targets.narrow(0, offset, current_batch);
                         }
 
-                        if constexpr (!BufferVRAM) {
-                            if (batch_inputs.device() != device) {
-                                batch_inputs = batch_inputs.to(device);
-                            }
-                            if (batch_targets.device() != device) {
-                                batch_targets = batch_targets.to(device);
-                            }
+                        if (batch_inputs.defined() && batch_inputs.device() != device) {
+                            batch_inputs = batch_inputs.to(device);
+                        }
+                        if (batch_targets.defined() && batch_targets.device() != device) {
+                            batch_targets = batch_targets.to(device);
                         }
 
-                        if constexpr (BufferVRAM) {
-                            if (batch_inputs.device() != device) {
-                                batch_inputs = batch_inputs.to(device);
-                            }
-                            if (batch_targets.device() != device) {
-                                batch_targets = batch_targets.to(device);
-                            }
+                        return std::pair<torch::Tensor, torch::Tensor>{std::move(batch_inputs), std::move(batch_targets)};
+                    };
+
+                    auto process_batch = [&](torch::Tensor batch_inputs, torch::Tensor batch_targets) {
+                        if (!batch_inputs.defined() || !batch_targets.defined()) {
+                            return std::int64_t{0};
+                        }
+
+                        const auto current_batch = batch_targets.size(0);
+                        if (current_batch <= 0) {
+                            return std::int64_t{0};
                         }
 
                         model.zero_grad();
@@ -1092,7 +1071,45 @@ namespace Thot {
                         loss_tensor = loss_tensor.to(torch::kFloat64);
                         loss_tensor.mul_(static_cast<double>(current_batch));
                         accumulation.add_(loss_tensor);
-                        weight += current_batch;
+                        return current_batch;
+                    };
+
+                    if constexpr (BufferVRAM) {
+                        std::deque<std::pair<torch::Tensor, torch::Tensor>> buffered_batches;
+                        std::size_t next_batch_to_load = 0;
+                        const std::size_t max_batches = total_batches == 0 ? 1 : total_batches;
+                        const std::size_t buffer_limit = std::max<std::size_t>(1,
+                            std::min<std::size_t>(options.buffer_vram + 1, max_batches));
+
+                        auto maintain_buffer = [&](std::size_t current_index) {
+                            const std::size_t desired_size = std::min(buffer_limit, total_batches - current_index);
+                            while (buffered_batches.size() < desired_size && next_batch_to_load < total_batches) {
+                                auto batch = fetch_batch(next_batch_to_load);
+                                buffered_batches.push_back(std::move(batch));
+                                ++next_batch_to_load;
+                            }
+                        };
+
+                        for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
+                            maintain_buffer(batch_index);
+                            if (buffered_batches.empty()) {
+                                break;
+                            }
+
+                            auto batch_pair = std::move(buffered_batches.front());
+                            buffered_batches.pop_front();
+
+                            const auto processed = process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
+                            weight += processed;
+
+                            maintain_buffer(batch_index + 1);
+                        }
+                    } else {
+                        for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
+                            auto batch_pair = fetch_batch(batch_index);
+                            const auto processed = process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
+                            weight += processed;
+                        }
                     }
 
                     const auto train_loss = weight > 0
@@ -1161,6 +1178,7 @@ namespace Thot {
                     }
                 }
                 if (options.restore_best_state && best_state_captured) {
+                    std::cout << "[Thot] Reloading best state of the network..." << std::endl;
                     auto parameters = model.parameters();
                     const auto parameter_limit = std::min(parameters.size(), best_parameters.size());
                     for (std::size_t index = 0; index < parameter_limit; ++index) {
@@ -1219,20 +1237,11 @@ namespace Thot {
                     inputs = dataset.inputs.narrow(0, offset, current_batch);
                     targets = dataset.targets.narrow(0, offset, current_batch);
 
-                    if constexpr (!BufferVRAM) {
-                        if (inputs.device() != device) {
-                            inputs = inputs.to(device);
-                        }
-                        if (targets.device() != device) {
-                            targets = targets.to(device);
-                        }
-                    } else {
-                        if (inputs.device() != device) {
-                            inputs = inputs.to(device);
-                        }
-                        if (targets.device() != device) {
-                            targets = targets.to(device);
-                        }
+                    if (inputs.device() != device) {
+                        inputs = inputs.to(device);
+                    }
+                    if (targets.device() != device) {
+                        targets = targets.to(device);
                     }
 
                     auto prediction = model.forward(inputs);
