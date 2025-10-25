@@ -62,7 +62,7 @@
 
 #include "../src/regularization/regularization.hpp"
 #include "../src/regularization/apply.hpp"
-
+#include "calibration/calibration.hpp"
 
 
 namespace Thot {
@@ -152,6 +152,7 @@ namespace Thot {
         using RegularizationState = Regularization::StateVariant;
         using RegularizationStateStorage = std::shared_ptr<std::vector<RegularizationState>>;
         using RegularizationAccumulator = Regularization::Accumulator;
+        using CalibrationMethod = Calibration::MethodPtr;
 
         struct RegularizationBinding {
             Regularization::Descriptor descriptor{};
@@ -508,7 +509,18 @@ namespace Thot {
                 output = layer.forward(std::move(output));
                 output = Activation::Details::apply(layer.activation, std::move(output));
             }
+            for (const auto& calibration : calibration_methods_) {
+                output = calibration->transform(std::move(output));
+            }
             return output;
+        }
+
+        void calibrate(const Calibration::Descriptor& descriptor,
+               const torch::Tensor& logits,
+               const torch::Tensor& targets)
+        {
+            auto method = Calibration::calibrate(*this, device_, descriptor, logits, targets);
+            calibration_methods_.push_back(std::move(method));
         }
 
         [[nodiscard]] torch::Tensor compute_loss(const torch::Tensor& prediction,
@@ -1351,6 +1363,7 @@ namespace Thot {
         };
 
         std::vector<Layer::Details::RegisteredLayer> layers_{};
+        std::vector<CalibrationMethod> calibration_methods_{};
         std::vector<std::vector<torch::Tensor>> layer_parameters_{};
         std::vector<std::vector<RegularizationBinding>> layer_regularization_bindings_{};
         std::vector<torch::Tensor> global_regularization_parameters_{};
