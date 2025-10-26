@@ -62,9 +62,8 @@ int main() {
             Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal)
         }, 1, {}, { .final_activation = Thot::Activation::Identity }));
 
+        model.add(Thot::Layer::Dropout({ .probability = 0.3 }));
 
-
-        // --- Stage 3: 128 -> 256 (downsample), then two identity blocks ---
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
             Thot::Layer::Conv2d({128,256,{3,3},{2,2},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal),
@@ -74,14 +73,14 @@ int main() {
             .projection = Thot::Layer::Conv2d({128,256,{1,1},{2,2},{0,0},{1,1},1,false}, Thot::Activation::Raw, Thot::Initialization::KaimingNormal)
         }, { .final_activation = Thot::Activation::Identity }));
 
-        for (int i=0;i<2;++i) {
-            model.add(Thot::Block::Residual({
-                Thot::Layer::BatchNorm2d({256,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-                Thot::Layer::Conv2d({256,256,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal),
-                Thot::Layer::BatchNorm2d({256,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-                Thot::Layer::Conv2d({256,256,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal)
-            }, 1, {/* no projection */}, { .final_activation = Thot::Activation::Identity }));
-        }
+
+        model.add(Thot::Block::Residual({
+            Thot::Layer::BatchNorm2d({256,1e-5,0.1,true,true}, Thot::Activation::GeLU),
+            Thot::Layer::Conv2d({256,256,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal),
+            Thot::Layer::BatchNorm2d({256,1e-5,0.1,true,true}, Thot::Activation::GeLU),
+            Thot::Layer::Conv2d({256,256,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal)
+        }, 1, {}, { .final_activation = Thot::Activation::Identity }));
+
 
         model.add(Thot::Layer::Dropout({ .probability = 0.3 }));
         model.add(Thot::Layer::AdaptiveAvgPool2d({{1, 1}}));
@@ -120,7 +119,7 @@ int main() {
     (void)Thot::Data::Check::Size(train_images, "Input train size raw");
 
 
-    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Cutout(train_images, train_labels, {-1, -1}, {8, 8}, -1, 1.f, true, false);
+    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Cutout(train_images, train_labels, {-1, -1}, {12, 8}, -1, 1.f, true, false);
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Shuffle(train_images, train_labels);
 
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {"x"}, 1.f, true, false);
