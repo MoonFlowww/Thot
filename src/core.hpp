@@ -38,11 +38,13 @@
 #include <variant>
 #include <vector>
 #include <deque>
-
+#include <filesystem>
 
 #include <torch/torch.h>
 
 
+
+#include "common/save_load.hpp"
 #include "utils/terminal.hpp"
 #include "activation/activation.hpp"
 #include "activation/apply.hpp"
@@ -162,14 +164,28 @@ namespace Thot {
 
 
     public:
-        Model() = default;
+        explicit Model(std::string_view name = {}) : name_(name) {}
         using torch::nn::Module::train;
+        [[nodiscard]] const std::string& name() const noexcept { return name_; }
+
+
+        struct ForwardOptions {
+            std::optional<std::size_t> max_chunk_size{};
+
+            [[nodiscard]] bool buffering_enabled() const noexcept
+            {
+                return max_chunk_size.has_value() && *max_chunk_size > 0;
+            }
+        };
+
 
 
         using ModuleDescriptor = std::variant<Layer::Descriptor, Block::Descriptor>;
         void add(ModuleDescriptor descriptor) {
             if (regularization_configured_)
                 throw std::logic_error("Cannot add modules after regularization has been configured.");
+
+            ModuleDescriptor preserved_descriptor = descriptor;
             auto register_layer = [this](auto&& concrete_descriptor) {
                 using DescriptorType = std::decay_t<decltype(concrete_descriptor)>;
                 auto registered = Layer::Details::build_registered_layer(
@@ -309,6 +325,7 @@ namespace Thot {
                 default:
                     throw std::invalid_argument("Unsupported module descriptor passed to Model::add.");
             }
+            module_descriptors_.push_back(std::move(preserved_descriptor));
         }
 
         void set_optimizer(Optimizer::Descriptor descriptor, std::optional<LrScheduler::Descriptor> scheduler = std::nullopt) {
@@ -501,24 +518,205 @@ namespace Thot {
         [[nodiscard]] const torch::Device& device() const noexcept { return device_; }
 
 
-        [[nodiscard]] torch::Tensor forward(torch::Tensor input) {
-            auto output = std::move(input);
-            if (output.device() != device_)
-                output = output.to(device_);
-            for (auto& layer : layers_) {
-                output = layer.forward(std::move(output));
-                output = Activation::Details::apply(layer.activation, std::move(output));
+        [[nodiscard]] torch::Tensor forward(torch::Tensor input)
+        {
+            return forward(std::move(input), {});
+        }
+
+        [[nodiscard]] torch::Tensor forward(torch::Tensor input, ForwardOptions options)
+        {
+            auto apply_pipeline = [&](torch::Tensor tensor) {
+                if (tensor.device() != device_) {
+                    tensor = tensor.to(device_);
+                }
+                for (auto& layer : layers_) {
+                    tensor = layer.forward(std::move(tensor));
+                    tensor = Activation::Details::apply(layer.activation, std::move(tensor));
+                }
+                for (const auto& calibration : calibration_methods_) {
+                    tensor = calibration->transform(std::move(tensor));
+                }
+                return tensor;
+            };
+
+            const bool can_buffer = options.buffering_enabled() && input.defined() && input.dim() > 0;
+            if (!can_buffer) {
+                return apply_pipeline(std::move(input));
             }
-            for (const auto& calibration : calibration_methods_) {
-                output = calibration->transform(std::move(output));
+
+            const auto chunk_limit = static_cast<int64_t>(*options.max_chunk_size);
+            if (chunk_limit <= 0) {
+                return apply_pipeline(std::move(input));
             }
-            return output;
+            const auto leading = input.size(0);
+            if (leading == 0 || leading <= chunk_limit) {
+                return apply_pipeline(std::move(input));
+            }
+            std::vector<torch::Tensor> outputs;
+            outputs.reserve(static_cast<std::size_t>((leading + chunk_limit - 1) / chunk_limit));
+
+            for (int64_t offset = 0; offset < leading; offset += chunk_limit) {
+                const auto current = std::min<int64_t>(chunk_limit, leading - offset);
+                auto chunk = input.narrow(0, offset, current);
+                chunk = apply_pipeline(std::move(chunk));
+                outputs.push_back(std::move(chunk));
+            }
+
+            return torch::cat(outputs, 0);
+        }
+
+        void set_model_name(std::string name) { model_name_ = std::move(name); }
+
+        [[nodiscard]] std::string model_name() const
+        {
+            if (model_name_.empty()) {
+                return this->name();
+            }
+            return model_name_;
+        }
+
+        void save(const std::filesystem::path& directory) const
+        {
+            namespace fs = std::filesystem;
+            if (directory.empty()) {
+                throw std::invalid_argument("Model::save requires a non-empty directory path.");
+            }
+
+            fs::create_directories(directory);
+
+            const auto architecture_path = directory / "architecture.json";
+            const auto parameters_path = directory / "parameters.binary";
+
+            Common::SaveLoad::PropertyTree architecture;
+            architecture.put("name", model_name());
+            architecture.add_child("modules", Common::SaveLoad::serialize_module_list(module_descriptors_));
+
+            try {
+                Common::SaveLoad::write_json_file(architecture_path, architecture);
+            } catch (const std::exception& error) {
+                throw std::runtime_error(std::string("Failed to write architecture description to '")
+                                         + architecture_path.string() + "': " + error.what());
+            }
+
+            torch::serialize::OutputArchive archive;
+            torch::nn::Module::save(archive);
+            archive.save_to(parameters_path.string());
+        }
+
+        void load(const std::filesystem::path& directory)
+        {
+            namespace fs = std::filesystem;
+            if (directory.empty()) {
+                throw std::invalid_argument("Model::load requires a non-empty directory path.");
+            }
+
+            const auto architecture_path = directory / "architecture.json";
+            const auto parameters_path = directory / "parameters.binary";
+
+            if (!fs::exists(architecture_path)) {
+                throw std::runtime_error(std::string("Architecture file not found at '")
+                                         + architecture_path.string() + "'.");
+            }
+            if (!fs::exists(parameters_path)) {
+                throw std::runtime_error(std::string("Parameter archive not found at '")
+                                         + parameters_path.string() + "'.");
+            }
+
+            Common::SaveLoad::PropertyTree architecture;
+            try {
+                architecture = Common::SaveLoad::read_json_file(architecture_path);
+            } catch (const std::exception& error) {
+                throw std::runtime_error(std::string("Failed to read architecture description from '")
+                                         + architecture_path.string() + "': " + error.what());
+            }
+
+            auto modules_node = architecture.get_child_optional("modules");
+            if (!modules_node) {
+                throw std::runtime_error(std::string("Architecture description '") + architecture_path.string()
+                                         + "' is missing the 'modules' entry.");
+            }
+
+            auto descriptors = Common::SaveLoad::deserialize_module_list(*modules_node, "module");
+
+            reset_runtime_state();
+
+            if (auto name_value = architecture.get_optional<std::string>("name")) {
+                model_name_ = std::move(*name_value);
+            } else {
+                model_name_.clear();
+            }
+
+            for (const auto& descriptor : descriptors) {
+                add(descriptor);
+            }
+
+            torch::serialize::InputArchive validation_archive;
+            try {
+                validation_archive.load_from(parameters_path.string());
+            } catch (const c10::Error& error) {
+                throw std::runtime_error(std::string("Failed to open parameter archive '")
+                                         + parameters_path.string() + "': " + error.what());
+            }
+
+            auto parameters = this->named_parameters(/*recurse=*/true);
+            for (const auto& item : parameters) {
+                torch::Tensor stored;
+                try {
+                    validation_archive.read(item.key(), stored);
+                } catch (const c10::Error& error) {
+                    throw std::runtime_error("Checkpoint is missing parameter '" + item.key() + "': " + error.what());
+                }
+                if (!stored.defined()) {
+                    throw std::runtime_error("Checkpoint parameter '" + item.key() + "' is undefined.");
+                }
+                if (stored.sizes() != item.value().sizes()) {
+                    throw std::runtime_error("Parameter '" + item.key() + "' shape mismatch: expected "
+                                             + format_tensor_shape(item.value()) + " but found "
+                                             + format_tensor_shape(stored) + ".");
+                }
+            }
+
+            auto buffers = this->named_buffers(/*recurse=*/true);
+            for (const auto& item : buffers) {
+                if (!item.value().defined()) {
+                    continue;
+                }
+                torch::Tensor stored;
+                try {
+                    validation_archive.read(item.key(), stored);
+                } catch (const c10::Error& error) {
+                    throw std::runtime_error("Checkpoint is missing buffer '" + item.key() + "': " + error.what());
+                }
+                if (!stored.defined()) {
+                    throw std::runtime_error("Checkpoint buffer '" + item.key() + "' is undefined.");
+                }
+                if (stored.sizes() != item.value().sizes()) {
+                    throw std::runtime_error("Buffer '" + item.key() + "' shape mismatch: expected "
+                                             + format_tensor_shape(item.value()) + " but found "
+                                             + format_tensor_shape(stored) + ".");
+                }
+            }
+
+            torch::serialize::InputArchive archive;
+            try {
+                archive.load_from(parameters_path.string());
+                torch::nn::Module::load(archive);
+            } catch (const c10::Error& error) {
+                throw std::runtime_error(std::string("Failed to load parameters from '")
+                                         + parameters_path.string() + "': " + error.what());
+            }
+
+            configure_step_impl();
         }
 
         void calibrate(const torch::Tensor& inputs, const torch::Tensor& targets, const Calibration::Descriptor& descriptor,  bool plot = true,
                        std::optional<std::pair<torch::Tensor, torch::Tensor>> validation = std::nullopt, Calibration::Options options = {}) {
             torch::NoGradGuard guard; eval();
-            auto logits = forward(inputs);
+            ForwardOptions forward_options{};
+            if (options.forward_chunk_size.has_value()) {
+                forward_options.max_chunk_size = options.forward_chunk_size;
+            }
+            auto logits = forward(inputs, std::move(forward_options));
             auto method = Calibration::Calibrate(*this, device_, descriptor, [&logits, &targets](torch::nn::Module&) {
                 return std::pair<torch::Tensor, torch::Tensor>{logits, targets};
             }, std::move(validation), std::move(options), plot);
@@ -1365,6 +1563,7 @@ namespace Thot {
         };
 
         std::vector<Layer::Details::RegisteredLayer> layers_{};
+        std::vector<ModuleDescriptor> module_descriptors_{};
         std::vector<CalibrationMethod> calibration_methods_{};
         std::vector<std::vector<torch::Tensor>> layer_parameters_{};
         std::vector<std::vector<RegularizationBinding>> layer_regularization_bindings_{};
@@ -1379,8 +1578,10 @@ namespace Thot {
         StepImpl step_impl_{&Model::step_not_configured};
         using LossDescriptor = std::variant<Loss::MSEDescriptor, Loss::CrossEntropyDescriptor>;
         std::optional<LossDescriptor> loss_descriptor_{};
+        std::string name_{};
         torch::Device device_{torch::kCPU, 0};
         bool regularization_configured_{false};
+        std::string model_name_{};
 
 
 
@@ -1411,8 +1612,42 @@ namespace Thot {
             }
         }
         [[nodiscard]] std::size_t next_module_index() noexcept { return module_index_++; }
+
+        void reset_runtime_state() {
+            clear_regularization();
+            layers_.clear();
+            calibration_methods_.clear();
+            layer_parameters_.clear();
+            layer_regularization_bindings_.clear();
+            global_regularization_parameters_.clear();
+            global_regularization_bindings_.clear();
+            module_descriptors_.clear();
+            last_input_shape_.reset();
+            module_index_ = 0;
+            optimizer_.reset();
+            local_optimizers_.clear();
+            scheduler_.reset();
+            configure_step_impl();
+            regularization_configured_ = false;
+            this->children_.clear();
+            this->parameters_.clear();
+            this->buffers_.clear();
+        }
+
+        static std::string format_tensor_shape(const torch::Tensor& tensor) {
+            std::ostringstream stream;
+            stream << '(';
+            const auto sizes = tensor.sizes();
+            for (int64_t index = 0; index < sizes.size(); ++index) {
+                if (index > 0) {
+                    stream << ", ";
+                }
+                stream << sizes[index];
+            }
+            stream << ')';
+            return stream.str();
+        }
     };
 }
-#include "utils/check.hpp"
 
 #endif //THOT_CORE_HPP

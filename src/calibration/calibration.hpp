@@ -49,6 +49,7 @@ namespace Thot::Calibration {
     struct Options {
         std::size_t reliability_bins{15};
         std::ostream* stream{nullptr};
+        std::optional<std::size_t> forward_chunk_size{};
     };
 
 
@@ -493,4 +494,6 @@ namespace Thot::Calibration {
         return method;
     }
 }
+
+
 #endif //THOT_CALIBRATION_HPP
