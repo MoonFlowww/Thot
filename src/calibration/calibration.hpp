@@ -167,11 +167,20 @@ namespace Thot::Calibration {
                 throw std::runtime_error("Calibration targets must be reducible to a one-dimensional tensor.");
             }
 
+            const auto min_val = prepared.min().item<long>();
+            const auto max_val = prepared.max().item<long>();
+            if (min_val < 0 || max_val >= num_classes) {
+                std::ostringstream oss;
+                oss << "Targets out of range [0," << (num_classes - 1)
+                    << "]: min=" << min_val << ", max=" << max_val << ".";
+                throw std::runtime_error(oss.str());
+            }
+
+
             return prepared.contiguous();
         }
 
-        inline ReliabilityComputation compute_reliability(torch::Tensor logits, torch::Tensor targets, std::size_t bin_count)
-        {
+        inline ReliabilityComputation compute_reliability(torch::Tensor logits, torch::Tensor targets, std::size_t bin_count) {
             if (!logits.defined()) {
                 throw std::invalid_argument("Calibration requires defined logits tensor.");
             }
@@ -272,36 +281,6 @@ namespace Thot::Calibration {
             }
 
             return result;
-        }
-        // replace your normalise_targets with this
-        inline torch::Tensor normalise_targets(torch::Tensor targets, std::int64_t num_classes)
-        {
-            if (!targets.defined()) throw std::invalid_argument("Calibration requires defined target tensor.");
-
-            auto t = targets.detach();
-            if (t.device().type() != torch::kCPU) t = t.to(torch::kCPU);
-
-            // Reduce shapes:
-            if (t.dim() > 1) {
-                const auto last = t.dim() - 1;
-                if (t.size(last) == num_classes)       t = t.argmax(last);
-                else if (t.size(last) == 1)            t = t.squeeze(last);
-                else                                   t = t.reshape({t.size(0)});
-            }
-            if (t.dtype() != torch::kLong) t = t.to(torch::kLong);
-            if (t.dim() != 1) throw std::runtime_error("Calibration targets must reduce to 1-D.");
-
-            // Range check (catch off-by-one or remapped labels)
-            auto mm   = t.minmax_values();
-            auto tmin = mm.first.item<long>();
-            auto tmax = mm.second.item<long>();
-            if (tmin < 0 || tmax >= num_classes) {
-                std::ostringstream oss;
-                oss << "Targets out of range [0," << (num_classes-1)
-                    << "]: min=" << tmin << ", max=" << tmax << ".";
-                throw std::runtime_error(oss.str());
-            }
-            return t.contiguous();
         }
 
 
