@@ -157,14 +157,14 @@ namespace Thot::Calibration {
         inline void plot_reliability_diagram(const Method& method,
                                              const std::pair<torch::Tensor, torch::Tensor>& validation,
                                              const Options& options,
-                                             const torch::Device& device)
-        {
+                                             const torch::Device& device) {
             auto logits = validation.first;
             auto targets = validation.second;
 
             if (!logits.defined() || !targets.defined()) {
                 throw std::invalid_argument("Validation logits and targets must be defined for reliability plotting.");
             }
+            auto raw_bins = compute_reliability_bins(logits, targets.clone(), options.reliability_bins);
 
             auto device_logits = logits;
             if (device_logits.device() != device) {
@@ -174,40 +174,63 @@ namespace Thot::Calibration {
             torch::NoGradGuard guard;
             auto transformed = method.transform(std::move(device_logits)).detach().to(torch::kCPU);
 
-            auto bins = compute_reliability_bins(std::move(transformed), std::move(targets), options.reliability_bins);
-            std::size_t total_samples{0};
-            for (const auto& bin : bins) {
-                total_samples += bin.count;
-            }
+            auto calibrated_bins = compute_reliability_bins(std::move(transformed), std::move(targets), options.reliability_bins);
 
-            if (total_samples == 0) {
+
+            struct ReliabilityStats {
+                std::vector<double> confidence_points{};
+                std::vector<double> accuracy_points{};
+                double ece{0.0};
+                double mce{0.0};
+                std::size_t total_samples{0};
+
+                [[nodiscard]] bool has_points() const
+                {
+                    return !confidence_points.empty();
+                }
+            };
+
+            const auto compute_stats = [](const std::vector<ReliabilityBin>& bins) {
+                ReliabilityStats stats{};
+
+                for (const auto& bin : bins) {
+                    stats.total_samples += bin.count;
+                }
+
+                if (stats.total_samples == 0) {
+                    return stats;
+                }
+
+                stats.confidence_points.reserve(bins.size());
+                stats.accuracy_points.reserve(bins.size());
+
+                for (const auto& bin : bins) {
+                    if (bin.count == 0) {
+                        continue;
+                    }
+
+                    const double avg_confidence = bin.confidence_sum / static_cast<double>(bin.count);
+                    const double avg_accuracy = bin.accuracy_sum / static_cast<double>(bin.count);
+                    stats.confidence_points.push_back(avg_confidence);
+                    stats.accuracy_points.push_back(avg_accuracy);
+
+
+                    const double difference = std::abs(avg_confidence - avg_accuracy);
+                    stats.ece += difference * (static_cast<double>(bin.count) / static_cast<double>(stats.total_samples));
+                    stats.mce = std::max(stats.mce, difference);
+                }
+
+                return stats;
+            };
+
+            auto raw_stats = compute_stats(raw_bins);
+            auto calibrated_stats = compute_stats(calibrated_bins);
+
+            if (calibrated_stats.total_samples == 0) {
                 if (options.stream != nullptr) {
                     *options.stream << "Calibration: no validation samples available for reliability plotting." << '\n';
                 }
                 return;
-            }
-
-            std::vector<double> confidence_points;
-            std::vector<double> accuracy_points;
-            confidence_points.reserve(bins.size());
-            accuracy_points.reserve(bins.size());
-
-            double ece{0.0};
-            double mce{0.0};
-
-            for (const auto& bin : bins) {
-                if (bin.count == 0) {
-                    continue;
-                }
-
-                const double avg_confidence = bin.confidence_sum / static_cast<double>(bin.count);
-                const double avg_accuracy = bin.accuracy_sum / static_cast<double>(bin.count);
-                confidence_points.push_back(avg_confidence);
-                accuracy_points.push_back(avg_accuracy);
-
-                const double difference = std::abs(avg_confidence - avg_accuracy);
-                ece += difference * (static_cast<double>(bin.count) / static_cast<double>(total_samples));
-                mce = std::max(mce, difference);
             }
 
             if (options.stream != nullptr) {
@@ -215,58 +238,80 @@ namespace Thot::Calibration {
                 const auto previous_flags = out.flags();
                 const auto previous_precision = out.precision();
                 out << std::fixed << std::setprecision(6)
-                    << "Calibration ECE: " << ece
-                    << ", MCE: " << mce << '\n';
-                out.flags(previous_flags);
-                out.precision(previous_precision);
-            }
-
-            if (confidence_points.empty()) {
-                if (options.stream != nullptr) {
-                    *options.stream << "Calibration: insufficient populated bins for reliability plot." << '\n';
+                << "Calibration ECE: " << calibrated_stats.ece
+                << ", MCE: " << calibrated_stats.mce << '\n';
+                if (raw_stats.total_samples != 0 && raw_stats.has_points()) {
+                    out << "Uncalibrated ECE: " << raw_stats.ece
+                        << ", MCE: " << raw_stats.mce << '\n';
+                    out.flags(previous_flags);
+                    out.precision(previous_precision);
                 }
-                return;
+                if (!calibrated_stats.has_points()) {
+                    if (options.stream != nullptr) {
+                        *options.stream << "Calibration: insufficient populated bins for reliability plot." << '\n';
+                    }
+                    return;
+                }
+
+                Utils::Gnuplot plotter{};
+                plotter.setTitle("Reliability diagram");
+                plotter.setXLabel("Confidence");
+                plotter.setYLabel("Accuracy");
+                plotter.command("set xrange [0:1]");
+                plotter.command("set yrange [0:1]");
+                plotter.command("set key top left");
+                plotter.command("set grid");
+
+                Utils::Gnuplot::PlotStyle diagonal_style{};
+                diagonal_style.mode = Utils::Gnuplot::PlotMode::Lines;
+                diagonal_style.lineWidth = 1.5;
+                diagonal_style.lineColor = "rgb '#7f7f7f'";
+
+                Utils::Gnuplot::PlotStyle model_style{};
+                model_style.mode = Utils::Gnuplot::PlotMode::LinesPoints;
+                model_style.lineWidth = 2.0;
+                model_style.pointType = 7;
+                model_style.pointSize = 1.2;
+                model_style.lineColor = "rgb '#1f77b4'";
+
+                Utils::Gnuplot::PlotStyle raw_model_style = model_style;
+                raw_model_style.lineColor = "rgb '#d62728'";
+                raw_model_style.pointType = 5;
+
+
+                Utils::Gnuplot::DataSet2D diagonal{
+                    std::vector<double>{0.0, 1.0},
+                    std::vector<double>{0.0, 1.0},
+                    "Perfect calibration",
+                    diagonal_style
+                };
+                std::vector<Utils::Gnuplot::DataSet2D> datasets;
+                datasets.reserve(3);
+                datasets.push_back(std::move(diagonal));
+
+                if (raw_stats.has_points()) {
+                    datasets.push_back(Utils::Gnuplot::DataSet2D{
+                        std::move(raw_stats.confidence_points),
+                        std::move(raw_stats.accuracy_points),
+                        "Uncalibrated model",
+                        raw_model_style
+                    });
+                }
+
+                Utils::Gnuplot::DataSet2D model_curve{
+                    std::move(calibrated_stats.confidence_points),
+                    std::move(calibrated_stats.accuracy_points),
+                    "Calibrated model",
+                    model_style
+                };
+
+                datasets.push_back(std::move(model_curve));
+
+                plotter.plot(std::move(datasets));
             }
-
-            Utils::Gnuplot plotter{};
-            plotter.setTitle("Reliability diagram");
-            plotter.setXLabel("Confidence");
-            plotter.setYLabel("Accuracy");
-            plotter.command("set xrange [0:1]");
-            plotter.command("set yrange [0:1]");
-            plotter.command("set key top left");
-            plotter.command("set grid");
-
-            Utils::Gnuplot::PlotStyle diagonal_style{};
-            diagonal_style.mode = Utils::Gnuplot::PlotMode::Lines;
-            diagonal_style.lineWidth = 1.5;
-            diagonal_style.lineColor = "rgb '#7f7f7f'";
-
-            Utils::Gnuplot::PlotStyle model_style{};
-            model_style.mode = Utils::Gnuplot::PlotMode::LinesPoints;
-            model_style.lineWidth = 2.0;
-            model_style.pointType = 7;
-            model_style.pointSize = 1.2;
-            model_style.lineColor = "rgb '#1f77b4'";
-
-            Utils::Gnuplot::DataSet2D diagonal{
-                std::vector<double>{0.0, 1.0},
-                std::vector<double>{0.0, 1.0},
-                "Perfect calibration",
-                diagonal_style
-            };
-
-            Utils::Gnuplot::DataSet2D model_curve{
-                std::move(confidence_points),
-                std::move(accuracy_points),
-                "Calibrated model",
-                model_style
-            };
-
-            plotter.plot({std::move(diagonal), std::move(model_curve)});
         }
     }
-}
+
 #include "details/temperature_scaling.hpp"
 
 
@@ -333,5 +378,5 @@ namespace Thot::Calibration {
         }
         return method;
     }
-}
+
 #endif //THOT_CALIBRATION_HPP
