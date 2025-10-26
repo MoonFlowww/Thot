@@ -1,5 +1,0 @@
-#ifndef THOT_CHECK_HPP
-#define THOT_CHECK_HPP
-
-
-#endif //THOT_CHECK_HPP

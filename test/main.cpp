@@ -136,7 +136,23 @@ int main() {
 
 
 
-    model.calibrate(validation_images, validation_labels, {Thot::Calibration::TemperatureScalingDescriptor{}}, true);
+    model.calibrate(train_images, train_labels, {Thot::Calibration::TemperatureScalingDescriptor{}}, true, std::make_pair(test_images, test_labels));
+
+
+    (void) model.evaluate(test_images, test_labels, Thot::Evaluation::Classification,{
+        Thot::Metric::Classification::Accuracy,
+        Thot::Metric::Classification::Precision,
+        Thot::Metric::Classification::Recall,
+        Thot::Metric::Classification::F1,
+        Thot::Metric::Classification::TruePositiveRate,
+        Thot::Metric::Classification::TrueNegativeRate,
+        Thot::Metric::Classification::Top1Error,
+        Thot::Metric::Classification::ExpectedCalibrationError,
+        Thot::Metric::Classification::MaximumCalibrationError,
+        Thot::Metric::Classification::CohensKappa,
+        Thot::Metric::Classification::LogLoss,
+        Thot::Metric::Classification::BrierScore,
+    });
 
     return 0;
 }

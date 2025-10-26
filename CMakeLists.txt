@@ -23,7 +23,7 @@ add_library(Thot SHARED
         src/metric/metric.hpp
         src/optimizer/optimizer.hpp
         src/regularization/regularization.hpp
-        src/utils/stresstest.hpp
+        src/common/stresstest.hpp
         src/utils/terminal.hpp
         src/utils/gnuplot.hpp
         src/initialization/initialization.hpp
@@ -110,7 +110,7 @@ add_executable(test_Thot test/main.cpp
         src/regularization/details/sfge.hpp
         src/regularization/details/swa.hpp
         src/regularization/details/swag.hpp
-        src/utils/check.hpp
         src/calibration/details/temperature_scaling.hpp
+        src/common/save_load.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)
