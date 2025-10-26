@@ -126,7 +126,10 @@ namespace Thot::Calibration::Details {
         TemperatureScalingModule module_{};
         bool attached_{false};
     };
-
+    inline MethodPtr make_temperature_scaling_method(TemperatureScalingDescriptor descriptor)
+    {
+        return std::make_shared<TemperatureScalingMethod>(std::move(descriptor));
+    }
 
 }
 #endif //THOT_TEMPERATURE_SCALING_HPP
