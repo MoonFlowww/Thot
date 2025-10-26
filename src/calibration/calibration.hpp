@@ -206,7 +206,14 @@ namespace Thot::Calibration {
             const std::size_t stride = static_cast<std::size_t>(probabilities.size(1));
 
             const std::size_t bins = std::max<std::size_t>(1, bin_count);
-            std::vector<ReliabilityBin> bucket(bins);
+            result.bins.assign(bins, ReliabilityBin{});
+
+            double log_loss_sum{0.0};
+            std::vector<double> auc_scores{};
+            std::vector<int> auc_labels{};
+            auc_scores.reserve(classes == 2 ? static_cast<std::size_t>(total) : 0);
+            auc_labels.reserve(auc_scores.capacity());
+
 
             for (std::int64_t idx = 0; idx < total; ++idx) {
                 const double confidence = confidence_ptr[idx];
