@@ -69,6 +69,14 @@
 
 
 namespace Thot {
+    template <class... Ts>
+    struct Overloaded : Ts... {
+        using Ts::operator()...;
+    };
+
+    template <class... Ts>
+    Overloaded(Ts...) -> Overloaded<Ts...>;
+
     namespace Core {
         template <std::size_t BufferVRAMBatches>
         struct DevicePolicy {
@@ -197,135 +205,125 @@ namespace Thot {
                 register_layer_runtime(layers_.back());
             };
 
-            auto handle_layer_descriptor = [&](Layer::Descriptor layer_descriptor) {
-                switch (layer_descriptor.index()) {
-                    case 0:
-                        register_layer(std::get<Layer::FCDescriptor>(std::move(layer_descriptor)));
-                        break;
-                    case 1:
-                        register_layer(std::get<Layer::Conv2dDescriptor>(std::move(layer_descriptor)));
-                        break;
-                    case 2:
-                        register_layer(std::get<Layer::BatchNorm2dDescriptor>(std::move(layer_descriptor)));
-                        break;
-                    case 3:
-                        register_layer(std::get<Layer::PoolingDescriptor>(std::move(layer_descriptor)));
-                        break;
-                    case 4:
-                        register_layer(std::get<Layer::DropoutDescriptor>(std::move(layer_descriptor)));
-                        break;
-                    case 5:
-                        register_layer(std::get<Layer::FlattenDescriptor>(std::move(layer_descriptor)));
-                        break;
-                    default:
-                        throw std::invalid_argument("Unsupported layer descriptor passed to Model::add.");
+            auto layer_dispatcher = Overloaded{
+                [&](auto&& concrete_descriptor) {
+                    register_layer(std::forward<decltype(concrete_descriptor)>(concrete_descriptor));
                 }
             };
 
-            switch (descriptor.index()) {
-                case 0:
-                    handle_layer_descriptor(std::get<Layer::Descriptor>(std::move(descriptor)));
-                    break;
-                case 1: {
-                    auto block_descriptor = std::get<Block::Descriptor>(std::move(descriptor));
-                    switch (block_descriptor.index()) {
-                        case 0: {
-                            auto sequential = std::get<Block::SequentialDescriptor>(std::move(block_descriptor));
-                            const bool block_declares_local_optimizer = sequential.local.optimizer.has_value();
-                            const bool any_layer_declares_local_optimizer = std::any_of(
-                                sequential.layers.begin(),
-                                sequential.layers.end(),
-                                [](const Layer::Descriptor& layer_descriptor) {
-                                    return std::visit(
-                                        [](const auto& concrete_layer) {
-                                            return concrete_layer.local.optimizer.has_value();
-                                        }, layer_descriptor);
-                                });
+            auto sequential_block_handler = [&](Block::SequentialDescriptor sequential) {
+                const bool block_declares_local_optimizer = sequential.local.optimizer.has_value();
+                const bool any_layer_declares_local_optimizer = std::any_of(
+                    sequential.layers.begin(),
+                    sequential.layers.end(),
+                    [](const Layer::Descriptor& layer_descriptor) {
+                        return std::visit(
+                            [](const auto& concrete_layer) {
+                                return concrete_layer.local.optimizer.has_value();
+                            }, layer_descriptor);
+                    });
 
-                            if (block_declares_local_optimizer && !any_layer_declares_local_optimizer) {
-                                const auto index = next_module_index();
-                                auto module = register_module(
-                                    "sequential_block_" + std::to_string(index),
-                                    ModelDetails::SequentialBlockModule(std::move(sequential.layers)));
+                if (block_declares_local_optimizer && !any_layer_declares_local_optimizer) {
+                    const auto index = next_module_index();
+                    auto module = register_module(
+                        "sequential_block_" + std::to_string(index),
+                        ModelDetails::SequentialBlockModule(std::move(sequential.layers)));
 
-                                Layer::Details::RegisteredLayer registered_layer{};
-                                registered_layer.activation = Activation::Type::Identity;
-                                registered_layer.module = Layer::Details::to_shared_module_ptr(module);
-                                registered_layer.local = std::move(sequential.local);
-                                registered_layer.forward = [module](torch::Tensor input) {
-                                    return module->forward(std::move(input));
-                                };
+                    Layer::Details::RegisteredLayer registered_layer{};
+                    registered_layer.activation = Activation::Type::Identity;
+                    registered_layer.module = Layer::Details::to_shared_module_ptr(module);
+                    registered_layer.local = std::move(sequential.local);
+                    registered_layer.forward = [module](torch::Tensor input) {
+                        return module->forward(std::move(input));
+                    };
 
-                                layers_.push_back(std::move(registered_layer));
-                                register_layer_runtime(layers_.back());
-                            } else {
-                                if (block_declares_local_optimizer) {
-                                    for (auto& layer : sequential.layers) {
-                                        std::visit(
-                                            [&](auto& concrete_layer) {
-                                                if (!concrete_layer.local.optimizer.has_value()) {
-                                                    concrete_layer.local = sequential.local;
-                                                }
-                                            },
-                                            layer);
+                    layers_.push_back(std::move(registered_layer));
+                    register_layer_runtime(layers_.back());
+                } else {
+                    if (block_declares_local_optimizer) {
+                        for (auto& layer : sequential.layers) {
+                            std::visit(
+                                [&](auto& concrete_layer) {
+                                    if (!concrete_layer.local.optimizer.has_value()) {
+                                        concrete_layer.local = sequential.local;
                                     }
-                                }
-
-                                for (auto& layer : sequential.layers) {
-                                    handle_layer_descriptor(std::move(layer));
-                                }
-
-                            }
-                            break;
+                                },
+                                layer);
                         }
-                        case 1: {
-                            auto residual = std::get<Block::ResidualDescriptor>(std::move(block_descriptor));
-                            auto residual_local = residual.local;
-                            const auto index = next_module_index();
-                            auto module = register_module(
-                                "residual_block_" + std::to_string(index),
-                                Block::Details::ResidualBlock(std::move(residual)));
 
-                            Layer::Details::RegisteredLayer registered_layer{};
-                            registered_layer.activation = Activation::Type::Identity;
-                            registered_layer.module = Layer::Details::to_shared_module_ptr(module);
-                            registered_layer.local = std::move(residual_local);
-                            registered_layer.forward = [module](torch::Tensor input) {
-                                return module->forward(std::move(input));
-                            };
-
-                            layers_.push_back(std::move(registered_layer));
-                            register_layer_runtime(layers_.back());
-                            break;
-                        }
-                        case 2: {
-                            auto encoder_descriptor = std::get<Block::Transformer::Classic::EncoderDescriptor>(std::move(block_descriptor));
-                            const auto index = next_module_index();
-                            auto module = register_module(
-                                "transformer_encoder_" + std::to_string(index),
-                                Block::Transformer::Classic::TransformerEncoder(std::move(encoder_descriptor)));
-
-                            Layer::Details::RegisteredLayer registered_layer{};
-                            registered_layer.activation = Activation::Type::Identity;
-                            registered_layer.module = Layer::Details::to_shared_module_ptr(module);
-                            registered_layer.forward = [module](torch::Tensor input) {
-                                return module->forward(std::move(input));
-                            };
-
-                            layers_.push_back(std::move(registered_layer));
-                            register_layer_runtime(layers_.back());
-                            break;
-                        }
-                        case 3:
-                            throw std::invalid_argument("Transformer decoder blocks are not yet supported by Model::add.");
-                        default:
-                            throw std::invalid_argument("Unsupported block descriptor passed to Model::add.");
                     }
-                    break;
+                    for (auto& layer : sequential.layers) {
+                        std::visit(layer_dispatcher, std::move(layer));
+                    }
                 }
-                default:
-                    throw std::invalid_argument("Unsupported module descriptor passed to Model::add.");
-            }
+            };
+
+            auto residual_block_handler = [&](Block::ResidualDescriptor residual) {
+                auto residual_local = residual.local;
+                const auto index = next_module_index();
+                auto module = register_module(
+                    "residual_block_" + std::to_string(index),
+                    Block::Details::ResidualBlock(std::move(residual)));
+
+                Layer::Details::RegisteredLayer registered_layer{};
+                registered_layer.activation = Activation::Type::Identity;
+                registered_layer.module = Layer::Details::to_shared_module_ptr(module);
+                registered_layer.local = std::move(residual_local);
+                registered_layer.forward = [module](torch::Tensor input) {
+                    return module->forward(std::move(input));
+                };
+
+                layers_.push_back(std::move(registered_layer));
+                register_layer_runtime(layers_.back());
+            };
+
+            auto transformer_block_handler = Overloaded{
+                [&](Block::Transformer::Classic::EncoderDescriptor encoder_descriptor) {
+                    const auto index = next_module_index();
+                    auto module = register_module(
+                        "transformer_encoder_" + std::to_string(index),
+                        Block::Transformer::Classic::TransformerEncoder(std::move(encoder_descriptor)));
+
+                    Layer::Details::RegisteredLayer registered_layer{};
+                    registered_layer.activation = Activation::Type::Identity;
+                    registered_layer.module = Layer::Details::to_shared_module_ptr(module);
+                    registered_layer.forward = [module](torch::Tensor input) {
+                        return module->forward(std::move(input));
+                    };
+
+                    layers_.push_back(std::move(registered_layer));
+                    register_layer_runtime(layers_.back());
+                },
+                [](const Block::Transformer::Classic::DecoderDescriptor&) {
+                    throw std::invalid_argument("Transformer decoder blocks are not yet supported by Model::add.");
+                }
+            };
+
+            auto block_dispatcher = Overloaded{
+                [&](Block::SequentialDescriptor sequential) {
+                    sequential_block_handler(std::move(sequential));
+                },
+                [&](Block::ResidualDescriptor residual) {
+                    residual_block_handler(std::move(residual));
+                },
+                [&](Block::Transformer::Classic::EncoderDescriptor encoder_descriptor) {
+                    transformer_block_handler(std::move(encoder_descriptor));
+                },
+                [&](Block::Transformer::Classic::DecoderDescriptor decoder_descriptor) {
+                    transformer_block_handler(decoder_descriptor);
+                }
+            };
+
+            auto module_dispatcher = Overloaded{
+                [&](Layer::Descriptor layer_descriptor) {
+                    std::visit(layer_dispatcher, std::move(layer_descriptor));
+                },
+                [&](Block::Descriptor block_descriptor) {
+                    std::visit(block_dispatcher, std::move(block_descriptor));
+                }
+            };
+
+            std::visit(module_dispatcher, std::move(descriptor));
             module_descriptors_.push_back(std::move(preserved_descriptor));
         }
 

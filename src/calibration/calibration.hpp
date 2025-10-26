@@ -227,6 +227,12 @@ namespace Thot::Calibration {
 
 
                 const auto target_index = static_cast<std::size_t>(target_ptr[idx]);
+                if (target_index >= stride) {
+                    std::ostringstream oss;
+                    oss << "Target index " << target_index << " >= num_classes " << stride
+                        << " at sample " << idx << ".";
+                    throw std::runtime_error(oss.str());
+                }
                 const auto base_index = static_cast<std::size_t>(idx) * stride;
                 const auto true_index = base_index + target_index;
                 const double true_probability = std::clamp(probability_ptr[true_index], 1e-12, 1.0);
@@ -238,6 +244,27 @@ namespace Thot::Calibration {
                     auc_labels.push_back(target_ptr[idx] == 1 ? 1 : 0);
                 }
             }
+            auto compute_auc_ovr = [&](const torch::Tensor& probs, const torch::Tensor& y, int C)->double {
+                std::vector<double> aucs;
+                aucs.reserve(C);
+                auto y_cpu = y.to(torch::kCPU, torch::kLong).contiguous();
+                auto p_cpu = probs.to(torch::kCPU, torch::kFloat64).contiguous();
+                const double* P = p_cpu.data_ptr<double>();
+                const long*   Y = y_cpu.data_ptr<long>();
+                const int64_t N = y_cpu.size(0), stride = p_cpu.size(1);
+                for (int c = 0; c < C; ++c) {
+                    std::vector<double> score; score.reserve(N);
+                    std::vector<int>    lab;   lab.reserve(N);
+                    for (int64_t i = 0; i < N; ++i) {
+                        score.push_back(std::clamp(P[i*stride + c], 0.0, 1.0));
+                        lab.push_back(Y[i] == c ? 1 : 0);
+                    }
+                    aucs.push_back(compute_auc(score, lab));
+                }
+                double s = 0.0; int k = 0;
+                for (auto a : aucs) if (std::isfinite(a)) { s += a; ++k; }
+                return k ? s / k : std::numeric_limits<double>::quiet_NaN();
+            };
 
             result.log_loss = log_loss_sum / static_cast<double>(total);
             if (classes == 2) {
@@ -246,6 +273,37 @@ namespace Thot::Calibration {
 
             return result;
         }
+        // replace your normalise_targets with this
+        inline torch::Tensor normalise_targets(torch::Tensor targets, std::int64_t num_classes)
+        {
+            if (!targets.defined()) throw std::invalid_argument("Calibration requires defined target tensor.");
+
+            auto t = targets.detach();
+            if (t.device().type() != torch::kCPU) t = t.to(torch::kCPU);
+
+            // Reduce shapes:
+            if (t.dim() > 1) {
+                const auto last = t.dim() - 1;
+                if (t.size(last) == num_classes)       t = t.argmax(last);
+                else if (t.size(last) == 1)            t = t.squeeze(last);
+                else                                   t = t.reshape({t.size(0)});
+            }
+            if (t.dtype() != torch::kLong) t = t.to(torch::kLong);
+            if (t.dim() != 1) throw std::runtime_error("Calibration targets must reduce to 1-D.");
+
+            // Range check (catch off-by-one or remapped labels)
+            auto mm   = t.minmax_values();
+            auto tmin = mm.first.item<long>();
+            auto tmax = mm.second.item<long>();
+            if (tmin < 0 || tmax >= num_classes) {
+                std::ostringstream oss;
+                oss << "Targets out of range [0," << (num_classes-1)
+                    << "]: min=" << tmin << ", max=" << tmax << ".";
+                throw std::runtime_error(oss.str());
+            }
+            return t.contiguous();
+        }
+
 
         inline void plot_reliability_diagram(const Method& method,
                                              const std::pair<torch::Tensor, torch::Tensor>& validation,
@@ -326,18 +384,31 @@ namespace Thot::Calibration {
                 return;
             }
 
+            const auto format_metric = [](double value) {
+                if (!std::isfinite(value)) {
+                    return std::string("N/A");
+                }
+                std::ostringstream formatted;
+                formatted << std::fixed << std::setprecision(6) << value;
+                return formatted.str();
+            };
+
+            const auto format_curve_title = [&format_metric](const std::string& base,
+                                            double log_loss,
+                                            double auc) {
+                std::ostringstream title;
+                title << base << " (LogLoss: " << format_metric(log_loss)
+                      << ", AUC: " << format_metric(auc) << ')';
+                return title.str();
+            };
+
+
             if (options.stream != nullptr) {
                 auto& out = *options.stream;
                 const auto previous_flags = out.flags();
                 const auto previous_precision = out.precision();
-                const auto format_metric = [](double value) {
-                    if (!std::isfinite(value)) {
-                        return std::string("N/A");
-                    }
-                    std::ostringstream formatted;
-                    formatted << std::fixed << std::setprecision(6) << value;
-                    return formatted.str();
-                };
+
+
                 out << std::fixed << std::setprecision(6)
                 << "Calibration ECE: " << calibrated_stats.ece
                 << ", MCE: " << calibrated_stats.mce << '\n';
@@ -351,81 +422,72 @@ namespace Thot::Calibration {
                 }
                 out.flags(previous_flags);
                 out.precision(previous_precision);
-                if (!calibrated_stats.has_points()) {
-                    if (options.stream != nullptr) {
-                        *options.stream << "Calibration: insufficient populated bins for reliability plot." << '\n';
-                    }
-                    return;
-                }
-
-                Utils::Gnuplot plotter{};
-                plotter.setTitle("Reliability Diagram");
-                plotter.setXLabel("Predicted Probability");
-                plotter.setYLabel("Empirical Probability");
-                plotter.command("set xrange [0:1]");
-                plotter.command("set yrange [0:1]");
-                plotter.command("set key top left");
-                plotter.command("set grid");
-
-                Utils::Gnuplot::PlotStyle diagonal_style{};
-                diagonal_style.mode = Utils::Gnuplot::PlotMode::Lines;
-                diagonal_style.lineWidth = 1.5;
-                diagonal_style.lineColor = "rgb '#7f7f7f'";
-
-                Utils::Gnuplot::PlotStyle model_style{};
-                model_style.mode = Utils::Gnuplot::PlotMode::LinesPoints;
-                model_style.lineWidth = 2.0;
-                model_style.pointType = 7;
-                model_style.pointSize = 1.2;
-                model_style.lineColor = "rgb '#1f77b4'";
-
-                Utils::Gnuplot::PlotStyle raw_model_style = model_style;
-                raw_model_style.lineColor = "rgb '#d62728'";
-                raw_model_style.pointType = 5;
-
-
-                Utils::Gnuplot::DataSet2D diagonal{
-                    std::vector<double>{0.0, 1.0},
-                    std::vector<double>{0.0, 1.0},
-                    "Perfect calibration",
-                    diagonal_style
-                };
-                std::vector<Utils::Gnuplot::DataSet2D> datasets;
-                datasets.reserve(3);
-                datasets.push_back(std::move(diagonal));
-
-                const auto format_curve_title = [&format_metric](const std::string& base,
-                                                double log_loss,
-                                                double auc) {
-                    std::ostringstream title;
-                    title << base << " (LogLoss: " << format_metric(log_loss)
-                          << ", AUC: " << format_metric(auc) << ')';
-                    return title.str();
-                };
-
-                if (raw_stats.has_points()) {
-                    auto raw_title = format_curve_title("Uncalibrated model", raw_computation.log_loss, raw_computation.auc);
-                    datasets.push_back(Utils::Gnuplot::DataSet2D{
-                        std::move(raw_stats.confidence_points),
-                        std::move(raw_stats.accuracy_points),
-                        std::move(raw_title),
-                        raw_model_style
-                    });
-                }
-
-                auto calibrated_title = format_curve_title("Calibrated model", calibrated_computation.log_loss, calibrated_computation.auc);
-
-                Utils::Gnuplot::DataSet2D model_curve{
-                    std::move(calibrated_stats.confidence_points),
-                    std::move(calibrated_stats.accuracy_points),
-                    std::move(calibrated_title),
-                    model_style
-                };
-
-                datasets.push_back(std::move(model_curve));
-
-                plotter.plot(std::move(datasets));
             }
+
+            if (!calibrated_stats.has_points()) {
+                if (options.stream != nullptr) {
+                    *options.stream << "Calibration: insufficient populated bins for reliability plot." << '\n';
+                }
+                return;
+            }
+
+            Utils::Gnuplot plotter{};
+            plotter.setTitle("Reliability Diagram");
+            plotter.setXLabel("Predicted Probability");
+            plotter.setYLabel("Empirical Probability");
+            plotter.command("set xrange [0:1]");
+            plotter.command("set yrange [0:1]");
+            plotter.command("set key top left");
+            plotter.command("set grid");
+
+            Utils::Gnuplot::PlotStyle diagonal_style{};
+            diagonal_style.mode = Utils::Gnuplot::PlotMode::Lines;
+            diagonal_style.lineWidth = 1.5;
+            diagonal_style.lineColor = "#7f7f7f";
+
+            Utils::Gnuplot::PlotStyle model_style{};
+            model_style.mode = Utils::Gnuplot::PlotMode::LinesPoints;
+            model_style.lineWidth = 2.0;
+            model_style.pointType = 7;
+            model_style.pointSize = 1.2;
+            model_style.lineColor = "#1f77b4";
+
+            Utils::Gnuplot::PlotStyle raw_model_style = model_style;
+            raw_model_style.lineColor = "#d62728";
+            raw_model_style.pointType = 5;
+
+
+            Utils::Gnuplot::DataSet2D diagonal{
+                std::vector<double>{0.0, 1.0},
+                std::vector<double>{0.0, 1.0},
+                "Perfect calibration",
+                diagonal_style
+            };
+            std::vector<Utils::Gnuplot::DataSet2D> datasets;
+            datasets.reserve(3);
+            datasets.push_back(std::move(diagonal));
+
+            if (raw_stats.has_points()) {
+                auto raw_title = format_curve_title("Uncalibrated model", raw_computation.log_loss, raw_computation.auc);
+                datasets.push_back(Utils::Gnuplot::DataSet2D{
+                    std::move(raw_stats.confidence_points),
+                    std::move(raw_stats.accuracy_points),
+                    std::move(raw_title),
+                    raw_model_style
+                });
+            }
+
+            auto calibrated_title = format_curve_title("Calibrated model", calibrated_computation.log_loss, calibrated_computation.auc);
+
+            Utils::Gnuplot::DataSet2D model_curve{
+                std::move(calibrated_stats.confidence_points),
+                std::move(calibrated_stats.accuracy_points),
+                std::move(calibrated_title),
+                model_style
+            };
+            datasets.push_back(std::move(model_curve));
+
+            plotter.plot(std::move(datasets));
         }
     }
 
