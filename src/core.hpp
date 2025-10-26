@@ -710,110 +710,160 @@ namespace Thot {
 
         void calibrate(const torch::Tensor& inputs, const torch::Tensor& targets, const Calibration::Descriptor& descriptor,  bool plot = true,
                        std::optional<std::pair<torch::Tensor, torch::Tensor>> validation = std::nullopt, Calibration::Options options = {}) {
-            torch::NoGradGuard guard; eval();
-if (!inputs.defined() || !targets.defined()) {
+            torch::NoGradGuard guard;
+            eval();
+            if (!inputs.defined() || !targets.defined()) {
                 throw std::invalid_argument("Calibration requires defined input and target tensors.");
             }
 
-            torch::Tensor logits;
-            torch::Tensor calibration_targets;
+            auto maybe_chunked_forward = [this, &options](const torch::Tensor& dataset_inputs, const torch::Tensor& dataset_targets) -> std::optional<std::pair<torch::Tensor, torch::Tensor>> {
+                const bool buffering_enabled = options.forward_buffer_batches > 0;
+                const bool has_leading_dimension = dataset_inputs.dim() > 0;
+                if (!buffering_enabled || !has_leading_dimension || dataset_inputs.size(0) <= 0) {
+                    return std::nullopt;
+                }
 
             const bool buffering_enabled = options.forward_buffer_batches > 0;
             const bool has_leading_dimension = inputs.dim() > 0;
 
-            if (buffering_enabled && has_leading_dimension && inputs.size(0) > 0) {
                 const auto chunk_size_value = static_cast<std::int64_t>(options.forward_chunk_size.value_or(Core::kDefaultTrainingConfig.batch_size));
                 if (chunk_size_value <= 0) {
                     throw std::invalid_argument("Calibration forward chunk size must be positive when buffering is enabled.");
                 }
 
-                const auto total_samples = inputs.size(0);
+                const auto total_samples = dataset_inputs.size(0);
                 const auto total_batches = static_cast<std::size_t>((total_samples + chunk_size_value - 1) / chunk_size_value);
 
-                if (total_batches > 0) {
-                    std::deque<std::pair<torch::Tensor, torch::Tensor>> buffered_batches;
-                    std::size_t next_batch_to_load = 0;
-                    const std::size_t buffer_limit = std::max<std::size_t>(1, options.forward_buffer_batches);
-
-                    auto fetch_batch = [&](std::size_t batch_index) {
-                        const auto offset = static_cast<std::int64_t>(batch_index) * chunk_size_value;
-                        const auto remaining = total_samples - offset;
-                        const auto current_batch = std::min<std::int64_t>(chunk_size_value, remaining);
-                        if (current_batch <= 0) {
-                            return std::pair<torch::Tensor, torch::Tensor>{torch::Tensor{}, torch::Tensor{}};
-                        }
-
-                        auto batch_inputs = inputs.narrow(0, offset, current_batch);
-                        if (batch_inputs.device() != device_) {
-                            batch_inputs = batch_inputs.to(device_);
-                        }
-
-                        auto batch_targets = targets.narrow(0, offset, current_batch);
-                        if (!batch_targets.device().is_cpu()) {
-                            batch_targets = batch_targets.to(torch::kCPU);
-                        }
-
-                        return std::pair<torch::Tensor, torch::Tensor>{std::move(batch_inputs), std::move(batch_targets)};
-                    };
-
-                    auto maintain_buffer = [&](std::size_t current_index) {
-                        const auto desired_size = std::min(buffer_limit, total_batches - current_index);
-                        while (buffered_batches.size() < desired_size && next_batch_to_load < total_batches) {
-                            auto batch = fetch_batch(next_batch_to_load);
-                            if (batch.first.defined() && batch.second.defined()) {
-                                buffered_batches.push_back(std::move(batch));
-                            }
-                            ++next_batch_to_load;
-                        }
-                    };
-
-                    std::vector<torch::Tensor> logits_chunks;
-                    logits_chunks.reserve(total_batches);
-                    std::vector<torch::Tensor> target_chunks;
-                    target_chunks.reserve(total_batches);
-
-                    for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
-                        maintain_buffer(batch_index);
-                        if (buffered_batches.empty()) {
-                            break;
-                        }
-
-                        auto batch_pair = std::move(buffered_batches.front());
-                        buffered_batches.pop_front();
-
-                        auto batch_logits = forward(std::move(batch_pair.first));
-                        if (!batch_logits.device().is_cpu()) {
-                            batch_logits = batch_logits.to(torch::kCPU);
-                        }
-                        logits_chunks.push_back(batch_logits.detach());
-
-                        auto batch_targets = std::move(batch_pair.second);
-                        if (!batch_targets.device().is_cpu()) {
-                            batch_targets = batch_targets.to(torch::kCPU);
-                        }
-                        target_chunks.push_back(std::move(batch_targets));
-
-                        maintain_buffer(batch_index + 1);
-                    }
-
-                    if (!logits_chunks.empty() && !target_chunks.empty()) {
-                        logits = torch::cat(logits_chunks, 0);
-                        calibration_targets = torch::cat(target_chunks, 0);
-                    }
+                if (total_batches == 0) {
+                    return std::nullopt;
                 }
-            }
-            if (!logits.defined() || !calibration_targets.defined()) {
+
+                std::deque<std::pair<torch::Tensor, torch::Tensor>> buffered_batches;
+                std::size_t next_batch_to_load = 0;
+                const std::size_t buffer_limit = std::max<std::size_t>(1, options.forward_buffer_batches);
+
+                auto fetch_batch = [&](std::size_t batch_index) {
+                    const auto offset = static_cast<std::int64_t>(batch_index) * chunk_size_value;
+                    const auto remaining = total_samples - offset;
+                    const auto current_batch = std::min<std::int64_t>(chunk_size_value, remaining);
+                    if (current_batch <= 0) {
+                        return std::pair<torch::Tensor, torch::Tensor>{torch::Tensor{}, torch::Tensor{}};
+                    }
+
+                    auto batch_inputs = dataset_inputs.narrow(0, offset, current_batch);
+                    if (batch_inputs.device() != device_) {
+                        batch_inputs = batch_inputs.to(device_);
+                    }
+
+                    auto batch_targets = dataset_targets.narrow(0, offset, current_batch);
+                    if (!batch_targets.device().is_cpu()) {
+                        batch_targets = batch_targets.to(torch::kCPU);
+                    }
+
+                    return std::pair<torch::Tensor, torch::Tensor>{std::move(batch_inputs), std::move(batch_targets)};
+                };
+
+                auto maintain_buffer = [&](std::size_t current_index) {
+                    const auto desired_size = std::min(buffer_limit, total_batches - current_index);
+                    while (buffered_batches.size() < desired_size && next_batch_to_load < total_batches) {
+                        auto batch = fetch_batch(next_batch_to_load);
+                        if (batch.first.defined() && batch.second.defined()) {
+                            buffered_batches.push_back(std::move(batch));
+                        }
+                        ++next_batch_to_load;
+                    }
+                };
+
+                std::vector<torch::Tensor> logits_chunks;
+                logits_chunks.reserve(total_batches);
+                std::vector<torch::Tensor> target_chunks;
+                target_chunks.reserve(total_batches);
+
+                for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
+                    maintain_buffer(batch_index);
+                    if (buffered_batches.empty()) {
+                        break;
+                    }
+
+                    auto batch_pair = std::move(buffered_batches.front());
+                    buffered_batches.pop_front();
+
+                    auto batch_logits = forward(std::move(batch_pair.first));
+                    if (!batch_logits.device().is_cpu()) {
+                        batch_logits = batch_logits.to(torch::kCPU);
+                    }
+                    logits_chunks.push_back(batch_logits.detach());
+
+                    auto batch_targets = std::move(batch_pair.second);
+                    if (!batch_targets.device().is_cpu()) {
+                        batch_targets = batch_targets.to(torch::kCPU);
+                    }
+                    target_chunks.push_back(std::move(batch_targets));
+
+                    maintain_buffer(batch_index + 1);
+                }
+
+                if (!logits_chunks.empty() && !target_chunks.empty()) {
+                    return std::pair<torch::Tensor, torch::Tensor>{
+                        torch::cat(logits_chunks, 0),
+                        torch::cat(target_chunks, 0)
+                    };
+                }
+
+                return std::nullopt;
+            };
+
+            auto calibration_pair = maybe_chunked_forward(inputs, targets);
+            torch::Tensor logits;
+            torch::Tensor calibration_targets;
+
+            if (calibration_pair.has_value()) {
+                logits = std::move(calibration_pair->first);
+                calibration_targets = std::move(calibration_pair->second);
+            } else {
                 ForwardOptions forward_options{};
                 if (options.forward_chunk_size.has_value()) {
                     forward_options.max_chunk_size = options.forward_chunk_size;
                 }
-                logits = forward(inputs, std::move(forward_options));
+                auto fallback_logits = forward(inputs, std::move(forward_options));
+                if (!fallback_logits.device().is_cpu()) {
+                    fallback_logits = fallback_logits.to(torch::kCPU);
+                }
+                logits = fallback_logits.detach();
                 calibration_targets = targets;
+                if (!calibration_targets.device().is_cpu()) {
+                    calibration_targets = calibration_targets.to(torch::kCPU);
+                }
+            }
+
+            std::optional<std::pair<torch::Tensor, torch::Tensor>> processed_validation = std::nullopt;
+            if (validation.has_value()) {
+                const auto& validation_inputs = validation->first;
+                const auto& validation_targets = validation->second;
+                if (validation_inputs.defined() && validation_targets.defined()) {
+                    if (auto validation_pair = maybe_chunked_forward(validation_inputs, validation_targets)) {
+                        processed_validation = std::move(*validation_pair);
+                    } else {
+                        ForwardOptions forward_options{};
+                        if (options.forward_chunk_size.has_value()) {
+                            forward_options.max_chunk_size = options.forward_chunk_size;
+                        }
+                        auto validation_logits = forward(validation_inputs, std::move(forward_options));
+                        if (!validation_logits.device().is_cpu()) {
+                            validation_logits = validation_logits.to(torch::kCPU);
+                        }
+                        auto validation_targets_cpu = validation_targets;
+                        if (!validation_targets_cpu.device().is_cpu()) {
+                            validation_targets_cpu = validation_targets_cpu.to(torch::kCPU);
+                        }
+                        processed_validation = std::make_pair(validation_logits.detach(), validation_targets_cpu);
+                    }
+                }
             }
 
             auto method = Calibration::Calibrate(*this, device_, descriptor, [&logits, &calibration_targets](torch::nn::Module&) {
                 return std::pair<torch::Tensor, torch::Tensor>{logits, calibration_targets};
-            }, std::move(validation), std::move(options), plot);
+            }, std::move(processed_validation), std::move(options), plot);
             calibration_methods_.push_back(std::move(method));
         }
 
