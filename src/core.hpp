@@ -30,6 +30,7 @@
 #include <optional>
 #include <random>
 #include <sstream>
+#include <new>
 #include <stdexcept>
 #include <type_traits>
 #include <string>
@@ -1614,24 +1615,15 @@ namespace Thot {
         [[nodiscard]] std::size_t next_module_index() noexcept { return module_index_++; }
 
         void reset_runtime_state() {
-            clear_regularization();
-            layers_.clear();
-            calibration_methods_.clear();
-            layer_parameters_.clear();
-            layer_regularization_bindings_.clear();
-            global_regularization_parameters_.clear();
-            global_regularization_bindings_.clear();
-            module_descriptors_.clear();
-            last_input_shape_.reset();
-            module_index_ = 0;
-            optimizer_.reset();
-            local_optimizers_.clear();
-            scheduler_.reset();
-            configure_step_impl();
-            regularization_configured_ = false;
-            this->children_.clear();
-            this->parameters_.clear();
-            this->buffers_.clear();
+            auto preserved_name = name_;
+            auto preserved_device = device_;
+            auto preserved_model_name = model_name_;
+
+            this->~Model();
+            new (this) Model(preserved_name);
+
+            device_ = preserved_device;
+            model_name_ = std::move(preserved_model_name);
         }
 
         static std::string format_tensor_shape(const torch::Tensor& tensor) {

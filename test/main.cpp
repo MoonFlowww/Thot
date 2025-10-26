@@ -7,13 +7,17 @@
 
 int main() {
     Thot::Model model("Debug_CIFAR");
-    bool IsLoading=true;
+    bool IsLoading=false;
     if (IsLoading) {
         model.save("/home/moonfloww/Projects/NNs");
     }
     std::cout << "Cuda: " << torch::cuda::is_available() << std::endl;
     model.to_device(torch::cuda::is_available());
+    const int64_t N = 200000;
+    const int64_t B = 258;
+    const int64_t epochs = 15;
 
+    const int64_t steps_per_epoch = (N + B - 1) / B;
     if (!IsLoading) {
         model.add(Thot::Block::Sequential({
             Thot::Layer::Conv2d(
@@ -79,11 +83,7 @@ int main() {
         model.add(Thot::Layer::FC({512, 10, true}, Thot::Activation::Raw, Thot::Initialization::KaimingNormal));
 
 
-        const int64_t N = 200000;
-        const int64_t B = 258;
-        const int64_t epochs = 15;
 
-        const int64_t steps_per_epoch = (N + B - 1) / B;
 
         model.set_optimizer(
             Thot::Optimizer::AdamW({.learning_rate=1e-3, .weight_decay=5e-4}),
@@ -120,8 +120,12 @@ int main() {
 
     (void)Thot::Data::Check::Size(train_images, "Input train size after augment");
 
-    if (!IsLoading)
-        model.train(train_images, train_labels, {.epoch = epochs, .batch_size = B, .shuffle = true, .buffer_vram = 0, .restore_best_state = true, .test = std::make_pair(validation_images, validation_labels)});
+    if (!IsLoading) {
+        model.train(train_images, train_labels, {
+                        .epoch = epochs, .batch_size = B, .shuffle = true, .buffer_vram = 0, .restore_best_state = true,
+                        .test = std::make_pair(validation_images, validation_labels)
+                    });
+    }
 
     (void) model.evaluate(test_images, test_labels, Thot::Evaluation::Classification,{
         Thot::Metric::Classification::Accuracy,
@@ -139,8 +143,9 @@ int main() {
     });
 
 
-    if (!IsLoading)
+    if (!IsLoading) {
         model.calibrate(train_images, train_labels, {Thot::Calibration::TemperatureScalingDescriptor{}}, true, std::make_pair(test_images, test_labels));
+    }
 
 
     (void) model.evaluate(test_images, test_labels, Thot::Evaluation::Classification,{
