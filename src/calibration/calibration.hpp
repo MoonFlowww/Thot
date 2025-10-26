@@ -315,7 +315,6 @@ namespace Thot::Calibration {
 #include "details/temperature_scaling.hpp"
 
 
-namespace Thot::Calibration {
 
     inline MethodPtr make_method(const Descriptor& descriptor)
     {
@@ -378,5 +377,5 @@ namespace Thot::Calibration {
         }
         return method;
     }
-
+}
 #endif //THOT_CALIBRATION_HPP
