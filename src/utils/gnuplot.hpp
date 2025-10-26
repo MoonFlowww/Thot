@@ -65,8 +65,8 @@ namespace Thot::Utils {
             PlotStyle style{};
         };
 
-        explicit Gnuplot(std::string command = "gnuplot -persist")
-            : command_(std::move(command)),
+        explicit Gnuplot(std::string command = "gnuplot")
+            : command_(EnsurePersist(std::move(command))),
               pipe_(popen(command_.c_str(), "w")) {
             if (pipe_ == nullptr) {
                 throw std::runtime_error("Failed to open pipe to gnuplot");
@@ -341,6 +341,17 @@ namespace Thot::Utils {
             if (std::fflush(pipe_) != 0) {
                 throw std::runtime_error("Failed to flush gnuplot pipe");
             }
+        }
+
+
+        static std::string EnsurePersist(std::string command) {
+            if (command.find("-persist") == std::string::npos) {
+                if (!command.empty() && command.back() != ' ') {
+                    command += ' ';
+                }
+                command += "-persist";
+            }
+            return command;
         }
 
         static std::string EscapeSingleQuotes(const std::string& input) {

@@ -6,10 +6,12 @@
 #include <cmath>
 #include <cstddef>
 #include <functional>
+#include <limits>
 #include <iomanip>
 #include <memory>
 #include <optional>
 #include <ostream>
+#include <sstream>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -56,6 +58,68 @@ namespace Thot::Calibration {
             double accuracy_sum{0.0};
             std::size_t count{0};
         };
+
+        struct ReliabilityComputation {
+            std::vector<ReliabilityBin> bins{};
+            double log_loss{std::numeric_limits<double>::quiet_NaN()};
+            double auc{std::numeric_limits<double>::quiet_NaN()};
+        };
+
+        inline double compute_auc(const std::vector<double>& scores, const std::vector<int>& labels)
+        {
+            const auto total = labels.size();
+            if (total == 0 || scores.size() != total) {
+                return std::numeric_limits<double>::quiet_NaN();
+            }
+
+            std::size_t positives = 0;
+            for (int label : labels) {
+                positives += (label == 1) ? 1 : 0;
+            }
+            const std::size_t negatives = total - positives;
+            if (positives == 0 || negatives == 0) {
+                return std::numeric_limits<double>::quiet_NaN();
+            }
+
+            std::vector<std::pair<double, int>> pairs(total);
+            for (std::size_t i = 0; i < total; ++i) {
+                pairs[i] = {scores[i], labels[i]};
+            }
+
+            std::sort(pairs.begin(), pairs.end(), [](const auto& a, const auto& b) {
+                if (a.first == b.first) {
+                    return a.second > b.second;
+                }
+                return a.first > b.first;
+            });
+
+            double auc = 0.0;
+            double tp = 0.0;
+            double fp = 0.0;
+            double prev_tpr = 0.0;
+            double prev_fpr = 0.0;
+            double prev_score = std::numeric_limits<double>::infinity();
+            for (const auto& [score, label] : pairs) {
+                if (score != prev_score) {
+                    const double tpr = tp / static_cast<double>(positives);
+                    const double fpr = fp / static_cast<double>(negatives);
+                    auc += (fpr - prev_fpr) * (tpr + prev_tpr) * 0.5;
+                    prev_tpr = tpr;
+                    prev_fpr = fpr;
+                    prev_score = score;
+                }
+                if (label == 1) {
+                    tp += 1.0;
+                } else {
+                    fp += 1.0;
+                }
+            }
+
+            const double tpr = tp / static_cast<double>(positives);
+            const double fpr = fp / static_cast<double>(negatives);
+            auc += (fpr - prev_fpr) * (tpr + prev_tpr) * 0.5;
+            return std::clamp(auc, 0.0, 1.0);
+        }
 
         inline std::size_t clamp_bin_index(double confidence, std::size_t bins)
         {
@@ -104,9 +168,7 @@ namespace Thot::Calibration {
             return prepared.contiguous();
         }
 
-        inline std::vector<ReliabilityBin> compute_reliability_bins(torch::Tensor logits,
-                                                                    torch::Tensor targets,
-                                                                    std::size_t bin_count)
+        inline ReliabilityComputation compute_reliability(torch::Tensor logits, torch::Tensor targets, std::size_t bin_count)
         {
             if (!logits.defined()) {
                 throw std::invalid_argument("Calibration requires defined logits tensor.");
@@ -118,10 +180,6 @@ namespace Thot::Calibration {
                 logits = logits.reshape({logits.size(0), -1});
             }
 
-            if (logits.size(0) == 0) {
-                return {};
-            }
-
             const auto classes = logits.size(1);
             auto prepared_targets = normalise_targets(std::move(targets), classes);
             if (prepared_targets.size(0) != logits.size(0)) {
@@ -129,15 +187,23 @@ namespace Thot::Calibration {
             }
 
             auto logits_cpu = logits.detach().to(torch::kCPU, torch::kFloat64).contiguous();
-            auto probabilities = torch::softmax(logits_cpu, 1);
+            auto probabilities = torch::softmax(logits_cpu, 1).contiguous();
             auto max_result = probabilities.max(1);
             auto confidences = std::get<0>(max_result).to(torch::kCPU).contiguous();
             auto predictions = std::get<1>(max_result).to(torch::kCPU, torch::kLong).contiguous();
 
             const auto total = confidences.size(0);
+            ReliabilityComputation result{};
+            if (total == 0) {
+                result.bins.resize(std::max<std::size_t>(1, bin_count));
+                return result;
+            }
             const auto* confidence_ptr = confidences.data_ptr<double>();
             const auto* prediction_ptr = predictions.data_ptr<long>();
             const auto* target_ptr = prepared_targets.data_ptr<long>();
+            const auto* probability_ptr = probabilities.data_ptr<double>();
+
+            const std::size_t stride = static_cast<std::size_t>(probabilities.size(1));
 
             const std::size_t bins = std::max<std::size_t>(1, bin_count);
             std::vector<ReliabilityBin> bucket(bins);
@@ -145,13 +211,31 @@ namespace Thot::Calibration {
             for (std::int64_t idx = 0; idx < total; ++idx) {
                 const double confidence = confidence_ptr[idx];
                 const std::size_t bin_index = clamp_bin_index(confidence, bins);
-                auto& entry = bucket[bin_index];
+                auto& entry = result.bins[bin_index];
                 entry.count += 1;
                 entry.confidence_sum += confidence;
                 entry.accuracy_sum += (prediction_ptr[idx] == target_ptr[idx]) ? 1.0 : 0.0;
+
+
+                const auto target_index = static_cast<std::size_t>(target_ptr[idx]);
+                const auto base_index = static_cast<std::size_t>(idx) * stride;
+                const auto true_index = base_index + target_index;
+                const double true_probability = std::clamp(probability_ptr[true_index], 1e-12, 1.0);
+                log_loss_sum += -std::log(true_probability);
+
+                if (classes == 2) {
+                    const double positive_probability = std::clamp(probability_ptr[base_index + 1], 0.0, 1.0);
+                    auc_scores.push_back(positive_probability);
+                    auc_labels.push_back(target_ptr[idx] == 1 ? 1 : 0);
+                }
             }
 
-            return bucket;
+            result.log_loss = log_loss_sum / static_cast<double>(total);
+            if (classes == 2) {
+                result.auc = compute_auc(auc_scores, auc_labels);
+            }
+
+            return result;
         }
 
         inline void plot_reliability_diagram(const Method& method,
@@ -164,7 +248,7 @@ namespace Thot::Calibration {
             if (!logits.defined() || !targets.defined()) {
                 throw std::invalid_argument("Validation logits and targets must be defined for reliability plotting.");
             }
-            auto raw_bins = compute_reliability_bins(logits, targets.clone(), options.reliability_bins);
+            auto raw_computation = compute_reliability(logits, targets.clone(), options.reliability_bins);
 
             auto device_logits = logits;
             if (device_logits.device() != device) {
@@ -174,7 +258,7 @@ namespace Thot::Calibration {
             torch::NoGradGuard guard;
             auto transformed = method.transform(std::move(device_logits)).detach().to(torch::kCPU);
 
-            auto calibrated_bins = compute_reliability_bins(std::move(transformed), std::move(targets), options.reliability_bins);
+            auto calibrated_computation = compute_reliability(std::move(transformed), std::move(targets), options.reliability_bins);
 
 
             struct ReliabilityStats {
@@ -223,8 +307,8 @@ namespace Thot::Calibration {
                 return stats;
             };
 
-            auto raw_stats = compute_stats(raw_bins);
-            auto calibrated_stats = compute_stats(calibrated_bins);
+            auto raw_stats = compute_stats(raw_computation.bins);
+            auto calibrated_stats = compute_stats(calibrated_computation.bins);
 
             if (calibrated_stats.total_samples == 0) {
                 if (options.stream != nullptr) {
@@ -237,15 +321,27 @@ namespace Thot::Calibration {
                 auto& out = *options.stream;
                 const auto previous_flags = out.flags();
                 const auto previous_precision = out.precision();
+                const auto format_metric = [](double value) {
+                    if (!std::isfinite(value)) {
+                        return std::string("N/A");
+                    }
+                    std::ostringstream formatted;
+                    formatted << std::fixed << std::setprecision(6) << value;
+                    return formatted.str();
+                };
                 out << std::fixed << std::setprecision(6)
                 << "Calibration ECE: " << calibrated_stats.ece
                 << ", MCE: " << calibrated_stats.mce << '\n';
+                out << "Calibrated LogLoss: " << format_metric(calibrated_computation.log_loss)
+                    << ", AUC: " << format_metric(calibrated_computation.auc) << '\n';
                 if (raw_stats.total_samples != 0 && raw_stats.has_points()) {
                     out << "Uncalibrated ECE: " << raw_stats.ece
                         << ", MCE: " << raw_stats.mce << '\n';
-                    out.flags(previous_flags);
-                    out.precision(previous_precision);
+                    out << "Uncalibrated LogLoss: " << format_metric(raw_computation.log_loss)
+                        << ", AUC: " << format_metric(raw_computation.auc) << '\n';
                 }
+                out.flags(previous_flags);
+                out.precision(previous_precision);
                 if (!calibrated_stats.has_points()) {
                     if (options.stream != nullptr) {
                         *options.stream << "Calibration: insufficient populated bins for reliability plot." << '\n';
@@ -254,9 +350,9 @@ namespace Thot::Calibration {
                 }
 
                 Utils::Gnuplot plotter{};
-                plotter.setTitle("Reliability diagram");
-                plotter.setXLabel("Confidence");
-                plotter.setYLabel("Accuracy");
+                plotter.setTitle("Reliability Diagram");
+                plotter.setXLabel("Predicted Probability");
+                plotter.setYLabel("Empirical Probability");
                 plotter.command("set xrange [0:1]");
                 plotter.command("set yrange [0:1]");
                 plotter.command("set key top left");
@@ -289,19 +385,31 @@ namespace Thot::Calibration {
                 datasets.reserve(3);
                 datasets.push_back(std::move(diagonal));
 
+                const auto format_curve_title = [&format_metric](const std::string& base,
+                                                double log_loss,
+                                                double auc) {
+                    std::ostringstream title;
+                    title << base << " (LogLoss: " << format_metric(log_loss)
+                          << ", AUC: " << format_metric(auc) << ')';
+                    return title.str();
+                };
+
                 if (raw_stats.has_points()) {
+                    auto raw_title = format_curve_title("Uncalibrated model", raw_computation.log_loss, raw_computation.auc);
                     datasets.push_back(Utils::Gnuplot::DataSet2D{
                         std::move(raw_stats.confidence_points),
                         std::move(raw_stats.accuracy_points),
-                        "Uncalibrated model",
+                        std::move(raw_title),
                         raw_model_style
                     });
                 }
 
+                auto calibrated_title = format_curve_title("Calibrated model", calibrated_computation.log_loss, calibrated_computation.auc);
+
                 Utils::Gnuplot::DataSet2D model_curve{
                     std::move(calibrated_stats.confidence_points),
                     std::move(calibrated_stats.accuracy_points),
-                    "Calibrated model",
+                    std::move(calibrated_title),
                     model_style
                 };
 
