@@ -134,13 +134,10 @@ int main() {
         Thot::Metric::Classification::BrierScore,
     });
 
-    {
-        torch::NoGradGuard guard;
-        model.eval();
 
-        auto calibration_logits = model.forward(validation_images);
-        model.calibrate(calibration_logits, validation_labels, {Thot::Calibration::TemperatureScalingDescriptor{}}, true);
-    }
+
+    model.calibrate(validation_images, validation_labels, {Thot::Calibration::TemperatureScalingDescriptor{}}, true);
+
     return 0;
 }
 

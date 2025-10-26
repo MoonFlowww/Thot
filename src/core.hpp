@@ -515,18 +515,13 @@ namespace Thot {
             return output;
         }
 
-        void calibrate(const torch::Tensor& logits, const torch::Tensor& targets, const Calibration::Descriptor& descriptor,  bool plot = true,
+        void calibrate(const torch::Tensor& inputs, const torch::Tensor& targets, const Calibration::Descriptor& descriptor,  bool plot = true,
                        std::optional<std::pair<torch::Tensor, torch::Tensor>> validation = std::nullopt, Calibration::Options options = {}) {
-            auto method = Calibration::Calibrate(
-            *this,
-            device_,
-            descriptor,
-            [&logits, &targets](torch::nn::Module&) {
+            torch::NoGradGuard guard; eval();
+            auto logits = forward(inputs);
+            auto method = Calibration::Calibrate(*this, device_, descriptor, [&logits, &targets](torch::nn::Module&) {
                 return std::pair<torch::Tensor, torch::Tensor>{logits, targets};
-            },
-            std::move(validation),
-            std::move(options),
-            plot);
+            }, std::move(validation), std::move(options), plot);
             calibration_methods_.push_back(std::move(method));
         }
 
