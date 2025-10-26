@@ -84,7 +84,7 @@ int main() {
         Thot::Optimizer::AdamW({.learning_rate=1e-3, .weight_decay=5e-4}),
             Thot::LrScheduler::CosineAnnealing({
             .T_max = (epochs) * steps_per_epoch,
-            .eta_min = 3e-6,
+            .eta_min = 3e-5,
             .warmup_steps = 5*steps_per_epoch,
             .warmup_start_factor = 0.1
         })
@@ -146,24 +146,25 @@ int main() {
 
 
 /*
-    const int64_t N = 150000;
-    const int64_t B = 128;
-    const int64_t epochs = 120;
+
+    const int64_t N = 200000;
+    const int64_t B = 258;
+    const int64_t epochs = 15;
 
     const int64_t steps_per_epoch = (N + B - 1) / B;
 
     model.set_optimizer(
         Thot::Optimizer::AdamW({.learning_rate=1e-3, .weight_decay=5e-4}),
             Thot::LrScheduler::CosineAnnealing({
-            .T_max = (epochs-40) * steps_per_epoch,
-            .eta_min = 5e-5,
+            .T_max = (epochs) * steps_per_epoch,
+            .eta_min = 3e-5,
             .warmup_steps = 5*steps_per_epoch,
             .warmup_start_factor = 0.1
         })
     );
 
 
-    model.set_loss(Thot::Loss::CrossEntropy({.label_smoothing=0.01f}));
+    model.set_loss(Thot::Loss::CrossEntropy({.label_smoothing=0.05f}));
 
     model.set_regularization({ Thot::Regularization::SWAG({
       .coefficient = 1e-3,
@@ -172,23 +173,24 @@ int main() {
       .accumulation_stride = static_cast<size_t>(steps_per_epoch),
       .max_snapshots = 20,
     })});
+
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┓
 ┃ Evaluation: Classification ┃          ┃                    ┃
 ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━┫
 ┃ Metric                     ┃    Macro ┃ Weighted (support) ┃
 ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━┫
-┃ Accuracy                   ┃ 0.878400 ┃           0.878400 ┃
-┃ Precision                  ┃ 0.877749 ┃           0.877749 ┃
-┃ Recall                     ┃ 0.878400 ┃           0.878400 ┃
-┃ F1 score                   ┃ 0.877952 ┃           0.877952 ┃
-┃ True positive rate         ┃ 0.878400 ┃           0.878400 ┃
-┃ True negative rate         ┃ 0.986489 ┃           0.986489 ┃
-┃ Top-1 error                ┃ 0.121600 ┃           0.121600 ┃
-┃ Expected calibration error ┃ 0.036280 ┃           0.036280 ┃
-┃ Maximum calibration error  ┃ 0.154874 ┃           0.154874 ┃
-┃ Cohen's kappa              ┃ 0.864889 ┃           0.864889 ┃
-┃ Log loss                   ┃ 0.427234 ┃           0.427234 ┃
-┃ Brier score                ┃ 0.185798 ┃           0.185798 ┃
+┃ Accuracy                   ┃ 0.877800 ┃           0.877800 ┃
+┃ Precision                  ┃ 0.878442 ┃           0.878442 ┃
+┃ Recall                     ┃ 0.877800 ┃           0.877800 ┃
+┃ F1 score                   ┃ 0.877967 ┃           0.877967 ┃
+┃ True positive rate         ┃ 0.877800 ┃           0.877800 ┃
+┃ True negative rate         ┃ 0.986422 ┃           0.986422 ┃
+┃ Top-1 error                ┃ 0.122200 ┃           0.122200 ┃
+┃ Expected calibration error ┃ 0.039478 ┃           0.039478 ┃
+┃ Maximum calibration error  ┃ 0.803993 ┃           0.803993 ┃
+┃ Cohen's kappa              ┃ 0.864222 ┃           0.864222 ┃
+┃ Log loss                   ┃ 0.466842 ┃           0.466842 ┃
+┃ Brier score                ┃ 0.193210 ┃           0.193210 ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┻━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━┛
 
 */

@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace Thot::Calibration::Details {
+namespace Details {
     class TemperatureScalingModuleImpl : public torch::nn::Module {
     public:
         TemperatureScalingModuleImpl()
