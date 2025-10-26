@@ -46,15 +46,23 @@ int main() {
             .projection = Thot::Layer::Conv2d({64,128,{1,1},{2,2},{0,0},{1,1},1,false}, Thot::Activation::Raw, Thot::Initialization::KaimingNormal)
         }, { .final_activation = Thot::Activation::Identity }));
 
-        // two more 128→128 identity blocks
-        for (int i=0;i<2;++i) {
-            model.add(Thot::Block::Residual({
-                Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-                Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal),
-                Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-                Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal)
-            }, 1, {/* no projection */}, { .final_activation = Thot::Activation::Identity }));
-        }
+
+
+        model.add(Thot::Block::Residual({
+            Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
+            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal),
+            Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
+            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal)
+        }, 1, {}, { .final_activation = Thot::Activation::Identity }));
+
+        model.add(Thot::Block::Residual({
+            Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
+            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal),
+            Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
+            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal)
+        }, 1, {}, { .final_activation = Thot::Activation::Identity }));
+
+
 
         // --- Stage 3: 128 -> 256 (downsample), then two identity blocks ---
         model.add(Thot::Block::Residual({

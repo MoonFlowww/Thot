@@ -50,6 +50,7 @@ namespace Thot::Calibration {
         std::size_t reliability_bins{15};
         std::ostream* stream{nullptr};
         std::optional<std::size_t> forward_chunk_size{};
+        std::size_t forward_buffer_batches{2};
     };
 
 
