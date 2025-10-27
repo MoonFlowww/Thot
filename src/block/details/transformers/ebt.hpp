@@ -318,7 +318,10 @@ namespace Thot::Block::Details::Transformer::EBT {
                     context_features = context_features.view({context_features.size(0), 1, -1});
                 }
 
-                context_features = context_features.expand(expanded_shape[0], expanded_shape[1], context_features.size(-1));
+                context_features = context_features.expand({
+                    expanded_shape[0],
+                    expanded_shape[1],
+                    context_features.size(-1)});
                 return torch::cat({prediction_features, context_features}, -1);
             }
 

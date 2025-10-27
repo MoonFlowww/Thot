@@ -424,7 +424,7 @@ namespace Thot::Block::Details::Transformer::Mamba {
             }
 
         private:
-            torch::Tensor apply_residual_branch(torch::Tensor branch) const
+            torch::Tensor apply_residual_branch(torch::Tensor branch)
             {
                 if (residual_gate_.defined()) {
                     branch = branch * residual_gate_.view({1, 1, -1});
@@ -435,7 +435,7 @@ namespace Thot::Block::Details::Transformer::Mamba {
                 return branch;
             }
 
-            torch::Tensor compute_feed_forward(torch::Tensor input) const
+            torch::Tensor compute_feed_forward(torch::Tensor input)
             {
                 auto up = feed_forward_up_->forward(input);
                 if (feed_forward_gating_ && feed_forward_gate_proj_) {
@@ -531,7 +531,7 @@ namespace Thot::Block::Details::Transformer::Mamba {
                 return {std::move(working), std::move(new_state)};
             }
 
-            torch::Tensor forward(torch::Tensor input) override
+            torch::Tensor forward(torch::Tensor input)
             {
                 return forward_with_state(std::move(input)).output;
             }

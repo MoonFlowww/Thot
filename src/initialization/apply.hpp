@@ -18,7 +18,13 @@ namespace Thot::Initialization::Details {
 
     template <class Module, class Descriptor>
     inline void apply_module_initialization(Module& module, const Descriptor& descriptor) {
-        const auto type = descriptor.initialization.type;
+        const auto type = [&]() {
+            if constexpr (requires { descriptor.initialization; }) {
+                return descriptor.initialization.type;
+            } else {
+                return descriptor.type;
+            }
+        }();
 
         switch (type) {
             case ::Thot::Initialization::Type::XavierNormal:
