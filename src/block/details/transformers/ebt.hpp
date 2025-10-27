@@ -199,7 +199,7 @@ namespace Thot::Block::Details::Transformer::EBT {
                 auto flattened = normalised.contiguous().view({batch * sequence, feature_dim_});
 
                 auto energy = torch::zeros({batch}, flattened.options());
-                for (const auto& head : heads_) {
+                for (auto& head : heads_) {
                     auto head_output = head->forward(flattened);
                     head_output = head_output.view({batch, sequence, 1});
                     energy = energy + head_output.sum(1).squeeze(-1);

@@ -374,13 +374,12 @@ namespace Thot::Layer::Details {
             auto projected_permuted = projected.transpose(1, 2); // (batch, rank, length)
             auto flipped_kernel = kernel.flip(-1);
             auto conv_options = torch::nn::functional::Conv1dFuncOptions{}
-                .bias(c10::nullopt)
                 .stride(1)
                 .padding(kernel.size(-1) - 1);
-                auto convolved_full = torch::nn::functional::conv1d(
-                    projected_permuted,
-                    flipped_kernel,
-                    conv_options);
+            auto convolved_full = torch::nn::functional::conv1d(
+                projected_permuted,
+                flipped_kernel,
+                conv_options);
             auto start = kernel.size(-1) - 1;
             auto convolved = convolved_full.narrow(2, start, length);
             convolved = convolved.transpose(1, 2);
