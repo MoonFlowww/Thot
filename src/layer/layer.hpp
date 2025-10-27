@@ -32,6 +32,8 @@ namespace Thot::Layer {
 
     using HardDropoutOptions = Details::HardDropoutOptions;
     using HardDropoutDescriptor = Details::HardDropoutDescriptor;
+    using SoftDropoutOptions = Details::SoftDropoutOptions;
+    using SoftDropoutDescriptor = Details::SoftDropoutDescriptor;
 
     using FlattenOptions = Details::FlattenOptions;
     using FlattenDescriptor = Details::FlattenDescriptor;
@@ -41,6 +43,7 @@ namespace Thot::Layer {
                                     BatchNorm2dDescriptor,
                                     PoolingDescriptor,
                                     HardDropoutDescriptor,
+                                    SoftDropoutDescriptor,
                                     FlattenDescriptor>;
 
     [[nodiscard]] inline auto FC(const FCOptions& options,
@@ -107,6 +110,10 @@ namespace Thot::Layer {
     }
 
     [[nodiscard]] inline auto HardDropout(const HardDropoutOptions& options, ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,  ::Thot::LocalConfig local = {}) -> HardDropoutDescriptor {
+        return {options, activation, std::move(local)};
+    }
+
+    [[nodiscard]] inline auto SoftDropout(const SoftDropoutOptions& options, ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity, ::Thot::LocalConfig local = {}) -> SoftDropoutDescriptor {
         return {options, activation, std::move(local)};
     }
 

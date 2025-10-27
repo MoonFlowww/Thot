@@ -19,7 +19,7 @@
 #include "../initialization/apply.hpp"
 #include "details/batchnorm.hpp"
 #include "details/conv.hpp"
-#include "details/HardDropout.hpp"
+#include "details/dropout.hpp"
 #include "details/fc.hpp"
 #include "details/flatten.hpp"
 #include "details/pooling.hpp"
