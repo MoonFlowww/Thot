@@ -12,7 +12,6 @@
 #include "details/leaky_relu.hpp"
 #include "details/mish.hpp"
 #include "details/psilu.hpp"
-#include "details/raw.hpp"
 #include "details/relu.hpp"
 #include "details/sigmoid.hpp"
 #include "details/silu.hpp"
@@ -24,8 +23,6 @@
 namespace Thot::Activation::Details {
     inline torch::Tensor apply(::Thot::Activation::Type type, torch::Tensor input) {
         switch (type) {
-            case ::Thot::Activation::Type::Raw:
-                return Raw{}(std::move(input));
             case ::Thot::Activation::Type::ReLU:
                 return ReLU{}(std::move(input));
             case ::Thot::Activation::Type::Sigmoid:
@@ -53,6 +50,7 @@ namespace Thot::Activation::Details {
             case ::Thot::Activation::Type::Swish:
                 return Swish{}(std::move(input));
             case ::Thot::Activation::Type::Identity:
+                return input;
             default:
                 return input;
         }

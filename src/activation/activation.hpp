@@ -5,7 +5,6 @@
 namespace Thot::Activation {
     enum class Type {
         Identity,
-        Raw,
         ReLU,
         Sigmoid,
         Tanh,
@@ -26,7 +25,6 @@ namespace Thot::Activation {
     };
 
     inline constexpr Descriptor Identity{Type::Identity};
-    inline constexpr Descriptor Raw{Type::Raw};
     inline constexpr Descriptor ReLU{Type::ReLU};
     inline constexpr Descriptor Sigmoid{Type::Sigmoid};
     inline constexpr Descriptor Tanh{Type::Tanh};

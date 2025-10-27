@@ -22,13 +22,13 @@ int main() {
         model.add(Thot::Block::Sequential({
             Thot::Layer::Conv2d(
                 {3, 64, {3,3}, {1,1}, {1,1}, {1,1}, 1, false},
-                Thot::Activation::Raw,
+                Thot::Activation::Identity,
                 Thot::Initialization::KaimingNormal
             ),
             Thot::Layer::BatchNorm2d({64, 1e-5, 0.1, true, true}, Thot::Activation::GeLU),
             Thot::Layer::Conv2d(
                 {64, 64, {3,3}, {1,1}, {1,1}, {1,1}, 1, false}, // bias false under BN
-                Thot::Activation::Raw,
+                Thot::Activation::Identity,
                 Thot::Initialization::KaimingNormal
             ),
             Thot::Layer::BatchNorm2d({64, 1e-5, 0.1, true, true}, Thot::Activation::GeLU),
@@ -39,46 +39,46 @@ int main() {
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({64, 1e-5, 0.1, true, true}, Thot::Activation::GeLU),
-            Thot::Layer::Conv2d({64,128,{3,3},{2,2},{1,1},{1,1},1,false}, Thot::Activation::Raw, Thot::Initialization::KaimingNormal),
+            Thot::Layer::Conv2d({64,128,{3,3},{2,2},{1,1},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal),
             Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal)
+            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Identity,Thot::Initialization::KaimingNormal)
         }, 1, {
-            .projection = Thot::Layer::Conv2d({64,128,{1,1},{2,2},{0,0},{1,1},1,false}, Thot::Activation::Raw, Thot::Initialization::KaimingNormal)
+            .projection = Thot::Layer::Conv2d({64,128,{1,1},{2,2},{0,0},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal)
         }, { .final_activation = Thot::Activation::Identity }));
 
 
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw ,Thot::Initialization::KaimingNormal),
+            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Identity ,Thot::Initialization::KaimingNormal),
             Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw ,Thot::Initialization::KaimingNormal)
+            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal)
         }, 1, {}, { .final_activation = Thot::Activation::Identity }));
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw ,Thot::Initialization::KaimingNormal),
+            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal),
             Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw ,Thot::Initialization::KaimingNormal)
+            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal)
         }, 1, {}, { .final_activation = Thot::Activation::Identity }));
 
         model.add(Thot::Layer::Dropout({ .probability = 0.3 }));
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-            Thot::Layer::Conv2d({128,256,{3,3},{2,2},{1,1},{1,1},1,false},Thot::Activation::Raw ,Thot::Initialization::KaimingNormal),
+            Thot::Layer::Conv2d({128,256,{3,3},{2,2},{1,1},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal),
             Thot::Layer::BatchNorm2d({256,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-            Thot::Layer::Conv2d({256,256,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw ,Thot::Initialization::KaimingNormal)
+            Thot::Layer::Conv2d({256,256,{3,3},{1,1},{1,1},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal)
         }, 1, {
-            .projection = Thot::Layer::Conv2d({128,256,{1,1},{2,2},{0,0},{1,1},1,false}, Thot::Activation::Raw , Thot::Initialization::KaimingNormal)
+            .projection = Thot::Layer::Conv2d({128,256,{1,1},{2,2},{0,0},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal)
         }, { .final_activation = Thot::Activation::Identity }));
 
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({256,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-            Thot::Layer::Conv2d({256,256,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw ,Thot::Initialization::KaimingNormal),
+            Thot::Layer::Conv2d({256,256,{3,3},{1,1},{1,1},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal),
             Thot::Layer::BatchNorm2d({256,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-            Thot::Layer::Conv2d({256,256,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw ,Thot::Initialization::KaimingNormal)
+            Thot::Layer::Conv2d({256,256,{3,3},{1,1},{1,1},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal)
         }, 1, {}, { .final_activation = Thot::Activation::Identity }));
 
 
@@ -87,7 +87,7 @@ int main() {
         model.add(Thot::Layer::Flatten());
         model.add(Thot::Layer::FC({256, 512, true}, Thot::Activation::SiLU, Thot::Initialization::KaimingNormal));
         model.add(Thot::Layer::Dropout({ .probability = 0.5 }));
-        model.add(Thot::Layer::FC({512, 10, true}, Thot::Activation::Raw, Thot::Initialization::KaimingNormal));
+        model.add(Thot::Layer::FC({512, 10, true}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal));
 
 
 

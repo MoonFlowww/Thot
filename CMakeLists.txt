@@ -79,7 +79,6 @@ add_library(Thot SHARED
         src/activation/details/leaky_relu.hpp
         src/activation/details/mish.hpp
         src/activation/details/psilu.hpp
-        src/activation/details/raw.hpp
         src/activation/details/sigmoid.hpp
         src/activation/details/silu.hpp
         src/activation/details/softmax.hpp
