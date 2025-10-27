@@ -583,7 +583,7 @@ namespace Thot::Block::Details::Transformer::Mamba {
 
     using SelectiveStateSpace = Detail::SelectiveStateSpace;
     using EncoderLayer = Detail::EncoderLayer;
-    using Encoder = Detail::Encoder;
+    using EncoderModule = Detail::Encoder;
 }
 
 

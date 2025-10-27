@@ -7,7 +7,7 @@
 namespace Thot::Initialization::Details {
     namespace detail {
         template <class Module>
-        inline void zero_bias_if_present(const Module& module) {
+        inline void zero_bias_if_present(Module& module) {
             if constexpr (requires { module->bias; }) {
                 if (module->bias.defined()) {
                     torch::nn::init::zeros_(module->bias);
@@ -17,7 +17,7 @@ namespace Thot::Initialization::Details {
     }  // namespace detail
 
     template <class Module, class Descriptor>
-    inline void apply_module_initialization(const Module& module, const Descriptor& descriptor) {
+    inline void apply_module_initialization(Module& module, const Descriptor& descriptor) {
         const auto type = descriptor.initialization.type;
 
         switch (type) {

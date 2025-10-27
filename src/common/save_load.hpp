@@ -275,6 +275,25 @@ namespace Thot::Common::SaveLoad {
             throw std::runtime_error(message.str());
         }
 
+        inline std::string s4_initialization_to_string(Layer::Details::S4Initialization initialization)
+        {
+            switch (initialization) {
+                case Layer::Details::S4Initialization::HiPPO: return "hippo";
+                case Layer::Details::S4Initialization::S4D: return "s4d";
+            }
+            throw std::runtime_error("Unsupported S4 initialization during serialisation.");
+        }
+
+        inline Layer::Details::S4Initialization s4_initialization_from_string(const std::string& value)
+        {
+            const auto lowered = to_lower(value);
+            if (lowered == "hippo") return Layer::Details::S4Initialization::HiPPO;
+            if (lowered == "s4d") return Layer::Details::S4Initialization::S4D;
+            std::ostringstream message;
+            message << "Unknown S4 initialization '" << value << "'.";
+            throw std::runtime_error(message.str());
+        }
+
         inline std::string attention_variant_to_string(Attention::Variant variant)
         {
             switch (variant) {
@@ -1154,6 +1173,20 @@ namespace Thot::Common::SaveLoad {
                     tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
                     tree.add_child("initialization", Detail::serialize_initialization_descriptor(concrete.initialization));
                     tree.add_child("local", serialize_local_config(concrete.local));
+                } else if constexpr (std::is_same_v<DescriptorType, Layer::S4Descriptor>) {
+                    tree.put("type", "s4");
+                    tree.put("options.input_size", concrete.options.input_size);
+                    tree.put("options.state_size", concrete.options.state_size);
+                    tree.put("options.rank", concrete.options.rank);
+                    tree.put("options.output_size", concrete.options.output_size);
+                    tree.put("options.batch_first", concrete.options.batch_first);
+                    tree.put("options.bidirectional", concrete.options.bidirectional);
+                    tree.put("options.dropout", concrete.options.dropout);
+                    tree.put("options.initialization", Detail::s4_initialization_to_string(concrete.options.initialization));
+                    tree.put("options.maximum_length", concrete.options.maximum_length);
+                    tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
+                    tree.add_child("initialization", Detail::serialize_initialization_descriptor(concrete.initialization));
+                    tree.add_child("local", serialize_local_config(concrete.local));
                 } else {
                     static_assert(sizeof(DescriptorType) == 0, "Unsupported layer descriptor supplied.");
                 }
@@ -1339,6 +1372,23 @@ namespace Thot::Common::SaveLoad {
             descriptor.options.dropout = Detail::get_numeric<double>(tree, "options.dropout", context);
             descriptor.options.batch_first = Detail::get_boolean(tree, "options.batch_first", context);
             descriptor.options.bidirectional = Detail::get_boolean(tree, "options.bidirectional", context);
+            descriptor.activation = Detail::deserialize_activation_descriptor(tree.get_child("activation"), context);
+            descriptor.initialization = Detail::deserialize_initialization_descriptor(tree.get_child("initialization"), context);
+            descriptor.local = deserialize_local_config(tree.get_child("local"), context);
+            return Layer::Descriptor{descriptor};
+        }
+        if (type == "s4") {
+            Layer::Details::S4Descriptor descriptor;
+            descriptor.options.input_size = Detail::get_numeric<std::int64_t>(tree, "options.input_size", context);
+            descriptor.options.state_size = Detail::get_numeric<std::int64_t>(tree, "options.state_size", context);
+            descriptor.options.rank = Detail::get_numeric<std::int64_t>(tree, "options.rank", context);
+            descriptor.options.output_size = Detail::get_numeric<std::int64_t>(tree, "options.output_size", context);
+            descriptor.options.batch_first = Detail::get_boolean(tree, "options.batch_first", context);
+            descriptor.options.bidirectional = Detail::get_boolean(tree, "options.bidirectional", context);
+            descriptor.options.dropout = Detail::get_numeric<double>(tree, "options.dropout", context);
+            descriptor.options.initialization =
+                Detail::s4_initialization_from_string(Detail::get_string(tree, "options.initialization", context));
+            descriptor.options.maximum_length = Detail::get_numeric<std::int64_t>(tree, "options.maximum_length", context);
             descriptor.activation = Detail::deserialize_activation_descriptor(tree.get_child("activation"), context);
             descriptor.initialization = Detail::deserialize_initialization_descriptor(tree.get_child("initialization"), context);
             descriptor.local = deserialize_local_config(tree.get_child("local"), context);

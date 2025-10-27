@@ -301,7 +301,7 @@ namespace Thot {
                 const auto index = next_module_index();
                 auto module = register_module(
                     "ebt_encoder_" + std::to_string(index),
-                    Block::Transformer::EBT::Encoder(std::move(encoder_descriptor)));
+                    Block::Transformer::EBT::EncoderModule(std::move(encoder_descriptor)));
 
                     Layer::Details::RegisteredLayer registered_layer{};
                     registered_layer.activation = Activation::Type::Identity;
@@ -353,7 +353,7 @@ namespace Thot {
                     const auto index = next_module_index();
                     auto module = register_module(
                         "mamba_encoder_" + std::to_string(index),
-                        Block::Transformer::Mamba::Encoder(std::move(encoder_descriptor)));
+                        Block::Transformer::Mamba::EncoderModule(std::move(encoder_descriptor)));
 
                     Layer::Details::RegisteredLayer registered_layer{};
                     registered_layer.activation = Activation::Type::Identity;

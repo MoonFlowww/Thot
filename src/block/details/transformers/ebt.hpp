@@ -457,8 +457,8 @@ namespace Thot::Block::Details::Transformer::EBT {
     using TokenEmbedding = Detail::TokenEmbedding;
     using EnergyScorer = Detail::EnergyScorer;
     using RefinementLoop = Detail::RefinementLoop;
-    using Encoder = Detail::Encoder;
-    using Decoder = Detail::Decoder;
+    using EncoderModule = Detail::Encoder;
+    using DecoderModule = Detail::Decoder;
 }
 
 #endif //THOT_EBT_HPP
