@@ -150,7 +150,7 @@ int main() {
 
 
     if (!IsLoading) {
-        model.calibrate(train_images, train_labels, {Thot::Calibration::TemperatureScalingDescriptor{}}, true, std::make_pair(test_images, test_labels));
+        model.calibrate(train_images, train_labels, {Thot::Calibration::TemperatureScalingDescriptor{}}, true, std::make_pair(train_images, train_labels)); // std::make_pair(test_images, test_labels)
     }
 
 
