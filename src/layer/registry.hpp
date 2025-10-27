@@ -4,22 +4,14 @@
 
 #include <variant>
 
-#include "details/batchnorm.hpp"
-#include "details/conv.hpp"
-#include "details/dropout.hpp"
-#include "details/fc.hpp"
-#include "details/flatten.hpp"
-#include "details/pooling.hpp"
-#include "details/recurrent.hpp"
-#include "details/statespace.hpp"
+
 
 namespace Thot::Layer::Details {
     template <class Impl>
     [[nodiscard]] inline std::shared_ptr<torch::nn::Module>
     to_shared_module_ptr(const torch::nn::ModuleHolder<Impl>& holder)
     {
-        static_assert(std::is_base_of_v<torch::nn::Module, Impl>,
-                      "ModuleHolder implementation must derive from torch::nn::Module.");
+        static_assert(std::is_base_of_v<torch::nn::Module, Impl>, "ModuleHolder implementation must derive from torch::nn::Module.");
         return std::static_pointer_cast<torch::nn::Module>(holder.ptr());
     }
 
