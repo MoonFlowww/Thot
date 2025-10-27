@@ -85,8 +85,14 @@ namespace Thot::Layer::Details {
         inline torch::Tensor default_s4d_eigenvalues(std::int64_t N, const torch::TensorOptions& options)
         {
             auto indices = torch::arange(N, options.dtype(torch::kFloat64));
-            // Mirror the S4D initialization: real negative spectrum spaced logarithmically
-            auto base = torch::logspace(std::log10(0.1), std::log10(10.0), N, options.dtype(torch::kFloat64));
+            // Mirror the S4D initialization: real negative spectrum spaced log
+            auto base = torch::logspace(
+                std::log10(0.1),
+                std::log10(10.0),
+                N,
+                10.0,
+                options.dtype(torch::kFloat64)
+            );
             auto eigenvalues = -base;
             return eigenvalues.to(options.dtype(torch::kFloat64));
         }
