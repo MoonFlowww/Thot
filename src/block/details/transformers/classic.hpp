@@ -105,7 +105,7 @@ namespace Thot::Block::Details::Transformer::Classic {
             attention_descriptor_options.variant = attention_options.variant;
             layer.attention = ::Thot::Attention::MultiHead(attention_descriptor_options);
 
-            layer.attention_dropout = ::Thot::Layer::Dropout({attention_options.dropout});
+            layer.attention_dropout = ::Thot::Layer::HardDropout({attention_options.dropout});
 
             ::Thot::Layer::FCOptions fc1_options{feed_forward.embed_dim, hidden_dim, feed_forward.bias};
             layer.feed_forward.emplace_back(::Thot::Layer::FC(fc1_options, feed_forward.activation, feed_forward.initialization));
@@ -113,7 +113,7 @@ namespace Thot::Block::Details::Transformer::Classic {
             ::Thot::Layer::FCOptions fc2_options{hidden_dim, feed_forward.embed_dim, feed_forward.bias};
             layer.feed_forward.emplace_back(::Thot::Layer::FC(fc2_options, ::Thot::Activation::Identity, feed_forward.initialization));
 
-            layer.feed_forward_dropout = ::Thot::Layer::Dropout({options.dropout});
+            layer.feed_forward_dropout = ::Thot::Layer::HardDropout({options.dropout});
 
             descriptor.layers.emplace_back(std::move(layer));
         }
@@ -175,7 +175,7 @@ namespace Thot::Block::Details::Transformer::Classic {
             self_attention_descriptor_options.batch_first = self_attention.batch_first;
             self_attention_descriptor_options.variant = self_attention.variant;
             layer.self_attention = ::Thot::Attention::MultiHead(self_attention_descriptor_options);
-            layer.self_attention_dropout = ::Thot::Layer::Dropout({self_attention.dropout});
+            layer.self_attention_dropout = ::Thot::Layer::HardDropout({self_attention.dropout});
 
             ::Thot::Attention::MultiHeadOptions cross_attention_descriptor_options{};
             cross_attention_descriptor_options.embed_dim = cross_attention.embed_dim;
@@ -185,7 +185,7 @@ namespace Thot::Block::Details::Transformer::Classic {
             cross_attention_descriptor_options.batch_first = cross_attention.batch_first;
             cross_attention_descriptor_options.variant = cross_attention.variant;
             layer.cross_attention = ::Thot::Attention::MultiHead(cross_attention_descriptor_options);
-            layer.cross_attention_dropout = ::Thot::Layer::Dropout({cross_attention.dropout});
+            layer.cross_attention_dropout = ::Thot::Layer::HardDropout({cross_attention.dropout});
 
             ::Thot::Layer::FCOptions fc1_options{feed_forward.embed_dim, hidden_dim, feed_forward.bias};
             layer.feed_forward.emplace_back(::Thot::Layer::FC(fc1_options, feed_forward.activation, feed_forward.initialization));
@@ -193,7 +193,7 @@ namespace Thot::Block::Details::Transformer::Classic {
             ::Thot::Layer::FCOptions fc2_options{hidden_dim, feed_forward.embed_dim, feed_forward.bias};
             layer.feed_forward.emplace_back(::Thot::Layer::FC(fc2_options, ::Thot::Activation::Identity, feed_forward.initialization));
 
-            layer.feed_forward_dropout = ::Thot::Layer::Dropout({options.dropout});
+            layer.feed_forward_dropout = ::Thot::Layer::HardDropout({options.dropout});
 
             descriptor.layers.emplace_back(std::move(layer));
         }

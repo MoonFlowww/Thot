@@ -6,22 +6,74 @@
 
 namespace Thot::Layer::Details {
 
-    struct DropoutOptions {
+    struct HardDropoutOptions {
         double probability{0.5};
         bool inplace{false};
     };
 
-    struct DropoutDescriptor {
-        DropoutOptions options{};
+    struct HardDropoutDescriptor {
+        HardDropoutOptions options{};
         ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
         ::Thot::LocalConfig local{};
     };
 
-    using HardDropoutOptions = DropoutOptions;
-    using HardDropoutDescriptor = DropoutDescriptor;
+    class HardDropoutImpl : public torch::nn::Module {
+    public:
+        explicit HardDropoutImpl(HardDropoutOptions options = {})
+            : options_(options)
+        {
+            TORCH_CHECK(options_.probability >= 0.0 && options_.probability < 1.0,
+                        "HardDropout probability must be in the range [0, 1).");
+        }
+
+        torch::Tensor forward(torch::Tensor input)
+        {
+            if (!input.defined()) {
+                return input;
+            }
+
+            TORCH_CHECK(input.is_floating_point(),
+                        "HardDropout expects floating point tensors.");
+
+            if (!is_training() || options_.probability == 0.0) {
+                return input;
+            }
+
+            const double keep_prob = 1.0 - options_.probability;
+            TORCH_CHECK(keep_prob > 0.0,
+                        "HardDropout probability must be strictly less than 1.");
+
+            auto mask = torch::bernoulli(torch::full_like(input, keep_prob));
+            auto output = mask.mul(input).div_(keep_prob);
+
+            if (options_.inplace) {
+                input.copy_(output);
+                return input;
+            }
+
+            return output;
+        }
+
+        [[nodiscard]] const HardDropoutOptions& options() const noexcept { return options_; }
+
+    private:
+        HardDropoutOptions options_{};
+    };
+
+    TORCH_MODULE(HardDropout);
+
+
+
+
+
+
+
+
 
     struct SoftDropoutOptions {
         double probability{0.5};
+        double noise_mean{0.0};
+        double noise_std{1.0};
         bool inplace{false};
     };
 
@@ -76,7 +128,6 @@ namespace Thot::Layer::Details {
             return output;
         }
 
-        void reset() override {}
 
         [[nodiscard]] const SoftDropoutOptions& options() const noexcept { return options_; }
 

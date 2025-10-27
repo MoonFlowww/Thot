@@ -259,7 +259,7 @@ namespace Thot::Common::SaveLoad {
             PropertyTree tree;
             tree.put("embed_dim", options.embed_dim);
             tree.put("num_heads", options.num_heads);
-            tree.put("dropout", options.dropout);
+            tree.put("harddropout", options.dropout);
             tree.put("bias", options.bias);
             tree.put("batch_first", options.batch_first);
             tree.put("variant", attention_variant_to_string(options.variant));
@@ -272,7 +272,7 @@ namespace Thot::Common::SaveLoad {
             Classic::AttentionOptions options;
             options.embed_dim = get_numeric<std::int64_t>(tree, "embed_dim", context);
             options.num_heads = get_numeric<std::int64_t>(tree, "num_heads", context);
-            options.dropout = get_numeric<double>(tree, "dropout", context);
+            options.dropout = get_numeric<double>(tree, "harddropout", context);
             options.bias = get_boolean(tree, "bias", context);
             options.batch_first = get_boolean(tree, "batch_first", context);
             options.variant = attention_variant_from_string(get_string(tree, "variant", context));
@@ -323,7 +323,7 @@ namespace Thot::Common::SaveLoad {
         {
             PropertyTree tree;
             tree.put("type", positional_encoding_type_to_string(options.type));
-            tree.put("dropout", options.dropout);
+            tree.put("harddropout", options.dropout);
             tree.put("max_length", static_cast<std::uint64_t>(options.max_length));
             tree.put("batch_first", options.batch_first);
             return tree;
@@ -334,7 +334,7 @@ namespace Thot::Common::SaveLoad {
         {
             Classic::PositionalEncodingOptions options;
             options.type = positional_encoding_type_from_string(get_string(tree, "type", context));
-            options.dropout = get_numeric<double>(tree, "dropout", context);
+            options.dropout = get_numeric<double>(tree, "harddropout", context);
             options.max_length = static_cast<std::size_t>(get_numeric<std::uint64_t>(tree, "max_length", context));
             options.batch_first = get_boolean(tree, "batch_first", context);
             return options;
@@ -679,8 +679,8 @@ namespace Thot::Common::SaveLoad {
                         concrete.options);
                     tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
                     tree.add_child("local", serialize_local_config(concrete.local));
-                } else if constexpr (std::is_same_v<DescriptorType, Layer::DropoutDescriptor>) {
-                    tree.put("type", "dropout");
+                } else if constexpr (std::is_same_v<DescriptorType, Layer::HardDropoutDescriptor>) {
+                    tree.put("type", "harddropout");
                     tree.put("options.probability", concrete.options.probability);
                     tree.put("options.inplace", concrete.options.inplace);
                     tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
@@ -777,8 +777,8 @@ namespace Thot::Common::SaveLoad {
                 descriptor.options);
             return Layer::Descriptor{descriptor};
         }
-        if (type == "dropout") {
-            Layer::Details::DropoutDescriptor descriptor;
+        if (type == "harddropout") {
+            Layer::Details::HardDropoutDescriptor descriptor;
             descriptor.options.probability = Detail::get_numeric<double>(tree, "options.probability", context);
             descriptor.options.inplace = Detail::get_boolean(tree, "options.inplace", context);
             descriptor.activation = Detail::deserialize_activation_descriptor(tree.get_child("activation"), context);

@@ -244,8 +244,22 @@ namespace Thot::Layer::Details {
     template <class Owner>
     RegisteredLayer build_registered_layer(Owner& owner, const HardDropoutDescriptor& descriptor, std::size_t index)
     {
-        auto options = torch::nn::HardDropoutOptions(descriptor.options.probability).inplace(descriptor.options.inplace);
-        auto module = owner.register_module("HardDropout_" + std::to_string(index), torch::nn::HardDropout(options));
+        auto module = owner.register_module("harddropout_" + std::to_string(index), HardDropout(descriptor.options));
+
+        RegisteredLayer registered_layer{};
+        registered_layer.activation = descriptor.activation.type;
+        registered_layer.module = to_shared_module_ptr(module);
+        registered_layer.local = descriptor.local;
+        registered_layer.forward = [module](torch::Tensor input) {
+            return module->forward(std::move(input));
+        };
+        return registered_layer;
+    }
+
+    template <class Owner>
+    RegisteredLayer build_registered_layer(Owner& owner, const SoftDropoutDescriptor& descriptor, std::size_t index)
+    {
+        auto module = owner.register_module("softdropout_" + std::to_string(index), SoftDropout(descriptor.options));
 
         RegisteredLayer registered_layer{};
         registered_layer.activation = descriptor.activation.type;
