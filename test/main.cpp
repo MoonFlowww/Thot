@@ -9,7 +9,7 @@ int main() {
     Thot::Model model("Debug_CIFAR");
     bool IsLoading=false;
     if (IsLoading) {
-        model.save("/home/moonfloww/Projects/NNs");
+        model.save("/home/moonfloww/Projects/NNs/CIFAR_DEBUG");
     }
     std::cout << "Cuda: " << torch::cuda::is_available() << std::endl;
     model.to_device(torch::cuda::is_available());
@@ -168,57 +168,51 @@ int main() {
         Thot::Metric::Classification::BrierScore,
     });
 
-    model.save("/home/moonfloww/Projects/NNs");
+    model.save("/home/moonfloww/Projects/NNs/CIFAR_DEBUG");
     return 0;
 }
 
 
 /*
 
-    const int64_t N = 200000;
-    const int64_t B = 258;
-    const int64_t epochs = 15;
-
-    const int64_t steps_per_epoch = (N + B - 1) / B;
-
-    model.set_optimizer(
-        Thot::Optimizer::AdamW({.learning_rate=1e-3, .weight_decay=5e-4}),
-            Thot::LrScheduler::CosineAnnealing({
-            .T_max = (epochs) * steps_per_epoch,
-            .eta_min = 3e-5,
-            .warmup_steps = 5*steps_per_epoch,
-            .warmup_start_factor = 0.1
-        })
-    );
+model.set_optimizer(
+    Thot::Optimizer::AdamW({.learning_rate=1e-3, .weight_decay=5e-4}),
+        Thot::LrScheduler::CosineAnnealing({
+        .T_max = (epochs) * steps_per_epoch,
+        .eta_min = 3e-7,
+        .warmup_steps = 5*steps_per_epoch,
+        .warmup_start_factor = 0.1
+    })
+);
 
 
-    model.set_loss(Thot::Loss::CrossEntropy({.label_smoothing=0.05f}));
+model.set_loss(Thot::Loss::CrossEntropy({.label_smoothing=0.05f}));
 
-    model.set_regularization({ Thot::Regularization::SWAG({
-      .coefficient = 1e-3,
-      .variance_epsilon = 1e-6,
-      .start_step = static_cast<size_t>(0.85 * (steps_per_epoch*epochs)),
-      .accumulation_stride = static_cast<size_t>(steps_per_epoch),
-      .max_snapshots = 20,
-    })});
+model.set_regularization({ Thot::Regularization::SWAG({
+  .coefficient = 1e-3,
+  .variance_epsilon = 1e-6,
+  .start_step = static_cast<size_t>(0.85 * (steps_per_epoch*epochs)),
+  .accumulation_stride = static_cast<size_t>(steps_per_epoch),
+  .max_snapshots = 20,
+})});
 
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┓
 ┃ Evaluation: Classification ┃          ┃                    ┃
 ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━┫
 ┃ Metric                     ┃    Macro ┃ Weighted (support) ┃
 ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━┫
-┃ Accuracy                   ┃ 0.877800 ┃           0.877800 ┃
-┃ Precision                  ┃ 0.878442 ┃           0.878442 ┃
-┃ Recall                     ┃ 0.877800 ┃           0.877800 ┃
-┃ F1 score                   ┃ 0.877967 ┃           0.877967 ┃
-┃ True positive rate         ┃ 0.877800 ┃           0.877800 ┃
-┃ True negative rate         ┃ 0.986422 ┃           0.986422 ┃
-┃ Top-1 error                ┃ 0.122200 ┃           0.122200 ┃
-┃ Expected calibration error ┃ 0.039478 ┃           0.039478 ┃
-┃ Maximum calibration error  ┃ 0.803993 ┃           0.803993 ┃
-┃ Cohen's kappa              ┃ 0.864222 ┃           0.864222 ┃
-┃ Log loss                   ┃ 0.466842 ┃           0.466842 ┃
-┃ Brier score                ┃ 0.193210 ┃           0.193210 ┃
+┃ Accuracy                   ┃ 0.882600 ┃           0.882600 ┃
+┃ Precision                  ┃ 0.882892 ┃           0.882892 ┃
+┃ Recall                     ┃ 0.882600 ┃           0.882600 ┃
+┃ F1 score                   ┃ 0.881857 ┃           0.881857 ┃
+┃ True positive rate         ┃ 0.882600 ┃           0.882600 ┃
+┃ True negative rate         ┃ 0.986956 ┃           0.986956 ┃
+┃ Top-1 error                ┃ 0.117400 ┃           0.117400 ┃
+┃ Expected calibration error ┃ 0.034671 ┃           0.034671 ┃
+┃ Maximum calibration error  ┃ 0.244972 ┃           0.244972 ┃
+┃ Cohen's kappa              ┃ 0.869556 ┃           0.869556 ┃
+┃ Log loss                   ┃ 0.451599 ┃           0.451599 ┃
+┃ Brier score                ┃ 0.185568 ┃           0.185568 ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┻━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━┛
 
 */

@@ -113,7 +113,6 @@ namespace Thot::Common::SaveLoad {
         {
             switch (type) {
                 case Activation::Type::Identity: return "identity";
-                case Activation::Type::Raw: return "raw";
                 case Activation::Type::ReLU: return "relu";
                 case Activation::Type::Sigmoid: return "sigmoid";
                 case Activation::Type::Tanh: return "tanh";
@@ -135,7 +134,6 @@ namespace Thot::Common::SaveLoad {
         {
             const auto lowered = to_lower(value);
             if (lowered == "identity") return Activation::Type::Identity;
-            if (lowered == "raw") return Activation::Type::Raw;
             if (lowered == "relu") return Activation::Type::ReLU;
             if (lowered == "sigmoid") return Activation::Type::Sigmoid;
             if (lowered == "tanh") return Activation::Type::Tanh;

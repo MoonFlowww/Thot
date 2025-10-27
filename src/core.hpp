@@ -574,7 +574,7 @@ namespace Thot {
             return model_name_;
         }
 
-        void save(const std::filesystem::path& directory) const
+        void save(std::filesystem::path& directory) const
         {
             namespace fs = std::filesystem;
             if (directory.empty()) {
