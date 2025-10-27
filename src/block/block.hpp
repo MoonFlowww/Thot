@@ -27,7 +27,9 @@ namespace Thot::Block {
                                     Transformer::Classic::DecoderDescriptor,
                                     Transformer::Mamba::EncoderDescriptor,
                                     Transformer::EBT::EncoderDescriptor,
-                                    Transformer::EBT::DecoderDescriptor>;
+                                    Transformer::EBT::DecoderDescriptor,
+                                    Transformer::PlusPlus::EncoderDescriptor,
+                                    Transformer::PlusPlus::DecoderDescriptor>;
 
     [[nodiscard]] inline auto Sequential(std::initializer_list<::Thot::Layer::Descriptor> layers, ::Thot::LocalConfig local = {}) -> SequentialDescriptor {
         SequentialDescriptor descriptor{};
