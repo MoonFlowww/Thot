@@ -3,7 +3,9 @@
 #include "../../activation/activation.hpp"
 #include "../../common/local.hpp"
 #include <torch/torch.h>
-
+#include <string>
+#include <utility>
+#include "../registry.hpp"
 namespace Thot::Layer::Details {
 
     struct HardDropoutOptions {
@@ -61,6 +63,19 @@ namespace Thot::Layer::Details {
     };
 
     TORCH_MODULE(HardDropout);
+
+    template <class Owner>
+    RegisteredLayer build_registered_layer(Owner& owner, const HardDropoutDescriptor& descriptor, std::size_t index)
+    {
+        auto module = owner.register_module("hard_dropout_" + std::to_string(index), HardDropout(descriptor.options));
+
+        RegisteredLayer registered_layer{};
+        registered_layer.activation = descriptor.activation.type;
+        registered_layer.module = to_shared_module_ptr(module);
+        registered_layer.local = descriptor.local;
+        registered_layer.forward = [module](torch::Tensor input) { return module->forward(std::move(input)); };
+        return registered_layer;
+    }
 
 
 
@@ -133,6 +148,19 @@ namespace Thot::Layer::Details {
     };
 
     TORCH_MODULE(SoftDropout);
+
+    template <class Owner>
+    RegisteredLayer build_registered_layer(Owner& owner, const SoftDropoutDescriptor& descriptor, std::size_t index)
+    {
+        auto module = owner.register_module("soft_dropout_" + std::to_string(index), SoftDropout(descriptor.options));
+
+        RegisteredLayer registered_layer{};
+        registered_layer.activation = descriptor.activation.type;
+        registered_layer.module = to_shared_module_ptr(module);
+        registered_layer.local = descriptor.local;
+        registered_layer.forward = [module](torch::Tensor input) { return module->forward(std::move(input)); };
+        return registered_layer;
+    }
 
 }
 
