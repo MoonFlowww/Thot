@@ -35,7 +35,7 @@ int main() {
             Thot::Layer::MaxPool2d({{2,2}, {2,2}})
         }));
 
-        model.add(Thot::Layer::SoftDropout({ .probability = 0.3 }));
+        model.add(Thot::Layer::SoftDropout({ .probability = 0.08, .noise_mean = 0.0, .noise_std = 0.03 }));
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({64, 1e-5, 0.1, true, true}, Thot::Activation::GeLU),
@@ -46,7 +46,7 @@ int main() {
             .projection = Thot::Layer::Conv2d({64,128,{1,1},{2,2},{0,0},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal)
         }, { .final_activation = Thot::Activation::Identity }));
 
-        model.add(Thot::Layer::SoftDropout({ .probability = 0.3 }));
+        model.add(Thot::Layer::SoftDropout({ .probability = 0.08, .noise_mean = 0.0, .noise_std = 0.03 }));
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
@@ -62,7 +62,7 @@ int main() {
             Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal)
         }, 1, {}, { .final_activation = Thot::Activation::Identity }));
 
-        model.add(Thot::Layer::SoftDropout({ .probability = 0.3 }));
+        model.add(Thot::Layer::SoftDropout({ .probability = 0.25, .noise_mean = 0.0, .noise_std = 0.08, .inplace = false }));
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
@@ -73,7 +73,7 @@ int main() {
             .projection = Thot::Layer::Conv2d({128,256,{1,1},{2,2},{0,0},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal)
         }, { .final_activation = Thot::Activation::Identity }));
 
-        model.add(Thot::Layer::SoftDropout({ .probability = 0.3 }));
+        model.add(Thot::Layer::SoftDropout({ .probability = 0.25, .noise_mean = 0.0, .noise_std = 0.08, .inplace = false }));
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({256,1e-5,0.1,true,true}, Thot::Activation::GeLU),
