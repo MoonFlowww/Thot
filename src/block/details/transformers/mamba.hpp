@@ -8,6 +8,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <algorithm>
+
 
 #include <torch/torch.h>
 

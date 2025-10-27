@@ -13,6 +13,7 @@
 #include "details/transformers/classic.hpp"
 #include "details/transformers/mamba.hpp"
 #include "details/transformers/ebt.hpp"
+#include "details/transformers/plusplus.hpp"
 
 namespace Thot::Block {
     using SequentialDescriptor = Details::SequentialDescriptor;

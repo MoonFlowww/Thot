@@ -12,7 +12,7 @@
 #include <tuple>
 #include <utility>
 #include <vector>
-
+#include <cmath>
 #include <torch/torch.h>
 
 namespace Thot::Block::Details::Transformer::EBT {
