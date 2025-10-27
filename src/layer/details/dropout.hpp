@@ -30,31 +30,21 @@ namespace Thot::Layer::Details {
 
         torch::Tensor forward(torch::Tensor input)
         {
-            if (!input.defined()) {
-                return input;
-            }
+            if (!input.defined()) return input;
+            TORCH_CHECK(input.is_floating_point(), "SoftDropout expects floating point tensors.");
+            if (!is_training() || options_.probability == 0.0) return input;
 
-            TORCH_CHECK(input.is_floating_point(),
-                        "HardDropout expects floating point tensors.");
+            const double p = options_.probability;
+            const double std = std::sqrt(p / (1.0 - p)); // matches inverted dropout variance
 
-            if (!is_training() || options_.probability == 0.0) {
-                return input;
-            }
+            // mean=1 keeps E[output]=input
+            auto eps = torch::empty_like(input).normal_(1.0, std);
+            auto output = input * eps;
 
-            const double keep_prob = 1.0 - options_.probability;
-            TORCH_CHECK(keep_prob > 0.0,
-                        "HardDropout probability must be strictly less than 1.");
-
-            auto mask = torch::bernoulli(torch::full_like(input, keep_prob));
-            auto output = mask.mul(input).div_(keep_prob);
-
-            if (options_.inplace) {
-                input.copy_(output);
-                return input;
-            }
-
+            if (options_.inplace) { input.mul_(eps); return input; }
             return output;
         }
+
 
         [[nodiscard]] const HardDropoutOptions& options() const noexcept { return options_; }
 
