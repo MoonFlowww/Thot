@@ -741,6 +741,52 @@ namespace Thot::Common::SaveLoad {
                     tree.put("options.end_dim", concrete.options.end_dim);
                     tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
                     tree.add_child("local", serialize_local_config(concrete.local));
+                    } else if constexpr (std::is_same_v<DescriptorType, Layer::RNNDescriptor>) {
+                    tree.put("type", "rnn");
+                    tree.put("options.input_size", concrete.options.input_size);
+                    tree.put("options.hidden_size", concrete.options.hidden_size);
+                    tree.put("options.num_layers", concrete.options.num_layers);
+                    tree.put("options.dropout", concrete.options.dropout);
+                    tree.put("options.batch_first", concrete.options.batch_first);
+                    tree.put("options.bidirectional", concrete.options.bidirectional);
+                    tree.put("options.nonlinearity", concrete.options.nonlinearity);
+                    tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
+                    tree.add_child("initialization", Detail::serialize_initialization_descriptor(concrete.initialization));
+                    tree.add_child("local", serialize_local_config(concrete.local));
+                } else if constexpr (std::is_same_v<DescriptorType, Layer::LSTMDescriptor>) {
+                    tree.put("type", "lstm");
+                    tree.put("options.input_size", concrete.options.input_size);
+                    tree.put("options.hidden_size", concrete.options.hidden_size);
+                    tree.put("options.num_layers", concrete.options.num_layers);
+                    tree.put("options.dropout", concrete.options.dropout);
+                    tree.put("options.batch_first", concrete.options.batch_first);
+                    tree.put("options.bidirectional", concrete.options.bidirectional);
+                    tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
+                    tree.add_child("initialization", Detail::serialize_initialization_descriptor(concrete.initialization));
+                    tree.add_child("local", serialize_local_config(concrete.local));
+                } else if constexpr (std::is_same_v<DescriptorType, Layer::GRUDescriptor>) {
+                    tree.put("type", "gru");
+                    tree.put("options.input_size", concrete.options.input_size);
+                    tree.put("options.hidden_size", concrete.options.hidden_size);
+                    tree.put("options.num_layers", concrete.options.num_layers);
+                    tree.put("options.dropout", concrete.options.dropout);
+                    tree.put("options.batch_first", concrete.options.batch_first);
+                    tree.put("options.bidirectional", concrete.options.bidirectional);
+                    tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
+                    tree.add_child("initialization", Detail::serialize_initialization_descriptor(concrete.initialization));
+                    tree.add_child("local", serialize_local_config(concrete.local));
+                } else if constexpr (std::is_same_v<DescriptorType, Layer::StateSpaceDescriptor>) {
+                    tree.put("type", "statespace");
+                    tree.put("options.input_size", concrete.options.input_size);
+                    tree.put("options.hidden_size", concrete.options.hidden_size);
+                    tree.put("options.output_size", concrete.options.output_size);
+                    tree.put("options.num_layers", concrete.options.num_layers);
+                    tree.put("options.dropout", concrete.options.dropout);
+                    tree.put("options.batch_first", concrete.options.batch_first);
+                    tree.put("options.bidirectional", concrete.options.bidirectional);
+                    tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
+                    tree.add_child("initialization", Detail::serialize_initialization_descriptor(concrete.initialization));
+                    tree.add_child("local", serialize_local_config(concrete.local));
                 } else {
                     static_assert(sizeof(DescriptorType) == 0, "Unsupported layer descriptor supplied.");
                 }
@@ -874,6 +920,60 @@ namespace Thot::Common::SaveLoad {
             descriptor.options.start_dim = Detail::get_numeric<std::int64_t>(tree, "options.start_dim", context);
             descriptor.options.end_dim = Detail::get_numeric<std::int64_t>(tree, "options.end_dim", context);
             descriptor.activation = Detail::deserialize_activation_descriptor(tree.get_child("activation"), context);
+            descriptor.local = deserialize_local_config(tree.get_child("local"), context);
+            return Layer::Descriptor{descriptor};
+        }
+        if (type == "rnn") {
+            Layer::Details::RNNDescriptor descriptor;
+            descriptor.options.input_size = Detail::get_numeric<std::int64_t>(tree, "options.input_size", context);
+            descriptor.options.hidden_size = Detail::get_numeric<std::int64_t>(tree, "options.hidden_size", context);
+            descriptor.options.num_layers = Detail::get_numeric<std::int64_t>(tree, "options.num_layers", context);
+            descriptor.options.dropout = Detail::get_numeric<double>(tree, "options.dropout", context);
+            descriptor.options.batch_first = Detail::get_boolean(tree, "options.batch_first", context);
+            descriptor.options.bidirectional = Detail::get_boolean(tree, "options.bidirectional", context);
+            descriptor.options.nonlinearity = Detail::get_string(tree, "options.nonlinearity", context);
+            descriptor.activation = Detail::deserialize_activation_descriptor(tree.get_child("activation"), context);
+            descriptor.initialization = Detail::deserialize_initialization_descriptor(tree.get_child("initialization"), context);
+            descriptor.local = deserialize_local_config(tree.get_child("local"), context);
+            return Layer::Descriptor{descriptor};
+        }
+        if (type == "lstm") {
+            Layer::Details::LSTMDescriptor descriptor;
+            descriptor.options.input_size = Detail::get_numeric<std::int64_t>(tree, "options.input_size", context);
+            descriptor.options.hidden_size = Detail::get_numeric<std::int64_t>(tree, "options.hidden_size", context);
+            descriptor.options.num_layers = Detail::get_numeric<std::int64_t>(tree, "options.num_layers", context);
+            descriptor.options.dropout = Detail::get_numeric<double>(tree, "options.dropout", context);
+            descriptor.options.batch_first = Detail::get_boolean(tree, "options.batch_first", context);
+            descriptor.options.bidirectional = Detail::get_boolean(tree, "options.bidirectional", context);
+            descriptor.activation = Detail::deserialize_activation_descriptor(tree.get_child("activation"), context);
+            descriptor.initialization = Detail::deserialize_initialization_descriptor(tree.get_child("initialization"), context);
+            descriptor.local = deserialize_local_config(tree.get_child("local"), context);
+            return Layer::Descriptor{descriptor};
+        }
+        if (type == "gru") {
+            Layer::Details::GRUDescriptor descriptor;
+            descriptor.options.input_size = Detail::get_numeric<std::int64_t>(tree, "options.input_size", context);
+            descriptor.options.hidden_size = Detail::get_numeric<std::int64_t>(tree, "options.hidden_size", context);
+            descriptor.options.num_layers = Detail::get_numeric<std::int64_t>(tree, "options.num_layers", context);
+            descriptor.options.dropout = Detail::get_numeric<double>(tree, "options.dropout", context);
+            descriptor.options.batch_first = Detail::get_boolean(tree, "options.batch_first", context);
+            descriptor.options.bidirectional = Detail::get_boolean(tree, "options.bidirectional", context);
+            descriptor.activation = Detail::deserialize_activation_descriptor(tree.get_child("activation"), context);
+            descriptor.initialization = Detail::deserialize_initialization_descriptor(tree.get_child("initialization"), context);
+            descriptor.local = deserialize_local_config(tree.get_child("local"), context);
+            return Layer::Descriptor{descriptor};
+        }
+        if (type == "statespace") {
+            Layer::Details::StateSpaceDescriptor descriptor;
+            descriptor.options.input_size = Detail::get_numeric<std::int64_t>(tree, "options.input_size", context);
+            descriptor.options.hidden_size = Detail::get_numeric<std::int64_t>(tree, "options.hidden_size", context);
+            descriptor.options.output_size = Detail::get_numeric<std::int64_t>(tree, "options.output_size", context);
+            descriptor.options.num_layers = Detail::get_numeric<std::int64_t>(tree, "options.num_layers", context);
+            descriptor.options.dropout = Detail::get_numeric<double>(tree, "options.dropout", context);
+            descriptor.options.batch_first = Detail::get_boolean(tree, "options.batch_first", context);
+            descriptor.options.bidirectional = Detail::get_boolean(tree, "options.bidirectional", context);
+            descriptor.activation = Detail::deserialize_activation_descriptor(tree.get_child("activation"), context);
+            descriptor.initialization = Detail::deserialize_initialization_descriptor(tree.get_child("initialization"), context);
             descriptor.local = deserialize_local_config(tree.get_child("local"), context);
             return Layer::Descriptor{descriptor};
         }
