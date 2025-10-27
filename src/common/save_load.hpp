@@ -345,7 +345,15 @@ namespace Thot::Common::SaveLoad {
             return std::visit(
                 [](const auto& concrete) -> std::string {
                     using OptionType = std::decay_t<decltype(concrete)>;
-                    if constexpr (std::is_same_v<OptionType, Layer::Details::MaxPool2dOptions>) {
+                    if constexpr (std::is_same_v<OptionType, Layer::Details::MaxPool1dOptions>) {
+                        return "max1d";
+                    } else if constexpr (std::is_same_v<OptionType, Layer::Details::AvgPool1dOptions>) {
+                        return "avg1d";
+                    } else if constexpr (std::is_same_v<OptionType, Layer::Details::AdaptiveAvgPool1dOptions>) {
+                        return "adaptive_avg1d";
+                    } else if constexpr (std::is_same_v<OptionType, Layer::Details::AdaptiveMaxPool1dOptions>) {
+                        return "adaptive_max1d";
+                    } else if constexpr (std::is_same_v<OptionType, Layer::Details::MaxPool2dOptions>) {
                         return "max2d";
                     } else if constexpr (std::is_same_v<OptionType, Layer::Details::AvgPool2dOptions>) {
                         return "avg2d";
@@ -363,6 +371,10 @@ namespace Thot::Common::SaveLoad {
         inline Layer::Details::PoolingOptions pooling_variant_from_string(const std::string& value)
         {
             const auto lowered = to_lower(value);
+            if (lowered == "max1d") return Layer::Details::PoolingOptions{Layer::Details::MaxPool1dOptions{}};
+            if (lowered == "avg1d") return Layer::Details::PoolingOptions{Layer::Details::AvgPool1dOptions{}};
+            if (lowered == "adaptive_avg1d") return Layer::Details::PoolingOptions{Layer::Details::AdaptiveAvgPool1dOptions{}};
+            if (lowered == "adaptive_max1d") return Layer::Details::PoolingOptions{Layer::Details::AdaptiveMaxPool1dOptions{}};
             if (lowered == "max2d") return Layer::Details::PoolingOptions{Layer::Details::MaxPool2dOptions{}};
             if (lowered == "avg2d") return Layer::Details::PoolingOptions{Layer::Details::AvgPool2dOptions{}};
             if (lowered == "adaptive_avg2d") return Layer::Details::PoolingOptions{Layer::Details::AdaptiveAvgPool2dOptions{}};
@@ -628,6 +640,20 @@ namespace Thot::Common::SaveLoad {
                     tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
                     tree.add_child("initialization", Detail::serialize_initialization_descriptor(concrete.initialization));
                     tree.add_child("local", serialize_local_config(concrete.local));
+                } else if constexpr (std::is_same_v<DescriptorType, Layer::Conv1dDescriptor>) {
+                    tree.put("type", "conv1d");
+                    tree.put("options.in_channels", concrete.options.in_channels);
+                    tree.put("options.out_channels", concrete.options.out_channels);
+                    tree.add_child("options.kernel_size", Detail::write_array(concrete.options.kernel_size));
+                    tree.add_child("options.stride", Detail::write_array(concrete.options.stride));
+                    tree.add_child("options.padding", Detail::write_array(concrete.options.padding));
+                    tree.add_child("options.dilation", Detail::write_array(concrete.options.dilation));
+                    tree.put("options.groups", concrete.options.groups);
+                    tree.put("options.bias", concrete.options.bias);
+                    tree.put("options.padding_mode", concrete.options.padding_mode);
+                    tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
+                    tree.add_child("initialization", Detail::serialize_initialization_descriptor(concrete.initialization));
+                    tree.add_child("local", serialize_local_config(concrete.local));
                 } else if constexpr (std::is_same_v<DescriptorType, Layer::Conv2dDescriptor>) {
                     tree.put("type", "conv2d");
                     tree.put("options.in_channels", concrete.options.in_channels);
@@ -658,7 +684,23 @@ namespace Thot::Common::SaveLoad {
                     std::visit(
                         [&](const auto& options) {
                             using OptionType = std::decay_t<decltype(options)>;
-                            if constexpr (std::is_same_v<OptionType, Layer::Details::MaxPool2dOptions>) {
+                            if constexpr (std::is_same_v<OptionType, Layer::Details::MaxPool1dOptions>) {
+                                tree.add_child("options.kernel_size", Detail::write_array(options.kernel_size));
+                                tree.add_child("options.stride", Detail::write_array(options.stride));
+                                tree.add_child("options.padding", Detail::write_array(options.padding));
+                                tree.add_child("options.dilation", Detail::write_array(options.dilation));
+                                tree.put("options.ceil_mode", options.ceil_mode);
+                            } else if constexpr (std::is_same_v<OptionType, Layer::Details::AvgPool1dOptions>) {
+                                tree.add_child("options.kernel_size", Detail::write_array(options.kernel_size));
+                                tree.add_child("options.stride", Detail::write_array(options.stride));
+                                tree.add_child("options.padding", Detail::write_array(options.padding));
+                                tree.put("options.ceil_mode", options.ceil_mode);
+                                tree.put("options.count_include_pad", options.count_include_pad);
+                            } else if constexpr (std::is_same_v<OptionType, Layer::Details::AdaptiveAvgPool1dOptions>) {
+                                tree.add_child("options.output_size", Detail::write_array(options.output_size));
+                            } else if constexpr (std::is_same_v<OptionType, Layer::Details::AdaptiveMaxPool1dOptions>) {
+                                tree.add_child("options.output_size", Detail::write_array(options.output_size));
+                            } else if constexpr (std::is_same_v<OptionType, Layer::Details::MaxPool2dOptions>) {
                                 tree.add_child("options.kernel_size", Detail::write_array(options.kernel_size));
                                 tree.add_child("options.stride", Detail::write_array(options.stride));
                                 tree.add_child("options.padding", Detail::write_array(options.padding));
@@ -720,6 +762,22 @@ namespace Thot::Common::SaveLoad {
             descriptor.local = deserialize_local_config(tree.get_child("local"), context);
             return Layer::Descriptor{descriptor};
         }
+        if (type == "conv1d") {
+            Layer::Details::Conv1dDescriptor descriptor;
+            descriptor.options.in_channels = Detail::get_numeric<std::int64_t>(tree, "options.in_channels", context);
+            descriptor.options.out_channels = Detail::get_numeric<std::int64_t>(tree, "options.out_channels", context);
+            descriptor.options.kernel_size = Detail::read_array<std::int64_t>(tree.get_child("options.kernel_size"), context);
+            descriptor.options.stride = Detail::read_array<std::int64_t>(tree.get_child("options.stride"), context);
+            descriptor.options.padding = Detail::read_array<std::int64_t>(tree.get_child("options.padding"), context);
+            descriptor.options.dilation = Detail::read_array<std::int64_t>(tree.get_child("options.dilation"), context);
+            descriptor.options.groups = Detail::get_numeric<std::int64_t>(tree, "options.groups", context);
+            descriptor.options.bias = Detail::get_boolean(tree, "options.bias", context);
+            descriptor.options.padding_mode = Detail::get_string(tree, "options.padding_mode", context);
+            descriptor.activation = Detail::deserialize_activation_descriptor(tree.get_child("activation"), context);
+            descriptor.initialization = Detail::deserialize_initialization_descriptor(tree.get_child("initialization"), context);
+            descriptor.local = deserialize_local_config(tree.get_child("local"), context);
+            return Layer::Descriptor{descriptor};
+        }
         if (type == "conv2d") {
             Layer::Details::Conv2dDescriptor descriptor;
             descriptor.options.in_channels = Detail::get_numeric<std::int64_t>(tree, "options.in_channels", context);
@@ -756,7 +814,23 @@ namespace Thot::Common::SaveLoad {
             std::visit(
                 [&](auto& options) {
                     using OptionType = std::decay_t<decltype(options)>;
-                    if constexpr (std::is_same_v<OptionType, Layer::Details::MaxPool2dOptions>) {
+                    if constexpr (std::is_same_v<OptionType, Layer::Details::MaxPool1dOptions>) {
+                        options.kernel_size = Detail::read_array<std::int64_t>(tree.get_child("options.kernel_size"), context);
+                        options.stride = Detail::read_array<std::int64_t>(tree.get_child("options.stride"), context);
+                        options.padding = Detail::read_array<std::int64_t>(tree.get_child("options.padding"), context);
+                        options.dilation = Detail::read_array<std::int64_t>(tree.get_child("options.dilation"), context);
+                        options.ceil_mode = Detail::get_boolean(tree, "options.ceil_mode", context);
+                    } else if constexpr (std::is_same_v<OptionType, Layer::Details::AvgPool1dOptions>) {
+                        options.kernel_size = Detail::read_array<std::int64_t>(tree.get_child("options.kernel_size"), context);
+                        options.stride = Detail::read_array<std::int64_t>(tree.get_child("options.stride"), context);
+                        options.padding = Detail::read_array<std::int64_t>(tree.get_child("options.padding"), context);
+                        options.ceil_mode = Detail::get_boolean(tree, "options.ceil_mode", context);
+                        options.count_include_pad = Detail::get_boolean(tree, "options.count_include_pad", context);
+                    } else if constexpr (std::is_same_v<OptionType, Layer::Details::AdaptiveAvgPool1dOptions>) {
+                        options.output_size = Detail::read_array<std::int64_t>(tree.get_child("options.output_size"), context);
+                    } else if constexpr (std::is_same_v<OptionType, Layer::Details::AdaptiveMaxPool1dOptions>) {
+                        options.output_size = Detail::read_array<std::int64_t>(tree.get_child("options.output_size"), context);
+                    } else if constexpr (std::is_same_v<OptionType, Layer::Details::MaxPool2dOptions>) {
                         options.kernel_size = Detail::read_array<std::int64_t>(tree.get_child("options.kernel_size"), context);
                         options.stride = Detail::read_array<std::int64_t>(tree.get_child("options.stride"), context);
                         options.padding = Detail::read_array<std::int64_t>(tree.get_child("options.padding"), context);

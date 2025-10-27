@@ -142,14 +142,16 @@ namespace Thot::Layer::Details {
             }
         }
 
-        inline std::string normalize_nonlinearity(std::string nonlinearity)
-        {
+        inline torch::nn::RNNOptions::nonlinearity_t normalize_nonlinearity(std::string nonlinearity) {
             std::transform(nonlinearity.begin(), nonlinearity.end(), nonlinearity.begin(),
                            [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
-            if (nonlinearity != "tanh" && nonlinearity != "relu") {
-                throw std::invalid_argument("RNN nonlinearity must be either 'tanh' or 'relu'.");
+            if (nonlinearity == "relu") {
+                return torch::kReLU;
             }
-            return nonlinearity;
+            if (nonlinearity == "tanh") {
+                return torch::kTanh;
+            }
+            throw std::invalid_argument("RNN nonlinearity must be either 'tanh' or 'relu'.");
         }
 
         template <class Owner, class ModuleType, class Descriptor, class Options>

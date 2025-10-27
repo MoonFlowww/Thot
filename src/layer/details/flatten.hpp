@@ -7,6 +7,7 @@
 #include <torch/nn/pimpl.h>
 #include "../../activation/activation.hpp"
 #include "../../common/local.hpp"
+#include "../registry.hpp"
 
 namespace Thot::Layer::Details {
 
@@ -53,6 +54,19 @@ namespace Thot::Layer::Details {
         ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
         ::Thot::LocalConfig local{};
     };
+
+    template <class Owner>
+    RegisteredLayer build_registered_layer(Owner& owner, const FlattenDescriptor& descriptor, std::size_t index)
+    {
+        auto module = owner.register_module("flatten_" + std::to_string(index), Flatten(descriptor.options));
+
+        RegisteredLayer registered_layer{};
+        registered_layer.activation = descriptor.activation.type;
+        registered_layer.module = to_shared_module_ptr(module);
+        registered_layer.local = descriptor.local;
+        registered_layer.forward = [module](torch::Tensor input) { return module->forward(std::move(input)); };
+        return registered_layer;
+    }
 
 }
 
