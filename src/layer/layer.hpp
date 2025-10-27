@@ -9,6 +9,7 @@
 #include "details/batchnorm.hpp"
 #include "details/conv.hpp"
 #include "details/dropout.hpp"
+#include "details/s4.hpp"
 #include "details/fc.hpp"
 #include "details/flatten.hpp"
 #include "details/pooling.hpp"
@@ -62,6 +63,11 @@ namespace Thot::Layer {
     using StateSpaceDescriptor = Details::StateSpaceDescriptor;
 
 
+    using S4Options = Details::S4Options;
+    using S4Descriptor = Details::S4Descriptor;
+
+
+
     using Descriptor = std::variant<FCDescriptor,
                                     Conv1dDescriptor,
                                     Conv2dDescriptor,
@@ -73,7 +79,8 @@ namespace Thot::Layer {
                                     RNNDescriptor,
                                     LSTMDescriptor,
                                     GRUDescriptor,
-                                    StateSpaceDescriptor>;
+                                    StateSpaceDescriptor,
+                                    S4Descriptor>;
 
     [[nodiscard]] inline auto FC(const FCOptions& options,
                                  ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
@@ -215,8 +222,7 @@ namespace Thot::Layer {
     [[nodiscard]] inline auto LSTM(const LSTMOptions& options,
                                     ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
                                     ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default,
-                                    ::Thot::LocalConfig local = {}) -> LSTMDescriptor
-    {
+                                    ::Thot::LocalConfig local = {}) -> LSTMDescriptor {
         return {options, activation, initialization, std::move(local)};
     }
 
@@ -235,6 +241,15 @@ namespace Thot::Layer {
     {
         return {options, activation, initialization, std::move(local)};
     }
+
+    [[nodiscard]] inline auto S4(const S4Options& options,
+                              ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
+                              ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default,
+                              ::Thot::LocalConfig local = {}) -> S4Descriptor
+    {
+        return {options, activation, initialization, std::move(local)};
+    }
+
 
 
 }

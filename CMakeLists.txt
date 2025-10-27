@@ -111,5 +111,6 @@ add_executable(test_Thot test/main.cpp
         src/regularization/details/swag.hpp
         src/calibration/details/temperature_scaling.hpp
         src/common/save_load.hpp
+        src/layer/details/s4.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)

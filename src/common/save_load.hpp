@@ -21,6 +21,7 @@
 #include "../attention/attention.hpp"
 #include "../block/block.hpp"
 #include "../block/details/transformers/classic.hpp"
+#include "../block/details/transformers/mamba.hpp"
 #include "../common/local.hpp"
 #include "../initialization/initialization.hpp"
 #include "../layer/layer.hpp"
@@ -107,6 +108,90 @@ namespace Thot::Common::SaveLoad {
                 array.push_back({"", element});
             }
             return array;
+        }
+
+        namespace Mamba = Block::Details::Transformer::Mamba;
+
+        inline PropertyTree serialize_mamba_rms_norm_options(const Mamba::RMSNormOptions& options)
+        {
+            PropertyTree tree;
+            tree.put("eps", options.eps);
+            tree.put("learnable", options.learnable);
+            return tree;
+        }
+
+        inline Mamba::RMSNormOptions deserialize_mamba_rms_norm_options(const PropertyTree& tree, const std::string& context)
+        {
+            Mamba::RMSNormOptions options;
+            options.eps = get_numeric<double>(tree, "eps", context + " rms_norm");
+            options.learnable = get_boolean(tree, "learnable", context + " rms_norm");
+            return options;
+        }
+
+        inline PropertyTree serialize_mamba_selective_state_options(const Mamba::SelectiveStateSpaceOptions& options)
+        {
+            PropertyTree tree;
+            tree.put("embed_dim", options.embed_dim);
+            tree.put("state_expansion", options.state_expansion);
+            tree.put("ssm_layers", static_cast<std::uint64_t>(options.ssm_layers));
+            tree.put("conv_kernel_size", static_cast<std::uint64_t>(options.conv_kernel_size));
+            tree.put("dropout", options.dropout);
+            tree.put("batch_first", options.batch_first);
+            return tree;
+        }
+
+        inline Mamba::SelectiveStateSpaceOptions deserialize_mamba_selective_state_options(const PropertyTree& tree,
+                                                                                          const std::string& context)
+        {
+            Mamba::SelectiveStateSpaceOptions options;
+            options.embed_dim = get_numeric<std::int64_t>(tree, "embed_dim", context + " selective_state");
+            options.state_expansion = get_numeric<double>(tree, "state_expansion", context + " selective_state");
+            options.ssm_layers = get_numeric<std::int64_t>(tree, "ssm_layers", context + " selective_state");
+            options.conv_kernel_size = get_numeric<std::int64_t>(tree, "conv_kernel_size", context + " selective_state");
+            options.dropout = get_numeric<double>(tree, "dropout", context + " selective_state");
+            options.batch_first = get_boolean(tree, "batch_first", context + " selective_state");
+            return options;
+        }
+
+        inline PropertyTree serialize_mamba_feed_forward_options(const Mamba::FeedForwardOptions& options)
+        {
+            PropertyTree tree;
+            tree.put("embed_dim", options.embed_dim);
+            tree.put("expansion_ratio", options.expansion_ratio);
+            tree.put("dropout", options.dropout);
+            tree.put("gated", options.gated);
+            return tree;
+        }
+
+        inline Mamba::FeedForwardOptions deserialize_mamba_feed_forward_options(const PropertyTree& tree,
+                                                                                const std::string& context)
+        {
+            Mamba::FeedForwardOptions options;
+            options.embed_dim = get_numeric<std::int64_t>(tree, "embed_dim", context + " feed_forward");
+            options.expansion_ratio = get_numeric<double>(tree, "expansion_ratio", context + " feed_forward");
+            options.dropout = get_numeric<double>(tree, "dropout", context + " feed_forward");
+            options.gated = get_boolean(tree, "gated", context + " feed_forward");
+            return options;
+        }
+
+        inline std::string serialize_mamba_normalization_order(Mamba::NormalizationOrder order)
+        {
+            return order == Mamba::NormalizationOrder::Pre ? "pre" : "post";
+        }
+
+        inline Mamba::NormalizationOrder deserialize_mamba_normalization_order(const std::string& value,
+                                                                               const std::string& context)
+        {
+            const auto lowered = to_lower(value);
+            if (lowered == "pre") {
+                return Mamba::NormalizationOrder::Pre;
+            }
+            if (lowered == "post") {
+                return Mamba::NormalizationOrder::Post;
+            }
+            std::ostringstream message;
+            message << "Unknown normalization order '" << value << "' in " << context;
+            throw std::runtime_error(message.str());
         }
 
         inline std::string activation_type_to_string(Activation::Type type)
@@ -203,6 +288,7 @@ namespace Thot::Common::SaveLoad {
         }
 
         namespace Classic = Block::Details::Transformer::Classic;
+        namespace EBT = Block::Details::Transformer::EBT;
 
         inline std::string positional_encoding_type_to_string(Classic::PositionalEncodingType type)
         {
@@ -252,6 +338,103 @@ namespace Thot::Common::SaveLoad {
             Initialization::Descriptor descriptor;
             descriptor.type = initialization_type_from_string(get_string(tree, "type", context));
             return descriptor;
+        }
+
+        inline std::string ebt_modality_type_to_string(EBT::ModalityType type)
+        {
+            switch (type) {
+            case EBT::ModalityType::Discrete: return "discrete";
+            case EBT::ModalityType::Continuous: return "continuous";
+            }
+            throw std::runtime_error("Unsupported EBT modality type during serialisation.");
+        }
+
+        inline EBT::ModalityType ebt_modality_type_from_string(const std::string& value)
+        {
+            const auto lowered = to_lower(value);
+            if (lowered == "discrete") {
+                return EBT::ModalityType::Discrete;
+            }
+            if (lowered == "continuous") {
+                return EBT::ModalityType::Continuous;
+            }
+            std::ostringstream message;
+            message << "Unknown EBT modality type '" << value << "'.";
+            throw std::runtime_error(message.str());
+        }
+
+        inline PropertyTree serialize_ebt_modality_options(const EBT::ModalityOptions& options)
+        {
+            PropertyTree tree;
+            tree.put("type", ebt_modality_type_to_string(options.type));
+            tree.put("vocab_size", static_cast<std::int64_t>(options.vocab_size));
+            tree.put("input_dim", static_cast<std::int64_t>(options.input_dim));
+            tree.put("embed_dim", static_cast<std::int64_t>(options.embed_dim));
+            return tree;
+        }
+
+        inline EBT::ModalityOptions deserialize_ebt_modality_options(const PropertyTree& tree, const std::string& context)
+        {
+            EBT::ModalityOptions options;
+            options.type = ebt_modality_type_from_string(get_string(tree, "type", context));
+            options.vocab_size = get_numeric<std::int64_t>(tree, "vocab_size", context);
+            options.input_dim = get_numeric<std::int64_t>(tree, "input_dim", context);
+            options.embed_dim = get_numeric<std::int64_t>(tree, "embed_dim", context);
+            return options;
+        }
+
+        inline PropertyTree serialize_ebt_energy_options(const EBT::EnergyScorerOptions& options)
+        {
+            PropertyTree tree;
+            tree.put("depth", static_cast<std::uint64_t>(options.depth));
+            tree.put("hidden_size", static_cast<std::int64_t>(options.hidden_size));
+            tree.put("modality_heads", static_cast<std::int64_t>(options.modality_heads));
+            return tree;
+        }
+
+        inline EBT::EnergyScorerOptions deserialize_ebt_energy_options(const PropertyTree& tree, const std::string& context)
+        {
+            EBT::EnergyScorerOptions options;
+            options.depth = static_cast<std::size_t>(get_numeric<std::uint64_t>(tree, "depth", context));
+            options.hidden_size = get_numeric<std::int64_t>(tree, "hidden_size", context);
+            options.modality_heads = get_numeric<std::int64_t>(tree, "modality_heads", context);
+            return options;
+        }
+
+        inline PropertyTree serialize_ebt_optimizer_options(const EBT::OptimizerOptions& options)
+        {
+            PropertyTree tree;
+            tree.put("learning_rate", options.learning_rate);
+            tree.put("momentum", options.momentum);
+            tree.put("gradient_clip_norm", options.gradient_clip_norm);
+            return tree;
+        }
+
+        inline EBT::OptimizerOptions deserialize_ebt_optimizer_options(const PropertyTree& tree, const std::string& context)
+        {
+            EBT::OptimizerOptions options;
+            options.learning_rate = get_numeric<double>(tree, "learning_rate", context);
+            options.momentum = get_numeric<double>(tree, "momentum", context);
+            options.gradient_clip_norm = get_numeric<double>(tree, "gradient_clip_norm", context);
+            return options;
+        }
+
+        inline PropertyTree serialize_ebt_refinement_options(const EBT::RefinementOptions& options)
+        {
+            PropertyTree tree;
+            tree.put("max_steps", static_cast<std::uint64_t>(options.max_steps));
+            tree.put("tolerance", options.tolerance);
+            tree.put("stop_on_plateau", options.stop_on_plateau);
+            return tree;
+        }
+
+        inline EBT::RefinementOptions deserialize_ebt_refinement_options(const PropertyTree& tree, const std::string& context)
+        {
+            EBT::RefinementOptions options;
+            options.max_steps = static_cast<std::size_t>(get_numeric<std::uint64_t>(tree, "max_steps", context));
+            options.tolerance = get_numeric<double>(tree, "tolerance", context);
+            options.stop_on_plateau = get_boolean(tree, "stop_on_plateau", context);
+            return options;
         }
 
         inline PropertyTree serialize_classic_attention_options(const Classic::AttentionOptions& options)
@@ -982,8 +1165,7 @@ namespace Thot::Common::SaveLoad {
         throw std::runtime_error(message.str());
     }
 
-    inline PropertyTree serialize_block_descriptor(const Block::Descriptor& descriptor)
-    {
+    inline PropertyTree serialize_block_descriptor(const Block::Descriptor& descriptor) {
         PropertyTree tree;
         std::visit(
             [&](const auto& concrete) {
@@ -1069,6 +1251,49 @@ namespace Thot::Common::SaveLoad {
                         layers.push_back({"", entry});
                     }
                     tree.add_child("layers", layers);
+                } else if constexpr (std::is_same_v<DescriptorType, Detail::EBT::EncoderDescriptor>) {
+                    tree.put("type", "ebt_encoder");
+                    tree.add_child("options.modality",
+                                   Detail::serialize_ebt_modality_options(concrete.options.modality));
+                    tree.add_child("options.energy", Detail::serialize_ebt_energy_options(concrete.options.energy));
+                    tree.add_child("options.optimizer",
+                                   Detail::serialize_ebt_optimizer_options(concrete.options.optimizer));
+                    tree.add_child("options.refinement",
+                                   Detail::serialize_ebt_refinement_options(concrete.options.refinement));
+                } else if constexpr (std::is_same_v<DescriptorType, Detail::EBT::DecoderDescriptor>) {
+                    tree.put("type", "ebt_decoder");
+                    tree.add_child("options.target",
+                                   Detail::serialize_ebt_modality_options(concrete.options.target));
+                    if (concrete.options.context.has_value()) {
+                        tree.add_child("options.context", Detail::serialize_ebt_modality_options(*concrete.options.context));
+                    }
+                    tree.add_child("options.energy", Detail::serialize_ebt_energy_options(concrete.options.energy));
+                    tree.add_child("options.optimizer", Detail::serialize_ebt_optimizer_options(concrete.options.optimizer));
+                    tree.add_child("options.refinement", Detail::serialize_ebt_refinement_options(concrete.options.refinement));
+
+                } else if constexpr (std::is_same_v<DescriptorType, Detail::Mamba::EncoderDescriptor>) {
+                    tree.put("type", "mamba_encoder");
+                    tree.put("options.layers", static_cast<std::uint64_t>(concrete.options.layers));
+                    tree.put("options.embed_dim", concrete.options.embed_dim);
+                    tree.add_child("options.rms_norm", Detail::serialize_mamba_rms_norm_options(concrete.options.rms_norm));
+                    tree.put("options.normalization", Detail::serialize_mamba_normalization_order(concrete.options.normalization));
+                    tree.put("options.residual_dropout", concrete.options.residual_dropout);
+                    tree.put("options.feed_forward_dropout", concrete.options.feed_forward_dropout);
+                    tree.put("options.residual_gating", concrete.options.residual_gating);
+                    tree.put("options.feed_forward_gating", concrete.options.feed_forward_gating);
+                    tree.put("options.batch_first", concrete.options.batch_first);
+                    tree.put("options.final_layer_norm", concrete.options.final_layer_norm);
+                    tree.add_child("options.selective_state", Detail::serialize_mamba_selective_state_options(concrete.options.selective_state));
+                    tree.add_child("options.feed_forward", Detail::serialize_mamba_feed_forward_options(concrete.options.feed_forward));
+
+                    PropertyTree layers;
+                for (const auto& layer : concrete.layers) {
+                    PropertyTree entry;
+                    entry.add_child("selective_state", Detail::serialize_mamba_selective_state_options(layer.selective_state));
+                    entry.add_child("feed_forward", Detail::serialize_mamba_feed_forward_options(layer.feed_forward));
+                    layers.push_back({"", entry});
+                }
+                tree.add_child("layers", layers);
                 } else {
                     static_assert(sizeof(DescriptorType) == 0, "Unsupported block descriptor supplied.");
                 }
@@ -1166,6 +1391,58 @@ namespace Thot::Common::SaveLoad {
                                                                            context + " decoder feed-forward dropout");
                 descriptor.layers.push_back(std::move(layer));
             }
+            return Block::Descriptor{descriptor};
+        }
+        if (type == "mamba_encoder") {
+            Detail::Mamba::EncoderDescriptor descriptor;
+            descriptor.options.layers = static_cast<std::size_t>(Detail::get_numeric<std::uint64_t>(tree, "options.layers", context));
+            descriptor.options.embed_dim = Detail::get_numeric<std::int64_t>(tree, "options.embed_dim", context);
+            descriptor.options.rms_norm = Detail::deserialize_mamba_rms_norm_options(tree.get_child("options.rms_norm"), context);
+            descriptor.options.normalization = Detail::deserialize_mamba_normalization_order(
+                Detail::get_string(tree, "options.normalization", context), context);
+            descriptor.options.residual_dropout = Detail::get_numeric<double>(tree, "options.residual_dropout", context);
+            descriptor.options.feed_forward_dropout = Detail::get_numeric<double>(tree, "options.feed_forward_dropout", context);
+            descriptor.options.residual_gating = Detail::get_boolean(tree, "options.residual_gating", context);
+            descriptor.options.feed_forward_gating = Detail::get_boolean(tree, "options.feed_forward_gating", context);
+            descriptor.options.batch_first = Detail::get_boolean(tree, "options.batch_first", context);
+            descriptor.options.final_layer_norm = Detail::get_boolean(tree, "options.final_layer_norm", context);
+            descriptor.options.selective_state =
+                Detail::deserialize_mamba_selective_state_options(tree.get_child("options.selective_state"), context);
+            descriptor.options.feed_forward =
+                Detail::deserialize_mamba_feed_forward_options(tree.get_child("options.feed_forward"), context);
+            for (const auto& node : tree.get_child("layers")) {
+                Detail::Mamba::EncoderLayerDescriptor layer;
+                layer.selective_state = Detail::deserialize_mamba_selective_state_options(node.second.get_child("selective_state"), context);
+                layer.feed_forward = Detail::deserialize_mamba_feed_forward_options(node.second.get_child("feed_forward"), context);
+                descriptor.layers.push_back(std::move(layer));
+            }
+            return Block::Descriptor{descriptor};
+        }
+        if (type == "ebt_encoder") {
+            Detail::EBT::EncoderDescriptor descriptor;
+            descriptor.options.modality =
+                Detail::deserialize_ebt_modality_options(tree.get_child("options.modality"), context);
+            descriptor.options.energy =
+                Detail::deserialize_ebt_energy_options(tree.get_child("options.energy"), context);
+            descriptor.options.optimizer =
+                Detail::deserialize_ebt_optimizer_options(tree.get_child("options.optimizer"), context);
+            descriptor.options.refinement =
+                Detail::deserialize_ebt_refinement_options(tree.get_child("options.refinement"), context);
+            return Block::Descriptor{descriptor};
+        }
+        if (type == "ebt_decoder") {
+            Detail::EBT::DecoderDescriptor descriptor;
+            descriptor.options.target =
+                Detail::deserialize_ebt_modality_options(tree.get_child("options.target"), context);
+            if (const auto context_node = tree.get_child_optional("options.context")) {
+                descriptor.options.context = Detail::deserialize_ebt_modality_options(*context_node, context);
+            }
+            descriptor.options.energy =
+                Detail::deserialize_ebt_energy_options(tree.get_child("options.energy"), context);
+            descriptor.options.optimizer =
+                Detail::deserialize_ebt_optimizer_options(tree.get_child("options.optimizer"), context);
+            descriptor.options.refinement =
+                Detail::deserialize_ebt_refinement_options(tree.get_child("options.refinement"), context);
             return Block::Descriptor{descriptor};
         }
         std::ostringstream message;

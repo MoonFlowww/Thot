@@ -11,6 +11,8 @@
 #include "details/blocks/residual.hpp"
 #include "details/blocks/sequential.hpp"
 #include "details/transformers/classic.hpp"
+#include "details/transformers/mamba.hpp"
+#include "details/transformers/ebt.hpp"
 
 namespace Thot::Block {
     using SequentialDescriptor = Details::SequentialDescriptor;
@@ -21,7 +23,10 @@ namespace Thot::Block {
     using Descriptor = std::variant<SequentialDescriptor,
                                     ResidualDescriptor,
                                     Transformer::Classic::EncoderDescriptor,
-                                    Transformer::Classic::DecoderDescriptor>;
+                                    Transformer::Classic::DecoderDescriptor,
+                                    Transformer::Mamba::EncoderDescriptor,
+                                    Transformer::EBT::EncoderDescriptor,
+                                    Transformer::EBT::DecoderDescriptor>;
 
     [[nodiscard]] inline auto Sequential(std::initializer_list<::Thot::Layer::Descriptor> layers, ::Thot::LocalConfig local = {}) -> SequentialDescriptor {
         SequentialDescriptor descriptor{};

@@ -296,6 +296,74 @@ namespace Thot {
                 },
                 [](const Block::Transformer::Classic::DecoderDescriptor&) {
                     throw std::invalid_argument("Transformer decoder blocks are not yet supported by Model::add.");
+                },
+            [&](Block::Transformer::EBT::EncoderDescriptor encoder_descriptor) {
+                const auto index = next_module_index();
+                auto module = register_module(
+                    "ebt_encoder_" + std::to_string(index),
+                    Block::Transformer::EBT::Encoder(std::move(encoder_descriptor)));
+
+                    Layer::Details::RegisteredLayer registered_layer{};
+                    registered_layer.activation = Activation::Type::Identity;
+                    registered_layer.module = Layer::Details::to_shared_module_ptr(module);
+                    registered_layer.forward = [module](torch::Tensor input) {
+                        return module->forward(std::move(input));
+                    };
+
+                    layers_.push_back(std::move(registered_layer));
+                    register_layer_runtime(layers_.back());
+                },
+                [](const Block::Transformer::EBT::DecoderDescriptor&) {
+                    throw std::invalid_argument("EBT decoder blocks are not yet supported by Model::add.");
+                },
+            [&](Block::Transformer::PlusPlus::EncoderDescriptor encoder_descriptor) {
+                const auto index = next_module_index();
+                auto module = register_module(
+                    "transformer_pp_encoder_" + std::to_string(index),
+                    Block::Transformer::PlusPlus::TransformerPlusPlusEncoder(std::move(encoder_descriptor)));
+
+                Layer::Details::RegisteredLayer registered_layer{};
+                registered_layer.activation = Activation::Type::Identity;
+                registered_layer.module = Layer::Details::to_shared_module_ptr(module);
+                registered_layer.forward = [module](torch::Tensor input) {
+                    return module->forward(std::move(input));
+                };
+
+                layers_.push_back(std::move(registered_layer));
+                register_layer_runtime(layers_.back());
+                },
+                [&](Block::Transformer::PlusPlus::DecoderDescriptor decoder_descriptor) {
+                    const auto index = next_module_index();
+                    auto module = register_module(
+                        "transformer_pp_decoder_" + std::to_string(index),
+                        Block::Transformer::PlusPlus::TransformerPlusPlusDecoder(std::move(decoder_descriptor)));
+
+                    Layer::Details::RegisteredLayer registered_layer{};
+                    registered_layer.activation = Activation::Type::Identity;
+                    registered_layer.module = Layer::Details::to_shared_module_ptr(module);
+                    registered_layer.forward = [module](torch::Tensor input) {
+                        auto result = module->forward(std::move(input), torch::Tensor{});
+                        return std::move(result.main);
+                    };
+
+                    layers_.push_back(std::move(registered_layer));
+                    register_layer_runtime(layers_.back());
+                },
+                [&](Block::Transformer::Mamba::EncoderDescriptor encoder_descriptor) {
+                    const auto index = next_module_index();
+                    auto module = register_module(
+                        "mamba_encoder_" + std::to_string(index),
+                        Block::Transformer::Mamba::Encoder(std::move(encoder_descriptor)));
+
+                    Layer::Details::RegisteredLayer registered_layer{};
+                    registered_layer.activation = Activation::Type::Identity;
+                    registered_layer.module = Layer::Details::to_shared_module_ptr(module);
+                    registered_layer.forward = [module](torch::Tensor input) {
+                        return module->forward(std::move(input));
+                    };
+
+                    layers_.push_back(std::move(registered_layer));
+                    register_layer_runtime(layers_.back());
                 }
             };
 
@@ -311,6 +379,15 @@ namespace Thot {
                 },
                 [&](Block::Transformer::Classic::DecoderDescriptor decoder_descriptor) {
                     transformer_block_handler(decoder_descriptor);
+                },
+                [&](Block::Transformer::PlusPlus::EncoderDescriptor encoder_descriptor) {
+                    transformer_block_handler(std::move(encoder_descriptor));
+                },
+                    [&](Block::Transformer::PlusPlus::DecoderDescriptor decoder_descriptor) {
+                        transformer_block_handler(std::move(decoder_descriptor));
+                },
+                    [&](Block::Transformer::Mamba::EncoderDescriptor encoder_descriptor) {
+                        transformer_block_handler(std::move(encoder_descriptor));
                 }
             };
 

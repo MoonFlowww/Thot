@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <tuple>
 
 #include <torch/torch.h>
 
@@ -154,6 +155,19 @@ namespace Thot::Layer::Details {
             throw std::invalid_argument("RNN nonlinearity must be either 'tanh' or 'relu'.");
         }
 
+        template <class Output>
+        auto take_recurrent_output(Output&& result)
+        {
+            if constexpr (requires { std::forward<Output>(result).output; }) {
+                return std::forward<Output>(result).output;
+            } else if constexpr (requires { std::get<0>(std::forward<Output>(result)); }) {
+                return std::get<0>(std::forward<Output>(result));
+            } else {
+                static_assert(sizeof(Output) == 0, "Unsupported recurrent module output type.");
+            }
+        }
+
+
         template <class Owner, class ModuleType, class Descriptor, class Options>
         RegisteredLayer build_recurrent_layer(Owner& owner,
                                               std::string name_prefix,
@@ -174,12 +188,12 @@ namespace Thot::Layer::Details {
             registered_layer.local = descriptor.local;
             registered_layer.forward = [module](torch::Tensor input) {
                 auto output = module->forward(std::move(input));
-                return std::move(output.output);
+                return Detail::take_recurrent_output(std::move(output));
             };
             return registered_layer;
         }
 
-    }  // namespace Detail
+    }
 
     template <class Owner>
     RegisteredLayer build_registered_layer(Owner& owner, const RNNDescriptor& descriptor, std::size_t index)
