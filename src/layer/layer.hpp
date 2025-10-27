@@ -12,6 +12,8 @@
 #include "details/fc.hpp"
 #include "details/flatten.hpp"
 #include "details/pooling.hpp"
+#include "details/recurrent.hpp"
+#include "details/statespace.hpp"
 #include "registry.hpp"
 
 namespace Thot::Layer {
@@ -38,13 +40,30 @@ namespace Thot::Layer {
     using FlattenOptions = Details::FlattenOptions;
     using FlattenDescriptor = Details::FlattenDescriptor;
 
+    using RNNOptions = Details::RNNOptions;
+    using RNNDescriptor = Details::RNNDescriptor;
+
+    using LSTMOptions = Details::LSTMOptions;
+    using LSTMDescriptor = Details::LSTMDescriptor;
+
+    using GRUOptions = Details::GRUOptions;
+    using GRUDescriptor = Details::GRUDescriptor;
+
+    using StateSpaceOptions = Details::StateSpaceOptions;
+    using StateSpaceDescriptor = Details::StateSpaceDescriptor;
+
+
     using Descriptor = std::variant<FCDescriptor,
                                     Conv2dDescriptor,
                                     BatchNorm2dDescriptor,
                                     PoolingDescriptor,
                                     HardDropoutDescriptor,
                                     SoftDropoutDescriptor,
-                                    FlattenDescriptor>;
+                                    FlattenDescriptor,
+                                    RNNDescriptor,
+                                    LSTMDescriptor,
+                                    GRUDescriptor,
+                                    StateSpaceDescriptor>;
 
     [[nodiscard]] inline auto FC(const FCOptions& options,
                                  ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
@@ -123,6 +142,39 @@ namespace Thot::Layer {
     {
         return {options, activation, std::move(local)};
     }
+
+    [[nodiscard]] inline auto RNN(const RNNOptions& options,
+                                   ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
+                                   ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default,
+                                   ::Thot::LocalConfig local = {}) -> RNNDescriptor
+    {
+        return {options, activation, initialization, std::move(local)};
+    }
+
+    [[nodiscard]] inline auto LSTM(const LSTMOptions& options,
+                                    ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
+                                    ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default,
+                                    ::Thot::LocalConfig local = {}) -> LSTMDescriptor
+    {
+        return {options, activation, initialization, std::move(local)};
+    }
+
+    [[nodiscard]] inline auto GRU(const GRUOptions& options,
+                                   ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
+                                   ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default,
+                                   ::Thot::LocalConfig local = {}) -> GRUDescriptor
+    {
+        return {options, activation, initialization, std::move(local)};
+    }
+
+    [[nodiscard]] inline auto StateSpace(const StateSpaceOptions& options,
+                                          ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
+                                          ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default,
+                                          ::Thot::LocalConfig local = {}) -> StateSpaceDescriptor
+    {
+        return {options, activation, initialization, std::move(local)};
+    }
+
 
 }
 

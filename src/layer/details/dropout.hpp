@@ -113,10 +113,7 @@ namespace Thot::Layer::Details {
 
             auto mask = torch::bernoulli(torch::full_like(input, keep_prob)).to(torch::kBool);
             auto scaled_input = input / keep_prob;
-            auto noise = torch::normal(options_.noise_mean,
-                                       options_.noise_std,
-                                       input.sizes(),
-                                       input.options());
+            auto noise = torch::empty_like(input).normal_(options_.noise_mean, options_.noise_std);
             auto noisy_input = scaled_input + noise;
             auto output = torch::where(mask, scaled_input, noisy_input);
 

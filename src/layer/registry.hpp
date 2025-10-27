@@ -23,6 +23,8 @@
 #include "details/fc.hpp"
 #include "details/flatten.hpp"
 #include "details/pooling.hpp"
+#include "details/recurrent.hpp"
+#include "details/statespace.hpp"
 
 namespace Thot::Layer::Details {
     template <class Impl>

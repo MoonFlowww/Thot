@@ -1,4 +1,0 @@
-#ifndef THOT_RESIDUAL_HPP
-#define THOT_RESIDUAL_HPP
-
-#endif //THOT_RESIDUAL_HPP

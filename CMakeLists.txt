@@ -51,7 +51,7 @@ add_library(Thot SHARED
         src/layer/details/conv.hpp
         src/layer/details/statespace.hpp
         src/layer/details/batchnorm.hpp
-        src/layer/details/residual.hpp
+        src/layer/details/recurrent.hpp
         src/layer/details/flatten.hpp
         src/layer/details/pooling.hpp
         src/layer/details/positional_encoding.hpp
