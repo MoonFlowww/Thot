@@ -5,13 +5,13 @@
 
 namespace Thot::Layer::Details {
 
-    struct DropoutOptions {
+    struct HardDropoutOptions {
         double probability{0.5};
         bool inplace{false};
     };
 
-    struct DropoutDescriptor {
-        DropoutOptions options{};
+    struct HardDropoutDescriptor {
+        HardDropoutOptions options{};
         ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
         ::Thot::LocalConfig local{};
     };

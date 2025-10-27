@@ -19,7 +19,7 @@
 #include "../initialization/apply.hpp"
 #include "details/batchnorm.hpp"
 #include "details/conv.hpp"
-#include "details/dropout.hpp"
+#include "details/HardDropout.hpp"
 #include "details/fc.hpp"
 #include "details/flatten.hpp"
 #include "details/pooling.hpp"
@@ -242,10 +242,10 @@ namespace Thot::Layer::Details {
     }
 
     template <class Owner>
-    RegisteredLayer build_registered_layer(Owner& owner, const DropoutDescriptor& descriptor, std::size_t index)
+    RegisteredLayer build_registered_layer(Owner& owner, const HardDropoutDescriptor& descriptor, std::size_t index)
     {
-        auto options = torch::nn::DropoutOptions(descriptor.options.probability).inplace(descriptor.options.inplace);
-        auto module = owner.register_module("dropout_" + std::to_string(index), torch::nn::Dropout(options));
+        auto options = torch::nn::HardDropoutOptions(descriptor.options.probability).inplace(descriptor.options.inplace);
+        auto module = owner.register_module("HardDropout_" + std::to_string(index), torch::nn::HardDropout(options));
 
         RegisteredLayer registered_layer{};
         registered_layer.activation = descriptor.activation.type;

@@ -14,7 +14,7 @@ namespace Thot::Attention {
     struct MultiHeadOptions {
         std::int64_t embed_dim{};
         std::int64_t num_heads{1};
-        double dropout{0.0};
+        double harddropout{0.0};
         bool bias{true};
         bool add_bias_kv{false};
         bool add_zero_attn{false};

@@ -259,7 +259,7 @@ namespace Thot::Common::SaveLoad {
             PropertyTree tree;
             tree.put("embed_dim", options.embed_dim);
             tree.put("num_heads", options.num_heads);
-            tree.put("dropout", options.dropout);
+            tree.put("harddropout", options.harddropout);
             tree.put("bias", options.bias);
             tree.put("batch_first", options.batch_first);
             tree.put("variant", attention_variant_to_string(options.variant));
@@ -272,7 +272,7 @@ namespace Thot::Common::SaveLoad {
             Classic::AttentionOptions options;
             options.embed_dim = get_numeric<std::int64_t>(tree, "embed_dim", context);
             options.num_heads = get_numeric<std::int64_t>(tree, "num_heads", context);
-            options.dropout = get_numeric<double>(tree, "dropout", context);
+            options.harddropout = get_numeric<double>(tree, "harddropout", context);
             options.bias = get_boolean(tree, "bias", context);
             options.batch_first = get_boolean(tree, "batch_first", context);
             options.variant = attention_variant_from_string(get_string(tree, "variant", context));
@@ -323,7 +323,7 @@ namespace Thot::Common::SaveLoad {
         {
             PropertyTree tree;
             tree.put("type", positional_encoding_type_to_string(options.type));
-            tree.put("dropout", options.dropout);
+            tree.put("harddropout", options.harddropout);
             tree.put("max_length", static_cast<std::uint64_t>(options.max_length));
             tree.put("batch_first", options.batch_first);
             return tree;
@@ -334,7 +334,7 @@ namespace Thot::Common::SaveLoad {
         {
             Classic::PositionalEncodingOptions options;
             options.type = positional_encoding_type_from_string(get_string(tree, "type", context));
-            options.dropout = get_numeric<double>(tree, "dropout", context);
+            options.harddropout = get_numeric<double>(tree, "harddropout", context);
             options.max_length = static_cast<std::size_t>(get_numeric<std::uint64_t>(tree, "max_length", context));
             options.batch_first = get_boolean(tree, "batch_first", context);
             return options;
@@ -580,7 +580,7 @@ namespace Thot::Common::SaveLoad {
                     tree.put("type", "multi_head");
                     tree.put("options.embed_dim", options.embed_dim);
                     tree.put("options.num_heads", options.num_heads);
-                    tree.put("options.dropout", options.dropout);
+                    tree.put("options.harddropout", options.harddropout);
                     tree.put("options.bias", options.bias);
                     tree.put("options.add_bias_kv", options.add_bias_kv);
                     tree.put("options.add_zero_attn", options.add_zero_attn);
@@ -605,7 +605,7 @@ namespace Thot::Common::SaveLoad {
         Attention::MultiHeadOptions options;
         options.embed_dim = Detail::get_numeric<std::int64_t>(tree, "options.embed_dim", context);
         options.num_heads = Detail::get_numeric<std::int64_t>(tree, "options.num_heads", context);
-        options.dropout = Detail::get_numeric<double>(tree, "options.dropout", context);
+        options.harddropout = Detail::get_numeric<double>(tree, "options.harddropout", context);
         options.bias = Detail::get_boolean(tree, "options.bias", context);
         options.add_bias_kv = Detail::get_boolean(tree, "options.add_bias_kv", context);
         options.add_zero_attn = Detail::get_boolean(tree, "options.add_zero_attn", context);
@@ -679,8 +679,8 @@ namespace Thot::Common::SaveLoad {
                         concrete.options);
                     tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
                     tree.add_child("local", serialize_local_config(concrete.local));
-                } else if constexpr (std::is_same_v<DescriptorType, Layer::DropoutDescriptor>) {
-                    tree.put("type", "dropout");
+                } else if constexpr (std::is_same_v<DescriptorType, Layer::HardDropoutDescriptor>) {
+                    tree.put("type", "harddropout");
                     tree.put("options.probability", concrete.options.probability);
                     tree.put("options.inplace", concrete.options.inplace);
                     tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
@@ -769,8 +769,8 @@ namespace Thot::Common::SaveLoad {
                 descriptor.options);
             return Layer::Descriptor{descriptor};
         }
-        if (type == "dropout") {
-            Layer::Details::DropoutDescriptor descriptor;
+        if (type == "harddropout") {
+            Layer::Details::HardDropoutDescriptor descriptor;
             descriptor.options.probability = Detail::get_numeric<double>(tree, "options.probability", context);
             descriptor.options.inplace = Detail::get_boolean(tree, "options.inplace", context);
             descriptor.activation = Detail::deserialize_activation_descriptor(tree.get_child("activation"), context);
@@ -818,7 +818,7 @@ namespace Thot::Common::SaveLoad {
                     }
                     tree.add_child("output.final_activation",
                                    Detail::serialize_activation_descriptor(concrete.output.final_activation));
-                    tree.put("output.dropout", concrete.output.dropout);
+                    tree.put("output.harddropout", concrete.output.harddropout);
                     tree.add_child("local", serialize_local_config(concrete.local));
                 } else if constexpr (std::is_same_v<DescriptorType, Detail::Classic::EncoderDescriptor>) {
                     tree.put("type", "transformer_encoder");
@@ -831,18 +831,18 @@ namespace Thot::Common::SaveLoad {
                                                                       concrete.options.positional_encoding));
                     tree.put("options.layers", static_cast<std::uint64_t>(concrete.options.layers));
                     tree.put("options.embed_dim", concrete.options.embed_dim);
-                    tree.put("options.dropout", concrete.options.dropout);
+                    tree.put("options.harddropout", concrete.options.harddropout);
                     PropertyTree layers;
                     for (const auto& layer : concrete.layers) {
                         PropertyTree entry;
                         entry.add_child("attention", serialize_attention(layer.attention));
-                        entry.add_child("attention_dropout", serialize_layer_descriptor(layer.attention_dropout));
+                        entry.add_child("attention_harddropout", serialize_layer_descriptor(layer.attention_harddropout));
                         PropertyTree feed_forward_layers;
                         for (const auto& ff : layer.feed_forward) {
                             feed_forward_layers.push_back({"", serialize_layer_descriptor(ff)});
                         }
                         entry.add_child("feed_forward", feed_forward_layers);
-                        entry.add_child("feed_forward_dropout", serialize_layer_descriptor(layer.feed_forward_dropout));
+                        entry.add_child("feed_forward_harddropout", serialize_layer_descriptor(layer.feed_forward_harddropout));
                         layers.push_back({"", entry});
                     }
                     tree.add_child("layers", layers);
@@ -860,20 +860,20 @@ namespace Thot::Common::SaveLoad {
                                                                       concrete.options.positional_encoding));
                     tree.put("options.layers", static_cast<std::uint64_t>(concrete.options.layers));
                     tree.put("options.embed_dim", concrete.options.embed_dim);
-                    tree.put("options.dropout", concrete.options.dropout);
+                    tree.put("options.harddropout", concrete.options.harddropout);
                     PropertyTree layers;
                     for (const auto& layer : concrete.layers) {
                         PropertyTree entry;
                         entry.add_child("self_attention", serialize_attention(layer.self_attention));
-                        entry.add_child("self_attention_dropout", serialize_layer_descriptor(layer.self_attention_dropout));
+                        entry.add_child("self_attention_harddropout", serialize_layer_descriptor(layer.self_attention_harddropout));
                         entry.add_child("cross_attention", serialize_attention(layer.cross_attention));
-                        entry.add_child("cross_attention_dropout", serialize_layer_descriptor(layer.cross_attention_dropout));
+                        entry.add_child("cross_attention_harddropout", serialize_layer_descriptor(layer.cross_attention_harddropout));
                         PropertyTree feed_forward_layers;
                         for (const auto& ff : layer.feed_forward) {
                             feed_forward_layers.push_back({"", serialize_layer_descriptor(ff)});
                         }
                         entry.add_child("feed_forward", feed_forward_layers);
-                        entry.add_child("feed_forward_dropout", serialize_layer_descriptor(layer.feed_forward_dropout));
+                        entry.add_child("feed_forward_harddropout", serialize_layer_descriptor(layer.feed_forward_harddropout));
                         layers.push_back({"", entry});
                     }
                     tree.add_child("layers", layers);
@@ -908,7 +908,7 @@ namespace Thot::Common::SaveLoad {
             }
             descriptor.output.final_activation =
                 Detail::deserialize_activation_descriptor(tree.get_child("output.final_activation"), context);
-            descriptor.output.dropout = Detail::get_numeric<double>(tree, "output.dropout", context);
+            descriptor.output.harddropout = Detail::get_numeric<double>(tree, "output.harddropout", context);
             descriptor.local = deserialize_local_config(tree.get_child("local"), context + " residual local");
             return Block::Descriptor{descriptor};
         }
@@ -925,18 +925,18 @@ namespace Thot::Common::SaveLoad {
             descriptor.options.layers =
                 static_cast<std::size_t>(Detail::get_numeric<std::uint64_t>(tree, "options.layers", context));
             descriptor.options.embed_dim = Detail::get_numeric<std::int64_t>(tree, "options.embed_dim", context);
-            descriptor.options.dropout = Detail::get_numeric<double>(tree, "options.dropout", context);
+            descriptor.options.harddropout = Detail::get_numeric<double>(tree, "options.harddropout", context);
             for (const auto& node : tree.get_child("layers")) {
                 Detail::Classic::EncoderLayerDescriptor layer;
                 layer.attention = deserialize_attention(node.second.get_child("attention"), context + " encoder attention");
-                layer.attention_dropout = deserialize_layer_descriptor(node.second.get_child("attention_dropout"),
-                                                                       context + " encoder attention dropout");
+                layer.attention_harddropout = deserialize_layer_descriptor(node.second.get_child("attention_harddropout"),
+                                                                       context + " encoder attention harddropout");
                 for (const auto& feed_forward : node.second.get_child("feed_forward")) {
                     layer.feed_forward.push_back(
                         deserialize_layer_descriptor(feed_forward.second, context + " encoder feed-forward"));
                 }
-                layer.feed_forward_dropout = deserialize_layer_descriptor(node.second.get_child("feed_forward_dropout"),
-                                                                           context + " encoder feed-forward dropout");
+                layer.feed_forward_harddropout = deserialize_layer_descriptor(node.second.get_child("feed_forward_harddropout"),
+                                                                           context + " encoder feed-forward harddropout");
                 descriptor.layers.push_back(std::move(layer));
             }
             return Block::Descriptor{descriptor};
@@ -956,23 +956,23 @@ namespace Thot::Common::SaveLoad {
             descriptor.options.layers =
                 static_cast<std::size_t>(Detail::get_numeric<std::uint64_t>(tree, "options.layers", context));
             descriptor.options.embed_dim = Detail::get_numeric<std::int64_t>(tree, "options.embed_dim", context);
-            descriptor.options.dropout = Detail::get_numeric<double>(tree, "options.dropout", context);
+            descriptor.options.harddropout = Detail::get_numeric<double>(tree, "options.harddropout", context);
             for (const auto& node : tree.get_child("layers")) {
                 Detail::Classic::DecoderLayerDescriptor layer;
                 layer.self_attention = deserialize_attention(node.second.get_child("self_attention"),
                                                              context + " decoder self-attention");
-                layer.self_attention_dropout = deserialize_layer_descriptor(node.second.get_child("self_attention_dropout"),
-                                                                            context + " decoder self-attention dropout");
+                layer.self_attention_harddropout = deserialize_layer_descriptor(node.second.get_child("self_attention_harddropout"),
+                                                                            context + " decoder self-attention harddropout");
                 layer.cross_attention = deserialize_attention(node.second.get_child("cross_attention"),
                                                               context + " decoder cross-attention");
-                layer.cross_attention_dropout = deserialize_layer_descriptor(node.second.get_child("cross_attention_dropout"),
-                                                                             context + " decoder cross-attention dropout");
+                layer.cross_attention_harddropout = deserialize_layer_descriptor(node.second.get_child("cross_attention_harddropout"),
+                                                                             context + " decoder cross-attention harddropout");
                 for (const auto& feed_forward : node.second.get_child("feed_forward")) {
                     layer.feed_forward.push_back(
                         deserialize_layer_descriptor(feed_forward.second, context + " decoder feed-forward"));
                 }
-                layer.feed_forward_dropout = deserialize_layer_descriptor(node.second.get_child("feed_forward_dropout"),
-                                                                           context + " decoder feed-forward dropout");
+                layer.feed_forward_harddropout = deserialize_layer_descriptor(node.second.get_child("feed_forward_harddropout"),
+                                                                           context + " decoder feed-forward harddropout");
                 descriptor.layers.push_back(std::move(layer));
             }
             return Block::Descriptor{descriptor};

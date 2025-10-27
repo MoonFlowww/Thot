@@ -30,8 +30,8 @@ namespace Thot::Layer {
     using AdaptiveMaxPool2dOptions = Details::AdaptiveMaxPool2dOptions;
     using PoolingDescriptor = Details::PoolingDescriptor;
 
-    using DropoutOptions = Details::DropoutOptions;
-    using DropoutDescriptor = Details::DropoutDescriptor;
+    using HardDropoutOptions = Details::HardDropoutOptions;
+    using HardDropoutDescriptor = Details::HardDropoutDescriptor;
 
     using FlattenOptions = Details::FlattenOptions;
     using FlattenDescriptor = Details::FlattenDescriptor;
@@ -40,21 +40,17 @@ namespace Thot::Layer {
                                     Conv2dDescriptor,
                                     BatchNorm2dDescriptor,
                                     PoolingDescriptor,
-                                    DropoutDescriptor,
+                                    HardDropoutDescriptor,
                                     FlattenDescriptor>;
 
     [[nodiscard]] inline auto FC(const FCOptions& options,
-                                 ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity, ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default, ::Thot::LocalConfig local = {})
-        -> FCDescriptor
-    {
+                                 ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
+                                 ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default, ::Thot::LocalConfig local = {}) -> FCDescriptor {
         return {options, activation, initialization, std::move(local)};
     }
 
-    [[nodiscard]] inline auto Conv2d(const Conv2dOptions& options,
-                                     ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
-                                     ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default, ::Thot::LocalConfig local = {})
-        -> Conv2dDescriptor
-    {
+    [[nodiscard]] inline auto Conv2d(const Conv2dOptions& options, ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
+                                     ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default, ::Thot::LocalConfig local = {}) -> Conv2dDescriptor {
         return {options, activation, initialization, std::move(local)};
     }
 
@@ -110,10 +106,7 @@ namespace Thot::Layer {
         return descriptor;
     }
 
-    [[nodiscard]] inline auto Dropout(const DropoutOptions& options,
-                                      ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,  ::Thot::LocalConfig local = {})
-        -> DropoutDescriptor
-    {
+    [[nodiscard]] inline auto HardDropout(const HardDropoutOptions& options, ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,  ::Thot::LocalConfig local = {}) -> HardDropoutDescriptor {
         return {options, activation, std::move(local)};
     }
 
