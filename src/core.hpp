@@ -380,14 +380,20 @@ namespace Thot {
                 [&](Block::Transformer::Classic::DecoderDescriptor decoder_descriptor) {
                     transformer_block_handler(decoder_descriptor);
                 },
+                [&](Block::Transformer::EBT::EncoderDescriptor encoder_descriptor) {
+                    transformer_block_handler(std::move(encoder_descriptor));
+                },
+                [&](Block::Transformer::EBT::DecoderDescriptor decoder_descriptor) {
+                    transformer_block_handler(decoder_descriptor);
+                },
                 [&](Block::Transformer::PlusPlus::EncoderDescriptor encoder_descriptor) {
                     transformer_block_handler(std::move(encoder_descriptor));
                 },
-                    [&](Block::Transformer::PlusPlus::DecoderDescriptor decoder_descriptor) {
-                        transformer_block_handler(std::move(decoder_descriptor));
+                [&](Block::Transformer::PlusPlus::DecoderDescriptor decoder_descriptor) {
+                    transformer_block_handler(std::move(decoder_descriptor));
                 },
-                    [&](Block::Transformer::Mamba::EncoderDescriptor encoder_descriptor) {
-                        transformer_block_handler(std::move(encoder_descriptor));
+                [&](Block::Transformer::Mamba::EncoderDescriptor encoder_descriptor) {
+                    transformer_block_handler(std::move(encoder_descriptor));
                 }
             };
 
