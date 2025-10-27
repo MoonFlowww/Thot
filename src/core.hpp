@@ -723,8 +723,7 @@ namespace Thot {
                     return std::nullopt;
                 }
 
-            const bool buffering_enabled = options.forward_buffer_batches > 0;
-            const bool has_leading_dimension = inputs.dim() > 0;
+
 
                 const auto chunk_size_value = static_cast<std::int64_t>(options.forward_chunk_size.value_or(Core::kDefaultTrainingConfig.batch_size));
                 if (chunk_size_value <= 0) {

@@ -50,35 +50,35 @@ int main() {
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal),
+            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw ,Thot::Initialization::KaimingNormal),
             Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal)
+            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw ,Thot::Initialization::KaimingNormal)
         }, 1, {}, { .final_activation = Thot::Activation::Identity }));
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal),
+            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw ,Thot::Initialization::KaimingNormal),
             Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal)
+            Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw ,Thot::Initialization::KaimingNormal)
         }, 1, {}, { .final_activation = Thot::Activation::Identity }));
 
         model.add(Thot::Layer::Dropout({ .probability = 0.3 }));
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-            Thot::Layer::Conv2d({128,256,{3,3},{2,2},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal),
+            Thot::Layer::Conv2d({128,256,{3,3},{2,2},{1,1},{1,1},1,false},Thot::Activation::Raw ,Thot::Initialization::KaimingNormal),
             Thot::Layer::BatchNorm2d({256,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-            Thot::Layer::Conv2d({256,256,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal)
+            Thot::Layer::Conv2d({256,256,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw ,Thot::Initialization::KaimingNormal)
         }, 1, {
-            .projection = Thot::Layer::Conv2d({128,256,{1,1},{2,2},{0,0},{1,1},1,false}, Thot::Activation::Raw, Thot::Initialization::KaimingNormal)
+            .projection = Thot::Layer::Conv2d({128,256,{1,1},{2,2},{0,0},{1,1},1,false}, Thot::Activation::Raw , Thot::Initialization::KaimingNormal)
         }, { .final_activation = Thot::Activation::Identity }));
 
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({256,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-            Thot::Layer::Conv2d({256,256,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal),
+            Thot::Layer::Conv2d({256,256,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw ,Thot::Initialization::KaimingNormal),
             Thot::Layer::BatchNorm2d({256,1e-5,0.1,true,true}, Thot::Activation::GeLU),
-            Thot::Layer::Conv2d({256,256,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw,Thot::Initialization::KaimingNormal)
+            Thot::Layer::Conv2d({256,256,{3,3},{1,1},{1,1},{1,1},1,false},Thot::Activation::Raw ,Thot::Initialization::KaimingNormal)
         }, 1, {}, { .final_activation = Thot::Activation::Identity }));
 
 
@@ -128,10 +128,8 @@ int main() {
     (void)Thot::Data::Check::Size(train_images, "Input train size after augment");
 
     if (!IsLoading) {
-        model.train(train_images, train_labels, {
-                        .epoch = epochs, .batch_size = B, .shuffle = true, .buffer_vram = 0, .restore_best_state = true,
-                        .test = std::make_pair(validation_images, validation_labels)
-                    });
+        model.train(train_images, train_labels, {.epoch = epochs, .batch_size = B, .shuffle = true, .buffer_vram = 0, .restore_best_state = true,
+                        .test = std::make_pair(validation_images, validation_labels)});
     }
 
     (void) model.evaluate(test_images, test_labels, Thot::Evaluation::Classification,{
