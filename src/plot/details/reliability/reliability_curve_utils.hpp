@@ -12,10 +12,7 @@
 
 #include <torch/torch.h>
 
-namespace Thot {
-    class Model;
-}
-
+#include "../../../core.hpp"
 
 namespace Thot::Plot::Details::Reliability::Curves {
     struct BinarySeries {
