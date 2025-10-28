@@ -10,6 +10,7 @@
 #include "details/adam.hpp"
 #include "details/sgd.hpp"
 #include "details/sophia.hpp"
+#include "details/muon.hpp"
 
 namespace Thot::Optimizer::Details {
     template <class Owner, class Descriptor>
@@ -38,6 +39,22 @@ namespace Thot::Optimizer::Details {
     template <class Owner>
     std::unique_ptr<torch::optim::Optimizer> build_optimizer(Owner& owner, const SophiaHDescriptor& descriptor) {
         return std::make_unique<SophiaH>(owner.parameters(), descriptor.options);
+    }
+
+
+    template <class Owner>
+    std::unique_ptr<torch::optim::Optimizer> build_optimizer(Owner& owner, const MuonDescriptor& descriptor) {
+        return std::make_unique<Muon>(owner.parameters(), descriptor.options);
+    }
+
+    template <class Owner>
+    std::unique_ptr<torch::optim::Optimizer> build_optimizer(Owner& owner, const AdaMuonDescriptor& descriptor) {
+        return std::make_unique<AdaMuon>(owner.parameters(), descriptor.options);
+    }
+
+    template <class Owner>
+    std::unique_ptr<torch::optim::Optimizer> build_optimizer(Owner& owner, const MuonManifoldDescriptor& descriptor) {
+        return std::make_unique<MuonManifold>(owner.parameters(), descriptor.options);
     }
 }
 

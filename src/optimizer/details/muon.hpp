@@ -12,6 +12,8 @@
 #include <utility>
 
 #include <torch/torch.h>
+#include <torch/optim/optimizer.h>
+#include <torch/optim/serialize.h>
 
 namespace Thot::Optimizer::Details {
 
@@ -55,30 +57,61 @@ namespace Thot::Optimizer::Details {
         }
     }
 
-    struct MuonOptions {
-        double learning_rate{1e-3};
-        double beta{0.95};
-        double weight_decay{0.0};
-        double epsilon{1e-8};
-        double max_update_norm{0.0};
+    struct MuonOptions : public torch::optim::OptimizerCloneableOptions<MuonOptions> {
+        MuonOptions(double lr = 1e-3) : lr_(lr) {}
+
+        TORCH_ARG(double, lr) = 1e-3;
+        TORCH_ARG(double, beta) = 0.95;
+        TORCH_ARG(double, weight_decay) = 0.0;
+        TORCH_ARG(double, eps) = 1e-8;
+        TORCH_ARG(double, max_update_norm) = 0.0;
 
         [[nodiscard]] inline auto validated() const -> MuonOptions {
-            auto copy = *this;
-            copy.beta = std::clamp(copy.beta, 0.0, 1.0);
-            copy.learning_rate = std::max(copy.learning_rate, 0.0);
-            copy.epsilon = std::max(copy.epsilon, 0.0);
-            copy.max_update_norm = std::max(copy.max_update_norm, 0.0);
+            MuonOptions copy = *this;
+            copy.beta(std::clamp(copy.beta(), 0.0, 1.0));
+            copy.lr(std::max(copy.lr(), 0.0));
+            copy.eps(std::max(copy.eps(), 0.0));
+            copy.max_update_norm(std::max(copy.max_update_norm(), 0.0));
+            copy.weight_decay(std::max(copy.weight_decay(), 0.0));
             return copy;
         }
+        void serialize(torch::serialize::InputArchive& archive) override {
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, lr);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, beta);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, weight_decay);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, eps);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, max_update_norm);
+        }
+
+        void serialize(torch::serialize::OutputArchive& archive) const override {
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(lr);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(beta);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(weight_decay);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(eps);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(max_update_norm);
+        }
+
+        double get_lr() const override { return lr(); }
+        void set_lr(double value) override { lr(value); }
     };
 
-    struct MuonState {
-        torch::Tensor exp_avg{};
-        int64_t step{0};
+    struct MuonState : public torch::optim::OptimizerCloneableParamState<MuonState> {
+        TORCH_ARG(torch::Tensor, exp_avg);
+        TORCH_ARG(int64_t, step) = 0;
+
+        void serialize(torch::serialize::InputArchive& archive) override {
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, exp_avg);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(int64_t, step);
+        }
+
+        void serialize(torch::serialize::OutputArchive& archive) const override {
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(exp_avg);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(step);
+        }
 
         void reset() {
-            exp_avg = torch::Tensor();
-            step = 0;
+            exp_avg(torch::Tensor());
+            step(0);
         }
     };
 
@@ -88,45 +121,90 @@ namespace Thot::Optimizer::Details {
                            const MuonOptions& raw_options) {
         auto options = raw_options.validated();
 
-        detail::ensure_tensor_like(state.exp_avg, grad);
+        auto& exp_avg = state.exp_avg();
+        detail::ensure_tensor_like(exp_avg, grad);
 
-        state.exp_avg.mul_(options.beta).add_(grad, 1.0 - options.beta);
+        exp_avg.mul_(options.beta()).add_(grad, 1.0 - options.beta());
 
-        auto parameter_norm = detail::safe_norm(param, options.epsilon);
-        auto direction_norm = detail::safe_norm(state.exp_avg, options.epsilon);
-        auto direction = state.exp_avg * (parameter_norm / direction_norm);
+        auto parameter_norm = detail::safe_norm(param, options.eps());
+        auto direction_norm = detail::safe_norm(exp_avg, options.eps());
+        auto direction = exp_avg * (parameter_norm / direction_norm);
 
-        detail::apply_weight_decay(direction, param, options.weight_decay);
-        direction = detail::clip_by_max_norm(direction, options.max_update_norm, options.epsilon);
+        detail::apply_weight_decay(direction, param, options.weight_decay());
+        direction = detail::clip_by_max_norm(direction, options.max_update_norm(), options.eps());
 
-        param.add_(direction, -options.learning_rate);
-        state.step += 1;
+        param.add_(direction, -options.lr());
+        state.step(state.step() + 1);
     }
 
     struct MuonDescriptor {
         MuonOptions options{};
     };
 
-    struct AdaMuonOptions : MuonOptions {
-        double beta2{0.999};
+    struct AdaMuonOptions : public torch::optim::OptimizerCloneableOptions<AdaMuonOptions> {
+        AdaMuonOptions(double lr = 1e-3) : lr_(lr) {}
+
+        TORCH_ARG(double, lr) = 1e-3;
+        TORCH_ARG(double, beta) = 0.95;
+        TORCH_ARG(double, beta2) = 0.999;
+        TORCH_ARG(double, weight_decay) = 0.0;
+        TORCH_ARG(double, eps) = 1e-8;
+        TORCH_ARG(double, max_update_norm) = 0.0;
 
         [[nodiscard]] inline auto validated() const -> AdaMuonOptions {
-            auto copy = *this;
-            copy.beta = std::clamp(copy.beta, 0.0, 1.0);
-            copy.beta2 = std::clamp(copy.beta2, 0.0, 1.0);
-            copy.learning_rate = std::max(copy.learning_rate, 0.0);
-            copy.epsilon = std::max(copy.epsilon, 0.0);
-            copy.max_update_norm = std::max(copy.max_update_norm, 0.0);
+            AdaMuonOptions copy = *this;
+            copy.beta(std::clamp(copy.beta(), 0.0, 1.0));
+            copy.beta2(std::clamp(copy.beta2(), 0.0, 1.0));
+            copy.lr(std::max(copy.lr(), 0.0));
+            copy.eps(std::max(copy.eps(), 0.0));
+            copy.max_update_norm(std::max(copy.max_update_norm(), 0.0));
+            copy.weight_decay(std::max(copy.weight_decay(), 0.0));
             return copy;
         }
+
+        void serialize(torch::serialize::InputArchive& archive) override {
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, lr);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, beta);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, beta2);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, weight_decay);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, eps);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, max_update_norm);
+        }
+
+        void serialize(torch::serialize::OutputArchive& archive) const override {
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(lr);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(beta);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(beta2);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(weight_decay);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(eps);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(max_update_norm);
+        }
+
+        double get_lr() const override { return lr(); }
+        void set_lr(double value) override { lr(value); }
     };
 
-    struct AdaMuonState : MuonState {
-        torch::Tensor exp_avg_sq{};
+    struct AdaMuonState : public torch::optim::OptimizerCloneableParamState<AdaMuonState> {
+        TORCH_ARG(torch::Tensor, exp_avg);
+        TORCH_ARG(torch::Tensor, exp_avg_sq);
+        TORCH_ARG(int64_t, step) = 0;
+
+        void serialize(torch::serialize::InputArchive& archive) override {
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, exp_avg);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, exp_avg_sq);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(int64_t, step);
+        }
+
+        void serialize(torch::serialize::OutputArchive& archive) const override {
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(exp_avg);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(exp_avg_sq);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(step);
+        }
 
         void reset() {
-            MuonState::reset();
-            exp_avg_sq = torch::Tensor();
+            exp_avg(torch::Tensor());
+            exp_avg_sq(torch::Tensor());
+            step(0);
         }
     };
 
@@ -136,30 +214,32 @@ namespace Thot::Optimizer::Details {
                                const AdaMuonOptions& raw_options) {
         auto options = raw_options.validated();
 
-        detail::ensure_tensor_like(state.exp_avg, grad);
-        detail::ensure_tensor_like(state.exp_avg_sq, grad);
+        auto& exp_avg = state.exp_avg();
+        auto& exp_avg_sq = state.exp_avg_sq();
+        detail::ensure_tensor_like(exp_avg, grad);
+        detail::ensure_tensor_like(exp_avg_sq, grad);
 
-        state.step += 1;
+        state.step(state.step() + 1);
 
-        state.exp_avg.mul_(options.beta).add_(grad, 1.0 - options.beta);
-        state.exp_avg_sq.mul_(options.beta2).addcmul_(grad, grad, 1.0 - options.beta2);
+        exp_avg.mul_(options.beta()).add_(grad, 1.0 - options.beta());
+        exp_avg_sq.mul_(options.beta2()).addcmul_(grad, grad, 1.0 - options.beta2());
 
-        auto bias_correction1 = 1.0 - std::pow(options.beta, static_cast<double>(state.step));
-        auto bias_correction2 = 1.0 - std::pow(options.beta2, static_cast<double>(state.step));
+        auto bias_correction1 = 1.0 - std::pow(options.beta(), static_cast<double>(state.step()));
+        auto bias_correction2 = 1.0 - std::pow(options.beta2(), static_cast<double>(state.step()));
 
-        auto corrected_exp_avg = state.exp_avg / bias_correction1;
-        auto corrected_exp_avg_sq = state.exp_avg_sq / bias_correction2;
-        auto denom = torch::sqrt(corrected_exp_avg_sq).add_(options.epsilon);
+        auto corrected_exp_avg = exp_avg / bias_correction1;
+        auto corrected_exp_avg_sq = exp_avg_sq / bias_correction2;
+        auto denom = torch::sqrt(corrected_exp_avg_sq).add_(options.eps());
         auto direction = corrected_exp_avg / denom;
 
-        auto parameter_norm = detail::safe_norm(param, options.epsilon);
-        auto direction_norm = detail::safe_norm(direction, options.epsilon);
+        auto parameter_norm = detail::safe_norm(param, options.eps());
+        auto direction_norm = detail::safe_norm(direction, options.eps());
         direction.mul_(parameter_norm / direction_norm);
 
-        detail::apply_weight_decay(direction, param, options.weight_decay);
-        direction = detail::clip_by_max_norm(direction, options.max_update_norm, options.epsilon);
+        detail::apply_weight_decay(direction, param, options.weight_decay());
+        direction = detail::clip_by_max_norm(direction, options.max_update_norm(), options.eps());
 
-        param.add_(direction, -options.learning_rate);
+        param.add_(direction, -options.lr());
     }
 
     struct AdaMuonDescriptor {
@@ -172,35 +252,90 @@ namespace Thot::Optimizer::Details {
         Stiefel
     };
 
-    struct MuonManifoldOptions : AdaMuonOptions {
-        ManifoldKind manifold{ManifoldKind::UnitSphere};
-        double retraction_epsilon{1e-12};
-        bool renormalize{true};
+    struct MuonManifoldOptions : public torch::optim::OptimizerCloneableOptions<MuonManifoldOptions> {
+        MuonManifoldOptions(double lr = 1e-3) : lr_(lr) {}
+
+        TORCH_ARG(double, lr) = 1e-3;
+        TORCH_ARG(double, beta) = 0.95;
+        TORCH_ARG(double, beta2) = 0.999;
+        TORCH_ARG(double, weight_decay) = 0.0;
+        TORCH_ARG(double, eps) = 1e-8;
+        TORCH_ARG(double, max_update_norm) = 0.0;
+        TORCH_ARG(ManifoldKind, manifold) = ManifoldKind::UnitSphere;
+        TORCH_ARG(double, retraction_epsilon) = 1e-12;
+        TORCH_ARG(bool, renormalize) = true;
 
         [[nodiscard]] inline auto validated() const -> MuonManifoldOptions {
-            auto base = AdaMuonOptions::validated();
-            MuonManifoldOptions copy;
-            static_cast<AdaMuonOptions&>(copy) = base;
-            copy.manifold = manifold;
-            copy.retraction_epsilon = std::max(retraction_epsilon, 0.0);
-            copy.renormalize = renormalize;
+            MuonManifoldOptions copy = *this;
+            copy.beta(std::clamp(copy.beta(), 0.0, 1.0));
+            copy.beta2(std::clamp(copy.beta2(), 0.0, 1.0));
+            copy.lr(std::max(copy.lr(), 0.0));
+            copy.eps(std::max(copy.eps(), 0.0));
+            copy.max_update_norm(std::max(copy.max_update_norm(), 0.0));
+            copy.weight_decay(std::max(copy.weight_decay(), 0.0));
+            copy.retraction_epsilon(std::max(copy.retraction_epsilon(), 0.0));
+            copy.renormalize(renormalize());
+            copy.manifold(manifold());
             return copy;
         }
-    };
+        void serialize(torch::serialize::InputArchive& archive) override {
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, lr);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, beta);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, beta2);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, weight_decay);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, eps);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, max_update_norm);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(ManifoldKind, manifold);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, retraction_epsilon);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(bool, renormalize);
+        }
 
-    struct MuonManifoldState : AdaMuonState {
+        void serialize(torch::serialize::OutputArchive& archive) const override {
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(lr);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(beta);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(beta2);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(weight_decay);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(eps);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(max_update_norm);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(manifold);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(retraction_epsilon);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(renormalize);
+        }
+
+        double get_lr() const override { return lr(); }
+        void set_lr(double value) override { lr(value); }
+    };
+    struct MuonManifoldState : public torch::optim::OptimizerCloneableParamState<MuonManifoldState> {
+        TORCH_ARG(torch::Tensor, exp_avg);
+        TORCH_ARG(torch::Tensor, exp_avg_sq);
+        TORCH_ARG(int64_t, step) = 0;
+
+        void serialize(torch::serialize::InputArchive& archive) override {
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, exp_avg);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, exp_avg_sq);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(int64_t, step);
+        }
+
+        void serialize(torch::serialize::OutputArchive& archive) const override {
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(exp_avg);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(exp_avg_sq);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(step);
+        }
+
         void reset() {
-            AdaMuonState::reset();
+            exp_avg(torch::Tensor());
+            exp_avg_sq(torch::Tensor());
+            step(0);
         }
     };
 
     inline void retract_to_manifold(torch::Tensor& param,
                                     const MuonManifoldOptions& options) {
-        switch (options.manifold) {
+        switch (options.manifold()) {
             case ManifoldKind::Euclidean:
                 return;
             case ManifoldKind::UnitSphere: {
-                auto norm = detail::safe_norm(param, options.retraction_epsilon);
+                auto norm = detail::safe_norm(param, options.retraction_epsilon());
                 param = param / norm;
                 return;
             }
@@ -217,8 +352,34 @@ namespace Thot::Optimizer::Details {
                                     MuonManifoldState& state,
                                     const MuonManifoldOptions& raw_options) {
         auto options = raw_options.validated();
-        ada_muon_step_(param, grad, state, options);
-        if (options.renormalize) {
+        auto& exp_avg = state.exp_avg();
+        auto& exp_avg_sq = state.exp_avg_sq();
+        detail::ensure_tensor_like(exp_avg, grad);
+        detail::ensure_tensor_like(exp_avg_sq, grad);
+
+        state.step(state.step() + 1);
+
+        exp_avg.mul_(options.beta()).add_(grad, 1.0 - options.beta());
+        exp_avg_sq.mul_(options.beta2()).addcmul_(grad, grad, 1.0 - options.beta2());
+
+        auto bias_correction1 = 1.0 - std::pow(options.beta(), static_cast<double>(state.step()));
+        auto bias_correction2 = 1.0 - std::pow(options.beta2(), static_cast<double>(state.step()));
+
+        auto corrected_exp_avg = exp_avg / bias_correction1;
+        auto corrected_exp_avg_sq = exp_avg_sq / bias_correction2;
+        auto denom = torch::sqrt(corrected_exp_avg_sq).add_(options.eps());
+        auto direction = corrected_exp_avg / denom;
+
+        auto parameter_norm = detail::safe_norm(param, options.eps());
+        auto direction_norm = detail::safe_norm(direction, options.eps());
+        direction.mul_(parameter_norm / direction_norm);
+
+        detail::apply_weight_decay(direction, param, options.weight_decay());
+        direction = detail::clip_by_max_norm(direction, options.max_update_norm(), options.eps());
+
+        param.add_(direction, -options.lr());
+
+        if (options.renormalize()) {
             retract_to_manifold(param, options);
         }
     }
@@ -226,6 +387,66 @@ namespace Thot::Optimizer::Details {
     struct MuonManifoldDescriptor {
         MuonManifoldOptions options{};
     };
+
+        namespace detail {
+        template <class OptionsType, class StateType, auto StepImpl>
+        class MuonOptimizerImpl : public torch::optim::Optimizer {
+        public:
+            explicit MuonOptimizerImpl(
+                const std::vector<torch::optim::OptimizerParamGroup>& param_groups,
+                OptionsType defaults = {})
+                : torch::optim::Optimizer(param_groups, std::make_unique<OptionsType>(defaults.validated())) {}
+
+            explicit MuonOptimizerImpl(std::vector<torch::Tensor> params, OptionsType defaults = {})
+                : MuonOptimizerImpl({torch::optim::OptimizerParamGroup(std::move(params))}, std::move(defaults)) {}
+
+            torch::Tensor step(LossClosure closure = nullptr) override {
+                torch::NoGradGuard no_grad;
+                torch::Tensor loss;
+                if (closure != nullptr) {
+                    torch::AutoGradMode enable_grad(true);
+                    loss = closure();
+                }
+
+                for (auto& group : this->param_groups_) {
+                    auto& options = static_cast<OptionsType&>(group.options());
+                    auto validated = options.validated();
+                    options = validated;
+                    for (auto& param : group.params()) {
+                        if (!param.grad().defined()) {
+                            continue;
+                        }
+                        const auto& grad = param.grad();
+                        TORCH_CHECK(!grad.is_sparse(), "Muon optimizers do not support sparse gradients.");
+
+                        auto state_it = this->state_.find(param.unsafeGetTensorImpl());
+                        if (state_it == this->state_.end()) {
+                            auto state = std::make_unique<StateType>();
+                            state->reset();
+                            state_it = this->state_.insert({param.unsafeGetTensorImpl(), std::move(state)}).first;
+                        }
+
+                        auto& state = static_cast<StateType&>(*state_it->second);
+                        StepImpl(param, grad, state, validated);
+                    }
+                }
+
+                return loss;
+            }
+
+            void save(torch::serialize::OutputArchive& archive) const override {
+                torch::optim::serialize<StateType, OptionsType>(archive, *this);
+            }
+
+            void load(torch::serialize::InputArchive& archive) override {
+                torch::optim::serialize<StateType, OptionsType>(archive, *this);
+            }
+        };
+    }
+
+    using Muon = detail::MuonOptimizerImpl<MuonOptions, MuonState, muon_step_>;
+    using AdaMuon = detail::MuonOptimizerImpl<AdaMuonOptions, AdaMuonState, ada_muon_step_>;
+    using MuonManifold = detail::MuonOptimizerImpl<MuonManifoldOptions, MuonManifoldState, muon_manifold_step_>;
 }
 
 #endif //THOT_MUON_HPP

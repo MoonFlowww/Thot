@@ -4,6 +4,7 @@
 #include "details/adam.hpp"
 #include "details/sgd.hpp"
 #include "details/sophia.hpp"
+#include "details/muon.hpp"
 #include "registry.hpp"
 #include <functional>
 #include <type_traits>
@@ -19,7 +20,20 @@ namespace Thot::Optimizer {
     using SophiaHOptions = Details::SophiaHOptions;
     using SophiaHDescriptor = Details::SophiaHDescriptor;
 
-    using Descriptor = std::variant<SGDDescriptor, AdamWDescriptor, SophiaGDescriptor, SophiaHDescriptor>;
+    using MuonOptions = Details::MuonOptions;
+    using MuonDescriptor = Details::MuonDescriptor;
+    using AdaMuonOptions = Details::AdaMuonOptions;
+    using AdaMuonDescriptor = Details::AdaMuonDescriptor;
+    using MuonManifoldOptions = Details::MuonManifoldOptions;
+    using MuonManifoldDescriptor = Details::MuonManifoldDescriptor;
+
+    using Descriptor = std::variant<SGDDescriptor,
+                                    AdamWDescriptor,
+                                    SophiaGDescriptor,
+                                    SophiaHDescriptor,
+                                    MuonDescriptor,
+                                    AdaMuonDescriptor,
+                                    MuonManifoldDescriptor>;
 
 
 
@@ -35,6 +49,18 @@ namespace Thot::Optimizer {
     }
 
     [[nodiscard]] constexpr auto SophiaH(const SophiaHOptions& options = {}) noexcept -> SophiaHDescriptor {
+        return {options};
+    }
+
+    [[nodiscard]] constexpr auto Muon(const MuonOptions& options = {}) noexcept -> MuonDescriptor {
+        return {options};
+    }
+
+    [[nodiscard]] constexpr auto AdaMuon(const AdaMuonOptions& options = {}) noexcept -> AdaMuonDescriptor {
+        return {options};
+    }
+
+    [[nodiscard]] constexpr auto MuonManifold(const MuonManifoldOptions& options = {}) noexcept -> MuonManifoldDescriptor {
         return {options};
     }
 
