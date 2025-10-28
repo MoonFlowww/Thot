@@ -770,7 +770,33 @@ namespace Thot::Common::SaveLoad {
             throw std::runtime_error(message.str());
         }
 
-    } // namespace Detail
+        inline std::string manifold_kind_to_string(Optimizer::Details::ManifoldKind kind)
+        {
+            switch (kind) {
+                case Optimizer::Details::ManifoldKind::Euclidean:
+                    return "euclidean";
+                case Optimizer::Details::ManifoldKind::UnitSphere:
+                    return "unit_sphere";
+                case Optimizer::Details::ManifoldKind::Stiefel:
+                    return "stiefel";
+            }
+            throw std::logic_error("Unknown Muon manifold kind encountered during serialization.");
+        }
+
+        inline Optimizer::Details::ManifoldKind manifold_kind_from_string(const std::string& value,
+                                                                          const std::string& context)
+        {
+            const auto lowered = to_lower(value);
+            if (lowered == "euclidean") return Optimizer::Details::ManifoldKind::Euclidean;
+            if (lowered == "unit_sphere") return Optimizer::Details::ManifoldKind::UnitSphere;
+            if (lowered == "stiefel") return Optimizer::Details::ManifoldKind::Stiefel;
+            std::ostringstream message;
+            message << "Unknown Muon manifold kind '" << value << "' in " << context;
+            throw std::runtime_error(message.str());
+        }
+
+
+    }
 
     inline PropertyTree serialize_optimizer(const Optimizer::Descriptor& descriptor)
     {
@@ -818,6 +844,36 @@ namespace Thot::Common::SaveLoad {
                     tree.put("options.weight_decay", options.weight_decay());
                     tree.put("options.clip", options.clip());
                     tree.put("options.hessian_update_interval", options.hessian_update_interval());
+
+                    } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::MuonDescriptor>) {
+                    const auto& options = concrete.options;
+                    tree.put("type", "muon");
+                    tree.put("options.learning_rate", options.lr());
+                    tree.put("options.beta", options.beta());
+                    tree.put("options.weight_decay", options.weight_decay());
+                    tree.put("options.eps", options.eps());
+                    tree.put("options.max_update_norm", options.max_update_norm());
+                } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::AdaMuonDescriptor>) {
+                    const auto& options = concrete.options;
+                    tree.put("type", "ada_muon");
+                    tree.put("options.learning_rate", options.lr());
+                    tree.put("options.beta", options.beta());
+                    tree.put("options.beta2", options.beta2());
+                    tree.put("options.weight_decay", options.weight_decay());
+                    tree.put("options.eps", options.eps());
+                    tree.put("options.max_update_norm", options.max_update_norm());
+                } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::MuonManifoldDescriptor>) {
+                    const auto& options = concrete.options;
+                    tree.put("type", "muon_manifold");
+                    tree.put("options.learning_rate", options.lr());
+                    tree.put("options.beta", options.beta());
+                    tree.put("options.beta2", options.beta2());
+                    tree.put("options.weight_decay", options.weight_decay());
+                    tree.put("options.eps", options.eps());
+                    tree.put("options.max_update_norm", options.max_update_norm());
+                    tree.put("options.retraction_epsilon", options.retraction_epsilon());
+                    tree.put("options.renormalize", options.renormalize());
+                    tree.put("options.manifold", Detail::manifold_kind_to_string(options.manifold()));
 
                 } else {
                     static_assert(sizeof(DescriptorType) == 0, "Unsupported optimizer descriptor supplied.");
@@ -873,6 +929,39 @@ namespace Thot::Common::SaveLoad {
             options.clip(Detail::get_numeric<double>(tree, "options.clip", context));
             options.hessian_update_interval(Detail::get_numeric<int64_t>(tree, "options.hessian_update_interval", context));
             return Optimizer::Descriptor{Optimizer::Details::SophiaHDescriptor{options}};
+        }
+        if (type == "muon") {
+            Optimizer::Details::MuonOptions options;
+            options.lr(Detail::get_numeric<double>(tree, "options.learning_rate", context));
+            options.beta(Detail::get_numeric<double>(tree, "options.beta", context));
+            options.weight_decay(Detail::get_numeric<double>(tree, "options.weight_decay", context));
+            options.eps(Detail::get_numeric<double>(tree, "options.eps", context));
+            options.max_update_norm(Detail::get_numeric<double>(tree, "options.max_update_norm", context));
+            return Optimizer::Descriptor{Optimizer::Details::MuonDescriptor{options}};
+        }
+        if (type == "ada_muon") {
+            Optimizer::Details::AdaMuonOptions options;
+            options.lr(Detail::get_numeric<double>(tree, "options.learning_rate", context));
+            options.beta(Detail::get_numeric<double>(tree, "options.beta", context));
+            options.beta2(Detail::get_numeric<double>(tree, "options.beta2", context));
+            options.weight_decay(Detail::get_numeric<double>(tree, "options.weight_decay", context));
+            options.eps(Detail::get_numeric<double>(tree, "options.eps", context));
+            options.max_update_norm(Detail::get_numeric<double>(tree, "options.max_update_norm", context));
+            return Optimizer::Descriptor{Optimizer::Details::AdaMuonDescriptor{options}};
+        }
+        if (type == "muon_manifold") {
+            Optimizer::Details::MuonManifoldOptions options;
+            options.lr(Detail::get_numeric<double>(tree, "options.learning_rate", context));
+            options.beta(Detail::get_numeric<double>(tree, "options.beta", context));
+            options.beta2(Detail::get_numeric<double>(tree, "options.beta2", context));
+            options.weight_decay(Detail::get_numeric<double>(tree, "options.weight_decay", context));
+            options.eps(Detail::get_numeric<double>(tree, "options.eps", context));
+            options.max_update_norm(Detail::get_numeric<double>(tree, "options.max_update_norm", context));
+            options.retraction_epsilon(Detail::get_numeric<double>(tree, "options.retraction_epsilon", context));
+            options.renormalize(Detail::get_boolean(tree, "options.renormalize", context));
+            const auto manifold = Detail::get_string(tree, "options.manifold", context);
+            options.manifold(Detail::manifold_kind_from_string(manifold, context));
+            return Optimizer::Descriptor{Optimizer::Details::MuonManifoldDescriptor{options}};
         }
         std::ostringstream message;
         message << "Unknown optimizer descriptor '" << type << "' in " << context;
