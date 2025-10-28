@@ -46,10 +46,10 @@ namespace Thot::Plot::Details::Reliability {
 
 
             if (adjustScale) {
-                plotter.setAxisScale('x', Utils::Gnuplot::AxisScale::Log);
-                plotter.setAxisScale('y', Utils::Gnuplot::AxisScale::LogOneMinus);
                 plotter.setRange('x', logEpsilon, 1.0);
                 plotter.setRange('y', logEpsilon, 1.0 - logEpsilon);
+                plotter.setAxisScale('x', Utils::Gnuplot::AxisScale::Log);
+                plotter.setAxisScale('y', Utils::Gnuplot::AxisScale::LogOneMinus);
             } else {
                 plotter.setRange('x', 0.0, 1.0);
                 plotter.setRange('y', 0.0, 1.0);

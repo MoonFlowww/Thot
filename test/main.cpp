@@ -15,7 +15,7 @@ int main() {
     model.to_device(torch::cuda::is_available());
     const int64_t N = 200000;
     const int64_t B = 258;
-    const int64_t epochs = 15;
+    const int64_t epochs = 30;
 
     const int64_t steps_per_epoch = (N + B - 1) / B;
     if (!IsLoading) {
@@ -109,7 +109,7 @@ int main() {
         model.set_regularization({ Thot::Regularization::SWAG({
           .coefficient = 1e-3,
           .variance_epsilon = 1e-6,
-          .start_step = static_cast<size_t>(0.85 * (steps_per_epoch*epochs)),
+          .start_step = static_cast<size_t>(0.5 * (steps_per_epoch*epochs)),
           .accumulation_stride = static_cast<size_t>(steps_per_epoch),
           .max_snapshots = 20,
         })});
@@ -174,7 +174,7 @@ int main() {
         model.plot(Thot::Plot::Reliability::ROC({
                         .KSTest = true,
                         .thresholds = true,
-                        .adjustScale = true,
+                        .adjustScale = false,
                     }),
                     train_images,
                     train_labels,
@@ -185,7 +185,7 @@ int main() {
                         .samples = true,
                         .random = false,
                         .interpolate = true,
-                        .adjustScale = true,
+                        .adjustScale = false,
                     }),
                     train_images,
                     train_labels,
@@ -196,7 +196,7 @@ int main() {
                         .KSTest = true,
                         .confidenceBands = true,
                         .annotateCrossing = true,
-                        .adjustScale = true,
+                        .adjustScale = false,
                     }),
                     train_images,
                     train_labels,
