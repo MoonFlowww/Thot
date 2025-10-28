@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <cmath>
 
 #include <torch/torch.h>
 
@@ -41,15 +42,38 @@ namespace Thot::Plot::Details::Reliability {
             plotter.setTitle("Receiver Operating Characteristic");
             plotter.setXLabel("False Positive Rate");
             plotter.setYLabel("True Positive Rate");
-            plotter.command("set xrange [0:1]");
-            plotter.command("set yrange [0:1]");
+
             plotter.setGrid(true);
             plotter.setKey("bottom right");
 
             const auto& options = descriptor.options;
-            if (options.logScale) {
+            const bool adjustScale = options.adjustScale;
+            constexpr double logEpsilon = 1e-6;
+
+            if (adjustScale) {
                 plotter.setLogScale('x');
+                plotter.setRange('x', logEpsilon, 1.0);
+                const double expMax = std::expm1(1.0);
+                plotter.setRange('y', 0.0, expMax);
+            } else {
+                plotter.setRange('x', 0.0, 1.0);
+                plotter.setRange('y', 0.0, 1.0);
             }
+
+            const auto transformFpr = [adjustScale](double value) {
+                if (!adjustScale) {
+                    return value;
+                }
+                constexpr double epsilon = 1e-6;
+                return value <= 0.0 ? epsilon : value;
+            };
+
+            const auto transformTpr = [adjustScale](double value) {
+                if (!adjustScale) {
+                    return value;
+                }
+                return std::expm1(value);
+            };
 
             std::vector<Utils::Gnuplot::DataSet2D> datasets;
             datasets.reserve(series.size());
@@ -68,8 +92,8 @@ namespace Thot::Plot::Details::Reliability {
                         / static_cast<double>(curve.totalNegatives);
                     const double tpr = static_cast<double>(point.truePositives)
                         / static_cast<double>(curve.totalPositives);
-                    falsePositiveRates.push_back(fpr);
-                    truePositiveRates.push_back(tpr);
+                    falsePositiveRates.push_back(transformFpr(fpr));
+                    truePositiveRates.push_back(transformTpr(tpr));
                 }
 
                 Utils::Gnuplot::PlotStyle style{};

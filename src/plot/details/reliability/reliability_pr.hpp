@@ -40,19 +40,9 @@ namespace Thot::Plot::Details::Reliability {
             plotter.setGrid(true);
             plotter.setKey("top right");
             const auto& options = descriptor.options;
-            if (options.logScale && options.expScale) {
-                throw std::invalid_argument(
-                    "Precision-Recall rendering cannot enable both logScale and expScale at the same time.");
-            }
+            const bool adjustScale = options.adjustScale;
 
-            constexpr double logEpsilon = 1e-6;
-
-            if (options.logScale) {
-                plotter.setLogScale('x');
-                plotter.setLogScale('y');
-                plotter.setRange('x', logEpsilon, 1.0);
-                plotter.setRange('y', logEpsilon, 1.0);
-            } else if (options.expScale) {
+            if (adjustScale) {
                 const double expMax = std::expm1(1.0);
                 plotter.setRange('x', 0.0, expMax);
                 plotter.setRange('y', 0.0, expMax);
@@ -65,67 +55,47 @@ namespace Thot::Plot::Details::Reliability {
             std::vector<Utils::Gnuplot::DataSet2D> datasets;
             datasets.reserve(series.size());
 
+            const auto transform = [adjustScale](double value) {
+                if (!adjustScale) {
+                    return value;
+                }
+                return std::expm1(value);
+            };
             for (std::size_t index = 0; index < series.size(); ++index) {
                 const auto& entry = series[index];
                 const auto curve = Curves::BuildCurve(entry);
 
                 std::vector<double> recallValues;
                 std::vector<double> precisionValues;
+                std::vector<double> rawRecallValues;
                 recallValues.reserve(curve.points.size());
                 precisionValues.reserve(curve.points.size());
+                rawRecallValues.reserve(curve.points.size());
 
                 for (const auto& point : curve.points) {
                     const double tp = static_cast<double>(point.truePositives);
                     const double fp = static_cast<double>(point.falsePositives);
-                    double recall = tp / static_cast<double>(curve.totalPositives);
+                    const double recallRaw = tp / static_cast<double>(curve.totalPositives);
                     const double precisionDenominator = tp + fp;
-                    double precision = precisionDenominator > 0.0 ? tp / precisionDenominator : 1.0;
+                    const double precisionRaw = precisionDenominator > 0.0 ? tp / precisionDenominator : 1.0;
 
-                    if (options.logScale) {
-                        recall = recall <= 0.0 ? logEpsilon : recall;
-                        precision = precision <= 0.0 ? logEpsilon : precision;
-                    }
+                    rawRecallValues.push_back(recallRaw);
 
-                    if (options.expScale) {
-                        recall = std::expm1(recall);
-                        precision = std::expm1(precision);
-                    }
-                    recallValues.push_back(recall);
-                    precisionValues.push_back(precision);
+                    recallValues.push_back(transform(recallRaw));
+                    precisionValues.push_back(transform(precisionRaw));
                 }
 
                 if (recallValues.empty()) {
                     continue;
                 }
 
-                const double startThreshold = options.logScale ? logEpsilon : 0.0;
-                if (recallValues.front() > startThreshold) {
-                    double recall = 0.0;
-                    double precision = 1.0;
-                    if (options.logScale) {
-                        recall = logEpsilon;
-                        precision = 1.0;
-                    }
-                    if (options.expScale) {
-                        recall = std::expm1(recall);
-                        precision = std::expm1(precision);
-                    }
-                    recallValues.insert(recallValues.begin(), recall);
-                    precisionValues.insert(precisionValues.begin(), precision);
+                if (!rawRecallValues.empty() && rawRecallValues.front() > 0.0) {
+                    recallValues.insert(recallValues.begin(), transform(0.0));
+                    precisionValues.insert(precisionValues.begin(), transform(1.0));
                 }
-                if (recallValues.back() < 1.0) {
-                    double recall = 1.0;
-                    double precision = 0.0;
-                    if (options.logScale) {
-                        recall = 1.0;
-                        precision = logEpsilon;
-                    }
-                    if (options.expScale) {
-                        recall = std::expm1(recall);
-                        precision = std::expm1(precision);
-                    }
-                    recallValues.push_back(recall);
-                    precisionValues.push_back(precision);
+                if (!rawRecallValues.empty() && rawRecallValues.back() < 1.0) {
+                    recallValues.push_back(transform(1.0));
+                    precisionValues.push_back(transform(0.0));
                 }
 
                 Utils::Gnuplot::PlotStyle style{};

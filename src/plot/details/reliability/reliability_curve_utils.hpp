@@ -320,10 +320,10 @@ namespace Thot::Plot::Details::Reliability::Curves {
         }
     }
 
-    auto MakeSeriesFromSamples(Model& model,
-                               torch::Tensor inputs,
-                               torch::Tensor targets,
-                               std::string label) -> BinarySeries
+    inline auto MakeSeriesFromSamples(Model& model,
+                                      torch::Tensor inputs,
+                                      torch::Tensor targets,
+                                      std::string label) -> BinarySeries
     {
         if (!inputs.defined()) {
             throw std::invalid_argument("Reliability curves require defined input samples.");
@@ -337,13 +337,13 @@ namespace Thot::Plot::Details::Reliability::Curves {
         return make_series_from_binary(std::move(binary_probabilities), std::move(binary_targets), std::move(label));
     }
 
-    auto MakeSeriesFromSamples(Model& model,
-                               torch::Tensor firstInputs,
-                               torch::Tensor firstTargets,
-                               torch::Tensor secondInputs,
-                               torch::Tensor secondTargets,
-                               std::string firstLabel,
-                               std::string secondLabel) -> std::vector<BinarySeries> {
+    inline auto MakeSeriesFromSamples(Model& model,
+                                      torch::Tensor firstInputs,
+                                      torch::Tensor firstTargets,
+                                      torch::Tensor secondInputs,
+                                      torch::Tensor secondTargets,
+                                      std::string firstLabel,
+                                      std::string secondLabel) -> std::vector<BinarySeries> {
         std::vector<BinarySeries> series;
         series.reserve(2);
         series.emplace_back(MakeSeriesFromSamples(model,

@@ -48,22 +48,15 @@ namespace Thot::Plot::Details::Reliability {
             plotter.setKey("top right");
 
             const auto& options = descriptor.options;
-            if (options.logScale && options.expScale) {
-                throw std::invalid_argument(
-                    "DET rendering cannot enable both logScale and expScale at the same time.");
-            }
+            const bool adjustScale = options.adjustScale;
 
             constexpr double logEpsilon = 1e-6;
 
-            if (options.logScale) {
+            if (adjustScale) {
                 plotter.setLogScale('x');
                 plotter.setLogScale('y');
                 plotter.setRange('x', logEpsilon, 1.0);
                 plotter.setRange('y', logEpsilon, 1.0);
-            } else if (options.expScale) {
-                const double expMax = std::expm1(1.0);
-                plotter.setRange('x', 0.0, expMax);
-                plotter.setRange('y', 0.0, expMax);
             } else {
                 plotter.setRange('x', 0.0, 1.0);
                 plotter.setRange('y', 0.0, 1.0);
@@ -87,15 +80,11 @@ namespace Thot::Plot::Details::Reliability {
                     double fpr = static_cast<double>(point.falsePositives) / static_cast<double>(curve.totalNegatives);
                     double fnr = static_cast<double>(point.falseNegatives) / static_cast<double>(curve.totalPositives);
 
-                    if (options.logScale) {
+                    if (adjustScale) {
                         fpr = fpr <= 0.0 ? logEpsilon : fpr;
                         fnr = fnr <= 0.0 ? logEpsilon : fnr;
                     }
 
-                    if (options.expScale) {
-                        fpr = std::expm1(fpr);
-                        fnr = std::expm1(fnr);
-                    }
 
                     falsePositiveRates.push_back(fpr);
                     falseNegativeRates.push_back(fnr);
