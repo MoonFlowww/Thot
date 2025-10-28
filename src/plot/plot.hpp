@@ -5,11 +5,16 @@
 #include <optional>
 #include <type_traits>
 #include <utility>
-
+#include <cstdint>
+#include <vector>
 #include <torch/torch.h>
 
 #include "details/training.hpp"
 #include "details/reliability.hpp"
+#include "details/reliability/reliability_det.hpp"
+#include "details/reliability/reliability_pr.hpp"
+#include "details/reliability/reliability_roc.hpp"
+#include "details/reliability/reliability_youdens.hpp"
 
 namespace Thot {
     class Model;
@@ -153,6 +158,47 @@ namespace Thot::Plot {
         }
 
         inline void Render(Model& model,
+                           const DETDescriptor& descriptor,
+                           torch::Tensor trainLogits,
+                           torch::Tensor trainTargets,
+                           torch::Tensor testLogits,
+                           torch::Tensor testTargets)
+        {
+            Details::Reliability::RenderDET(model,
+                                            descriptor,
+                                            std::move(trainLogits),
+                                            std::move(trainTargets),
+                                            std::move(testLogits),
+                                            std::move(testTargets));
+        }
+
+        inline void Render(Model& model,
+                           const DETDescriptor& descriptor,
+                           const std::vector<double>& probabilities,
+                           const std::vector<int64_t>& targets)
+        {
+            Details::Reliability::RenderDET(model,
+                                            descriptor,
+                                            probabilities,
+                                            targets);
+        }
+
+        inline void Render(Model& model,
+                           const DETDescriptor& descriptor,
+                           const std::vector<double>& trainProbabilities,
+                           const std::vector<int64_t>& trainTargets,
+                           const std::vector<double>& testProbabilities,
+                           const std::vector<int64_t>& testTargets)
+        {
+            Details::Reliability::RenderDET(model,
+                                            descriptor,
+                                            trainProbabilities,
+                                            trainTargets,
+                                            testProbabilities,
+                                            testTargets);
+        }
+
+        inline void Render(Model& model,
                            const ROCDescriptor& descriptor,
                            torch::Tensor logits,
                            torch::Tensor targets)
@@ -161,6 +207,47 @@ namespace Thot::Plot {
                                             descriptor,
                                             std::move(logits),
                                             std::move(targets));
+        }
+
+        inline void Render(Model& model,
+                   const ROCDescriptor& descriptor,
+                   torch::Tensor trainLogits,
+                   torch::Tensor trainTargets,
+                   torch::Tensor testLogits,
+                   torch::Tensor testTargets)
+        {
+            Details::Reliability::RenderROC(model,
+                                            descriptor,
+                                            std::move(trainLogits),
+                                            std::move(trainTargets),
+                                            std::move(testLogits),
+                                            std::move(testTargets));
+        }
+
+        inline void Render(Model& model,
+                           const ROCDescriptor& descriptor,
+                           const std::vector<double>& probabilities,
+                           const std::vector<int64_t>& targets)
+        {
+            Details::Reliability::RenderROC(model,
+                                            descriptor,
+                                            probabilities,
+                                            targets);
+        }
+
+        inline void Render(Model& model,
+                           const ROCDescriptor& descriptor,
+                           const std::vector<double>& trainProbabilities,
+                           const std::vector<int64_t>& trainTargets,
+                           const std::vector<double>& testProbabilities,
+                           const std::vector<int64_t>& testTargets)
+        {
+            Details::Reliability::RenderROC(model,
+                                            descriptor,
+                                            trainProbabilities,
+                                            trainTargets,
+                                            testProbabilities,
+                                            testTargets);
         }
 
         inline void Render(Model& model,
@@ -173,6 +260,46 @@ namespace Thot::Plot {
                                                 std::move(logits),
                                                 std::move(targets));
         }
+        inline void Render(Model& model,
+                           const YoudensDescriptor& descriptor,
+                           torch::Tensor trainLogits,
+                           torch::Tensor trainTargets,
+                           torch::Tensor testLogits,
+                           torch::Tensor testTargets)
+        {
+            Details::Reliability::RenderYoudens(model,
+                                                descriptor,
+                                                std::move(trainLogits),
+                                                std::move(trainTargets),
+                                                std::move(testLogits),
+                                                std::move(testTargets));
+        }
+
+        inline void Render(Model& model,
+                           const YoudensDescriptor& descriptor,
+                           const std::vector<double>& probabilities,
+                           const std::vector<int64_t>& targets)
+        {
+            Details::Reliability::RenderYoudens(model,
+                                                descriptor,
+                                                probabilities,
+                                                targets);
+        }
+
+        inline void Render(Model& model,
+                           const YoudensDescriptor& descriptor,
+                           const std::vector<double>& trainProbabilities,
+                           const std::vector<int64_t>& trainTargets,
+                           const std::vector<double>& testProbabilities,
+                           const std::vector<int64_t>& testTargets)
+        {
+            Details::Reliability::RenderYoudens(model,
+                                                descriptor,
+                                                trainProbabilities,
+                                                trainTargets,
+                                                testProbabilities,
+                                                testTargets);
+        }
 
         inline void Render(Model& model,
                            const PRDescriptor& descriptor,
@@ -183,6 +310,46 @@ namespace Thot::Plot {
                                            descriptor,
                                            std::move(logits),
                                            std::move(targets));
+        }
+        inline void Render(Model& model,
+                           const PRDescriptor& descriptor,
+                           torch::Tensor trainLogits,
+                           torch::Tensor trainTargets,
+                           torch::Tensor testLogits,
+                           torch::Tensor testTargets)
+        {
+            Details::Reliability::RenderPR(model,
+                                           descriptor,
+                                           std::move(trainLogits),
+                                           std::move(trainTargets),
+                                           std::move(testLogits),
+                                           std::move(testTargets));
+        }
+
+        inline void Render(Model& model,
+                           const PRDescriptor& descriptor,
+                           const std::vector<double>& probabilities,
+                           const std::vector<int64_t>& targets)
+        {
+            Details::Reliability::RenderPR(model,
+                                           descriptor,
+                                           probabilities,
+                                           targets);
+        }
+
+        inline void Render(Model& model,
+                           const PRDescriptor& descriptor,
+                           const std::vector<double>& trainProbabilities,
+                           const std::vector<int64_t>& trainTargets,
+                           const std::vector<double>& testProbabilities,
+                           const std::vector<int64_t>& testTargets)
+        {
+            Details::Reliability::RenderPR(model,
+                                           descriptor,
+                                           trainProbabilities,
+                                           trainTargets,
+                                           testProbabilities,
+                                           testTargets);
         }
 
         inline void Render(Model& model,

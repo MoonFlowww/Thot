@@ -1,0 +1,228 @@
+#ifndef THOT_RELIABILITY_CURVE_UTILS_HPP
+#define THOT_RELIABILITY_CURVE_UTILS_HPP
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <numeric>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include <torch/torch.h>
+
+namespace Thot::Plot::Details::Reliability::Curves {
+    struct BinarySeries {
+        std::vector<double> scores{};
+        std::vector<int64_t> targets{};
+        std::string label{};
+    };
+
+    struct BinaryCurvePoint {
+        double threshold{0.0};
+        std::size_t truePositives{0};
+        std::size_t falsePositives{0};
+        std::size_t falseNegatives{0};
+        std::size_t trueNegatives{0};
+    };
+
+    struct BinaryCurve {
+        std::vector<BinaryCurvePoint> points{};
+        std::size_t totalPositives{0};
+        std::size_t totalNegatives{0};
+    };
+
+    /**
+     * Converts raw logits or probabilities shaped as (batch, classes) alongside
+     * target labels shaped as (batch, 1) or (batch) into a binary series ready
+     * for curve construction. The final column is treated as the positive class
+     * probability.
+     */
+    inline auto MakeSeriesFromTensor(torch::Tensor logitsOrProbabilities,
+                                     torch::Tensor targets,
+                                     std::string label) -> BinarySeries
+    {
+        if (!logitsOrProbabilities.defined()) {
+            throw std::invalid_argument("Reliability curves require defined logits/probabilities.");
+        }
+        if (!targets.defined()) {
+            throw std::invalid_argument("Reliability curves require defined target labels.");
+        }
+
+        if (logitsOrProbabilities.dim() != 2) {
+            throw std::invalid_argument(
+                "Reliability curves expect logits/probabilities shaped as (batch, classes).");
+        }
+
+        const auto batch = logitsOrProbabilities.size(0);
+        const auto classes = logitsOrProbabilities.size(1);
+        if (batch <= 0) {
+            throw std::invalid_argument("Reliability curves require at least one prediction.");
+        }
+        if (classes < 2) {
+            throw std::invalid_argument("Reliability curves currently support binary classification (classes = 2).");
+        }
+
+        torch::Tensor probabilities = logitsOrProbabilities;
+        const bool valuesInRange = logitsOrProbabilities.ge(0.0).all().item<bool>()
+            && logitsOrProbabilities.le(1.0).all().item<bool>();
+        bool rowsSumToOne = false;
+        if (valuesInRange) {
+            const auto rowSums = logitsOrProbabilities.sum(1);
+            const auto ones = torch::ones_like(rowSums);
+            rowsSumToOne = torch::allclose(rowSums, ones, 1e-4, 1e-4);
+        }
+        if (!valuesInRange || !rowsSumToOne) {
+            probabilities = torch::softmax(logitsOrProbabilities, 1);
+        }
+
+        probabilities = probabilities.to(torch::kDouble).cpu();
+        auto positiveProbabilities = probabilities.select(1, classes - 1).contiguous();
+
+        BinarySeries series{};
+        series.scores.resize(static_cast<std::size_t>(batch));
+        const auto* probsData = positiveProbabilities.data_ptr<double>();
+        std::copy(probsData, probsData + batch, series.scores.begin());
+        series.label = std::move(label);
+
+        torch::Tensor flattenedTargets;
+        if (targets.dim() == 2) {
+            if (targets.size(1) != 1) {
+                throw std::invalid_argument("Target tensor must be shaped as (batch, 1) for reliability curves.");
+            }
+            flattenedTargets = targets.reshape({targets.size(0)});
+        } else if (targets.dim() == 1) {
+            flattenedTargets = targets;
+        } else {
+            throw std::invalid_argument("Target tensor must be one- or two-dimensional for reliability curves.");
+        }
+
+        if (flattenedTargets.size(0) != batch) {
+            throw std::invalid_argument("Logits/probabilities and targets must share the same batch dimension.");
+        }
+
+        flattenedTargets = flattenedTargets.to(torch::kLong).cpu().contiguous();
+        series.targets.resize(static_cast<std::size_t>(batch));
+        const auto* targetsData = flattenedTargets.data_ptr<int64_t>();
+        std::copy(targetsData, targetsData + batch, series.targets.begin());
+        for (const auto target : series.targets) {
+            if (target != 0 && target != 1) {
+                throw std::invalid_argument("Reliability curves expect binary targets encoded as {0, 1}.");
+            }
+        }
+
+        return series;
+    }
+
+    /**
+     * Normalises probability/target vectors into a binary series for curve
+     * construction. Probabilities must lie in [0, 1] and targets must be encoded
+     * as {0, 1}.
+     */
+    inline auto MakeSeriesFromVectors(const std::vector<double>& probabilities,
+                                      const std::vector<int64_t>& targets,
+                                      std::string label) -> BinarySeries
+    {
+        if (probabilities.empty()) {
+            throw std::invalid_argument("Reliability curves require at least one probability value.");
+        }
+        if (probabilities.size() != targets.size()) {
+            throw std::invalid_argument("Probability and target vectors must have the same length.");
+        }
+
+        BinarySeries series{};
+        series.scores = probabilities;
+        series.targets = targets;
+        series.label = std::move(label);
+
+        for (const auto probability : series.scores) {
+            if (!(probability >= 0.0 && probability <= 1.0)) {
+                throw std::invalid_argument("Probabilities must lie within the range [0, 1].");
+            }
+        }
+
+        for (const auto target : series.targets) {
+            if (target != 0 && target != 1) {
+                throw std::invalid_argument("Reliability curves expect binary targets encoded as {0, 1}.");
+            }
+        }
+
+        return series;
+    }
+
+    inline auto BuildCurve(const BinarySeries& series) -> BinaryCurve
+    {
+        if (series.scores.size() != series.targets.size()) {
+            throw std::invalid_argument("Probability scores and targets must share the same length.");
+        }
+        if (series.scores.empty()) {
+            throw std::invalid_argument("Reliability curves require at least one data point.");
+        }
+
+        BinaryCurve curve{};
+        curve.totalPositives = static_cast<std::size_t>(std::count(series.targets.begin(), series.targets.end(), 1));
+        curve.totalNegatives = series.targets.size() - curve.totalPositives;
+
+        if (curve.totalPositives == 0 || curve.totalNegatives == 0) {
+            throw std::invalid_argument("Reliability curves require both positive and negative samples.");
+        }
+
+        std::vector<std::pair<double, int64_t>> paired(series.scores.size());
+        for (std::size_t i = 0; i < series.scores.size(); ++i) {
+            paired[i] = std::make_pair(series.scores[i], series.targets[i]);
+        }
+
+        std::sort(paired.begin(), paired.end(), [](const auto& lhs, const auto& rhs) {
+            if (lhs.first == rhs.first) {
+                return lhs.second > rhs.second;
+            }
+            return lhs.first > rhs.first;
+        });
+
+        curve.points.reserve(paired.size() + 2);
+        curve.points.push_back(BinaryCurvePoint{std::numeric_limits<double>::infinity(), 0, 0, curve.totalPositives, curve.totalNegatives});
+
+        std::size_t cumulativeTP = 0;
+        std::size_t cumulativeFP = 0;
+        std::size_t index = 0;
+        while (index < paired.size()) {
+            const double threshold = paired[index].first;
+            while (index < paired.size() && paired[index].first == threshold) {
+                if (paired[index].second == 1) {
+                    ++cumulativeTP;
+                } else {
+                    ++cumulativeFP;
+                }
+                ++index;
+            }
+
+            const std::size_t fn = curve.totalPositives - cumulativeTP;
+            const std::size_t tn = curve.totalNegatives - cumulativeFP;
+            curve.points.push_back(BinaryCurvePoint{threshold, cumulativeTP, cumulativeFP, fn, tn});
+        }
+
+        curve.points.push_back(BinaryCurvePoint{std::numeric_limits<double>::lowest(),
+                                               curve.totalPositives,
+                                               curve.totalNegatives,
+                                               0,
+                                               0});
+
+        return curve;
+    }
+
+    inline auto DefaultLabelForIndex(std::size_t index) -> std::string
+    {
+        switch (index) {
+            case 0:
+                return "Primary";
+            case 1:
+                return "Secondary";
+            case 2:
+                return "Tertiary";
+            default:
+                return "Series " + std::to_string(index + 1);
+        }
+    }
+}
+#endif //THOT_RELIABILITY_CURVE_UTILS_HPP

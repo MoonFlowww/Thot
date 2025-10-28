@@ -115,5 +115,11 @@ add_executable(test_Thot test/main.cpp
         src/plot/details/reliability.hpp
         src/plot/details/training.hpp
         src/plot/plot.hpp
+        src/plot/details/statistics.hpp
+        src/plot/details/reliability/reliability_curve_utils.hpp
+        src/plot/details/reliability/reliability_det.hpp
+        src/plot/details/reliability/reliability_pr.hpp
+        src/plot/details/reliability/reliability_youdens.hpp
+        src/plot/details/reliability/reliability_roc.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)

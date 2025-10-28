@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <chrono>
 #include <cstddef>
 #include <initializer_list>
 #include <cmath>
@@ -173,7 +174,53 @@ namespace Thot {
 
 
     public:
+        struct TrainingTelemetry {
+            struct EpochSnapshot {
+                std::size_t epoch_index{};
+                double train_loss{};
+                std::optional<double> test_loss{};
+                std::optional<double> delta{};
+                std::vector<double> learning_rates{};
+                std::chrono::system_clock::time_point timestamp{};
+                double duration_seconds{};
+            };
+
+            struct DatasetLossSnapshot {
+                double loss{};
+                std::size_t sample_count{};
+                std::vector<double> learning_rates{};
+                std::chrono::system_clock::time_point timestamp{};
+            };
+
+            [[nodiscard]] const std::vector<EpochSnapshot>& epochs() const noexcept { return epochs_; }
+            [[nodiscard]] const std::vector<DatasetLossSnapshot>& dataset_losses() const noexcept { return dataset_losses_; }
+
+            void clear() noexcept
+            {
+                epochs_.clear();
+                dataset_losses_.clear();
+            }
+
+        private:
+            friend class Model;
+
+            void append_epoch(EpochSnapshot snapshot)
+            {
+                epochs_.push_back(std::move(snapshot));
+            }
+
+            void append_dataset_loss(DatasetLossSnapshot snapshot)
+            {
+                dataset_losses_.push_back(std::move(snapshot));
+            }
+
+            std::vector<EpochSnapshot> epochs_{};
+            std::vector<DatasetLossSnapshot> dataset_losses_{};
+        };
+
         explicit Model(std::string_view name = {}) : name_(name) {}
+        [[nodiscard]] const TrainingTelemetry& training_telemetry() const noexcept { return telemetry_; }
+        void clear_training_telemetry() noexcept { telemetry_.clear(); }
         using torch::nn::Module::train;
         [[nodiscard]] const std::string& name() const noexcept { return name_; }
 
@@ -1061,6 +1108,8 @@ namespace Thot {
                 throw std::invalid_argument("Batch size must be greater than zero.");
             }
 
+            clear_training_telemetry();
+
             if (options.epoch == 0) {
                 return;
             }
@@ -1132,6 +1181,38 @@ namespace Thot {
         static std::vector<int64_t> tensor_shape_vector(const torch::Tensor& tensor);
         static std::string describe_activation(Activation::Type type);
         static std::string describe_module(const Layer::Details::RegisteredLayer& layer);
+
+        void record_epoch_telemetry(TrainingTelemetry::EpochSnapshot snapshot)
+        {
+            telemetry_.append_epoch(std::move(snapshot));
+        }
+
+        void record_dataset_loss_telemetry(TrainingTelemetry::DatasetLossSnapshot snapshot)
+        {
+            telemetry_.append_dataset_loss(std::move(snapshot));
+        }
+
+        [[nodiscard]] std::vector<double> collect_learning_rates()
+        {
+            std::vector<double> learning_rates;
+
+            auto append_from = [&](torch::optim::Optimizer* optimizer) {
+                if (!optimizer) {
+                    return;
+                }
+                for (auto& group : optimizer->param_groups()) {
+                    learning_rates.push_back(group.options().get_lr());
+                }
+            };
+
+            append_from(optimizer_.get());
+            for (auto& optimizer : local_optimizers_) {
+                append_from(optimizer.get());
+            }
+
+            return learning_rates;
+        }
+
 
         void register_layer_runtime(const Layer::Details::RegisteredLayer& layer)
         {
@@ -1608,8 +1689,19 @@ namespace Thot {
                     }
 
 
-                    const auto duration_seconds = std::chrono::duration<double>(
-                                            std::chrono::steady_clock::now() - epoch_start).count();
+                    const auto duration_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - epoch_start).count();
+
+                    const auto epoch_timestamp = std::chrono::system_clock::now();
+                    auto learning_rates = model.collect_learning_rates();
+                    model.record_epoch_telemetry({
+                        epoch + 1,
+                        train_loss,
+                        test_loss,
+                        delta,
+                        std::move(learning_rates),
+                        epoch_timestamp,
+                        duration_seconds
+                    });
 
                     if (options.monitor && options.stream) {
                         log_epoch(*options.stream,
@@ -1733,7 +1825,17 @@ namespace Thot {
                     return std::nullopt;
                 }
 
-                return accumulation.item<double>() / static_cast<double>(weight);
+                const double averaged_loss = accumulation.item<double>() / static_cast<double>(weight);
+                auto learning_rates = model.collect_learning_rates();
+                const auto timestamp = std::chrono::system_clock::now();
+                model.record_dataset_loss_telemetry({
+                    averaged_loss,
+                    static_cast<std::size_t>(dataset.inputs.size(0)),
+                    std::move(learning_rates),
+                    timestamp
+                });
+
+                return averaged_loss;
             }
 
             static void log_epoch(std::ostream& stream,
@@ -1803,6 +1905,7 @@ namespace Thot {
         std::vector<torch::Tensor> global_regularization_parameters_{};
         std::vector<RegularizationBinding> global_regularization_bindings_{};
         mutable std::optional<std::vector<int64_t>> last_input_shape_{};
+        TrainingTelemetry telemetry_{};
         std::size_t module_index_{0};
         std::unique_ptr<torch::optim::Optimizer> optimizer_{};
         std::vector<std::unique_ptr<torch::optim::Optimizer>> local_optimizers_{};
