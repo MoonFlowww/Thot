@@ -27,7 +27,7 @@ int main() {
             ),
             Thot::Layer::BatchNorm2d({64, 1e-5, 0.1, true, true}, Thot::Activation::GeLU),
             Thot::Layer::Conv2d(
-                {64, 64, {3,3}, {1,1}, {1,1}, {1,1}, 1, false}, // bias false under BN
+                {64, 64, {3,3}, {1,1}, {1,1}, {1,1}, 1, false},
                 Thot::Activation::Identity,
                 Thot::Initialization::KaimingNormal
             ),
@@ -35,7 +35,7 @@ int main() {
             Thot::Layer::MaxPool2d({{2,2}, {2,2}})
         }));
 
-        model.add(Thot::Layer::SoftDropout({ .probability = 0.08, .noise_mean = 0.0, .noise_std = 0.03 }));
+        model.add(Thot::Layer::SoftDropout({ .probability = 0.1, .noise_mean = 0.0, .noise_std = 0.05 }));
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({64, 1e-5, 0.1, true, true}, Thot::Activation::GeLU),
@@ -46,7 +46,7 @@ int main() {
             .projection = Thot::Layer::Conv2d({64,128,{1,1},{2,2},{0,0},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal)
         }, { .final_activation = Thot::Activation::Identity }));
 
-        model.add(Thot::Layer::SoftDropout({ .probability = 0.08, .noise_mean = 0.0, .noise_std = 0.03 }));
+        model.add(Thot::Layer::SoftDropout({ .probability = 0.1, .noise_mean = 0.0, .noise_std = 0.05 }));
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
@@ -62,7 +62,7 @@ int main() {
             Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal)
         }, 1, {}, { .final_activation = Thot::Activation::Identity }));
 
-        model.add(Thot::Layer::SoftDropout({ .probability = 0.15, .noise_mean = 0.0, .noise_std = 0.08, .inplace = false }));
+        model.add(Thot::Layer::SoftDropout({ .probability = 0.25, .noise_mean = 0.0, .noise_std = 0.08, .inplace = false }));
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
@@ -73,7 +73,7 @@ int main() {
             .projection = Thot::Layer::Conv2d({128,256,{1,1},{2,2},{0,0},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal)
         }, { .final_activation = Thot::Activation::Identity }));
 
-        model.add(Thot::Layer::SoftDropout({ .probability = 0.15, .noise_mean = 0.0, .noise_std = 0.08, .inplace = false }));
+        model.add(Thot::Layer::SoftDropout({ .probability = 0.25, .noise_mean = 0.0, .noise_std = 0.08, .inplace = false }));
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({256,1e-5,0.1,true,true}, Thot::Activation::GeLU),
@@ -169,6 +169,98 @@ int main() {
         Thot::Metric::Classification::BrierScore,
     });
 
+
+    try {
+        torch::NoGradGuard no_grad{};
+        Thot::Model::ForwardOptions inference_options{};
+        inference_options.max_chunk_size = 1024;
+
+        const auto gather_logits = [&](const torch::Tensor& inputs) {
+            auto outputs = model.forward(inputs, inference_options);
+            return outputs.detach().to(torch::kCPU);
+        };
+
+        const auto ensure_two_dimensional = [](torch::Tensor logits) {
+            if (!logits.defined()) {
+                return logits;
+            }
+            if (logits.dim() == 1) {
+                logits = logits.unsqueeze(1);
+            } else if (logits.dim() > 2) {
+                logits = logits.reshape({logits.size(0), -1});
+            }
+            return logits;
+        };
+
+        const auto prepare_binary_curves = [](torch::Tensor logits,
+                                              torch::Tensor labels,
+                                              int64_t positive_class) {
+            logits = logits.to(torch::kCPU);
+            auto probabilities = torch::softmax(logits, 1);
+            auto positive_probabilities = probabilities.select(1, positive_class);
+            auto negative_probabilities = 1.0 - positive_probabilities;
+            auto binary_probabilities = torch::stack({negative_probabilities, positive_probabilities}, 1).contiguous();
+
+            auto flattened_labels = labels;
+            if (flattened_labels.dim() > 1) {
+                flattened_labels = flattened_labels.reshape({flattened_labels.size(0)});
+            }
+            flattened_labels = flattened_labels.to(torch::kLong).to(torch::kCPU);
+            auto binary_targets = (flattened_labels == positive_class).to(torch::kLong);
+
+            return std::make_pair(binary_probabilities, binary_targets);
+        };
+
+        auto train_logits = ensure_two_dimensional(gather_logits(train_images));
+        auto test_logits = ensure_two_dimensional(gather_logits(test_images));
+
+        if (train_logits.dim() != 2 || test_logits.dim() != 2) {
+            std::cerr << "Skipping reliability plots: unexpected logit dimensionality." << std::endl;
+        } else if (train_logits.size(1) < 2) {
+            std::cerr << "Skipping reliability plots: model produced fewer than two classes." << std::endl;
+        } else {
+            const auto positive_class = train_logits.size(1) - 1;
+            auto [train_binary_logits, train_binary_targets] =
+                prepare_binary_curves(train_logits, train_labels, positive_class);
+            auto [test_binary_logits, test_binary_targets] =
+                prepare_binary_curves(test_logits, test_labels, positive_class);
+
+            Thot::Plot::Render(model,
+                               Thot::Plot::Reliability::ROC({
+                                   .KSTest = true,
+                                   .thresholds = true,
+                                   .logScale = false,
+                               }),
+                               train_binary_logits,
+                               train_binary_targets,
+                               test_binary_logits,
+                               test_binary_targets);
+
+            Thot::Plot::Render(model,
+                               Thot::Plot::Reliability::PR({
+                                   .samples = true,
+                                   .random = false,
+                                   .interpolate = true,
+                               }),
+                               train_binary_logits,
+                               train_binary_targets,
+                               test_binary_logits,
+                               test_binary_targets);
+
+            Thot::Plot::Render(model,
+                               Thot::Plot::Reliability::DET({
+                                   .KSTest = true,
+                                   .confidenceBands = true,
+                                   .annotateCrossing = true,
+                               }),
+                               train_binary_logits,
+                               train_binary_targets,
+                               test_binary_logits,
+                               test_binary_targets);
+        }
+    } catch (const std::exception& plotting_error) {
+        std::cerr << "Plotting failed: " << plotting_error.what() << std::endl;
+    }
     model.save("/home/moonfloww/Projects/NNs/CIFAR_DEBUG");
     return 0;
 }
