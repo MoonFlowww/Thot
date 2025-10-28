@@ -97,26 +97,20 @@ namespace Thot::Plot::Details::Reliability {
         detail::RenderROCFromSeries(model, descriptor, std::move(series));
     }
 
-    inline void RenderROC(Model& model,
-                           const Plot::Reliability::ROCDescriptor& descriptor,
-                           torch::Tensor logits,
-                           torch::Tensor targets)
-    {
+    inline void RenderROC(Model& model, const Plot::Reliability::ROCDescriptor& descriptor, torch::Tensor inputs, torch::Tensor targets) {
         std::vector<Curves::BinarySeries> series;
-        series.emplace_back(Curves::MakeSeriesFromTensor(std::move(logits), std::move(targets), ""));
+        series.emplace_back(Curves::MakeSeriesFromSamples(model, std::move(inputs), std::move(targets), ""));
         RenderROC(model, descriptor, std::move(series));
     }
 
-    inline void RenderROC(Model& model,
-                           const Plot::Reliability::ROCDescriptor& descriptor,
-                           torch::Tensor trainLogits,
-                           torch::Tensor trainTargets,
-                           torch::Tensor testLogits,
-                           torch::Tensor testTargets)
+    inline void RenderROC(Model& model, const Plot::Reliability::ROCDescriptor& descriptor, torch::Tensor trainInputs, torch::Tensor trainTargets, torch::Tensor testInputs, torch::Tensor testTargets)
     {
-        std::vector<Curves::BinarySeries> series;
-        series.emplace_back(Curves::MakeSeriesFromTensor(std::move(trainLogits), std::move(trainTargets), "Train"));
-        series.emplace_back(Curves::MakeSeriesFromTensor(std::move(testLogits), std::move(testTargets), "Test"));
+        auto series = Curves::MakeSeriesFromSamples(model,
+                                                    std::move(trainInputs),
+                                                    std::move(trainTargets),
+                                                    std::move(testInputs),
+                                                    std::move(testTargets),
+                                                    "Train", "Test");
         RenderROC(model, descriptor, std::move(series));
     }
 

@@ -427,7 +427,7 @@ namespace Thot::Data::Check {
         return oss.str();
     }
 
-    [[nodiscard]] inline std::vector<int> Size(const torch::Tensor&x, const std::string& title="Tensor Shape") {
+    inline std::vector<int> Size(const torch::Tensor&x, const std::string& title="Tensor Shape") {
         at::IntArrayRef sizes = x.sizes();
         std::cout << title << ": (";
         for (size_t i = 0; i < sizes.size(); i++) {

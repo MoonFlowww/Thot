@@ -12,6 +12,11 @@
 
 #include <torch/torch.h>
 
+namespace Thot {
+    class Model;
+}
+
+
 namespace Thot::Plot::Details::Reliability::Curves {
     struct BinarySeries {
         std::vector<double> scores{};
@@ -223,6 +228,136 @@ namespace Thot::Plot::Details::Reliability::Curves {
             default:
                 return "Series " + std::to_string(index + 1);
         }
+    }
+
+    namespace {
+        [[nodiscard]] auto ensure_two_dimensional(torch::Tensor logits) -> torch::Tensor
+        {
+            if (!logits.defined()) {
+                throw std::invalid_argument("Reliability curves require defined model outputs.");
+            }
+            if (logits.dim() == 1) {
+                logits = logits.unsqueeze(1);
+            } else if (logits.dim() > 2) {
+                logits = logits.reshape({logits.size(0), -1});
+            }
+            return logits;
+        }
+
+        [[nodiscard]] auto flatten_targets(torch::Tensor targets) -> torch::Tensor
+        {
+            if (!targets.defined()) {
+                throw std::invalid_argument("Reliability curves require defined target labels.");
+            }
+
+            if (targets.dim() == 2) {
+                if (targets.size(1) != 1) {
+                    throw std::invalid_argument("Target tensor must be shaped as (batch, 1) for reliability curves.");
+                }
+                targets = targets.reshape({targets.size(0)});
+            } else if (targets.dim() != 1) {
+                throw std::invalid_argument("Target tensor must be one- or two-dimensional for reliability curves.");
+            }
+
+            return targets.to(torch::kLong);
+        }
+
+        [[nodiscard]] auto build_binary_projection(torch::Tensor logits, torch::Tensor targets)
+            -> std::pair<torch::Tensor, torch::Tensor>
+        {
+            logits = ensure_two_dimensional(std::move(logits));
+            if (logits.dim() != 2) {
+                throw std::invalid_argument("Reliability curves expect model outputs shaped as (batch, classes).");
+            }
+
+            const auto batch = logits.size(0);
+            const auto classes = logits.size(1);
+            if (batch <= 0) {
+                throw std::invalid_argument("Reliability curves require at least one prediction.");
+            }
+            if (classes < 2) {
+                throw std::invalid_argument("Reliability curves currently support binary classification (classes = 2).");
+            }
+
+            auto probabilities = torch::softmax(logits, 1).to(torch::kDouble).cpu();
+            auto positive_probabilities = probabilities.select(1, classes - 1).contiguous();
+            auto negative_probabilities = (1.0 - positive_probabilities).contiguous();
+            auto binary_probabilities = torch::stack({negative_probabilities, positive_probabilities}, 1).contiguous();
+
+            auto flattened_targets = flatten_targets(std::move(targets)).to(torch::kCPU);
+            auto binary_targets = (flattened_targets == (classes - 1)).to(torch::kLong);
+
+            return {std::move(binary_probabilities), std::move(binary_targets)};
+        }
+
+        [[nodiscard]] auto make_series_from_binary(torch::Tensor probabilities,
+                                                   torch::Tensor targets,
+                                                   std::string label) -> BinarySeries
+        {
+            return MakeSeriesFromTensor(std::move(probabilities), std::move(targets), std::move(label));
+        }
+
+        [[nodiscard]] auto run_inference(Model& model, torch::Tensor inputs) -> torch::Tensor
+        {
+            torch::NoGradGuard no_grad{};
+            const bool was_training = model.is_training();
+            model.eval();
+
+            torch::Tensor outputs;
+            try {
+                Model::ForwardOptions options{};
+                options.max_chunk_size = 256;
+                outputs = model.forward(std::move(inputs), options);
+            } catch (...) {
+                if (was_training) {
+                    model.train();
+                }
+                throw;
+            }
+
+            if (was_training) {
+                model.train();
+            }
+
+            return outputs.detach().to(torch::kCPU);
+        }
+    }
+
+    auto MakeSeriesFromSamples(Model& model,
+                               torch::Tensor inputs,
+                               torch::Tensor targets,
+                               std::string label) -> BinarySeries
+    {
+        if (!inputs.defined()) {
+            throw std::invalid_argument("Reliability curves require defined input samples.");
+        }
+        if (!targets.defined()) {
+            throw std::invalid_argument("Reliability curves require defined target labels.");
+        }
+
+        auto logits = run_inference(model, std::move(inputs));
+        auto [binary_probabilities, binary_targets] = build_binary_projection(std::move(logits), std::move(targets));
+        return make_series_from_binary(std::move(binary_probabilities), std::move(binary_targets), std::move(label));
+    }
+
+    auto MakeSeriesFromSamples(Model& model,
+                               torch::Tensor firstInputs,
+                               torch::Tensor firstTargets,
+                               torch::Tensor secondInputs,
+                               torch::Tensor secondTargets,
+                               std::string firstLabel,
+                               std::string secondLabel) -> std::vector<BinarySeries> {
+        std::vector<BinarySeries> series;
+        series.reserve(2);
+        series.emplace_back(MakeSeriesFromSamples(model,
+                                                  std::move(firstInputs),
+                                                  std::move(firstTargets),
+                                                  std::move(firstLabel)));
+        series.emplace_back(MakeSeriesFromSamples(model,
+                                                  std::move(secondInputs),
+                                                  std::move(secondTargets),
+                                                  std::move(secondLabel)));
+        return series;
     }
 }
 #endif //THOT_RELIABILITY_CURVE_UTILS_HPP

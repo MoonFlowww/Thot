@@ -1012,7 +1012,7 @@ namespace Thot {
                             }, *loss_descriptor_);
         }
 
-        [[nodiscard]] auto evaluate(torch::Tensor evaluation_inputs, torch::Tensor evaluation_targets, Evaluation::ClassificationDescriptor descriptor, std::vector<Metric::Classification::Descriptor> metrics, Evaluation::Options options = {}) -> Evaluation::ClassificationReport {
+        auto evaluate(torch::Tensor evaluation_inputs, torch::Tensor evaluation_targets, Evaluation::ClassificationDescriptor descriptor, std::vector<Metric::Classification::Descriptor> metrics, Evaluation::Options options = {}) -> Evaluation::ClassificationReport {
             return Evaluation::Evaluate(
                 *this,
                 std::move(evaluation_inputs),

@@ -17,6 +17,7 @@ namespace Thot::Plot::Reliability {
         bool confidenceBands{false};
         bool annotateCrossing{true};
         bool logScale{false};
+        bool expScale{false};
     };
     struct DETDescriptor {
         DETOptions options{};
@@ -48,6 +49,7 @@ namespace Thot::Plot::Reliability {
         bool random{false};
         bool interpolate{true};
         bool logScale{false};
+        bool expScale{false};
     };
 
     struct PRDescriptor {

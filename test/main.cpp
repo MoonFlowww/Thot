@@ -117,7 +117,7 @@ int main() {
 
     auto [train_images, train_labels, test_images, test_labels] = Thot::Data::Load::CIFAR10("/home/moonfloww/Projects/DATASETS/CIFAR10", 1.f, 1.f, true);
     auto [validation_images, validation_labels] = Thot::Data::Manipulation::Fraction(test_images, test_labels, 0.1f);
-    (void)Thot::Data::Check::Size(train_images, "Input train size raw");
+    Thot::Data::Check::Size(train_images, "Input train size raw");
 
 
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Cutout(train_images, train_labels, {-1, -1}, {12, 8}, -1, 1.f, true, false);
@@ -126,14 +126,14 @@ int main() {
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {"x"}, 1.f, true, false);
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Shuffle(train_images, train_labels);
 
-    (void)Thot::Data::Check::Size(train_images, "Input train size after augment");
+    Thot::Data::Check::Size(train_images, "Input train size after augment");
 
     if (!IsLoading) {
         model.train(train_images, train_labels, {.epoch = epochs, .batch_size = B, .shuffle = true, .buffer_vram = 0, .restore_best_state = true,
                         .test = std::make_pair(validation_images, validation_labels)});
     }
 
-    (void) model.evaluate(test_images, test_labels, Thot::Evaluation::Classification,{
+    model.evaluate(test_images, test_labels, Thot::Evaluation::Classification,{
         Thot::Metric::Classification::Accuracy,
         Thot::Metric::Classification::Precision,
         Thot::Metric::Classification::Recall,
@@ -154,7 +154,7 @@ int main() {
     }
 
 
-    (void) model.evaluate(test_images, test_labels, Thot::Evaluation::Classification,{
+    model.evaluate(test_images, test_labels, Thot::Evaluation::Classification,{
         Thot::Metric::Classification::Accuracy,
         Thot::Metric::Classification::Precision,
         Thot::Metric::Classification::Recall,
@@ -171,95 +171,38 @@ int main() {
 
 
     try {
-        torch::NoGradGuard no_grad{};
-        Thot::Model::ForwardOptions inference_options{};
-        inference_options.max_chunk_size = 256;
+        model.plot(Thot::Plot::Reliability::ROC({
+                        .KSTest = true,
+                        .thresholds = true,
+                        .logScale = true,
+                    }),
+                    train_images,
+                    train_labels,
+                    test_images,
+                    test_labels);
 
-        const auto gather_logits = [&](const torch::Tensor& inputs) {
-            auto outputs = model.forward(inputs, inference_options);
-            return outputs.detach().to(torch::kCPU);
-        };
+        model.plot(Thot::Plot::Reliability::PR({
+                        .samples = true,
+                        .random = false,
+                        .interpolate = true,
+                        .expScale = true,
+                    }),
+                    train_images,
+                    train_labels,
+                    test_images,
+                    test_labels);
 
-        const auto ensure_two_dimensional = [](torch::Tensor logits) {
-            if (!logits.defined()) {
-                return logits;
-            }
-            if (logits.dim() == 1) {
-                logits = logits.unsqueeze(1);
-            } else if (logits.dim() > 2) {
-                logits = logits.reshape({logits.size(0), -1});
-            }
-            return logits;
-        };
-
-        const auto prepare_binary_curves = [](torch::Tensor logits,
-                                              torch::Tensor labels,
-                                              int64_t positive_class) {
-            logits = logits.to(torch::kCPU);
-            auto probabilities = torch::softmax(logits, 1);
-            auto positive_probabilities = probabilities.select(1, positive_class);
-            auto negative_probabilities = 1.0 - positive_probabilities;
-            auto binary_probabilities = torch::stack({negative_probabilities, positive_probabilities}, 1).contiguous();
-
-            auto flattened_labels = labels;
-            if (flattened_labels.dim() > 1) {
-                flattened_labels = flattened_labels.reshape({flattened_labels.size(0)});
-            }
-            flattened_labels = flattened_labels.to(torch::kLong).to(torch::kCPU);
-            auto binary_targets = (flattened_labels == positive_class).to(torch::kLong);
-
-            return std::make_pair(binary_probabilities, binary_targets);
-        };
-
-        auto train_logits = ensure_two_dimensional(gather_logits(train_images));
-        auto test_logits = ensure_two_dimensional(gather_logits(test_images));
-
-        if (train_logits.dim() != 2 || test_logits.dim() != 2) {
-            std::cerr << "Skipping reliability plots: unexpected logit dimensionality." << std::endl;
-        } else if (train_logits.size(1) < 2) {
-            std::cerr << "Skipping reliability plots: model produced fewer than two classes." << std::endl;
-        } else {
-            const auto positive_class = train_logits.size(1) - 1;
-            auto [train_binary_logits, train_binary_targets] =
-                prepare_binary_curves(train_logits, train_labels, positive_class);
-            auto [test_binary_logits, test_binary_targets] =
-                prepare_binary_curves(test_logits, test_labels, positive_class);
-
-            Thot::Plot::Render(model,
-                               Thot::Plot::Reliability::ROC({
-                                   .KSTest = true,
-                                   .thresholds = true,
-                                   .logScale = true,
-                               }),
-                               train_binary_logits,
-                               train_binary_targets,
-                               test_binary_logits,
-                               test_binary_targets);
-
-            Thot::Plot::Render(model,
-                               Thot::Plot::Reliability::PR({
-                                   .samples = true,
-                                   .random = false,
-                                   .interpolate = true,
-                                   .logScale = true,
-                               }),
-                               train_binary_logits,
-                               train_binary_targets,
-                               test_binary_logits,
-                               test_binary_targets);
-
-            Thot::Plot::Render(model,
-                               Thot::Plot::Reliability::DET({
-                                   .KSTest = true,
-                                   .confidenceBands = true,
-                                   .annotateCrossing = true,
-                                   .logScale = true,
-                               }),
-                               train_binary_logits,
-                               train_binary_targets,
-                               test_binary_logits,
-                               test_binary_targets);
-        }
+        model.plot(Thot::Plot::Reliability::DET({
+                        .KSTest = true,
+                        .confidenceBands = true,
+                        .annotateCrossing = true,
+                        .logScale = true,
+                        .expScale = true,
+                    }),
+                    train_images,
+                    train_labels,
+                    test_images,
+                    test_labels);
     } catch (const std::exception& plotting_error) {
         std::cerr << "Plotting failed: " << plotting_error.what() << std::endl;
     }

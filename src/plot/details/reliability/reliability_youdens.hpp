@@ -107,24 +107,25 @@ namespace Thot::Plot::Details::Reliability {
 
     inline void RenderYoudens(Model& model,
                                const Plot::Reliability::YoudensDescriptor& descriptor,
-                               torch::Tensor logits,
+                               torch::Tensor inputs,
                                torch::Tensor targets)
     {
         std::vector<Curves::BinarySeries> series;
-        series.emplace_back(Curves::MakeSeriesFromTensor(std::move(logits), std::move(targets), ""));
+        series.emplace_back(Curves::MakeSeriesFromSamples(model, std::move(inputs), std::move(targets), ""));
+
         RenderYoudens(model, descriptor, std::move(series));
     }
 
     inline void RenderYoudens(Model& model,
                                const Plot::Reliability::YoudensDescriptor& descriptor,
-                               torch::Tensor trainLogits,
+                               torch::Tensor trainInputs,
                                torch::Tensor trainTargets,
-                               torch::Tensor testLogits,
+                               torch::Tensor testInputs,
                                torch::Tensor testTargets)
     {
         std::vector<Curves::BinarySeries> series;
-        series.emplace_back(Curves::MakeSeriesFromTensor(std::move(trainLogits), std::move(trainTargets), "Train"));
-        series.emplace_back(Curves::MakeSeriesFromTensor(std::move(testLogits), std::move(testTargets), "Test"));
+        series.emplace_back(Curves::MakeSeriesFromTensor(std::move(trainInputs), std::move(trainTargets), "Train"));
+        series.emplace_back(Curves::MakeSeriesFromTensor(std::move(testInputs), std::move(testTargets), "Test"));
         RenderYoudens(model, descriptor, std::move(series));
     }
 

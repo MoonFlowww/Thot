@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cmath>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -22,20 +23,7 @@ namespace Thot {
 
 namespace Thot::Plot::Details::Reliability {
     namespace detail {
-        inline auto PickColor(std::size_t index) -> std::string
-        {
-            static constexpr std::array<const char*, 8> palette{
-                "#1f77b4",
-                "#ff7f0e",
-                "#2ca02c",
-                "#d62728",
-                "#9467bd",
-                "#8c564b",
-                "#e377c2",
-                "#7f7f7f"
-            };
-            return std::string(palette[index % palette.size()]);
-        }
+
 
         inline void RenderDETFromSeries(Model& /*model*/,
                                         const Plot::Reliability::DETDescriptor& descriptor,
@@ -55,10 +43,32 @@ namespace Thot::Plot::Details::Reliability {
             plotter.setTitle("Detection Error Tradeoff");
             plotter.setXLabel("False Positive Rate");
             plotter.setYLabel("False Negative Rate");
-            plotter.command("set xrange [0:1]");
-            plotter.command("set yrange [0:1]");
+
             plotter.setGrid(true);
             plotter.setKey("top right");
+
+            const auto& options = descriptor.options;
+            if (options.logScale && options.expScale) {
+                throw std::invalid_argument(
+                    "DET rendering cannot enable both logScale and expScale at the same time.");
+            }
+
+            constexpr double logEpsilon = 1e-6;
+
+            if (options.logScale) {
+                plotter.setLogScale('x');
+                plotter.setLogScale('y');
+                plotter.setRange('x', logEpsilon, 1.0);
+                plotter.setRange('y', logEpsilon, 1.0);
+            } else if (options.expScale) {
+                const double expMax = std::expm1(1.0);
+                plotter.setRange('x', 0.0, expMax);
+                plotter.setRange('y', 0.0, expMax);
+            } else {
+                plotter.setRange('x', 0.0, 1.0);
+                plotter.setRange('y', 0.0, 1.0);
+            }
+
 
 
             std::vector<Utils::Gnuplot::DataSet2D> datasets;
@@ -74,10 +84,19 @@ namespace Thot::Plot::Details::Reliability {
                 falseNegativeRates.reserve(curve.points.size());
 
                 for (const auto& point : curve.points) {
-                    const double fpr = static_cast<double>(point.falsePositives)
-                        / static_cast<double>(curve.totalNegatives);
-                    const double fnr = static_cast<double>(point.falseNegatives)
-                        / static_cast<double>(curve.totalPositives);
+                    double fpr = static_cast<double>(point.falsePositives) / static_cast<double>(curve.totalNegatives);
+                    double fnr = static_cast<double>(point.falseNegatives) / static_cast<double>(curve.totalPositives);
+
+                    if (options.logScale) {
+                        fpr = fpr <= 0.0 ? logEpsilon : fpr;
+                        fnr = fnr <= 0.0 ? logEpsilon : fnr;
+                    }
+
+                    if (options.expScale) {
+                        fpr = std::expm1(fpr);
+                        fnr = std::expm1(fnr);
+                    }
+
                     falsePositiveRates.push_back(fpr);
                     falseNegativeRates.push_back(fnr);
                 }
@@ -87,7 +106,7 @@ namespace Thot::Plot::Details::Reliability {
                 style.lineWidth = 2.0;
                 style.pointType = 7;
                 style.pointSize = 1.1;
-                style.lineColor = PickColor(index);
+                style.lineColor = Utils::Terminal::Thot::Plot::Details::Reliability::detail::PickColor(index);
 
                 datasets.push_back(Utils::Gnuplot::DataSet2D{
                     std::move(falsePositiveRates),
@@ -104,17 +123,20 @@ namespace Thot::Plot::Details::Reliability {
         detail::RenderDETFromSeries(model, descriptor, std::move(series));
     }
 
-    inline void RenderDET(Model& model, const Plot::Reliability::DETDescriptor& descriptor, torch::Tensor logits, torch::Tensor targets) {
+    inline void RenderDET(Model& model, const Plot::Reliability::DETDescriptor& descriptor, torch::Tensor inputs, torch::Tensor targets) {
         std::vector<Curves::BinarySeries> series;
-        series.emplace_back(Curves::MakeSeriesFromTensor(std::move(logits), std::move(targets), ""));
+        series.emplace_back(Curves::MakeSeriesFromSamples(model, std::move(inputs), std::move(targets), ""));
         RenderDET(model, descriptor, std::move(series));
     }
 
-    inline void RenderDET(Model& model, const Plot::Reliability::DETDescriptor& descriptor, torch::Tensor trainLogits,
-                        torch::Tensor trainTargets, torch::Tensor testLogits, torch::Tensor testTargets) {
-        std::vector<Curves::BinarySeries> series;
-        series.emplace_back(Curves::MakeSeriesFromTensor(std::move(trainLogits), std::move(trainTargets), "Train"));
-        series.emplace_back(Curves::MakeSeriesFromTensor(std::move(testLogits), std::move(testTargets), "Test"));
+    inline void RenderDET(Model& model, const Plot::Reliability::DETDescriptor& descriptor, torch::Tensor trainInputs, torch::Tensor trainTargets, torch::Tensor testInputs, torch::Tensor testTargets) {
+        auto series = Curves::MakeSeriesFromSamples(model,
+                                                    std::move(trainInputs),
+                                                    std::move(trainTargets),
+                                                    std::move(testInputs),
+                                                    std::move(testTargets),
+                                                    "Train",
+                                                    "Test");
         RenderDET(model, descriptor, std::move(series));
     }
 

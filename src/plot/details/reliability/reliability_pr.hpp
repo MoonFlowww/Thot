@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-
+#include <cmath>
 #include <torch/torch.h>
 
 #include "../../../utils/terminal.hpp"
@@ -37,10 +37,29 @@ namespace Thot::Plot::Details::Reliability {
             plotter.setTitle("Precision-Recall Curve");
             plotter.setXLabel("Recall");
             plotter.setYLabel("Precision");
-            plotter.command("set xrange [0:1]");
-            plotter.command("set yrange [0:1]");
             plotter.setGrid(true);
             plotter.setKey("top right");
+            const auto& options = descriptor.options;
+            if (options.logScale && options.expScale) {
+                throw std::invalid_argument(
+                    "Precision-Recall rendering cannot enable both logScale and expScale at the same time.");
+            }
+
+            constexpr double logEpsilon = 1e-6;
+
+            if (options.logScale) {
+                plotter.setLogScale('x');
+                plotter.setLogScale('y');
+                plotter.setRange('x', logEpsilon, 1.0);
+                plotter.setRange('y', logEpsilon, 1.0);
+            } else if (options.expScale) {
+                const double expMax = std::expm1(1.0);
+                plotter.setRange('x', 0.0, expMax);
+                plotter.setRange('y', 0.0, expMax);
+            } else {
+                plotter.setRange('x', 0.0, 1.0);
+                plotter.setRange('y', 0.0, 1.0);
+            }
 
 
             std::vector<Utils::Gnuplot::DataSet2D> datasets;
@@ -58,9 +77,19 @@ namespace Thot::Plot::Details::Reliability {
                 for (const auto& point : curve.points) {
                     const double tp = static_cast<double>(point.truePositives);
                     const double fp = static_cast<double>(point.falsePositives);
-                    const double recall = tp / static_cast<double>(curve.totalPositives);
+                    double recall = tp / static_cast<double>(curve.totalPositives);
                     const double precisionDenominator = tp + fp;
-                    const double precision = precisionDenominator > 0.0 ? tp / precisionDenominator : 1.0;
+                    double precision = precisionDenominator > 0.0 ? tp / precisionDenominator : 1.0;
+
+                    if (options.logScale) {
+                        recall = recall <= 0.0 ? logEpsilon : recall;
+                        precision = precision <= 0.0 ? logEpsilon : precision;
+                    }
+
+                    if (options.expScale) {
+                        recall = std::expm1(recall);
+                        precision = std::expm1(precision);
+                    }
                     recallValues.push_back(recall);
                     precisionValues.push_back(precision);
                 }
@@ -69,13 +98,34 @@ namespace Thot::Plot::Details::Reliability {
                     continue;
                 }
 
-                if (recallValues.front() > 0.0) {
-                    recallValues.insert(recallValues.begin(), 0.0);
-                    precisionValues.insert(precisionValues.begin(), 1.0);
+                const double startThreshold = options.logScale ? logEpsilon : 0.0;
+                if (recallValues.front() > startThreshold) {
+                    double recall = 0.0;
+                    double precision = 1.0;
+                    if (options.logScale) {
+                        recall = logEpsilon;
+                        precision = 1.0;
+                    }
+                    if (options.expScale) {
+                        recall = std::expm1(recall);
+                        precision = std::expm1(precision);
+                    }
+                    recallValues.insert(recallValues.begin(), recall);
+                    precisionValues.insert(precisionValues.begin(), precision);
                 }
                 if (recallValues.back() < 1.0) {
-                    recallValues.push_back(1.0);
-                    precisionValues.push_back(0.0);
+                    double recall = 1.0;
+                    double precision = 0.0;
+                    if (options.logScale) {
+                        recall = 1.0;
+                        precision = logEpsilon;
+                    }
+                    if (options.expScale) {
+                        recall = std::expm1(recall);
+                        precision = std::expm1(precision);
+                    }
+                    recallValues.push_back(recall);
+                    precisionValues.push_back(precision);
                 }
 
                 Utils::Gnuplot::PlotStyle style{};
@@ -107,21 +157,22 @@ namespace Thot::Plot::Details::Reliability {
         detail::RenderPRFromSeries(model, descriptor, std::move(series));
     }
 
-    inline void RenderPR(Model& model,
-                          const Plot::Reliability::PRDescriptor& descriptor,
-                          torch::Tensor logits,
-                          torch::Tensor targets)
+    inline void RenderPR(Model& model, const Plot::Reliability::PRDescriptor& descriptor, torch::Tensor inputs, torch::Tensor targets)
     {
         std::vector<Curves::BinarySeries> series;
-        series.emplace_back(Curves::MakeSeriesFromTensor(std::move(logits), std::move(targets), ""));
+        series.emplace_back(Curves::MakeSeriesFromSamples(model, std::move(inputs), std::move(targets), ""));
         RenderPR(model, descriptor, std::move(series));
     }
 
-    inline void RenderPR(Model& model, const Plot::Reliability::PRDescriptor& descriptor, torch::Tensor trainLogits, torch::Tensor trainTargets, torch::Tensor testLogits, torch::Tensor testTargets)
+    inline void RenderPR(Model& model, const Plot::Reliability::PRDescriptor& descriptor, torch::Tensor trainInputs, torch::Tensor trainTargets, torch::Tensor testInputs, torch::Tensor testTargets)
     {
-        std::vector<Curves::BinarySeries> series;
-        series.emplace_back(Curves::MakeSeriesFromTensor(std::move(trainLogits), std::move(trainTargets), "Train"));
-        series.emplace_back(Curves::MakeSeriesFromTensor(std::move(testLogits), std::move(testTargets), "Test"));
+        auto series = Curves::MakeSeriesFromSamples(model,
+                                                    std::move(trainInputs),
+                                                    std::move(trainTargets),
+                                                    std::move(testInputs),
+                                                    std::move(testTargets),
+                                                    "Train",
+                                                    "Test");
         RenderPR(model, descriptor, std::move(series));
     }
 
