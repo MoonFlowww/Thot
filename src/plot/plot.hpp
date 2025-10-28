@@ -53,92 +53,41 @@ namespace Thot::Plot {
     }
 
     namespace Reliability {
-        struct DETOptions {
-            bool KSTest{false};
-            bool confidenceBands{false};
-            bool annotateCrossing{true};
-        };
 
-        struct DETDescriptor {
-            DETOptions options{};
-        };
 
         [[nodiscard]] constexpr auto DET(DETOptions options = {}) -> DETDescriptor
         {
             return DETDescriptor{options};
         }
 
-        struct ROCOptions {
-            bool KSTest{false};
-            bool thresholds{false};
-            bool logScale{false};
-        };
 
-        struct ROCDescriptor {
-            ROCOptions options{};
-        };
 
         [[nodiscard]] constexpr auto ROC(ROCOptions options = {}) -> ROCDescriptor
         {
             return ROCDescriptor{options};
         }
 
-        struct YoudensOptions {
-            bool KSTest{false};
-            bool annotate{true};
-            bool showIsoCost{false};
-        };
 
-        struct YoudensDescriptor {
-            YoudensOptions options{};
-        };
 
         [[nodiscard]] constexpr auto Youdens(YoudensOptions options = {}) -> YoudensDescriptor
         {
             return YoudensDescriptor{options};
         }
 
-        struct PROptions {
-            bool samples{false};
-            bool random{false};
-            bool interpolate{true};
-        };
 
-        struct PRDescriptor {
-            PROptions options{};
-        };
 
         [[nodiscard]] constexpr auto PR(PROptions options = {}) -> PRDescriptor
         {
             return PRDescriptor{options};
         }
 
-        struct GradCAMOptions {
-            std::size_t samples{0};
-            bool random{false};
-            bool normalize{true};
-            bool overlay{true};
-        };
-
-        struct GradCAMDescriptor {
-            GradCAMOptions options{};
-        };
 
         [[nodiscard]] constexpr auto GradCAM(GradCAMOptions options = {}) -> GradCAMDescriptor
         {
             return GradCAMDescriptor{options};
         }
 
-        struct LIMEOptions {
-            std::size_t samples{500};
-            bool random{true};
-            bool normalize{true};
-            bool showWeights{false};
-        };
 
-        struct LIMEDescriptor {
-            LIMEOptions options{};
-        };
 
         [[nodiscard]] constexpr auto LIME(LIMEOptions options = {}) -> LIMEDescriptor
         {

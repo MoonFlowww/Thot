@@ -12,14 +12,12 @@
 #include "reliability_curve_utils.hpp"
 #include "../../../utils/gnuplot.hpp"
 #include "../../../utils/terminal.hpp"
+#include "../reliability.hpp"
 
 namespace Thot {
     class Model;
 }
 
-namespace Thot::Plot::Reliability {
-    struct ROCDescriptor;
-}
 
 namespace Thot::Plot::Details::Reliability {
     namespace detail {

@@ -13,12 +13,9 @@
 #include "../../../utils/terminal.hpp"
 #include "reliability_curve_utils.hpp"
 #include "../../../utils/gnuplot.hpp"
+#include "../reliability.hpp"
 
 namespace Thot {
-    namespace Plot::Reliability {
-        struct DETDescriptor;
-    }
-
     class Model;
 }
 
@@ -63,8 +60,6 @@ namespace Thot::Plot::Details::Reliability {
             plotter.setGrid(true);
             plotter.setKey("top right");
 
-            const auto& options = descriptor.options;
-            (void)options;
 
             std::vector<Utils::Gnuplot::DataSet2D> datasets;
             datasets.reserve(series.size());

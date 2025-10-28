@@ -12,9 +12,66 @@ namespace Thot {
 }
 
 namespace Thot::Plot::Reliability {
+    struct DETOptions {
+        bool KSTest{false};
+        bool confidenceBands{false};
+        bool annotateCrossing{true};
+    };
+    struct DETDescriptor {
+        DETOptions options{};
+    };
 
-    struct GradCAMDescriptor;
-    struct LIMEDescriptor;
+    struct ROCOptions {
+        bool KSTest{false};
+        bool thresholds{false};
+        bool logScale{false};
+    };
+
+    struct ROCDescriptor {
+        ROCOptions options{};
+    };
+
+    struct YoudensOptions {
+        bool KSTest{false};
+        bool annotate{true};
+        bool showIsoCost{false};
+    };
+
+    struct YoudensDescriptor {
+        YoudensOptions options{};
+    };
+
+    struct PROptions {
+        bool samples{false};
+        bool random{false};
+        bool interpolate{true};
+    };
+
+    struct PRDescriptor {
+        PROptions options{};
+    };
+
+    struct GradCAMOptions {
+        std::size_t samples{0};
+        bool random{false};
+        bool normalize{true};
+        bool overlay{true};
+    };
+
+    struct GradCAMDescriptor {
+        GradCAMOptions options{};
+    };
+
+    struct LIMEOptions {
+        std::size_t samples{500};
+        bool random{true};
+        bool normalize{true};
+        bool showWeights{false};
+    };
+
+    struct LIMEDescriptor {
+        LIMEOptions options{};
+    };
 }
 
 namespace Thot::Plot::Details::Reliability {

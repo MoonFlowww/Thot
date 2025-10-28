@@ -12,16 +12,13 @@
 
 #include "reliability_curve_utils.hpp"
 #include "../../../utils/gnuplot.hpp"
-
+#include "../reliability.hpp"
 #include "../../../utils/terminal.hpp"
 
 namespace Thot {
     class Model;
 }
 
-namespace Thot::Plot::Reliability {
-    struct YoudensDescriptor;
-}
 
 namespace Thot::Plot::Details::Reliability {
     namespace detail {
@@ -50,8 +47,6 @@ namespace Thot::Plot::Details::Reliability {
             plotter.setGrid(true);
             plotter.setKey("top left");
 
-            const auto& options = descriptor.options;
-            (void)options;
 
             std::vector<Utils::Gnuplot::DataSet2D> datasets;
             datasets.reserve(series.size());
