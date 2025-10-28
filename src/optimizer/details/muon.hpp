@@ -101,6 +101,8 @@ namespace Thot::Optimizer::Details {
         TORCH_ARG(torch::Tensor, exp_avg);
         TORCH_ARG(int64_t, step) = 0;
 
+    public:
+
         void serialize(torch::serialize::InputArchive& archive) override {
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, exp_avg);
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(int64_t, step);
@@ -190,6 +192,8 @@ namespace Thot::Optimizer::Details {
         TORCH_ARG(torch::Tensor, exp_avg);
         TORCH_ARG(torch::Tensor, exp_avg_sq);
         TORCH_ARG(int64_t, step) = 0;
+
+    public:
 
         void serialize(torch::serialize::InputArchive& archive) override {
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, exp_avg);
@@ -339,6 +343,8 @@ namespace Thot::Optimizer::Details {
         TORCH_ARG(torch::Tensor, exp_avg_sq);
         TORCH_ARG(int64_t, step) = 0;
 
+
+    public:
         void serialize(torch::serialize::InputArchive& archive) override {
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, exp_avg);
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, exp_avg_sq);
