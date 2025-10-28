@@ -845,7 +845,7 @@ namespace Thot::Common::SaveLoad {
                     tree.put("options.clip", options.clip());
                     tree.put("options.hessian_update_interval", options.hessian_update_interval());
 
-                    } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::MuonDescriptor>) {
+                } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::MuonDescriptor>) {
                     const auto& options = concrete.options;
                     tree.put("type", "muon");
                     tree.put("options.learning_rate", options.lr());
