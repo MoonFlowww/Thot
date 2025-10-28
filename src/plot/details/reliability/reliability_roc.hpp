@@ -53,8 +53,8 @@ namespace Thot::Plot::Details::Reliability {
             if (adjustScale) {
                 plotter.setLogScale('x');
                 plotter.setRange('x', logEpsilon, 1.0);
-                const double expMax = std::expm1(1.0);
-                plotter.setRange('y', 0.0, expMax);
+                plotter.setRange('y', logEpsilon, 1.0);
+                plotter.setNonlinear('y', "exp($1)", "log($1)");
             } else {
                 plotter.setRange('x', 0.0, 1.0);
                 plotter.setRange('y', 0.0, 1.0);
@@ -72,7 +72,8 @@ namespace Thot::Plot::Details::Reliability {
                 if (!adjustScale) {
                     return value;
                 }
-                return std::expm1(value);
+                constexpr double epsilon = 1e-6;
+                return value <= epsilon ? epsilon : value;
             };
 
             std::vector<Utils::Gnuplot::DataSet2D> datasets;

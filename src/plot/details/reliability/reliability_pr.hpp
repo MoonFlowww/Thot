@@ -41,11 +41,13 @@ namespace Thot::Plot::Details::Reliability {
             plotter.setKey("top right");
             const auto& options = descriptor.options;
             const bool adjustScale = options.adjustScale;
+            constexpr double logEpsilon = 1e-6;
 
             if (adjustScale) {
-                const double expMax = std::expm1(1.0);
-                plotter.setRange('x', 0.0, expMax);
-                plotter.setRange('y', 0.0, expMax);
+                plotter.setRange('x', logEpsilon, 1.0);
+                plotter.setRange('y', logEpsilon, 1.0);
+                plotter.setNonlinear('x', "exp($1)", "log($1)");
+                plotter.setNonlinear('y', "exp($1)", "log($1)");
             } else {
                 plotter.setRange('x', 0.0, 1.0);
                 plotter.setRange('y', 0.0, 1.0);
@@ -55,11 +57,12 @@ namespace Thot::Plot::Details::Reliability {
             std::vector<Utils::Gnuplot::DataSet2D> datasets;
             datasets.reserve(series.size());
 
-            const auto transform = [adjustScale](double value) {
+            const auto clampForLog = [adjustScale](double value) {
                 if (!adjustScale) {
                     return value;
                 }
-                return std::expm1(value);
+                constexpr double epsilon = 1e-6;
+                return value <= epsilon ? epsilon : value;
             };
             for (std::size_t index = 0; index < series.size(); ++index) {
                 const auto& entry = series[index];
@@ -81,8 +84,8 @@ namespace Thot::Plot::Details::Reliability {
 
                     rawRecallValues.push_back(recallRaw);
 
-                    recallValues.push_back(transform(recallRaw));
-                    precisionValues.push_back(transform(precisionRaw));
+                    recallValues.push_back(clampForLog(recallRaw));
+                    precisionValues.push_back(clampForLog(precisionRaw));
                 }
 
                 if (recallValues.empty()) {
@@ -90,12 +93,12 @@ namespace Thot::Plot::Details::Reliability {
                 }
 
                 if (!rawRecallValues.empty() && rawRecallValues.front() > 0.0) {
-                    recallValues.insert(recallValues.begin(), transform(0.0));
-                    precisionValues.insert(precisionValues.begin(), transform(1.0));
+                    recallValues.insert(recallValues.begin(), clampForLog(0.0));
+                    precisionValues.insert(precisionValues.begin(), clampForLog(1.0));
                 }
                 if (!rawRecallValues.empty() && rawRecallValues.back() < 1.0) {
-                    recallValues.push_back(transform(1.0));
-                    precisionValues.push_back(transform(0.0));
+                    recallValues.push_back(clampForLog(1.0));
+                    precisionValues.push_back(clampForLog(0.0));
                 }
 
                 Utils::Gnuplot::PlotStyle style{};

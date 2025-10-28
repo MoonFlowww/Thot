@@ -184,6 +184,32 @@ namespace Thot::Utils {
             unsetLogScale(std::string(1, axis));
         }
 
+        void setNonlinear(const std::string& axis,
+                  const std::string& forward,
+                  const std::string& inverse)
+        {
+            ensureValid();
+            std::ostringstream stream;
+            stream << "set nonlinear " << axis << " via " << forward << " inverse " << inverse;
+            writeLine(stream.str());
+            flush();
+        }
+
+        void setNonlinear(char axis, const std::string& forward, const std::string& inverse)
+        {
+            setNonlinear(std::string(1, axis), forward, inverse);
+        }
+
+        void unsetNonlinear(const std::string& axis)
+        {
+            command("unset nonlinear " + axis);
+        }
+
+        void unsetNonlinear(char axis)
+        {
+            unsetNonlinear(std::string(1, axis));
+        }
+
         void setGrid(bool enable = true) {
             command(std::string(enable ? "set" : "unset") + " grid");
         }
