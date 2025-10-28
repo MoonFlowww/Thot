@@ -1,7 +1,6 @@
 #ifndef THOT_RELIABILITY_PR_HPP
 #define THOT_RELIABILITY_PR_HPP
 
-#include <array>
 #include <cstddef>
 #include <stdexcept>
 #include <string>
@@ -9,38 +8,23 @@
 
 #include <torch/torch.h>
 
+#include "../../../utils/terminal.hpp"
 #include "reliability_curve_utils.hpp"
 #include "../../../utils/gnuplot.hpp"
 
 namespace Thot {
+    namespace Plot::Reliability {
+        struct PRDescriptor;
+    }
+
     class Model;
 }
 
-namespace Thot::Plot::Reliability {
-    struct PRDescriptor;
-}
 
 namespace Thot::Plot::Details::Reliability {
     namespace detail {
-        inline auto PickColor(std::size_t index) -> std::string
-        {
-            static constexpr std::array<const char*, 8> palette{
-                "#1f77b4",
-                "#ff7f0e",
-                "#2ca02c",
-                "#d62728",
-                "#9467bd",
-                "#8c564b",
-                "#e377c2",
-                "#7f7f7f"
-            };
-            return std::string(palette[index % palette.size()]);
-        }
 
-        inline void RenderPRFromSeries(Model& /*model*/,
-                                       const Plot::Reliability::PRDescriptor& descriptor,
-                                       std::vector<Curves::BinarySeries> series)
-        {
+        inline void RenderPRFromSeries(Model&, const Plot::Reliability::PRDescriptor& descriptor, std::vector<Curves::BinarySeries> series) {
             if (series.empty()) {
                 throw std::invalid_argument("Precision-Recall rendering requires at least one series.");
             }
@@ -137,12 +121,7 @@ namespace Thot::Plot::Details::Reliability {
         RenderPR(model, descriptor, std::move(series));
     }
 
-    inline void RenderPR(Model& model,
-                          const Plot::Reliability::PRDescriptor& descriptor,
-                          torch::Tensor trainLogits,
-                          torch::Tensor trainTargets,
-                          torch::Tensor testLogits,
-                          torch::Tensor testTargets)
+    inline void RenderPR(Model& model, const Plot::Reliability::PRDescriptor& descriptor, torch::Tensor trainLogits, torch::Tensor trainTargets, torch::Tensor testLogits, torch::Tensor testTargets)
     {
         std::vector<Curves::BinarySeries> series;
         series.emplace_back(Curves::MakeSeriesFromTensor(std::move(trainLogits), std::move(trainTargets), "Train"));
