@@ -77,7 +77,7 @@ namespace Thot::Plot::Details::Reliability {
                 style.lineWidth = 2.0;
                 style.pointType = 7;
                 style.pointSize = 1.1;
-                style.lineColor = PickColor(index);
+                style.lineColor = Utils::Terminal::Thot::Plot::Details::Reliability::detail::PickColor(index);
 
                 datasets.push_back(Utils::Gnuplot::DataSet2D{
                     std::move(falsePositiveRates),

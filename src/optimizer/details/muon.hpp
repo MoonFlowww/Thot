@@ -66,6 +66,8 @@ namespace Thot::Optimizer::Details {
         TORCH_ARG(double, eps) = 1e-8;
         TORCH_ARG(double, max_update_norm) = 0.0;
 
+    public:
+
         [[nodiscard]] inline auto validated() const -> MuonOptions {
             MuonOptions copy = *this;
             copy.beta(std::clamp(copy.beta(), 0.0, 1.0));
@@ -150,7 +152,7 @@ namespace Thot::Optimizer::Details {
         TORCH_ARG(double, weight_decay) = 0.0;
         TORCH_ARG(double, eps) = 1e-8;
         TORCH_ARG(double, max_update_norm) = 0.0;
-
+    public:
         [[nodiscard]] inline auto validated() const -> AdaMuonOptions {
             AdaMuonOptions copy = *this;
             copy.beta(std::clamp(copy.beta(), 0.0, 1.0));
@@ -261,9 +263,27 @@ namespace Thot::Optimizer::Details {
         TORCH_ARG(double, weight_decay) = 0.0;
         TORCH_ARG(double, eps) = 1e-8;
         TORCH_ARG(double, max_update_norm) = 0.0;
-        TORCH_ARG(ManifoldKind, manifold) = ManifoldKind::UnitSphere;
         TORCH_ARG(double, retraction_epsilon) = 1e-12;
         TORCH_ARG(bool, renormalize) = true;
+
+    private:
+        static constexpr int64_t to_index(ManifoldKind kind) {
+            return static_cast<int64_t>(kind);
+        }
+
+        static constexpr auto manifold_from_index(int64_t index) -> ManifoldKind {
+            switch (static_cast<ManifoldKind>(index)) {
+                case ManifoldKind::Euclidean:
+                case ManifoldKind::UnitSphere:
+                case ManifoldKind::Stiefel:
+                    return static_cast<ManifoldKind>(index);
+            }
+            return ManifoldKind::UnitSphere;
+        }
+
+        TORCH_ARG(int64_t, manifold_index) = to_index(ManifoldKind::UnitSphere);
+
+    public:
 
         [[nodiscard]] inline auto validated() const -> MuonManifoldOptions {
             MuonManifoldOptions copy = *this;
@@ -285,7 +305,7 @@ namespace Thot::Optimizer::Details {
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, weight_decay);
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, eps);
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, max_update_norm);
-            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(ManifoldKind, manifold);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(int64_t, manifold_index);
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, retraction_epsilon);
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(bool, renormalize);
         }
@@ -297,13 +317,22 @@ namespace Thot::Optimizer::Details {
             _TORCH_OPTIM_SERIALIZE_TORCH_ARG(weight_decay);
             _TORCH_OPTIM_SERIALIZE_TORCH_ARG(eps);
             _TORCH_OPTIM_SERIALIZE_TORCH_ARG(max_update_norm);
-            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(manifold);
+            _TORCH_OPTIM_SERIALIZE_TORCH_ARG(manifold_index);
             _TORCH_OPTIM_SERIALIZE_TORCH_ARG(retraction_epsilon);
             _TORCH_OPTIM_SERIALIZE_TORCH_ARG(renormalize);
         }
 
         double get_lr() const override { return lr(); }
         void set_lr(double value) override { lr(value); }
+
+        [[nodiscard]] inline auto manifold() const -> ManifoldKind {
+            return manifold_from_index(manifold_index());
+        }
+
+        inline auto manifold(ManifoldKind value) -> MuonManifoldOptions& {
+            manifold_index(to_index(value));
+            return *this;
+        }
     };
     struct MuonManifoldState : public torch::optim::OptimizerCloneableParamState<MuonManifoldState> {
         TORCH_ARG(torch::Tensor, exp_avg);
