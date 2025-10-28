@@ -35,7 +35,7 @@ int main() {
             Thot::Layer::MaxPool2d({{2,2}, {2,2}})
         }));
 
-        model.add(Thot::Layer::SoftDropout({ .probability = 0.1, .noise_mean = 0.0, .noise_std = 0.05 }));
+        model.add(Thot::Layer::SoftDropout({ .probability = 0.05, .noise_mean = 1.0, .noise_std = 0.03, .inplace = false }));
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({64, 1e-5, 0.1, true, true}, Thot::Activation::GeLU),
@@ -46,7 +46,7 @@ int main() {
             .projection = Thot::Layer::Conv2d({64,128,{1,1},{2,2},{0,0},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal)
         }, { .final_activation = Thot::Activation::Identity }));
 
-        model.add(Thot::Layer::SoftDropout({ .probability = 0.1, .noise_mean = 0.0, .noise_std = 0.05 }));
+        model.add(Thot::Layer::SoftDropout({ .probability = 0.10, .noise_mean = 1.0, .noise_std = 0.04, .inplace = false }));
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
@@ -62,7 +62,7 @@ int main() {
             Thot::Layer::Conv2d({128,128,{3,3},{1,1},{1,1},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal)
         }, 1, {}, { .final_activation = Thot::Activation::Identity }));
 
-        model.add(Thot::Layer::SoftDropout({ .probability = 0.25, .noise_mean = 0.0, .noise_std = 0.08, .inplace = false }));
+        model.add(Thot::Layer::SoftDropout({ .probability = 0.08, .noise_mean = 1.0, .noise_std = 0.04, .inplace = false }));
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({128,1e-5,0.1,true,true}, Thot::Activation::GeLU),
@@ -73,7 +73,7 @@ int main() {
             .projection = Thot::Layer::Conv2d({128,256,{1,1},{2,2},{0,0},{1,1},1,false}, Thot::Activation::Identity, Thot::Initialization::KaimingNormal)
         }, { .final_activation = Thot::Activation::Identity }));
 
-        model.add(Thot::Layer::SoftDropout({ .probability = 0.25, .noise_mean = 0.0, .noise_std = 0.08, .inplace = false }));
+        model.add(Thot::Layer::SoftDropout({ .probability = 0.18, .noise_mean = 1.0, .noise_std = 0.06, .inplace = false }));
 
         model.add(Thot::Block::Residual({
             Thot::Layer::BatchNorm2d({256,1e-5,0.1,true,true}, Thot::Activation::GeLU),
@@ -83,7 +83,7 @@ int main() {
         }, 1, {}, { .final_activation = Thot::Activation::Identity }));
 
 
-        model.add(Thot::Layer::HardDropout({ .probability = 0.3 }));
+        model.add(Thot::Layer::HardDropout({ .probability = 0.4 }));
         model.add(Thot::Layer::AdaptiveAvgPool2d({{1, 1}}));
         model.add(Thot::Layer::Flatten());
         model.add(Thot::Layer::FC({256, 512, true}, Thot::Activation::SiLU, Thot::Initialization::KaimingNormal));
@@ -173,7 +173,7 @@ int main() {
     try {
         torch::NoGradGuard no_grad{};
         Thot::Model::ForwardOptions inference_options{};
-        inference_options.max_chunk_size = 1024;
+        inference_options.max_chunk_size = 256;
 
         const auto gather_logits = [&](const torch::Tensor& inputs) {
             auto outputs = model.forward(inputs, inference_options);
@@ -229,7 +229,7 @@ int main() {
                                Thot::Plot::Reliability::ROC({
                                    .KSTest = true,
                                    .thresholds = true,
-                                   .logScale = false,
+                                   .logScale = true,
                                }),
                                train_binary_logits,
                                train_binary_targets,
@@ -241,6 +241,7 @@ int main() {
                                    .samples = true,
                                    .random = false,
                                    .interpolate = true,
+                                   .logScale = true,
                                }),
                                train_binary_logits,
                                train_binary_targets,
@@ -252,6 +253,7 @@ int main() {
                                    .KSTest = true,
                                    .confidenceBands = true,
                                    .annotateCrossing = true,
+                                   .logScale = true,
                                }),
                                train_binary_logits,
                                train_binary_targets,

@@ -796,6 +796,29 @@ namespace Thot::Common::SaveLoad {
                     tree.put("options.eps", options.eps);
                     tree.put("options.weight_decay", options.weight_decay);
                     tree.put("options.amsgrad", options.amsgrad);
+                } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::SophiaGDescriptor>) {
+                    const auto& options = concrete.options;
+                    tree.put("type", "sophia_g");
+                    tree.put("options.learning_rate", options.lr());
+                    tree.put("options.beta1", options.beta1());
+                    tree.put("options.beta2", options.beta2());
+                    tree.put("options.rho", options.rho());
+                    tree.put("options.eps", options.eps());
+                    tree.put("options.weight_decay", options.weight_decay());
+                    tree.put("options.clip", options.clip());
+                    tree.put("options.hessian_update_interval", options.hessian_update_interval());
+                } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::SophiaHDescriptor>) {
+                    const auto& options = concrete.options;
+                    tree.put("type", "sophia_h");
+                    tree.put("options.learning_rate", options.lr());
+                    tree.put("options.beta1", options.beta1());
+                    tree.put("options.beta2", options.beta2());
+                    tree.put("options.rho", options.rho());
+                    tree.put("options.eps", options.eps());
+                    tree.put("options.weight_decay", options.weight_decay());
+                    tree.put("options.clip", options.clip());
+                    tree.put("options.hessian_update_interval", options.hessian_update_interval());
+
                 } else {
                     static_assert(sizeof(DescriptorType) == 0, "Unsupported optimizer descriptor supplied.");
                 }
@@ -826,6 +849,30 @@ namespace Thot::Common::SaveLoad {
             options.weight_decay = Detail::get_numeric<double>(tree, "options.weight_decay", context);
             options.amsgrad = Detail::get_boolean(tree, "options.amsgrad", context);
             return Optimizer::Descriptor{Optimizer::Details::AdamWDescriptor{options}};
+        }
+        if (type == "sophia_g") {
+            Optimizer::Details::SophiaGOptions options;
+            options.lr(Detail::get_numeric<double>(tree, "options.learning_rate", context));
+            options.beta1(Detail::get_numeric<double>(tree, "options.beta1", context));
+            options.beta2(Detail::get_numeric<double>(tree, "options.beta2", context));
+            options.rho(Detail::get_numeric<double>(tree, "options.rho", context));
+            options.eps(Detail::get_numeric<double>(tree, "options.eps", context));
+            options.weight_decay(Detail::get_numeric<double>(tree, "options.weight_decay", context));
+            options.clip(Detail::get_numeric<double>(tree, "options.clip", context));
+            options.hessian_update_interval(Detail::get_numeric<int64_t>(tree, "options.hessian_update_interval", context));
+            return Optimizer::Descriptor{Optimizer::Details::SophiaGDescriptor{options}};
+        }
+        if (type == "sophia_h") {
+            Optimizer::Details::SophiaHOptions options;
+            options.lr(Detail::get_numeric<double>(tree, "options.learning_rate", context));
+            options.beta1(Detail::get_numeric<double>(tree, "options.beta1", context));
+            options.beta2(Detail::get_numeric<double>(tree, "options.beta2", context));
+            options.rho(Detail::get_numeric<double>(tree, "options.rho", context));
+            options.eps(Detail::get_numeric<double>(tree, "options.eps", context));
+            options.weight_decay(Detail::get_numeric<double>(tree, "options.weight_decay", context));
+            options.clip(Detail::get_numeric<double>(tree, "options.clip", context));
+            options.hessian_update_interval(Detail::get_numeric<int64_t>(tree, "options.hessian_update_interval", context));
+            return Optimizer::Descriptor{Optimizer::Details::SophiaHDescriptor{options}};
         }
         std::ostringstream message;
         message << "Unknown optimizer descriptor '" << type << "' in " << context;

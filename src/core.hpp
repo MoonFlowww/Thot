@@ -471,6 +471,10 @@ namespace Thot {
                         } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::AdamWDescriptor>) {
                             auto options = Optimizer::Details::to_torch_options(concrete_descriptor.options);
                             return std::make_unique<torch::optim::AdamW>(std::move(parameters), options);
+                        } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::SophiaGDescriptor>) {
+                            return std::make_unique<Optimizer::Details::SophiaG>(std::move(parameters), concrete_descriptor.options);
+                        } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::SophiaHDescriptor>) {
+                            return std::make_unique<Optimizer::Details::SophiaH>(std::move(parameters), concrete_descriptor.options);
                         } else {
                             static_assert(sizeof(DescriptorType) == 0, "Unsupported optimizer descriptor provided to Model::set_optimizer.");
                         }

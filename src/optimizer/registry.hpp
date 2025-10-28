@@ -9,6 +9,7 @@
 
 #include "details/adam.hpp"
 #include "details/sgd.hpp"
+#include "details/sophia.hpp"
 
 namespace Thot::Optimizer::Details {
     template <class Owner, class Descriptor>
@@ -27,6 +28,16 @@ namespace Thot::Optimizer::Details {
     std::unique_ptr<torch::optim::Optimizer> build_optimizer(Owner& owner, const AdamWDescriptor& descriptor) {
         auto options = to_torch_options(descriptor.options);
         return std::make_unique<torch::optim::AdamW>(owner.parameters(), options);
+    }
+
+    template <class Owner>
+    std::unique_ptr<torch::optim::Optimizer> build_optimizer(Owner& owner, const SophiaGDescriptor& descriptor) {
+        return std::make_unique<SophiaG>(owner.parameters(), descriptor.options);
+    }
+
+    template <class Owner>
+    std::unique_ptr<torch::optim::Optimizer> build_optimizer(Owner& owner, const SophiaHDescriptor& descriptor) {
+        return std::make_unique<SophiaH>(owner.parameters(), descriptor.options);
     }
 }
 

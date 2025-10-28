@@ -16,6 +16,7 @@ namespace Thot::Plot::Reliability {
         bool KSTest{false};
         bool confidenceBands{false};
         bool annotateCrossing{true};
+        bool logScale{false};
     };
     struct DETDescriptor {
         DETOptions options{};
@@ -35,6 +36,7 @@ namespace Thot::Plot::Reliability {
         bool KSTest{false};
         bool annotate{true};
         bool showIsoCost{false};
+        bool logScale{false};
     };
 
     struct YoudensDescriptor {
@@ -45,6 +47,7 @@ namespace Thot::Plot::Reliability {
         bool samples{false};
         bool random{false};
         bool interpolate{true};
+        bool logScale{false};
     };
 
     struct PRDescriptor {
