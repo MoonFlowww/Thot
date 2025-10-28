@@ -49,12 +49,13 @@ namespace Thot::Plot::Details::Reliability {
             const auto& options = descriptor.options;
             const bool adjustScale = options.adjustScale;
             constexpr double logEpsilon = 1e-6;
+            constexpr double logBase = 2.0;
 
             if (adjustScale) {
-                plotter.setLogScale('x');
+                plotter.setAxisScale('x', Utils::Gnuplot::AxisScale::Log);
+                plotter.setAxisScale('y', Utils::Gnuplot::AxisScale::LogOneMinus);
                 plotter.setRange('x', logEpsilon, 1.0);
-                plotter.setRange('y', logEpsilon, 1.0);
-                plotter.setNonlinear('y', "exp($1)", "log($1)");
+                plotter.setRange('y', logEpsilon, 1.0 - logEpsilon);
             } else {
                 plotter.setRange('x', 0.0, 1.0);
                 plotter.setRange('y', 0.0, 1.0);
@@ -73,7 +74,11 @@ namespace Thot::Plot::Details::Reliability {
                     return value;
                 }
                 constexpr double epsilon = 1e-6;
-                return value <= epsilon ? epsilon : value;
+                if (value <= epsilon) {
+                    return epsilon;
+                }
+                const double upperLimit = 1.0 - epsilon;
+                return value >= upperLimit ? upperLimit : value;
             };
 
             std::vector<Utils::Gnuplot::DataSet2D> datasets;

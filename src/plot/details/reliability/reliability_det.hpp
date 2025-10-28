@@ -53,8 +53,8 @@ namespace Thot::Plot::Details::Reliability {
             constexpr double logEpsilon = 1e-6;
 
             if (adjustScale) {
-                plotter.setLogScale('x');
-                plotter.setLogScale('y');
+                plotter.setAxisScale('x', Utils::Gnuplot::AxisScale::Log);
+                plotter.setAxisScale('y', Utils::Gnuplot::AxisScale::Log);
                 plotter.setRange('x', logEpsilon, 1.0);
                 plotter.setRange('y', logEpsilon, 1.0);
             } else {

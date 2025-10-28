@@ -42,12 +42,14 @@ namespace Thot::Plot::Details::Reliability {
             const auto& options = descriptor.options;
             const bool adjustScale = options.adjustScale;
             constexpr double logEpsilon = 1e-6;
+            constexpr double logBase = 2.0;
+
 
             if (adjustScale) {
+                plotter.setAxisScale('x', Utils::Gnuplot::AxisScale::Log);
+                plotter.setAxisScale('y', Utils::Gnuplot::AxisScale::LogOneMinus);
                 plotter.setRange('x', logEpsilon, 1.0);
-                plotter.setRange('y', logEpsilon, 1.0);
-                plotter.setNonlinear('x', "exp($1)", "log($1)");
-                plotter.setNonlinear('y', "exp($1)", "log($1)");
+                plotter.setRange('y', logEpsilon, 1.0 - logEpsilon);
             } else {
                 plotter.setRange('x', 0.0, 1.0);
                 plotter.setRange('y', 0.0, 1.0);
@@ -63,6 +65,17 @@ namespace Thot::Plot::Details::Reliability {
                 }
                 constexpr double epsilon = 1e-6;
                 return value <= epsilon ? epsilon : value;
+            };
+            const auto clampForLogOneMinus = [adjustScale](double value) {
+                if (!adjustScale) {
+                    return value;
+                }
+                constexpr double epsilon = 1e-6;
+                if (value <= epsilon) {
+                    return epsilon;
+                }
+                const double upperLimit = 1.0 - epsilon;
+                return value >= upperLimit ? upperLimit : value;
             };
             for (std::size_t index = 0; index < series.size(); ++index) {
                 const auto& entry = series[index];
@@ -85,7 +98,7 @@ namespace Thot::Plot::Details::Reliability {
                     rawRecallValues.push_back(recallRaw);
 
                     recallValues.push_back(clampForLog(recallRaw));
-                    precisionValues.push_back(clampForLog(precisionRaw));
+                    precisionValues.push_back(clampForLogOneMinus(precisionRaw));
                 }
 
                 if (recallValues.empty()) {
@@ -94,11 +107,11 @@ namespace Thot::Plot::Details::Reliability {
 
                 if (!rawRecallValues.empty() && rawRecallValues.front() > 0.0) {
                     recallValues.insert(recallValues.begin(), clampForLog(0.0));
-                    precisionValues.insert(precisionValues.begin(), clampForLog(1.0));
+                    precisionValues.insert(precisionValues.begin(), clampForLogOneMinus(1.0));
                 }
                 if (!rawRecallValues.empty() && rawRecallValues.back() < 1.0) {
                     recallValues.push_back(clampForLog(1.0));
-                    precisionValues.push_back(clampForLog(0.0));
+                    precisionValues.push_back(clampForLogOneMinus(0.0));
                 }
 
                 Utils::Gnuplot::PlotStyle style{};

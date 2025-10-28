@@ -10,7 +10,7 @@
 #include <string>
 #include <utility>
 #include <vector>
-
+#include <iomanip>
 namespace Thot::Utils {
     class Gnuplot {
     public:
@@ -24,6 +24,12 @@ namespace Thot::Utils {
             FilledCurves
         };
 
+        enum class AxisScale {
+            Linear,       // identity
+            Log,          // classic log(value)
+            LogOneMinus,  // -log_b(1 - value) for [0,1)
+            Logit         // log(value/(1-value)) for (0,1)
+        };
         struct PlotStyle {
             PlotMode mode;
             std::optional<int> lineType;
@@ -98,6 +104,83 @@ namespace Thot::Utils {
 
         [[nodiscard]] bool valid() const noexcept {
             return pipe_ != nullptr;
+        }
+
+        // Set printf-style numeric format for an axis (e.g. "%.3f")
+        void setFormat(char axis, const std::string& fmt) {
+            command(std::string("set format ") + axis + " '" + EscapeSingleQuotes(fmt) + "'");
+        }
+
+        // Main scaler: applies Linear, Log, LogOneMinus, or Logit to axis ('x'|'y'|'z')
+        // For LogOneMinus, 'base' controls the logarithm base (default 10).
+        void setAxisScale(char axis, AxisScale scale, double base = 10.0) {
+            switch (scale) {
+                case AxisScale::Linear:
+                    unsetLogScale(axis);
+                    unsetNonlinear(axis);
+                    break;
+
+                case AxisScale::Log: {
+                    unsetNonlinear(axis);
+                    setLogScale(axis, true, base);
+                    break;
+                }
+
+                case AxisScale::LogOneMinus: {
+                    // y' = -log_b(1 - y)  <=>  via (-log(1-ax)/log(base))
+                    // inverse: y = 1 - exp(-y'*log(base))
+                    unsetLogScale(axis);
+                    const std::string ax(1, axis);
+                    std::ostringstream fwd, inv;
+                    fwd  << "(-log(1.0-" << ax << ")/log(" << base << "))";
+                    inv  << "(1.0-exp(-"   << ax << "*log(" << base << ")))";
+                    setNonlinear(axis, fwd.str(), inv.str());
+                    break;
+                }
+
+                case AxisScale::Logit: {
+                    // y' = log(y/(1-y)), inverse: y = 1/(1+exp(-y'))
+                    unsetLogScale(axis);
+                    const std::string ax(1, axis);
+                    const std::string fwd = "(log(" + ax + "/(1.0-" + ax + ")))";
+                    const std::string inv = "(1.0/(1.0+exp(-" + ax + ")))";
+                    setNonlinear(axis, fwd, inv);
+                    break;
+                }
+            }
+        }
+
+        // Convenience
+        void setAxisScaleX(AxisScale s, double base = 10.0) { setAxisScale('x', s, base); }
+        void setAxisScaleY(AxisScale s, double base = 10.0) { setAxisScale('y', s, base); }
+        void setAxisScaleZ(AxisScale s, double base = 10.0) { setAxisScale('z', s, base); }
+
+        // Tick helpers in DATA units (gnuplot maps them through the nonlinear transform)
+        void unsetTics(char axis) { command(std::string("unset ") + axis + "tics"); }
+
+        // Set ticks at given data values with default text = formatted value (fmt like "%.3f")
+        void setTics(char axis, const std::vector<double>& values, const std::string& fmt = "%.3f") {
+            std::ostringstream s; s << "set " << axis << "tics (";
+            char buf[128]; bool first = true;
+            for (double v : values) {
+                if (!first) s << ", ";
+                first = false;
+                std::snprintf(buf, sizeof(buf), fmt.c_str(), v);
+                s << "'" << EscapeSingleQuotes(buf) << "' " << v;
+            }
+            s << ")";
+            command(s.str());
+        }
+
+        // Labeled ticks explicitly
+        void setLabeledTics(char axis, const std::vector<std::pair<double,std::string>>& tics) {
+            std::ostringstream s; s << "set " << axis << "tics (";
+            for (std::size_t i = 0; i < tics.size(); ++i) {
+                if (i) s << ", ";
+                s << "'" << EscapeSingleQuotes(tics[i].second) << "' " << tics[i].first;
+            }
+            s << ")";
+            command(s.str());
         }
 
         void command(const std::string& cmd) {
