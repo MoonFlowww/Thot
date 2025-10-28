@@ -48,6 +48,7 @@ namespace Thot::Evaluation::Details::Classification {
         std::vector<std::size_t> support{};
         std::vector<std::vector<double>> per_class{};
         std::size_t total_samples{0};
+        double overall_accuracy{std::numeric_limits<double>::quiet_NaN()};
     };
 
     namespace detail {
@@ -1151,12 +1152,6 @@ namespace Thot::Evaluation::Details::Classification {
             double weighted = (total_support > 0.0) ? (weighted_sum / total_support) : std::numeric_limits<double>::quiet_NaN();
 
             switch (kind) {
-                case MetricKind::Accuracy:
-                case MetricKind::Top1Accuracy:
-                case MetricKind::SubsetAccuracy:
-                    macro = top1_accuracy;
-                    weighted = top1_accuracy;
-                    break;
                 case MetricKind::Top1Error:
                     macro = top1_error;
                     weighted = top1_error;
@@ -1252,6 +1247,7 @@ namespace Thot::Evaluation::Details::Classification {
         report.per_class = per_class_values;
         report.labels = class_labels;
         report.support = support_values;
+        report.overall_accuracy = top1_accuracy;
 
         if (was_training) {
             model.train();
@@ -1337,6 +1333,12 @@ namespace Thot::Evaluation::Details::Classification {
                 print_row(metric_names[i], macro_values[i], weighted_values[i]);
             }
             stream << bottom << '\n';
+
+
+            if (std::isfinite(report.overall_accuracy)) {
+                stream << "\nOverall accuracy (micro): "
+                       << detail::format_double(report.overall_accuracy) << '\n';
+            }
         }
 
         if (options.print_per_class && !report.per_class.empty() && !report.labels.empty()) {
