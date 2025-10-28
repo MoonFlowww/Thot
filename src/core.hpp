@@ -66,7 +66,7 @@
 #include "../src/regularization/regularization.hpp"
 #include "../src/regularization/apply.hpp"
 #include "calibration/calibration.hpp"
-
+#include "plot/plot.hpp"
 
 namespace Thot {
     template <class... Ts>
@@ -969,6 +969,13 @@ namespace Thot {
                 descriptor,
                 std::move(metrics),
                 options);
+        }
+
+        template <class Descriptor, class... Args>
+        decltype(auto) plot(Descriptor descriptor, Args&&... args) {
+            return Plot::Render(*this,
+                                std::move(descriptor),
+                                std::forward<Args>(args)...);
         }
 
         void zero_grad(bool set_to_none = false) {

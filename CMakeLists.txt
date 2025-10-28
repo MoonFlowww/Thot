@@ -112,5 +112,8 @@ add_executable(test_Thot test/main.cpp
         src/calibration/details/temperature_scaling.hpp
         src/common/save_load.hpp
         src/layer/details/s4.hpp
+        src/plot/details/reliability.hpp
+        src/plot/details/training.hpp
+        src/plot/plot.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)
