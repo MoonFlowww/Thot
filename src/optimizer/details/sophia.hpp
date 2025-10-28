@@ -25,6 +25,8 @@ namespace Thot::Optimizer::Details {
         TORCH_ARG(double, clip) = 1.0;
         TORCH_ARG(int64_t, hessian_update_interval) = 1;
 
+    public:
+
         void serialize(torch::serialize::InputArchive& archive) override {
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, lr);
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, beta1);
@@ -62,6 +64,8 @@ namespace Thot::Optimizer::Details {
         TORCH_ARG(double, weight_decay) = 0.0;
         TORCH_ARG(double, clip) = 1.0;
         TORCH_ARG(int64_t, hessian_update_interval) = 1;
+
+    public:
 
         void serialize(torch::serialize::InputArchive& archive) override {
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(double, lr);
@@ -102,6 +106,7 @@ namespace Thot::Optimizer::Details {
         TORCH_ARG(torch::Tensor, momentum);
         TORCH_ARG(torch::Tensor, hessian);
 
+    public:
         void serialize(torch::serialize::InputArchive& archive) override {
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(int64_t, step);
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, momentum);
