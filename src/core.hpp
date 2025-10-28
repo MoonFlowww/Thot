@@ -67,7 +67,6 @@
 #include "../src/regularization/regularization.hpp"
 #include "../src/regularization/apply.hpp"
 #include "calibration/calibration.hpp"
-#include "plot/plot.hpp"
 
 namespace Thot {
     template <class... Ts>
@@ -1023,11 +1022,7 @@ namespace Thot {
         }
 
         template <class Descriptor, class... Args>
-        decltype(auto) plot(Descriptor descriptor, Args&&... args) {
-            return Plot::Render(*this,
-                                std::move(descriptor),
-                                std::forward<Args>(args)...);
-        }
+        decltype(auto) plot(Descriptor descriptor, Args&&... args);
 
         void zero_grad(bool set_to_none = false) {
             bool handled{false};
@@ -1981,4 +1976,15 @@ namespace Thot {
     };
 }
 
+#include "plot/plot.hpp"
+
+namespace Thot {
+    template <class Descriptor, class... Args>
+    decltype(auto) Model::plot(Descriptor descriptor, Args&&... args)
+    {
+        return Plot::Render(*this,
+                            std::move(descriptor),
+                            std::forward<Args>(args)...);
+    }
+}
 #endif //THOT_CORE_HPP
