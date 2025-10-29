@@ -920,6 +920,26 @@ namespace Thot {
                 }
             }
 
+            for (const auto& node : nodes) {
+                switch (node.kind) {
+                    case CompiledNode::Kind::Input:
+                        break;
+                    case CompiledNode::Kind::Module:
+                        if (node.inputs.empty()) {
+                            throw std::invalid_argument(
+                                "Module node '" + node.label + "' has no inbound links in the routing graph.");
+                        }
+                        break;
+                    case CompiledNode::Kind::Join:
+                        break;
+                    case CompiledNode::Kind::Output:
+                        if (node.inputs.empty()) {
+                            throw std::invalid_argument("Output node has no inbound links in the routing graph.");
+                        }
+                        break;
+                }
+            }
+
             std::vector<std::size_t> indegree(nodes.size(), 0);
             for (std::size_t node_index = 0; node_index < nodes.size(); ++node_index) {
                 for (auto target : nodes[node_index].outputs) {
