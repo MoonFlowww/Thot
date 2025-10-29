@@ -20,7 +20,6 @@
 
 namespace Thot::Data::Load {
     namespace Details {
-        namespace fs = std::filesystem;
 
         inline std::string trim(std::string value) {
             const auto not_space = [](unsigned char c) { return !std::isspace(c); };
@@ -29,7 +28,7 @@ namespace Thot::Data::Load {
             return value;
         }
 
-        inline std::vector<float> parse_timeseries_csv(const fs::path& file_path, std::size_t expected_columns) {
+        inline std::vector<float> parse_timeseries_csv(const std::filesystem::path& file_path, std::size_t expected_columns) {
             std::ifstream file(file_path);
             if (!file) {
                 throw std::runtime_error("Failed to open timeseries CSV: " + file_path.string());
@@ -94,8 +93,8 @@ namespace Thot::Data::Load {
             }
         };
 
-        inline std::optional<int64_t> parse_patient_label(const fs::path& label_path) {
-            if (!fs::exists(label_path)) {
+        inline std::optional<int64_t> parse_patient_label(const std::filesystem::path& label_path) {
+            if (!std::filesystem::exists(label_path)) {
                 return std::nullopt;
             }
 
@@ -121,16 +120,16 @@ namespace Thot::Data::Load {
             return std::nullopt;
         }
 
-        inline PatientSignals load_patient_directory(const fs::path& patient_root) {
+        inline PatientSignals load_patient_directory(const std::filesystem::path& patient_root) {
             const auto identifier = patient_root.filename().string();
             const auto ecg_path = patient_root / "ecg.csv";
             const auto acc_path = patient_root / "acc.csv";
             const auto label_path = patient_root / "label.txt";
 
-            if (!fs::exists(ecg_path)) {
+            if (!std::filesystem::exists(ecg_path)) {
                 throw std::runtime_error("Missing ecg.csv for patient: " + identifier);
             }
-            if (!fs::exists(acc_path)) {
+            if (!std::filesystem::exists(acc_path)) {
                 throw std::runtime_error("Missing acc.csv for patient: " + identifier);
             }
 
@@ -219,17 +218,17 @@ namespace Thot::Data::Load {
             return torch::from_blob(labels.data(), {static_cast<int64_t>(labels.size())}, options).clone();
         }
 
-        inline fs::path resolve_cifar10_root(const std::string& root) {
-            auto candidate = fs::path(root);
-            if (!fs::exists(candidate)) {
+        inline std::filesystem::path resolve_cifar10_root(const std::string& root) {
+            auto candidate = std::filesystem::path(root);
+            if (!std::filesystem::exists(candidate)) {
                 throw std::runtime_error("Provided CIFAR-10 root directory does not exist: " + root);
             }
 
-            if (fs::is_directory(candidate / "cifar-10-batches-bin")) {
+            if (std::filesystem::is_directory(candidate / "cifar-10-batches-bin")) {
                 candidate /= "cifar-10-batches-bin";
             }
 
-            if (!fs::exists(candidate / "data_batch_1.bin")) {
+            if (!std::filesystem::exists(candidate / "data_batch_1.bin")) {
                 throw std::runtime_error(
                     "Unable to locate CIFAR-10 binary batches in the provided root directory: " + candidate.string());
             }
@@ -242,7 +241,7 @@ namespace Thot::Data::Load {
             torch::Tensor targets;
         };
 
-        inline CIFAR10RawBatch read_cifar10_batch(const fs::path& file_path) {
+        inline CIFAR10RawBatch read_cifar10_batch(const std::filesystem::path& file_path) {
             constexpr int64_t kChannels = 3;
             constexpr int64_t kHeight = 32;
             constexpr int64_t kWidth = 32;
@@ -345,13 +344,13 @@ namespace Thot::Data::Load {
     template <bool BufferVRAM = false, class DevicePolicyT = Core::DevicePolicy<BufferVRAM>>
     [[nodiscard]] inline std::pair<torch::Tensor, torch::Tensor>
     PatientTimeseries(const std::string& root, bool normalise = false) {
-        const auto dataset_root = fs::path(root);
-        if (!fs::exists(dataset_root) || !fs::is_directory(dataset_root)) {
+        const auto dataset_root = std::filesystem::path(root);
+        if (!std::filesystem::exists(dataset_root) || !std::filesystem::is_directory(dataset_root)) {
             throw std::runtime_error("Provided timeseries root directory does not exist: " + root);
         }
 
         std::vector<Details::PatientSignals> patients;
-        for (const auto& entry : fs::directory_iterator(dataset_root)) {
+        for (const auto& entry : std::filesystem::directory_iterator(dataset_root)) {
             if (!entry.is_directory()) {
                 continue;
             }

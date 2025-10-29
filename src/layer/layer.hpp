@@ -14,7 +14,6 @@
 #include "details/flatten.hpp"
 #include "details/pooling.hpp"
 #include "details/recurrent.hpp"
-#include "details/statespace.hpp"
 #include "registry.hpp"
 
 namespace Thot::Layer {
@@ -59,8 +58,6 @@ namespace Thot::Layer {
     using GRUOptions = Details::GRUOptions;
     using GRUDescriptor = Details::GRUDescriptor;
 
-    using StateSpaceOptions = Details::StateSpaceOptions;
-    using StateSpaceDescriptor = Details::StateSpaceDescriptor;
 
 
     using S4Options = Details::S4Options;
@@ -79,7 +76,6 @@ namespace Thot::Layer {
                                     RNNDescriptor,
                                     LSTMDescriptor,
                                     GRUDescriptor,
-                                    StateSpaceDescriptor,
                                     S4Descriptor>;
 
     [[nodiscard]] inline auto FC(const FCOptions& options,
@@ -234,13 +230,7 @@ namespace Thot::Layer {
         return {options, activation, initialization, std::move(local)};
     }
 
-    [[nodiscard]] inline auto StateSpace(const StateSpaceOptions& options,
-                                          ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
-                                          ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default,
-                                          ::Thot::LocalConfig local = {}) -> StateSpaceDescriptor
-    {
-        return {options, activation, initialization, std::move(local)};
-    }
+
 
     [[nodiscard]] inline auto S4(const S4Options& options,
                               ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
