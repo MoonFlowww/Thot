@@ -121,5 +121,22 @@ add_executable(test_Thot test/main.cpp
         src/plot/details/reliability/reliability_pr.hpp
         src/plot/details/reliability/reliability_youdens.hpp
         src/plot/details/reliability/reliability_roc.hpp
+        src/regularization/details/centeringvariance.hpp
+        src/regularization/details/decov.hpp
+        src/regularization/details/elasticnet.hpp
+        src/regularization/details/grouplasso.hpp
+        src/regularization/details/jacobian.hpp
+        src/regularization/details/klsparsity.hpp
+        src/regularization/details/l0hardconcrete.hpp
+        src/regularization/details/l1.hpp
+        src/regularization/details/maxnorm.hpp
+        src/regularization/details/orthogonality.hpp
+        src/regularization/details/r1.hpp
+        src/regularization/details/r2.hpp
+        src/regularization/details/spectralnorm.hpp
+        src/regularization/details/structuredl2.hpp
+        src/regularization/details/trades.hpp
+        src/regularization/details/vat.hpp
+        src/regularization/details/wgangp.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)

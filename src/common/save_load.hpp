@@ -975,7 +975,79 @@ namespace Thot::Common::SaveLoad {
             [&](const auto& concrete) {
                 using DescriptorType = std::decay_t<decltype(concrete)>;
                 const auto& options = concrete.options;
-                if constexpr (std::is_same_v<DescriptorType, Regularization::L2Descriptor>) {
+                if constexpr (std::is_same_v<DescriptorType, Regularization::L1Descriptor>) {
+                    tree.put("type", "l1");
+                    tree.put("options.coefficient", options.coefficient);
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::ElasticNetDescriptor>) {
+                    tree.put("type", "elastic_net");
+                    tree.put("options.l1_coefficient", options.l1_coefficient);
+                    tree.put("options.l2_coefficient", options.l2_coefficient);
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::GroupLassoDescriptor>) {
+                    tree.put("type", "group_lasso");
+                    tree.put("options.coefficient", options.coefficient);
+                    tree.put("options.group_dim", static_cast<std::int64_t>(options.group_dim));
+                    tree.put("options.epsilon", options.epsilon);
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::StructuredL2Descriptor>) {
+                    tree.put("type", "structured_l2");
+                    tree.put("options.coefficient", options.coefficient);
+                    tree.put("options.group_dim", static_cast<std::int64_t>(options.group_dim));
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::L0HardConcreteDescriptor>) {
+                    tree.put("type", "l0_hard_concrete");
+                    tree.put("options.coefficient", options.coefficient);
+                    tree.put("options.beta", options.beta);
+                    tree.put("options.gamma", options.gamma);
+                    tree.put("options.zeta", options.zeta);
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::OrthogonalityDescriptor>) {
+                    tree.put("type", "orthogonality");
+                    tree.put("options.coefficient", options.coefficient);
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::SpectralNormDescriptor>) {
+                    tree.put("type", "spectral_norm");
+                    tree.put("options.coefficient", options.coefficient);
+                    tree.put("options.target", options.target);
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::MaxNormDescriptor>) {
+                    tree.put("type", "max_norm");
+                    tree.put("options.coefficient", options.coefficient);
+                    tree.put("options.max_norm", options.max_norm);
+                    tree.put("options.dim", static_cast<std::int64_t>(options.dim));
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::KLSparsityDescriptor>) {
+                    tree.put("type", "kl_sparsity");
+                    tree.put("options.coefficient", options.coefficient);
+                    tree.put("options.target", options.target);
+                    tree.put("options.epsilon", options.epsilon);
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::DeCovDescriptor>) {
+                    tree.put("type", "decov");
+                    tree.put("options.coefficient", options.coefficient);
+                    tree.put("options.epsilon", options.epsilon);
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::CenteringVarianceDescriptor>) {
+                    tree.put("type", "centering_variance");
+                    tree.put("options.coefficient", options.coefficient);
+                    tree.put("options.target_std", options.target_std);
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::TotalVariationDescriptor>) {
+                    tree.put("type", "total_variation");
+                    tree.put("options.coefficient", options.coefficient);
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::JacobianNormDescriptor>) {
+                    tree.put("type", "jacobian_norm");
+                    tree.put("options.coefficient", options.coefficient);
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::InputGradientPenaltyDescriptor>) {
+                    tree.put("type", "input_gradient_penalty");
+                    tree.put("options.coefficient", options.coefficient);
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::WGANGPDescriptor>) {
+                    tree.put("type", "wgan_gp");
+                    tree.put("options.coefficient", options.coefficient);
+                    tree.put("options.target", options.target);
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::R1Descriptor>) {
+                    tree.put("type", "r1");
+                    tree.put("options.coefficient", options.coefficient);
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::R2Descriptor>) {
+                    tree.put("type", "r2");
+                    tree.put("options.coefficient", options.coefficient);
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::TRADESDescriptor>) {
+                    tree.put("type", "trades");
+                    tree.put("options.coefficient", options.coefficient);
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::VATDescriptor>) {
+                    tree.put("type", "vat");
+                    tree.put("options.coefficient", options.coefficient);
+                } else if constexpr (std::is_same_v<DescriptorType, Regularization::L2Descriptor>) {
                     tree.put("type", "l2");
                     tree.put("options.coefficient", options.coefficient);
                 } else if constexpr (std::is_same_v<DescriptorType, Regularization::EWCDescriptor>) {
@@ -1018,6 +1090,116 @@ namespace Thot::Common::SaveLoad {
     inline Regularization::Descriptor deserialize_regularization(const PropertyTree& tree, const std::string& context)
     {
         const auto type = Detail::to_lower(Detail::get_string(tree, "type", context));
+        if (type == "l1") {
+            Regularization::Details::L1Options options;
+            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
+            return Regularization::Descriptor{Regularization::Details::L1Descriptor{options}};
+        }
+        if (type == "elastic_net") {
+            Regularization::Details::ElasticNetOptions options;
+            options.l1_coefficient = Detail::get_numeric<double>(tree, "options.l1_coefficient", context);
+            options.l2_coefficient = Detail::get_numeric<double>(tree, "options.l2_coefficient", context);
+            return Regularization::Descriptor{Regularization::Details::ElasticNetDescriptor{options}};
+        }
+        if (type == "group_lasso") {
+            Regularization::Details::GroupLassoOptions options;
+            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
+            options.group_dim = Detail::get_numeric<std::int64_t>(tree, "options.group_dim", context);
+            options.epsilon = Detail::get_numeric<double>(tree, "options.epsilon", context);
+            return Regularization::Descriptor{Regularization::Details::GroupLassoDescriptor{options}};
+        }
+        if (type == "structured_l2") {
+            Regularization::Details::StructuredL2Options options;
+            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
+            options.group_dim = Detail::get_numeric<std::int64_t>(tree, "options.group_dim", context);
+            return Regularization::Descriptor{Regularization::Details::StructuredL2Descriptor{options}};
+        }
+        if (type == "l0_hard_concrete") {
+            Regularization::Details::L0HardConcreteOptions options;
+            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
+            options.beta = Detail::get_numeric<double>(tree, "options.beta", context);
+            options.gamma = Detail::get_numeric<double>(tree, "options.gamma", context);
+            options.zeta = Detail::get_numeric<double>(tree, "options.zeta", context);
+            return Regularization::Descriptor{Regularization::Details::L0HardConcreteDescriptor{options}};
+        }
+        if (type == "orthogonality") {
+            Regularization::Details::OrthogonalityOptions options;
+            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
+            return Regularization::Descriptor{Regularization::Details::OrthogonalityDescriptor{options}};
+        }
+        if (type == "spectral_norm") {
+            Regularization::Details::SpectralNormOptions options;
+            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
+            options.target = Detail::get_numeric<double>(tree, "options.target", context);
+            return Regularization::Descriptor{Regularization::Details::SpectralNormDescriptor{options}};
+        }
+        if (type == "max_norm") {
+            Regularization::Details::MaxNormOptions options;
+            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
+            options.max_norm = Detail::get_numeric<double>(tree, "options.max_norm", context);
+            options.dim = Detail::get_numeric<std::int64_t>(tree, "options.dim", context);
+            return Regularization::Descriptor{Regularization::Details::MaxNormDescriptor{options}};
+        }
+        if (type == "kl_sparsity") {
+            Regularization::Details::KLSparsityOptions options;
+            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
+            options.target = Detail::get_numeric<double>(tree, "options.target", context);
+            options.epsilon = Detail::get_numeric<double>(tree, "options.epsilon", context);
+            return Regularization::Descriptor{Regularization::Details::KLSparsityDescriptor{options}};
+        }
+        if (type == "decov") {
+            Regularization::Details::DeCovOptions options;
+            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
+            options.epsilon = Detail::get_numeric<double>(tree, "options.epsilon", context);
+            return Regularization::Descriptor{Regularization::Details::DeCovDescriptor{options}};
+        }
+        if (type == "centering_variance") {
+            Regularization::Details::CenteringVarianceOptions options;
+            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
+            options.target_std = Detail::get_numeric<double>(tree, "options.target_std", context);
+            return Regularization::Descriptor{Regularization::Details::CenteringVarianceDescriptor{options}};
+        }
+        if (type == "total_variation") {
+            Regularization::Details::TotalVariationOptions options;
+            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
+            return Regularization::Descriptor{Regularization::Details::TotalVariationDescriptor{options}};
+        }
+        if (type == "jacobian_norm") {
+            Regularization::Details::JacobianNormOptions options;
+            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
+            return Regularization::Descriptor{Regularization::Details::JacobianNormDescriptor{options}};
+        }
+        if (type == "input_gradient_penalty") {
+            Regularization::Details::InputGradientPenaltyOptions options;
+            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
+            return Regularization::Descriptor{Regularization::Details::InputGradientPenaltyDescriptor{options}};
+        }
+        if (type == "wgan_gp") {
+            Regularization::Details::WGANGPOptions options;
+            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
+            options.target = Detail::get_numeric<double>(tree, "options.target", context);
+            return Regularization::Descriptor{Regularization::Details::WGANGPDescriptor{options}};
+        }
+        if (type == "r1") {
+            Regularization::Details::R1Options options;
+            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
+            return Regularization::Descriptor{Regularization::Details::R1Descriptor{options}};
+        }
+        if (type == "r2") {
+            Regularization::Details::R2Options options;
+            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
+            return Regularization::Descriptor{Regularization::Details::R2Descriptor{options}};
+        }
+        if (type == "trades") {
+            Regularization::Details::TRADESOptions options;
+            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
+            return Regularization::Descriptor{Regularization::Details::TRADESDescriptor{options}};
+        }
+        if (type == "vat") {
+            Regularization::Details::VATOptions options;
+            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
+            return Regularization::Descriptor{Regularization::Details::VATDescriptor{options}};
+        }
         if (type == "l2") {
             Regularization::Details::L2Options options;
             options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
