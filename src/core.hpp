@@ -2763,6 +2763,21 @@ namespace Thot {
                 torch::Tensor targets;
             };
 
+            [[nodiscard]] static bool requires_retain_graph_retry(const c10::Error& error)
+            {
+                std::string message{error.what()};
+                std::string normalised;
+                normalised.reserve(message.size());
+
+                for (char ch : message) {
+                    normalised.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+                }
+
+                constexpr std::string_view kTrigger{
+                    "trying to backward through the graph a second time"};
+                return normalised.find(kTrigger) != std::string::npos;
+            }
+
             [[nodiscard]] static TensorDataset prepare_tensor_dataset(torch::Tensor inputs,
                                                                       torch::Tensor targets)
             {
@@ -2828,6 +2843,7 @@ namespace Thot {
                 std::size_t step_index = 0;
 
                 const bool regularization_active = model.has_regularization();
+                bool retain_graph_required = false;
 
                 for (std::size_t epoch = 0; epoch < options.epoch; ++epoch) {
                     const auto epoch_start = std::chrono::steady_clock::now();
@@ -2882,49 +2898,46 @@ namespace Thot {
                     };
 
                     auto process_batch = [&](torch::Tensor batch_inputs, torch::Tensor batch_targets) {
-                        return model.with_cuda_failover(
-                            "training step",
-                            [&]() -> std::int64_t {
-                                if (!batch_inputs.defined() || !batch_targets.defined()) {
-                                    return std::int64_t{0};
+                        auto run_training_step = [&](bool retain_graph) -> std::int64_t {
+                            if (!batch_inputs.defined() || !batch_targets.defined()) {
+                                return std::int64_t{0};
+                            }
+
+                            const auto current_batch = batch_targets.size(0);
+                            if (current_batch <= 0) {
+                                return std::int64_t{0};
+                            }
+                            if (accumulation.defined() && accumulation.device() != model.device()) {
+                                accumulation = accumulation.to(model.device());
+                            }
+
+                            model.zero_grad();
+                            auto prediction = model.forward(batch_inputs);
+
+                            if (!prediction.sizes().equals(batch_targets.sizes())) {
+                                if (batch_targets.numel() == prediction.numel()) {
+                                    batch_targets = batch_targets.reshape_as(prediction);
                                 }
-                                const auto current_batch = batch_targets.size(0);
-                                 if (current_batch <= 0) {
-                                     return std::int64_t{0};
-                                 }
+                            }
 
-                                if (accumulation.defined() && accumulation.device() != model.device()) {
-                                    accumulation = accumulation.to(model.device());
-                                }
-
-                                model.zero_grad();
-                                auto prediction = model.forward(batch_inputs);
-
-                                if (!prediction.sizes().equals(batch_targets.sizes())) {
-                                    if (batch_targets.numel() == prediction.numel()) {
-                                        batch_targets = batch_targets.reshape_as(prediction);
+                            auto loss = model.compute_loss(prediction, batch_targets);
+                            if (loss.dim() != 0) {
+                                loss = loss.mean();
+                            }
+                            if (regularization_active) {
+                                auto regularization_penalty = model.compute_regularization_penalty();
+                                if (regularization_penalty.defined()) {
+                                    if (regularization_penalty.device() != loss.device()) {
+                                        regularization_penalty = regularization_penalty.to(loss.device());
                                     }
-                                }
-                                auto loss = model.compute_loss(prediction, batch_targets);
-                                if (loss.dim() != 0) {
-                                    loss = loss.mean();
-                                }
-                                if (regularization_active) {
-                                    auto regularization_penalty = model.compute_regularization_penalty();
-                                    if (regularization_penalty.defined()) {
-                                        if (regularization_penalty.device() != loss.device()) {
-                                            regularization_penalty = regularization_penalty.to(loss.device());
-                                        }
-                                        if (regularization_penalty.scalar_type() != loss.scalar_type()) {
-                                            regularization_penalty = regularization_penalty.to(loss.scalar_type());
-                                        }
-                                        loss = loss + regularization_penalty;
+                                    if (regularization_penalty.scalar_type() != loss.scalar_type()) {
+                                        regularization_penalty = regularization_penalty.to(loss.scalar_type());
                                     }
+                                    loss = loss + regularization_penalty;
                                 }
-                                loss.backward();
+
+                                loss.backward({}, retain_graph);
                                 model.step();
-
-
                                 if (regularization_active) {
                                     model.update_regularization_states(step_index, true);
                                 }
@@ -2938,6 +2951,28 @@ namespace Thot {
                                 loss_tensor.mul_(static_cast<double>(current_batch));
                                 accumulation.add_(loss_tensor);
                                 return current_batch;
+                            };
+                            auto execute_training = [&]() -> std::int64_t {
+                                if (retain_graph_required) {
+                                    return run_training_step(true);
+                                }
+
+                                try {
+                                    return run_training_step(false);
+                                } catch (const c10::Error& error) {
+                                    if (!requires_retain_graph_retry(error)) {
+                                        throw;
+                                }
+                                    retain_graph_required = true;
+                                    model.zero_grad(true);
+                                    return run_training_step(true);
+                                }
+                            };
+
+                            return model.with_cuda_failover(
+                                "training step",
+                                [&]() -> std::int64_t {
+                                    return execute_training();
                             },
                             [&](const c10::Error&) {
                                 if (batch_inputs.defined() && !batch_inputs.device().is_cpu()) {
