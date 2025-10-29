@@ -2958,19 +2958,17 @@ namespace Thot {
                         };
 
                         auto execute_training = [&]() -> std::int64_t {
-                            if (retain_graph_required) {
-                                return run_training_step(true);
-                            }
-
-                            try {
-                                return run_training_step(false);
-                            } catch (const c10::Error& error) {
-                                if (!requires_retain_graph_retry(error)) {
-                                    throw;
+                            while (true) {
+                                const bool use_retain_graph = retain_graph_required;
+                                try {
+                                    return run_training_step(use_retain_graph);
+                                } catch (const c10::Error& error) {
+                                    if (!requires_retain_graph_retry(error) || use_retain_graph) {
+                                        throw;
+                                    }
+                                    retain_graph_required = true;
+                                    model.zero_grad(true);
                                 }
-                                retain_graph_required = true;
-                                model.zero_grad(true);
-                                return run_training_step(true);
                             }
                         };
 
