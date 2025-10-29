@@ -23,6 +23,6 @@ namespace Thot::Regularization::Details {
         return jacobian.pow(2).sum().mul(options.coefficient);
     }
 
-} // namespace Thot::Regularization::Details
+}
 
 #endif // THOT_REGULARIZATION_DETAILS_JACOBIANNORM_HPP

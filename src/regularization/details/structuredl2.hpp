@@ -37,6 +37,6 @@ namespace Thot::Regularization::Details {
         return squared.sum().mul(options.coefficient);
     }
 
-} // namespace Thot::Regularization::Details
+}
 
 #endif // THOT_REGULARIZATION_DETAILS_STRUCTURED_L2_HPP

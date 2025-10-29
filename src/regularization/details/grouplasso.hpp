@@ -39,6 +39,6 @@ namespace Thot::Regularization::Details {
         return norms.sum().mul(options.coefficient);
     }
 
-} // namespace Thot::Regularization::Details
+}
 
 #endif // THOT_REGULARIZATION_DETAILS_GROUPLASSO_HPP

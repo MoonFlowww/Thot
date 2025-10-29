@@ -23,6 +23,6 @@ namespace Thot::Regularization::Details {
         return params.abs().sum().mul(coefficient);
     }
 
-} // namespace Thot::Regularization::Details
+}
 
 #endif // THOT_REGULARIZATION_DETAILS_L1_HPP

@@ -27,6 +27,6 @@ namespace Thot::Regularization::Details {
         return penalty_value.mul(options.coefficient);
     }
 
-} // namespace Thot::Regularization::Details
+}
 
 #endif // THOT_REGULARIZATION_DETAILS_R1_HPP
