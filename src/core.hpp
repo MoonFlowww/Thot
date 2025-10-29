@@ -2457,12 +2457,13 @@ namespace Thot {
         }
 
         template <class Fn, class Recovery>
-decltype(auto) with_cuda_failover(std::string_view context, Fn&& fn, Recovery&& recovery)
+        auto with_cuda_failover(std::string_view context, Fn&& fn, Recovery&& recovery)
+            -> decltype(std::forward<Fn>(fn)())
         {
             bool retried = false;
             while (true) {
                 try {
-                    return fn();
+                    return std::forward<Fn>(fn)();
                 } catch (const c10::Error& error) {
                     if (retried || !should_retry_on_cuda_failure(error)) {
                         throw;
@@ -2471,7 +2472,7 @@ decltype(auto) with_cuda_failover(std::string_view context, Fn&& fn, Recovery&& 
                                ". Falling back to CPU execution.");
                     to_device(false);
                     invalidate_execution_workspace();
-                    recovery(error);
+                    std::forward<Recovery>(recovery)(error);
                     retried = true;
                 }
             }
