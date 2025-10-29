@@ -33,6 +33,18 @@ namespace Thot::Common::SaveLoad {
     using PropertyTree = boost::property_tree::ptree;
     using ModuleDescriptor = std::variant<Layer::Descriptor, Block::Descriptor>;
 
+    struct NamedModuleDescriptor {
+        ModuleDescriptor descriptor{};
+        std::string name{};
+
+        NamedModuleDescriptor() = default;
+
+        NamedModuleDescriptor(ModuleDescriptor descriptor, std::string name = {})
+            : descriptor(std::move(descriptor)), name(std::move(name))
+        {}
+    };
+
+
     PropertyTree serialize_attention(const Attention::Descriptor& descriptor);
     Attention::Descriptor deserialize_attention(const PropertyTree& tree, const std::string& context);
     PropertyTree serialize_layer_descriptor(const Layer::Descriptor& descriptor);
@@ -2059,7 +2071,7 @@ namespace Thot::Common::SaveLoad {
         throw std::runtime_error(message.str());
     }
 
-    inline PropertyTree serialize_module_descriptor(const ModuleDescriptor& descriptor)
+    inline PropertyTree serialize_module_descriptor_payload(const ModuleDescriptor& descriptor)
     {
         PropertyTree tree;
         if (std::holds_alternative<Layer::Descriptor>(descriptor)) {
@@ -2071,6 +2083,16 @@ namespace Thot::Common::SaveLoad {
         }
         return tree;
     }
+
+    inline PropertyTree serialize_module_descriptor(const NamedModuleDescriptor& descriptor)
+    {
+        auto tree = serialize_module_descriptor_payload(descriptor.descriptor);
+        if (!descriptor.name.empty()) {
+            tree.put("name", descriptor.name);
+        }
+        return tree;
+    }
+
 
     inline ModuleDescriptor deserialize_module_descriptor(const PropertyTree& tree, const std::string& context)
     {
@@ -2086,7 +2108,17 @@ namespace Thot::Common::SaveLoad {
         throw std::runtime_error(message.str());
     }
 
-    inline PropertyTree serialize_module_list(const std::vector<ModuleDescriptor>& descriptors)
+    inline NamedModuleDescriptor deserialize_named_module_descriptor(const PropertyTree& tree, const std::string& context)
+    {
+        NamedModuleDescriptor descriptor{};
+        descriptor.descriptor = deserialize_module_descriptor(tree, context);
+        if (const auto name_value = tree.get_optional<std::string>("name")) {
+            descriptor.name = *name_value;
+        }
+        return descriptor;
+    }
+
+    inline PropertyTree serialize_module_list(const std::vector<NamedModuleDescriptor>& descriptors)
     {
         PropertyTree tree;
         for (const auto& descriptor : descriptors) {
@@ -2095,12 +2127,12 @@ namespace Thot::Common::SaveLoad {
         return tree;
     }
 
-    inline std::vector<ModuleDescriptor> deserialize_module_list(const PropertyTree& tree, const std::string& context)
+    inline std::vector<NamedModuleDescriptor> deserialize_module_list(const PropertyTree& tree, const std::string& context)
     {
-        std::vector<ModuleDescriptor> descriptors;
+        std::vector<NamedModuleDescriptor> descriptors;
         descriptors.reserve(tree.size());
         for (const auto& node : tree) {
-            descriptors.push_back(deserialize_module_descriptor(node.second, context));
+            descriptors.push_back(deserialize_named_module_descriptor(node.second, context));
         }
         return descriptors;
     }

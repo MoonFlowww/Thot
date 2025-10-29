@@ -1,7 +1,9 @@
 #ifndef THOT_LAYER_REGISTRY_HPP
 #define THOT_LAYER_REGISTRY_HPP
 
-
+#include <functional>
+#include <memory>
+#include <string>
 #include <variant>
 
 
@@ -29,6 +31,7 @@ namespace Thot::Layer::Details {
         ::Thot::Activation::Type activation{::Thot::Activation::Type::Identity};
         std::shared_ptr<torch::nn::Module> module{};
         ::Thot::LocalConfig local{};
+        std::string name{};
     };
 
     template <class Owner, class Descriptor>

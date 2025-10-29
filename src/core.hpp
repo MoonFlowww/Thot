@@ -41,6 +41,7 @@
 #include <vector>
 #include <deque>
 #include <filesystem>
+#include <unordered_map>
 
 #include <torch/torch.h>
 
@@ -235,20 +236,32 @@ namespace Thot {
 
 
 
-        using ModuleDescriptor = std::variant<Layer::Descriptor, Block::Descriptor>;
-        void add(ModuleDescriptor descriptor) {
+        using ModuleDescriptor = Common::SaveLoad::ModuleDescriptor;
+        using NamedModuleDescriptor = Common::SaveLoad::NamedModuleDescriptor;
+        void add(ModuleDescriptor descriptor, std::string name = {}) {
             if (regularization_configured_)
                 throw std::logic_error("Cannot add modules after regularization has been configured.");
 
+            compiled_routing_plan_.reset();
+
+            const std::string module_name = std::move(name);
+            if (!module_name.empty() && module_name_index_.find(module_name) != module_name_index_.end()) {
+                throw std::invalid_argument("Module name '" + module_name + "' is already registered.");
+            }
+
             ModuleDescriptor preserved_descriptor = descriptor;
-            auto register_layer = [this](auto&& concrete_descriptor) {
+            auto store_layer = [&](Layer::Details::RegisteredLayer registered_layer) {
+                registered_layer.name = module_name;
+                layers_.push_back(std::move(registered_layer));
+                register_layer_runtime(layers_.back());
+            };
+            auto register_layer = [&](auto&& concrete_descriptor) {
                 using DescriptorType = std::decay_t<decltype(concrete_descriptor)>;
                 auto registered = Layer::Details::build_registered_layer(
                     *this,
                     static_cast<const DescriptorType&>(concrete_descriptor),
                     next_module_index());
-                layers_.push_back(std::move(registered));
-                register_layer_runtime(layers_.back());
+                store_layer(std::move(registered));
             };
 
             auto layer_dispatcher = Overloaded{
@@ -283,8 +296,7 @@ namespace Thot {
                         return module->forward(std::move(input));
                     };
 
-                    layers_.push_back(std::move(registered_layer));
-                    register_layer_runtime(layers_.back());
+                    store_layer(std::move(registered_layer));
                 } else {
                     if (block_declares_local_optimizer) {
                         for (auto& layer : sequential.layers) {
@@ -319,8 +331,7 @@ namespace Thot {
                     return module->forward(std::move(input));
                 };
 
-                layers_.push_back(std::move(registered_layer));
-                register_layer_runtime(layers_.back());
+                store_layer(std::move(registered_layer));
             };
 
             auto transformer_block_handler = Overloaded{
@@ -337,8 +348,7 @@ namespace Thot {
                         return module->forward(std::move(input));
                     };
 
-                    layers_.push_back(std::move(registered_layer));
-                    register_layer_runtime(layers_.back());
+                    store_layer(std::move(registered_layer));
                 },
                 [](const Block::Transformer::Classic::DecoderDescriptor&) {
                     throw std::invalid_argument("Transformer decoder blocks are not yet supported by Model::add.");
@@ -356,8 +366,7 @@ namespace Thot {
                         return module->forward(std::move(input));
                     };
 
-                    layers_.push_back(std::move(registered_layer));
-                    register_layer_runtime(layers_.back());
+                    store_layer(std::move(registered_layer));
                 },
                 [](const Block::Transformer::EBT::DecoderDescriptor&) {
                     throw std::invalid_argument("EBT decoder blocks are not yet supported by Model::add.");
@@ -392,8 +401,7 @@ namespace Thot {
                         return std::move(result.main);
                     };
 
-                    layers_.push_back(std::move(registered_layer));
-                    register_layer_runtime(layers_.back());
+                    store_layer(std::move(registered_layer));
                 },
                 [&](Block::Transformer::Mamba::EncoderDescriptor encoder_descriptor) {
                     const auto index = next_module_index();
@@ -408,8 +416,7 @@ namespace Thot {
                         return module->forward(std::move(input));
                     };
 
-                    layers_.push_back(std::move(registered_layer));
-                    register_layer_runtime(layers_.back());
+                    store_layer(std::move(registered_layer));
                 }
             };
 
@@ -453,7 +460,10 @@ namespace Thot {
             };
 
             std::visit(module_dispatcher, std::move(descriptor));
-            module_descriptors_.push_back(std::move(preserved_descriptor));
+            module_descriptors_.emplace_back(std::move(preserved_descriptor), module_name);
+            if (!module_descriptors_.back().name.empty()) {
+                module_name_index_[module_descriptors_.back().name] = module_descriptors_.size() - 1;
+            }
         }
 
         void set_optimizer(Optimizer::Descriptor descriptor, std::optional<LrScheduler::Descriptor> scheduler = std::nullopt) {
@@ -784,8 +794,8 @@ namespace Thot {
                 model_name_.clear();
             }
 
-            for (const auto& descriptor : descriptors) {
-                add(descriptor);
+            for (auto& descriptor : descriptors) {
+                add(std::move(descriptor.descriptor), std::move(descriptor.name));
             }
 
             torch::serialize::InputArchive validation_archive;
@@ -1903,7 +1913,7 @@ namespace Thot {
         };
 
         std::vector<Layer::Details::RegisteredLayer> layers_{};
-        std::vector<ModuleDescriptor> module_descriptors_{};
+        std::vector<NamedModuleDescriptor> module_descriptors_{};
         std::vector<CalibrationMethod> calibration_methods_{};
         std::vector<std::vector<torch::Tensor>> layer_parameters_{};
         std::vector<std::vector<RegularizationBinding>> layer_regularization_bindings_{};
@@ -1912,6 +1922,9 @@ namespace Thot {
         mutable std::optional<std::vector<int64_t>> last_input_shape_{};
         TrainingTelemetry telemetry_{};
         std::size_t module_index_{0};
+        std::unordered_map<std::string, std::size_t> module_name_index_{};
+        using RoutingPlan = std::vector<std::size_t>;
+        std::optional<RoutingPlan> compiled_routing_plan_{};
         std::unique_ptr<torch::optim::Optimizer> optimizer_{};
         std::vector<std::unique_ptr<torch::optim::Optimizer>> local_optimizers_{};
         std::unique_ptr<LrScheduler::Details::Scheduler> scheduler_{};
@@ -1964,6 +1977,8 @@ namespace Thot {
 
             device_ = preserved_device;
             model_name_ = std::move(preserved_model_name);
+            module_name_index_.clear();
+            compiled_routing_plan_.reset();
         }
 
         static std::string format_tensor_shape(const torch::Tensor& tensor) {
