@@ -40,12 +40,12 @@ int main() {
                 Thot::Activation::SiLU
             ),
             Thot::Layer::MaxPool2d({{2, 2}, {2, 2}})
-        }));
+        }), "stem");
 
-        model.add(Thot::Layer::HardDropout({ .probability = 0.3 }));
 
 
         model.add(Thot::Block::Residual({
+            Thot::Layer::HardDropout({ .probability = 0.3 }),
             Thot::Layer::Conv2d(
                 {64, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
                 Thot::Activation::Identity,
@@ -60,9 +60,10 @@ int main() {
                 Thot::Activation::Identity,
                 Thot::Initialization::HeNormal
             )
-        }, 3, {}, { .final_activation = Thot::Activation::SiLU }));
+        }, 3, {}, { .final_activation = Thot::Activation::SiLU }), "R1");
 
         model.add(Thot::Block::Residual({
+            Thot::Layer::HardDropout({ .probability = 0.3 }),
             Thot::Layer::Conv2d(
                 {64, 128, {3, 3}, {2, 2}, {1, 1}, {1, 1}, 1, false},
                 Thot::Activation::Identity,
@@ -83,9 +84,9 @@ int main() {
                     Thot::Activation::Identity,
                     Thot::Initialization::HeNormal)
             },
-            { .final_activation = Thot::Activation::SiLU }));
+            { .final_activation = Thot::Activation::SiLU }), "R2");
 
-        model.add(Thot::Layer::HardDropout({ .probability = 0.3 }));
+
 
         model.add(Thot::Block::Sequential({
             Thot::Layer::Conv2d(
@@ -98,7 +99,7 @@ int main() {
                 Thot::Activation::SiLU
             ),
             Thot::Layer::AdaptiveAvgPool2d({{1, 1}})
-        }));
+        }), "S1");
 
         model.add(Thot::Block::Sequential({
             Thot::Layer::Conv2d(
@@ -111,13 +112,30 @@ int main() {
                 Thot::Activation::SiLU
             ),
             Thot::Layer::AdaptiveAvgPool2d({{1, 1}})
-        }));
+        }), "S2");
 
-        model.add(Thot::Layer::Flatten());
+        model.add(Thot::Layer::Flatten(), "flat");
 
-        model.add(Thot::Layer::FC({128, 512, true}, Thot::Activation::SiLU, Thot::Initialization::HeNormal));
-        model.add(Thot::Layer::HardDropout({.probability = 0.5}));
-        model.add(Thot::Layer::FC({512, 10, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal));
+        model.add(Thot::Layer::FC({128, 512, true}, Thot::Activation::SiLU, Thot::Initialization::HeNormal), "FC1");
+        model.add(Thot::Layer::HardDropout({.probability = 0.5}), "HDFin");
+        model.add(Thot::Layer::FC({512, 10, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal), "FC2");
+
+
+        model.links({
+            Thot::LinkSpec{Thot::Port::parse("@input"), Thot::Port::parse("stem")},
+
+            Thot::LinkSpec{Thot::Port::parse("stem"), Thot::Port::parse("R1")},
+            Thot::LinkSpec{Thot::Port::parse("R1"), Thot::Port::parse("R2")},
+            Thot::LinkSpec{Thot::Port::parse("R2"), Thot::Port::parse("S1")},
+            Thot::LinkSpec{Thot::Port::parse("S1"), Thot::Port::parse("S2")},
+
+            Thot::LinkSpec{Thot::Port::parse("S2"), Thot::Port::parse("flat")},
+            Thot::LinkSpec{Thot::Port::parse("flat"), Thot::Port::parse("FC1")},
+            Thot::LinkSpec{Thot::Port::parse("FC1"), Thot::Port::parse("HD")},
+            Thot::LinkSpec{Thot::Port::parse("HD"), Thot::Port::parse("FC2")},
+
+            Thot::LinkSpec{Thot::Port::parse("FC2"), Thot::Port::parse("@output")}
+        });
 
 
         model.set_optimizer(
@@ -214,23 +232,28 @@ int main() {
     model.save("/home/moonfloww/Projects/NNs/CIFAR_DEBUG");
 
 
-                            model.add(convStem, "stem");
-    model.add(resBlock, "res_branch"); model.add(flatten, "flatten");
-                            model.add(fc, "logits");
 
-    model.links({
-        LinkSpec{Port::parse("@input"), Port::parse("stem")},
-        LinkSpec{Port::parse("stem"), Port::parse("res_branch")},
-        LinkSpec{Port::parse("stem"), Port::parse("flatten")},
-        LinkSpec{Port::join({"res_branch", "flatten"}, MergePolicyKind::Concat, /*dim=*/1), Port::parse("logits")},
-        LinkSpec{Port::parse("logits"), Port::parse("@output")},
-    });
 
     return 0;
 }
 
 
 /*
+
+Epoch [1/80] | Train loss: 2.043670 | Test loss: 1.558099 | ΔLoss: N/A (∇) | duration: 21.43sec
+Epoch [2/80] | Train loss: 1.551665 | Test loss: 1.325052 | ΔLoss: -0.233048 (∇) | duration: 22.25sec
+Epoch [3/80] | Train loss: 1.316544 | Test loss: 1.125911 | ΔLoss: -0.199141 (∇) | duration: 20.96sec
+Epoch [4/80] | Train loss: 1.153605 | Test loss: 1.000342 | ΔLoss: -0.125569 (∇) | duration: 22.22sec
+Epoch [5/80] | Train loss: 1.035271 | Test loss: 0.889793 | ΔLoss: -0.110549 (∇) | duration: 23.31sec
+Epoch [6/80] | Train loss: 0.938822 | Test loss: 0.797055 | ΔLoss: -0.092738 (∇) | duration: 23.13sec
+Epoch [7/80] | Train loss: 0.856046 | Test loss: 0.760538 | ΔLoss: -0.036517 (∇) | duration: 22.97sec
+Epoch [8/80] | Train loss: 0.791008 | Test loss: 0.670695 | ΔLoss: -0.089843 (∇) | duration: 21.81sec
+Epoch [9/80] | Train loss: 0.738124 | Test loss: 0.638725 | ΔLoss: -0.031971 (∇) | duration: 24.40sec
+Epoch [10/80] | Train loss: 0.695576 | Test loss: 0.600487 | ΔLoss: -0.038238 (∇) | duration: 23.00sec
+Epoch [11/80] | Train loss: 0.659483 | Test loss: 0.595433 | ΔLoss: -0.005054 (∇) | duration: 22.78sec
+Epoch [12/80] | Train loss: 0.626604 | Test loss: 0.572415 | ΔLoss: -0.023018 (∇) | duration: 24.25sec
+Epoch [13/80] | Train loss: 0.599530 | Test loss: 0.567682 | ΔLoss: -0.004733 (∇) | duration: 22.31sec
+Epoch [14/80] | Train loss: 0.572129 | Test loss: 0.545594 | ΔLoss: -0.022088 (∇) | duration: 21.55sec
  --------------------------------------CIFAR10--------------------------------------
         model.add(Thot::Block::Sequential({
             Thot::Layer::Conv2d(
@@ -372,5 +395,20 @@ int main() {
 ┃ Log loss                   ┃ 0.415918 ┃           0.415918 ┃
 ┃ Brier score                ┃ 0.190100 ┃           0.190100 ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┻━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━┛
+
+
+
+idea:
+                        model.add(..., "stem");
+    model.add(..., "res_branch"); model.add(..., "seq_branch");
+                        model.add(..., "logits");
+
+    model.links({
+        LinkSpec{Port::parse("@input"), Port::parse("stem")},
+        LinkSpec{Port::parse("stem"), Port::parse("res_branch")},
+        LinkSpec{Port::parse("stem"), Port::parse("seq_branch")},
+        LinkSpec{Port::join({"res_branch", "seq_branch"}, MergePolicyKind::Concat, 1), Port::parse("logits")}, // 1:dims
+        LinkSpec{Port::parse("logits"), Port::parse("@output")},
+    });
 
 */

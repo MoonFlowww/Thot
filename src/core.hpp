@@ -729,8 +729,7 @@ namespace Thot {
                     return std::stoll(token);
                 } catch (const std::exception&) {
                     throw std::invalid_argument(
-                        "Join port '" + port.describe() + "' specifies an invalid concat dimension '")
-                        + token + "'.");
+                        "Join port '" + port.describe() + "' specifies an invalid concat dimension '") + token + "'.");
                 }
             };
 
