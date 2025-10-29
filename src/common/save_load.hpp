@@ -250,8 +250,8 @@ namespace Thot::Common::SaveLoad {
                 case Initialization::Type::Default: return "default";
                 case Initialization::Type::XavierNormal: return "xavier_normal";
                 case Initialization::Type::XavierUniform: return "xavier_uniform";
-                case Initialization::Type::KaimingNormal: return "kaiming_normal";
-                case Initialization::Type::KaimingUniform: return "kaiming_uniform";
+                case Initialization::Type::HeNormal: return "he_normal";
+                case Initialization::Type::HeUniform: return "he_uniform";
                 case Initialization::Type::ZeroBias: return "zero_bias";
                 case Initialization::Type::Dirac: return "dirac";
                 case Initialization::Type::Lyapunov: return "lyapunov";
@@ -265,8 +265,8 @@ namespace Thot::Common::SaveLoad {
             if (lowered == "default") return Initialization::Type::Default;
             if (lowered == "xavier_normal") return Initialization::Type::XavierNormal;
             if (lowered == "xavier_uniform") return Initialization::Type::XavierUniform;
-            if (lowered == "kaiming_normal") return Initialization::Type::KaimingNormal;
-            if (lowered == "kaiming_uniform") return Initialization::Type::KaimingUniform;
+            if (lowered == "he_normal") return Initialization::Type::HeNormal;
+            if (lowered == "he_uniform") return Initialization::Type::HeUniform;
             if (lowered == "zero_bias") return Initialization::Type::ZeroBias;
             if (lowered == "dirac") return Initialization::Type::Dirac;
             if (lowered == "lyapunov") return Initialization::Type::Lyapunov;

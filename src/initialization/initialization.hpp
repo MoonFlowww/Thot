@@ -7,8 +7,8 @@ namespace Thot::Initialization {
         Default,
         XavierNormal,
         XavierUniform,
-        KaimingNormal,
-        KaimingUniform,
+        HeNormal,
+        HeUniform,
         ZeroBias,
         Dirac, // https://arxiv.org/pdf/1706.00388
         Lyapunov,
@@ -21,8 +21,8 @@ namespace Thot::Initialization {
     inline constexpr Descriptor Default{Type::Default};
     inline constexpr Descriptor XavierNormal{Type::XavierNormal};
     inline constexpr Descriptor XavierUniform{Type::XavierUniform};
-    inline constexpr Descriptor KaimingNormal{Type::KaimingNormal};
-    inline constexpr Descriptor KaimingUniform{Type::KaimingUniform};
+    inline constexpr Descriptor HeNormal{Type::HeNormal};
+    inline constexpr Descriptor HeUniform{Type::HeUniform};
     inline constexpr Descriptor ZeroBias{Type::ZeroBias};
     inline constexpr Descriptor Dirac{Type::Dirac};
     inline constexpr Descriptor Lyapunov{Type::Lyapunov};

@@ -35,14 +35,14 @@ namespace Thot::Initialization::Details {
                 torch::nn::init::xavier_uniform_(module->weight);
                 detail::zero_bias_if_present(module);
                 break;
-            case ::Thot::Initialization::Type::KaimingNormal:
+            case ::Thot::Initialization::Type::HeNormal:
                 torch::nn::init::kaiming_normal_(module->weight,
                                                  /*a=*/0.0,
                                                  torch::kFanIn,
                                                  torch::kReLU);
                 detail::zero_bias_if_present(module);
                 break;
-            case ::Thot::Initialization::Type::KaimingUniform:
+            case ::Thot::Initialization::Type::HeUniform:
                 torch::nn::init::kaiming_uniform_(module->weight,
                                                   /*a=*/0.0,
                                                   torch::kFanIn,

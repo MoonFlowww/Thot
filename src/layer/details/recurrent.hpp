@@ -97,10 +97,10 @@ namespace Thot::Layer::Details {
                         case ::Thot::Initialization::Type::XavierUniform:
                             torch::nn::init::xavier_uniform_(parameter);
                             break;
-                        case ::Thot::Initialization::Type::KaimingNormal:
+                        case ::Thot::Initialization::Type::HeNormal:
                             torch::nn::init::kaiming_normal_(parameter, /*a=*/0.0, torch::kFanIn, torch::kReLU);
                             break;
-                        case ::Thot::Initialization::Type::KaimingUniform:
+                        case ::Thot::Initialization::Type::HeUniform:
                             torch::nn::init::kaiming_uniform_(parameter, /*a=*/0.0, torch::kFanIn, torch::kReLU);
                             break;
                         case ::Thot::Initialization::Type::Dirac:
@@ -120,8 +120,8 @@ namespace Thot::Layer::Details {
 
                 if (is_bias && (type == ::Thot::Initialization::Type::XavierNormal ||
                                  type == ::Thot::Initialization::Type::XavierUniform ||
-                                 type == ::Thot::Initialization::Type::KaimingNormal ||
-                                 type == ::Thot::Initialization::Type::KaimingUniform ||
+                                 type == ::Thot::Initialization::Type::HeNormal ||
+                                 type == ::Thot::Initialization::Type::HeUniform ||
                                  type == ::Thot::Initialization::Type::Lyapunov ||
                                  type == ::Thot::Initialization::Type::ZeroBias)) {
                     torch::nn::init::zeros_(parameter);
