@@ -1525,17 +1525,32 @@ namespace Thot {
 
         Model& to_device(bool use_cuda = true)
         {
-            if (use_cuda) {
-                if (!torch::cuda::is_available()) {
-                    throw std::runtime_error("CUDA device requested but is unavailable.");
-                }
-                device_ = torch::Device(torch::kCUDA, /*index=*/0);
-            } else {
+            auto select_cpu = [&]() {
                 device_ = torch::Device(torch::kCPU, /*index=*/0);
+                this->to(device_);
+            };
+
+            if (!use_cuda) {
+                select_cpu();
+                return *this;
             }
 
-            this->to(device_);
-            return *this;
+            const bool cuda_available = torch::cuda::is_available();
+            const auto cuda_devices = cuda_available ? torch::cuda::device_count() : 0;
+            if (!cuda_available || cuda_devices == 0) {
+                select_cpu();
+                return *this;
+            }
+
+            try {
+                device_ = torch::Device(torch::kCUDA, /*index=*/0);
+                this->to(device_);
+                return *this;
+            } catch (const c10::Error& error) {
+                TORCH_WARN("Falling back to CPU because CUDA initialisation failed: ", error.what());
+                select_cpu();
+                return *this;
+            }
         }
 
         [[nodiscard]] const torch::Device& device() const noexcept { return device_; }
