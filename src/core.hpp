@@ -46,15 +46,11 @@
 #include <limits>
 #include <cctype>
 #include <iterator>
-#include <array>
-#include <atomic>
 
 
 #include <torch/torch.h>
-#include <torch/cuda.h>
-#include <ATen/cuda/CUDAGraph.h>
-#include <c10/cuda/CUDAStream.h>
-#include <c10/cuda/CUDAGuard.h>
+
+
 
 #include "common/save_load.hpp"
 #include "utils/terminal.hpp"
@@ -802,16 +798,8 @@ namespace Thot {
             module_descriptors_.emplace_back(std::move(preserved_descriptor), module_name);
         }
 
-        // When `enable_cuda_graph` is set, the model attempts to capture the compiled
-        // routing into a CUDA graph the first time `forward` observes static CUDA
-        // shapes. The capture requires CUDA execution and static tensor metadata; the
-        // runtime automatically falls back to the eager path for CPU execution,
-        // forward chunking, dynamic shapes and every training invocation. CUDA graph
-        // acceleration is therefore intended for inference workloads only.
-        void links(std::vector<LinkSpec> specifications, bool enable_cuda_graph = false)
+        void links(std::vector<LinkSpec> specifications)
         {
-            cuda_graph_enabled_ = enable_cuda_graph;
-            reset_cuda_graph_capture();
             if (specifications.empty()) {
                 clear_compiled_graph();
                 return;
@@ -1528,32 +1516,17 @@ namespace Thot {
 
         Model& to_device(bool use_cuda = true)
         {
-            auto select_cpu = [&]() {
-                device_ = torch::Device(torch::kCPU, /*index=*/0);
-                this->to(device_);
-            };
-
-            if (!use_cuda) {
-                select_cpu();
-                return *this;
-            }
-
-            const bool cuda_available = torch::cuda::is_available();
-            const auto cuda_devices = cuda_available ? torch::cuda::device_count() : 0;
-            if (!cuda_available || cuda_devices == 0) {
-                select_cpu();
-                return *this;
-            }
-
-            try {
+            if (use_cuda) {
+                if (!torch::cuda::is_available()) {
+                    throw std::runtime_error("CUDA device requested but is unavailable.");
+                }
                 device_ = torch::Device(torch::kCUDA, /*index=*/0);
-                this->to(device_);
-                return *this;
-            } catch (const c10::Error& error) {
-                TORCH_WARN("Falling back to CPU because CUDA initialisation failed: ", error.what());
-                select_cpu();
-                return *this;
+            } else {
+                device_ = torch::Device(torch::kCPU, /*index=*/0);
             }
+
+            this->to(device_);
+            return *this;
         }
 
         [[nodiscard]] const torch::Device& device() const noexcept { return device_; }
@@ -1566,180 +1539,44 @@ namespace Thot {
 
         [[nodiscard]] torch::Tensor forward(torch::Tensor input, ForwardOptions options)
         {
-            torch::Tensor original_input = input;
-            torch::Tensor working_input = std::move(input);
-
-            auto execute_forward = [&](torch::Tensor tensor, bool chunking_active) {
-                return execute_plan(std::move(tensor), chunking_active);
+            auto execute = [&](torch::Tensor tensor) {
+                return execute_plan(std::move(tensor));
             };
 
-            auto perform_forward = [&]() -> torch::Tensor {
-                auto tensor = working_input;
-                if (tensor.defined() && tensor.device() != device_) {
-                    tensor = tensor.to(device_);
-                }
+            if (input.defined() && input.device() != device_) {
+                input = input.to(device_);
+            }
 
-                const bool can_buffer = options.buffering_enabled() && tensor.defined() && tensor.dim() > 0;
-                if (!can_buffer) {
-                    return execute_forward(std::move(tensor), /*chunking_active=*/false);
-                }
+            const bool can_buffer = options.buffering_enabled() && input.defined() && input.dim() > 0;
+            if (!can_buffer) {
+                return execute(std::move(input));
+            }
 
-                const auto chunk_limit = static_cast<int64_t>(*options.max_chunk_size);
-                if (chunk_limit <= 0) {
-                    return execute_forward(std::move(tensor), /*chunking_active=*/false);
-                }
-                const auto leading = tensor.size(0);
-                if (leading == 0 || leading <= chunk_limit) {
-                    return execute_forward(std::move(tensor), /*chunking_active=*/false);
-                }
-                std::vector<torch::Tensor> outputs;
-                outputs.reserve(static_cast<std::size_t>((leading + chunk_limit - 1) / chunk_limit));
+            const auto chunk_limit = static_cast<int64_t>(*options.max_chunk_size);
+            if (chunk_limit <= 0) {
+                return execute(std::move(input));
+            }
+            const auto leading = input.size(0);
+            if (leading == 0 || leading <= chunk_limit) {
+                return execute(std::move(input));
+            }
+            std::vector<torch::Tensor> outputs;
+            outputs.reserve(static_cast<std::size_t>((leading + chunk_limit - 1) / chunk_limit));
 
-                for (int64_t offset = 0; offset < leading; offset += chunk_limit) {
-                    const auto current = std::min<int64_t>(chunk_limit, leading - offset);
-                    auto chunk = tensor.narrow(0, offset, current);
-                    outputs.push_back(execute_forward(std::move(chunk), /*chunking_active=*/true));
-                }
+            for (int64_t offset = 0; offset < leading; offset += chunk_limit) {
+                const auto current = std::min<int64_t>(chunk_limit, leading - offset);
+                auto chunk = input.narrow(0, offset, current);
+                outputs.push_back(execute(std::move(chunk)));
+            }
 
-                return torch::cat(outputs, 0);
-            };
-
-            return with_cuda_failover(
-                "forward pass",
-                [&]() { return perform_forward(); },
-                [&](const c10::Error&) {
-                    working_input = original_input;
-                    if (working_input.defined() && !working_input.device().is_cpu()) {
-                        working_input = working_input.to(torch::kCPU);
-                    }
-                });
+            return torch::cat(outputs, 0);
         }
 
-        torch::Tensor execute_plan(torch::Tensor tensor, bool chunking_active = false)
+        torch::Tensor execute_plan(torch::Tensor tensor)
         {
             if (tensor.defined() && tensor.device() != device_) {
                 tensor = tensor.to(device_);
             }
-
-            auto execute_eager = [&](torch::Tensor value) {
-                ensure_execution_workspace();
-                return execute_plan_eager(std::move(value),
-                                          node_activations_,
-                                          join_workspace_,
-                                          /*preserve_workspace_for_graph=*/false);
-            };
-
-            if (!tensor.defined()) {
-                return execute_eager(std::move(tensor));
-            }
-
-            const bool autograd_active = torch::GradMode::is_enabled()
-                             || (tensor.defined() && tensor.requires_grad());
-
-            const bool wants_cuda_graph = cuda_graph_enabled_ && !chunking_active;
-            const bool routing_ready = has_compiled_routing() && !compiled_nodes_.empty();
-
-            if (autograd_active && wants_cuda_graph) {
-                static std::atomic<bool> warned{false};
-                bool expected = false;
-                if (warned.compare_exchange_strong(expected, true)) {
-                    TORCH_WARN("CUDA graph acceleration is inference-only; falling back to eager execution because autograd is enabled.");
-                }
-            }
-
-            if (autograd_active || !wants_cuda_graph || !routing_ready || !device_.is_cuda()) {
-                return execute_eager(std::move(tensor));
-            }
-
-            if (cuda_graph_captured_) {
-                const bool shape_match = cuda_graph_input_shape_
-                                         && *cuda_graph_input_shape_ == tensor.sizes().vec();
-                const bool dtype_match = cuda_graph_input_dtype_
-                                         && *cuda_graph_input_dtype_ == tensor.scalar_type();
-                if (shape_match && dtype_match && cuda_graph_ && cuda_graph_static_input_.defined()
-                    && cuda_graph_static_output_.defined()) {
-                    auto replay_graph = [&]() {
-                        cuda_graph_static_input_.copy_(tensor);
-                        cuda_graph_->replay();
-                    };
-                    if (cuda_graph_capture_stream_) {
-                        c10::cuda::CUDAStreamGuard guard(*cuda_graph_capture_stream_);
-                        replay_graph();
-                    } else {
-                        replay_graph();
-                    }
-                    return cuda_graph_static_output_.clone();
-                }
-
-                reset_cuda_graph_capture();
-            }
-
-            ensure_execution_workspace();
-            prepare_cuda_graph_workspace();
-
-            cuda_graph_input_shape_ = tensor.sizes().vec();
-            cuda_graph_input_dtype_ = tensor.scalar_type();
-            cuda_graph_static_input_ = torch::empty_like(tensor);
-            cuda_graph_static_input_.copy_(tensor);
-
-            cuda_graph_.emplace();
-            auto& graph = *cuda_graph_;
-            auto capture_stream = at::cuda::getStreamFromPool(/*isHighPriority=*/false,
-                                                                          device_.index());
-            cuda_graph_capture_stream_ = capture_stream;
-            torch::Tensor captured_output;
-            {
-                c10::cuda::CUDAStreamGuard guard(capture_stream);
-                bool capture_began = false;
-                try {
-                    // Many CUDA kernels lazily instantiate state such as cuDNN handles when
-                    // executed for the first time on a stream. These allocations are not graph
-                    // capture-safe and will invalidate the capture if they occur inside
-                    // `capture_begin`/`capture_end`. Run a warm-up pass on the capture stream so
-                    // that all lazy initialization happens outside of the capture window.
-                    execute_plan_eager(cuda_graph_static_input_,
-                                       cuda_graph_node_activations_,
-                                       cuda_graph_join_workspace_,
-                                       /*preserve_workspace_for_graph=*/true);
-
-                    // The warm-up pass can populate the CUDA graph workspaces and may mutate the
-                    // static input when layers perform in-place operations. Refresh the static
-                    // buffers to ensure the subsequent capture observes the original inputs and an
-                    // empty workspace state.
-                    cuda_graph_static_input_.copy_(tensor);
-                    prepare_cuda_graph_workspace();
-                    graph.capture_begin();
-                    capture_began = true;
-                    captured_output = execute_plan_eager(cuda_graph_static_input_,
-                                                         cuda_graph_node_activations_,
-                                                         cuda_graph_join_workspace_,
-                                                         /*preserve_workspace_for_graph=*/true);
-                    cuda_graph_static_output_ = captured_output;
-                    graph.capture_end();
-                    capture_began = false;
-                } catch (...) {
-                    if (capture_began) {
-                        try {
-                            graph.capture_end();
-                        } catch (const c10::Error& end_error) {
-                            TORCH_WARN("Failed to end CUDA graph capture after error: ",
-                                       end_error.what());
-                        }
-                    }
-                    reset_cuda_graph_capture();
-                    throw;
-                }
-            }
-            cuda_graph_captured_ = true;
-
-            return captured_output.clone();
-        }
-
-        torch::Tensor execute_plan_eager(torch::Tensor tensor,
-                                         std::vector<torch::Tensor>& activations,
-                                         std::vector<std::vector<torch::Tensor>>& join_workspace,
-                                         bool preserve_workspace_for_graph)
-        {
 
             auto apply_calibrations = [&](torch::Tensor value) {
                 for (const auto& calibration : calibration_methods_) {
@@ -1755,14 +1592,13 @@ namespace Thot {
                 }
                 return apply_calibrations(std::move(tensor));
             }
+
+            ensure_execution_workspace();
+
             constexpr std::size_t kInputNodeIndex = 0;
 
-            if (activations.size() <= kInputNodeIndex) {
-                activations.resize(kInputNodeIndex + 1);
-            }
 
-
-            activations[kInputNodeIndex] = std::move(tensor);
+            node_activations_[kInputNodeIndex] = std::move(tensor);
 
             for (const auto& step : compiled_steps_) {
                 const auto node_index = step.node_index;
@@ -1783,10 +1619,10 @@ namespace Thot {
                             throw std::runtime_error("Module node is missing its dependency in the compiled graph.");
                         }
                         const auto upstream_index = step.dependencies.front();
-                        if (upstream_index >= activations.size()) {
+                        if (upstream_index >= node_activations_.size()) {
                             throw std::runtime_error("Module dependency index is invalid.");
                         }
-                        auto input_tensor = activations[upstream_index];
+                        auto input_tensor = node_activations_[upstream_index];
                         if (!input_tensor.defined()) {
                             throw std::runtime_error("Module dependency tensor is undefined during plan execution.");
                         }
@@ -1796,7 +1632,7 @@ namespace Thot {
                         }
                         auto output_tensor = layer->forward(input_tensor);
                         output_tensor = Activation::Details::apply(layer->activation, std::move(output_tensor));
-                        activations[node_index] = std::move(output_tensor);
+                        node_activations_[node_index] = std::move(output_tensor);
                         break;
                     }
                     case CompiledNode::Kind::Join: {
@@ -1804,14 +1640,14 @@ namespace Thot {
                             throw std::runtime_error("Join buffer cache is out of sync with compiled graph.");
                         }
                         auto& buffer = join_buffers_[node.index];
-                        auto& scratch = join_workspace[node.index];
+                        auto& scratch = join_workspace_[node.index];
                         scratch.clear();
                         scratch.reserve(buffer.producers.size());
                         for (auto producer : buffer.producers) {
-                            if (producer >= activations.size()) {
+                            if (producer >= node_activations_.size()) {
                                 throw std::runtime_error("Join producer index is invalid.");
                             }
-                            auto value = activations[producer];
+                            auto value = node_activations_[producer];
                             if (!value.defined()) {
                                 throw std::runtime_error("Join producer tensor is undefined during plan execution.");
                             }
@@ -1848,7 +1684,7 @@ namespace Thot {
                         }
 
                         scratch.clear();
-                        activations[node_index] = std::move(joined);
+                        node_activations_[node_index] = std::move(joined);
                         break;
                     }
                     case CompiledNode::Kind::Output: {
@@ -1856,10 +1692,10 @@ namespace Thot {
                             throw std::runtime_error("Output node has no dependencies in the compiled graph.");
                         }
                         const auto upstream_index = step.dependencies.front();
-                        if (upstream_index >= activations.size()) {
+                        if (upstream_index >= node_activations_.size()) {
                             throw std::runtime_error("Output dependency index is invalid.");
                         }
-                        activations[node_index] = activations[upstream_index];
+                        node_activations_[node_index] = node_activations_[upstream_index];
                         break;
                     }
                 }
@@ -1867,21 +1703,19 @@ namespace Thot {
 
             const auto output_index = compiled_output_node_index_.value_or(
                 compiled_steps_.empty() ? kInputNodeIndex : compiled_steps_.back().node_index);
-            if (output_index >= activations.size()) {
+            if (output_index >= node_activations_.size()) {
                 throw std::runtime_error("Compiled output index is invalid.");
             }
 
-            auto result = activations[output_index];
+            auto result = node_activations_[output_index];
             if (!result.defined()) {
                 throw std::runtime_error("Model::forward produced an undefined tensor at the output node.");
             }
 
-            if (!preserve_workspace_for_graph) {
-                for (auto& slot : activations) {
-                    slot = torch::Tensor{};
-                }
+            for (auto& slot : node_activations_) {
+                slot = torch::Tensor{};
             }
-            for (auto& scratch : join_workspace) {
+            for (auto& scratch : join_workspace_) {
                 scratch.clear();
             }
 
@@ -2197,24 +2031,10 @@ namespace Thot {
             if (!loss_descriptor_.has_value()) {
                 throw std::logic_error("Loss function has not been configured.");
             }
-            torch::Tensor adjusted_target = target;
-            if (prediction.defined() && adjusted_target.defined()
-                && adjusted_target.device() != prediction.device()) {
-                adjusted_target = adjusted_target.to(prediction.device(), adjusted_target.scalar_type());
-                }
-
-            std::optional<torch::Tensor> adjusted_weight = weight;
-            if (prediction.defined() && adjusted_weight.has_value() && adjusted_weight->defined()) {
-                const auto& weight_tensor = *adjusted_weight;
-                if (weight_tensor.device() != prediction.device()
-                    || weight_tensor.scalar_type() != prediction.scalar_type()) {
-                    adjusted_weight = weight_tensor.to(prediction.device(), prediction.scalar_type());
-                    }
-            }
             return std::visit(
-                [&](const auto& descriptor) {
-                    return Loss::Details::compute(descriptor, prediction, adjusted_target, adjusted_weight);
-                }, *loss_descriptor_);
+                            [&](const auto& descriptor) {
+                                return Loss::Details::compute(descriptor, prediction, target, weight);
+                            }, *loss_descriptor_);
         }
 
         auto evaluate(torch::Tensor evaluation_inputs, torch::Tensor evaluation_targets, Evaluation::ClassificationDescriptor descriptor, std::vector<Metric::Classification::Descriptor> metrics, Evaluation::Options options = {}) -> Evaluation::ClassificationReport {
@@ -2445,7 +2265,6 @@ namespace Thot {
             node_activations_.clear();
             join_workspace_.clear();
             cached_layer_pointers_.clear();
-            reset_cuda_graph_capture();
         }
 
         void ensure_execution_workspace()
@@ -2479,98 +2298,6 @@ namespace Thot {
 
             execution_workspace_dirty_ = false;
         }
-
-        void prepare_cuda_graph_workspace()
-        {
-            if (cuda_graph_node_activations_.size() != compiled_nodes_.size()) {
-                cuda_graph_node_activations_.assign(compiled_nodes_.size(), torch::Tensor{});
-            } else {
-                for (auto& slot : cuda_graph_node_activations_) {
-                    slot = torch::Tensor{};
-                }
-            }
-
-            if (cuda_graph_join_workspace_.size() != join_buffers_.size()) {
-                cuda_graph_join_workspace_.resize(join_buffers_.size());
-            }
-
-            for (std::size_t index = 0; index < cuda_graph_join_workspace_.size(); ++index) {
-                auto& scratch = cuda_graph_join_workspace_[index];
-                scratch.clear();
-                if (index < join_buffers_.size()) {
-                    scratch.reserve(join_buffers_[index].producers.size());
-                }
-            }
-        }
-
-        void reset_cuda_graph_capture() noexcept
-        {
-            cuda_graph_captured_ = false;
-            cuda_graph_.reset();
-            cuda_graph_static_input_ = torch::Tensor{};
-            cuda_graph_static_output_ = torch::Tensor{};
-            cuda_graph_node_activations_.clear();
-            cuda_graph_join_workspace_.clear();
-            cuda_graph_input_shape_.reset();
-            cuda_graph_input_dtype_.reset();
-            cuda_graph_capture_stream_.reset();
-        }
-
-        template <class Fn, class Recovery>
-        auto with_cuda_failover(std::string_view context, Fn&& fn, Recovery&& recovery)
-            -> decltype(std::forward<Fn>(fn)())
-        {
-            bool retried = false;
-            while (true) {
-                try {
-                    return std::forward<Fn>(fn)();
-                } catch (const c10::Error& error) {
-                    if (retried || !should_retry_on_cuda_failure(error)) {
-                        throw;
-                    }
-                    TORCH_WARN("Encountered CUDA failure during ", context, ": ", error.what(),
-                               ". Falling back to CPU execution.");
-                    reset_cuda_graph_capture();
-                    to_device(false);
-                    invalidate_execution_workspace();
-                    std::forward<Recovery>(recovery)(error);
-                    retried = true;
-                }
-            }
-        }
-
-        [[nodiscard]] bool should_retry_on_cuda_failure(const c10::Error& error) const
-        {
-            if (!device_.is_cuda()) {
-                return false;
-            }
-
-            const std::string message = error.what();
-            std::string normalized;
-            normalized.reserve(message.size());
-            std::transform(message.begin(), message.end(), std::back_inserter(normalized),
-                           [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
-
-            static constexpr std::array<std::string_view, 8> triggers = {
-                "cudnn_status_internal_error",
-                "device_allocation_failed",
-                "cudnn_status_alloc_failed",
-                "cuda error: out of memory",
-                "cuda runtime error",
-                "no cuda gpus are available",
-                "cuda error stream capture invalidated",
-                "operation failed due to a previous error during capture"
-            };
-
-            for (auto trigger : triggers) {
-                if (normalized.find(trigger) != std::string::npos) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
 
         static std::vector<torch::Tensor> collect_layer_parameters(const Layer::Details::RegisteredLayer& layer)
         {
@@ -2777,21 +2504,6 @@ namespace Thot {
                 torch::Tensor targets;
             };
 
-            [[nodiscard]] static bool requires_retain_graph_retry(const c10::Error& error)
-            {
-                std::string message{error.what()};
-                std::string normalised;
-                normalised.reserve(message.size());
-
-                for (char ch : message) {
-                    normalised.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
-                }
-
-                constexpr std::string_view kTrigger{
-                    "trying to backward through the graph a second time"};
-                return normalised.find(kTrigger) != std::string::npos;
-            }
-
             [[nodiscard]] static TensorDataset prepare_tensor_dataset(torch::Tensor inputs,
                                                                       torch::Tensor targets)
             {
@@ -2842,7 +2554,7 @@ namespace Thot {
                                    const std::optional<TensorDataset>& test_dataset,
                                    const TrainOptions& options)
             {
-                const auto& device = model.device();
+                const auto device = model.device();
                 const auto total_samples = train_dataset.inputs.size(0);
                 const auto batch_size = static_cast<std::int64_t>(options.batch_size);
 
@@ -2857,7 +2569,6 @@ namespace Thot {
                 std::size_t step_index = 0;
 
                 const bool regularization_active = model.has_regularization();
-                bool retain_graph_required = false;
 
                 for (std::size_t epoch = 0; epoch < options.epoch; ++epoch) {
                     const auto epoch_start = std::chrono::steady_clock::now();
@@ -2912,99 +2623,59 @@ namespace Thot {
                     };
 
                     auto process_batch = [&](torch::Tensor batch_inputs, torch::Tensor batch_targets) {
-                        auto run_training_step = [&](bool retain_graph) -> std::int64_t {
-                            if (!batch_inputs.defined() || !batch_targets.defined()) {
-                                return std::int64_t{0};
+                        if (!batch_inputs.defined() || !batch_targets.defined()) {
+                            return std::int64_t{0};
+                        }
+
+                        const auto current_batch = batch_targets.size(0);
+                        if (current_batch <= 0) {
+                            return std::int64_t{0};
+                        }
+
+                        model.zero_grad();
+                        auto prediction = model.forward(batch_inputs);
+
+                        if (!prediction.sizes().equals(batch_targets.sizes())) {
+                            if (batch_targets.numel() == prediction.numel()) {
+                                batch_targets = batch_targets.reshape_as(prediction);
                             }
+                        }
 
-                            const auto current_batch = batch_targets.size(0);
-                            if (current_batch <= 0) {
-                                return std::int64_t{0};
-                            }
-
-                            if (accumulation.defined() && accumulation.device() != model.device()) {
-                                accumulation = accumulation.to(model.device());
-                            }
-
-
-                            model.zero_grad();
-                            auto prediction = model.forward(batch_inputs);
-
-                            if (!prediction.sizes().equals(batch_targets.sizes())) {
-                                if (batch_targets.numel() == prediction.numel()) {
-                                    batch_targets = batch_targets.reshape_as(prediction);
+                        auto loss = model.compute_loss(prediction, batch_targets);
+                        if (loss.dim() != 0) {
+                            loss = loss.mean();
+                        }
+                        if (regularization_active) {
+                            auto regularization_penalty = model.compute_regularization_penalty();
+                            if (regularization_penalty.defined()) {
+                                if (regularization_penalty.device() != loss.device()) {
+                                    regularization_penalty = regularization_penalty.to(loss.device());
                                 }
-                            }
-
-                            auto loss = model.compute_loss(prediction, batch_targets);
-                            if (loss.dim() != 0) {
-                                loss = loss.mean();
-                            }
-                            if (regularization_active) {
-                                auto regularization_penalty = model.compute_regularization_penalty();
-                                if (regularization_penalty.defined()) {
-                                    if (regularization_penalty.device() != loss.device()) {
-                                        regularization_penalty = regularization_penalty.to(loss.device());
-                                    }
-                                    if (regularization_penalty.scalar_type() != loss.scalar_type()) {
-                                        regularization_penalty = regularization_penalty.to(loss.scalar_type());
-                                    }
-                                    loss = loss + regularization_penalty;
+                                if (regularization_penalty.scalar_type() != loss.scalar_type()) {
+                                    regularization_penalty = regularization_penalty.to(loss.scalar_type());
                                 }
+                                loss = loss + regularization_penalty;
                             }
-                            loss.backward({}, retain_graph);
-                            model.step();
+                        }
+
+                        loss.backward();
+                        model.step();
 
 
-                            if (regularization_active) {
-                                model.update_regularization_states(step_index, true);
-                            }
-                            ++step_index;
+                        if (regularization_active) {
+                            model.update_regularization_states(step_index, true);
+                        }
+                        ++step_index;
 
-                            auto loss_tensor = loss.detach();
-                            if (loss_tensor.device() != accumulation.device()) {
-                                loss_tensor = loss_tensor.to(accumulation.device());
-                            }
-                            loss_tensor = loss_tensor.to(torch::kFloat64);
-                            loss_tensor.mul_(static_cast<double>(current_batch));
-                            accumulation.add_(loss_tensor);
-                            return current_batch;
-                        };
 
-                        auto execute_training = [&]() -> std::int64_t {
-                            while (true) {
-                                const bool use_retain_graph = retain_graph_required;
-                                try {
-                                    return run_training_step(use_retain_graph);
-                                } catch (const c10::Error& error) {
-                                    if (!requires_retain_graph_retry(error) || use_retain_graph) {
-                                        throw;
-                                    }
-                                    retain_graph_required = true;
-                                    model.zero_grad(true);
-                                }
-                            }
-                        };
-
-                        return model.with_cuda_failover(
-                            "training step",
-                            [&]() -> std::int64_t {
-                                return execute_training();
-                            },
-                            [&](const c10::Error&) {
-                                if (batch_inputs.defined() && !batch_inputs.device().is_cpu()) {
-                                    batch_inputs = batch_inputs.to(torch::kCPU);
-                                }
-                                if (batch_targets.defined() && !batch_targets.device().is_cpu()) {
-                                    batch_targets = batch_targets.to(torch::kCPU);
-                                }
-                                if (accumulation.defined() && !accumulation.device().is_cpu()) {
-                                    accumulation = accumulation.to(torch::kCPU);
-                                }
-                                best_parameters.clear();
-                                best_buffers.clear();
-                                best_state_captured = false;
-                            });
+                        auto loss_tensor = loss.detach();
+                        if (loss_tensor.device() != accumulation.device()) {
+                            loss_tensor = loss_tensor.to(accumulation.device());
+                        }
+                        loss_tensor = loss_tensor.to(torch::kFloat64);
+                        loss_tensor.mul_(static_cast<double>(current_batch));
+                        accumulation.add_(loss_tensor);
+                        return current_batch;
                     };
 
                     if constexpr (BufferVRAM) {
@@ -3157,7 +2828,7 @@ namespace Thot {
                     return std::nullopt;
                 }
 
-                const auto& device = model.device();
+                const auto device = model.device();
                 const auto total_samples = dataset.inputs.size(0);
                 const auto local_batch = static_cast<std::int64_t>(batch_size);
                 const bool regularization_active = model.has_regularization();
@@ -3212,11 +2883,6 @@ namespace Thot {
                             loss = loss + regularization_penalty;
                         }
                     }
-
-                    if (accumulation.device() != model.device()) {
-                        accumulation = accumulation.to(model.device());
-                    }
-
 
                     auto loss_tensor = loss.detach();
                     if (loss_tensor.device() != accumulation.device()) {
@@ -3330,16 +2996,6 @@ namespace Thot {
         std::vector<Layer::Details::RegisteredLayer*> cached_layer_pointers_{};
         bool execution_workspace_dirty_{true};
         bool routing_active_{false};
-        bool cuda_graph_enabled_{false};
-        bool cuda_graph_captured_{false};
-        std::optional<at::cuda::CUDAGraph> cuda_graph_{};
-        std::optional<at::cuda::CUDAStream> cuda_graph_capture_stream_{};
-        torch::Tensor cuda_graph_static_input_{};
-        torch::Tensor cuda_graph_static_output_{};
-        std::vector<torch::Tensor> cuda_graph_node_activations_{};
-        std::vector<std::vector<torch::Tensor>> cuda_graph_join_workspace_{};
-        std::optional<std::vector<int64_t>> cuda_graph_input_shape_{};
-        std::optional<torch::ScalarType> cuda_graph_input_dtype_{};
         std::unique_ptr<torch::optim::Optimizer> optimizer_{};
         std::vector<std::unique_ptr<torch::optim::Optimizer>> local_optimizers_{};
         std::unique_ptr<LrScheduler::Details::Scheduler> scheduler_{};
@@ -3386,14 +3042,12 @@ namespace Thot {
             auto preserved_name = name_;
             auto preserved_device = device_;
             auto preserved_model_name = model_name_;
-            auto preserved_cuda_graph_enabled = cuda_graph_enabled_;
 
             this->~Model();
             new (this) Model(preserved_name);
 
             device_ = preserved_device;
             model_name_ = std::move(preserved_model_name);
-            cuda_graph_enabled_ = preserved_cuda_graph_enabled;
             module_name_index_.clear();
             clear_compiled_graph();
         }

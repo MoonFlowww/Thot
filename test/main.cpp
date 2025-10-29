@@ -132,7 +132,6 @@ int main() {
         model.add(Thot::Layer::FC({512, 256, true}, Thot::Activation::SiLU, Thot::Initialization::HeNormal), "FC1");
         model.add(Thot::Layer::HardDropout({.probability = 0.5}), "HDFin");
         model.add(Thot::Layer::FC({256, 10, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal), "FC2");
-        model.eval();
 
         model.links({
             Thot::LinkSpec{Thot::Port::parse("@input"), Thot::Port::parse("stem")},
@@ -150,7 +149,7 @@ int main() {
             Thot::LinkSpec{Thot::Port::parse("FC1"), Thot::Port::parse("HDFin")},
             Thot::LinkSpec{Thot::Port::parse("HDFin"), Thot::Port::parse("FC2")},
             Thot::LinkSpec{Thot::Port::parse("FC2"), Thot::Port::parse("@output")}
-        }, true);
+        });
 
 
 
