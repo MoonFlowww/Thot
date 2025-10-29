@@ -424,6 +424,7 @@ namespace Thot {
             std::size_t node_index{std::numeric_limits<std::size_t>::max()};
             MergePolicyKind policy{MergePolicyKind::Strict};
             std::vector<std::size_t> producers{};
+            std::optional<int64_t> concat_dimension{};
         };
 
 
@@ -697,6 +698,43 @@ namespace Thot {
             std::unordered_map<std::string, std::size_t> join_lookup{};
             std::unordered_map<std::size_t, std::size_t> join_buffer_lookup{};
 
+            auto parse_concat_dimension = [](const Port& port) -> std::optional<int64_t> {
+                if (port.attribute.empty()) {
+                    return std::nullopt;
+                }
+
+                std::string token;
+                token.reserve(port.attribute.size());
+                for (char ch : port.attribute) {
+                    if (!std::isspace(static_cast<unsigned char>(ch))) {
+                        token.push_back(ch);
+                    }
+                }
+
+                auto strip_prefix = [](std::string& value, std::string_view prefix) {
+                    if (value.rfind(prefix, 0) == 0) {
+                        value.erase(0, prefix.size());
+                    }
+                };
+
+                strip_prefix(token, "dim=");
+                strip_prefix(token, "axis=");
+
+                if (token.empty()) {
+                    throw std::invalid_argument(
+                        "Join port '" + port.describe() + "' specifies an empty concat dimension.");
+                }
+
+                try {
+                    return std::stoll(token);
+                } catch (const std::exception&) {
+                    throw std::invalid_argument(
+                        "Join port '" + port.describe() + "' specifies an invalid concat dimension '")
+                        + token + "'.");
+                }
+            };
+
+
             auto ensure_output_node = [&]() -> std::size_t {
                 if (output_node_index) {
                     return *output_node_index;
@@ -715,10 +753,22 @@ namespace Thot {
                 if (it != join_lookup.end()) {
                     const auto node_index = it->second;
                     const auto buffer_index = join_buffer_lookup.at(node_index);
-                    const auto& buffer = joins[buffer_index];
+                    auto& buffer = joins[buffer_index];
                     if (buffer.policy != port.merge_policy) {
                         throw std::invalid_argument("Join node '" + port.describe()
                                                      + "' requested with conflicting merge policies.");
+                    }
+                    if (buffer.policy == MergePolicyKind::Concat) {
+                        auto requested = parse_concat_dimension(port);
+                        if (requested) {
+                            if (buffer.concat_dimension && *requested != *buffer.concat_dimension) {
+                                throw std::invalid_argument("Join node '" + port.describe()
+                                                             + "' requested with conflicting concat dimensions.");
+                            }
+                            if (!buffer.concat_dimension) {
+                                buffer.concat_dimension = requested;
+                            }
+                        }
                     }
                     return node_index;
                 }
@@ -734,6 +784,9 @@ namespace Thot {
                 JoinBuffer buffer{};
                 buffer.node_index = node_index;
                 buffer.policy = port.merge_policy;
+                if (buffer.policy == MergePolicyKind::Concat) {
+                    buffer.concat_dimension = parse_concat_dimension(port);
+                }
                 join_buffer_lookup[node_index] = joins.size();
                 joins.push_back(std::move(buffer));
 
@@ -921,7 +974,9 @@ namespace Thot {
             compiled_steps_ = std::move(steps);
             join_buffers_ = std::move(joins);
             compiled_links_ = std::move(resolved_links);
+            compiled_output_node_index_ = output_node_index;
             routing_active_ = true;
+            invalidate_execution_workspace();
         }
 
         [[nodiscard]] bool has_compiled_routing() const noexcept { return routing_active_; }
@@ -1138,32 +1193,26 @@ namespace Thot {
 
         [[nodiscard]] torch::Tensor forward(torch::Tensor input, ForwardOptions options)
         {
-            auto apply_pipeline = [&](torch::Tensor tensor) {
-                if (tensor.device() != device_) {
-                    tensor = tensor.to(device_);
-                }
-                for (auto& layer : layers_) {
-                    tensor = layer.forward(std::move(tensor));
-                    tensor = Activation::Details::apply(layer.activation, std::move(tensor));
-                }
-                for (const auto& calibration : calibration_methods_) {
-                    tensor = calibration->transform(std::move(tensor));
-                }
-                return tensor;
+            auto execute = [&](torch::Tensor tensor) {
+                return execute_plan(std::move(tensor));
             };
+
+            if (input.defined() && input.device() != device_) {
+                input = input.to(device_);
+            }
 
             const bool can_buffer = options.buffering_enabled() && input.defined() && input.dim() > 0;
             if (!can_buffer) {
-                return apply_pipeline(std::move(input));
+                return execute(std::move(input));
             }
 
             const auto chunk_limit = static_cast<int64_t>(*options.max_chunk_size);
             if (chunk_limit <= 0) {
-                return apply_pipeline(std::move(input));
+                return execute(std::move(input));
             }
             const auto leading = input.size(0);
             if (leading == 0 || leading <= chunk_limit) {
-                return apply_pipeline(std::move(input));
+                return execute(std::move(input));
             }
             std::vector<torch::Tensor> outputs;
             outputs.reserve(static_cast<std::size_t>((leading + chunk_limit - 1) / chunk_limit));
@@ -1171,12 +1220,164 @@ namespace Thot {
             for (int64_t offset = 0; offset < leading; offset += chunk_limit) {
                 const auto current = std::min<int64_t>(chunk_limit, leading - offset);
                 auto chunk = input.narrow(0, offset, current);
-                chunk = apply_pipeline(std::move(chunk));
-                outputs.push_back(std::move(chunk));
+                outputs.push_back(execute(std::move(chunk)));
             }
 
             return torch::cat(outputs, 0);
         }
+
+        torch::Tensor execute_plan(torch::Tensor tensor)
+        {
+            if (tensor.defined() && tensor.device() != device_) {
+                tensor = tensor.to(device_);
+            }
+
+            auto apply_calibrations = [&](torch::Tensor value) {
+                for (const auto& calibration : calibration_methods_) {
+                    value = calibration->transform(std::move(value));
+                }
+                return value;
+            };
+
+            if (!has_compiled_routing() || compiled_nodes_.empty()) {
+                for (auto& layer : layers_) {
+                    tensor = layer.forward(std::move(tensor));
+                    tensor = Activation::Details::apply(layer.activation, std::move(tensor));
+                }
+                return apply_calibrations(std::move(tensor));
+            }
+
+            ensure_execution_workspace();
+
+            constexpr std::size_t kInputNodeIndex = 0;
+            if (node_activations_.size() <= kInputNodeIndex) {
+                throw std::runtime_error("Execution workspace is not aligned with compiled routing graph.");
+            }
+
+            node_activations_[kInputNodeIndex] = std::move(tensor);
+
+            for (const auto& step : compiled_steps_) {
+                const auto node_index = step.node_index;
+                if (node_index >= compiled_nodes_.size()) {
+                    throw std::runtime_error("Compiled step references an unknown node index.");
+                }
+
+                const auto& node = compiled_nodes_[node_index];
+                switch (node.kind) {
+                    case CompiledNode::Kind::Input: {
+                        break;
+                    }
+                    case CompiledNode::Kind::Module: {
+                        if (node.index >= cached_layer_pointers_.size()) {
+                            throw std::runtime_error("Module cache is out of sync with compiled graph.");
+                        }
+                        if (step.dependencies.empty()) {
+                            throw std::runtime_error("Module node is missing its dependency in the compiled graph.");
+                        }
+                        const auto upstream_index = step.dependencies.front();
+                        if (upstream_index >= node_activations_.size()) {
+                            throw std::runtime_error("Module dependency index is invalid.");
+                        }
+                        auto input_tensor = node_activations_[upstream_index];
+                        if (!input_tensor.defined()) {
+                            throw std::runtime_error("Module dependency tensor is undefined during plan execution.");
+                        }
+                        auto* layer = cached_layer_pointers_[node.index];
+                        if (!layer) {
+                            throw std::runtime_error("Cached layer pointer is null during plan execution.");
+                        }
+                        auto output_tensor = layer->forward(input_tensor);
+                        output_tensor = Activation::Details::apply(layer->activation, std::move(output_tensor));
+                        node_activations_[node_index] = std::move(output_tensor);
+                        break;
+                    }
+                    case CompiledNode::Kind::Join: {
+                        if (node.index >= join_buffers_.size()) {
+                            throw std::runtime_error("Join buffer cache is out of sync with compiled graph.");
+                        }
+                        auto& buffer = join_buffers_[node.index];
+                        auto& scratch = join_workspace_[node.index];
+                        scratch.clear();
+                        scratch.reserve(buffer.producers.size());
+                        for (auto producer : buffer.producers) {
+                            if (producer >= node_activations_.size()) {
+                                throw std::runtime_error("Join producer index is invalid.");
+                            }
+                            auto value = node_activations_[producer];
+                            if (!value.defined()) {
+                                throw std::runtime_error("Join producer tensor is undefined during plan execution.");
+                            }
+                            scratch.push_back(std::move(value));
+                        }
+
+                        torch::Tensor joined;
+                        switch (buffer.policy) {
+                            case MergePolicyKind::Strict: {
+                                if (scratch.size() != 1) {
+                                    throw std::runtime_error("Strict join expected exactly one producer.");
+                                }
+                                joined = scratch.front();
+                                break;
+                            }
+                            case MergePolicyKind::Broadcast: {
+                                if (scratch.empty()) {
+                                    throw std::runtime_error("Broadcast join has no producers.");
+                                }
+                                joined = scratch.front();
+                                for (std::size_t index = 1; index < scratch.size(); ++index) {
+                                    joined = joined + scratch[index];
+                                }
+                                break;
+                            }
+                            case MergePolicyKind::Concat: {
+                                if (scratch.empty()) {
+                                    throw std::runtime_error("Concat join has no producers.");
+                                }
+                                const auto dimension = buffer.concat_dimension.value_or(1);
+                                joined = torch::cat(scratch, dimension);
+                                break;
+                            }
+                        }
+
+                        scratch.clear();
+                        node_activations_[node_index] = std::move(joined);
+                        break;
+                    }
+                    case CompiledNode::Kind::Output: {
+                        if (step.dependencies.empty()) {
+                            throw std::runtime_error("Output node has no dependencies in the compiled graph.");
+                        }
+                        const auto upstream_index = step.dependencies.front();
+                        if (upstream_index >= node_activations_.size()) {
+                            throw std::runtime_error("Output dependency index is invalid.");
+                        }
+                        node_activations_[node_index] = node_activations_[upstream_index];
+                        break;
+                    }
+                }
+            }
+
+            const auto output_index = compiled_output_node_index_.value_or(
+                compiled_steps_.empty() ? kInputNodeIndex : compiled_steps_.back().node_index);
+            if (output_index >= node_activations_.size()) {
+                throw std::runtime_error("Compiled output index is invalid.");
+            }
+
+            auto result = node_activations_[output_index];
+            if (!result.defined()) {
+                throw std::runtime_error("Model::forward produced an undefined tensor at the output node.");
+            }
+
+            for (auto& slot : node_activations_) {
+                slot = {};
+            }
+            for (auto& scratch : join_workspace_) {
+                scratch.clear();
+            }
+
+            return apply_calibrations(std::move(result));
+        }
+
 
         void set_model_name(std::string name) { model_name_ = std::move(name); }
 
@@ -1701,6 +1902,8 @@ namespace Thot {
             compiled_steps_.clear();
             join_buffers_.clear();
             compiled_links_.clear();
+            compiled_output_node_index_.reset();
+            invalidate_execution_workspace();
         }
 
 
@@ -1709,6 +1912,47 @@ namespace Thot {
             layer_parameters_.push_back(collect_layer_parameters(layer));
             layer_regularization_bindings_.push_back(
                 bind_local_regularization(layer.local.regularization, layer_parameters_.back()));
+            invalidate_execution_workspace();
+        }
+
+        void invalidate_execution_workspace() noexcept
+        {
+            execution_workspace_dirty_ = true;
+            node_activations_.clear();
+            join_workspace_.clear();
+            cached_layer_pointers_.clear();
+        }
+
+        void ensure_execution_workspace()
+        {
+            if (execution_workspace_dirty_ || cached_layer_pointers_.size() != layers_.size()) {
+                cached_layer_pointers_.resize(layers_.size());
+                for (std::size_t index = 0; index < layers_.size(); ++index) {
+                    cached_layer_pointers_[index] = &layers_[index];
+                }
+            }
+
+            if (execution_workspace_dirty_ || node_activations_.size() != compiled_nodes_.size()) {
+                node_activations_.assign(compiled_nodes_.size(), torch::Tensor{});
+            } else {
+                for (auto& slot : node_activations_) {
+                    slot = {};
+                }
+            }
+
+            if (execution_workspace_dirty_ || join_workspace_.size() != join_buffers_.size()) {
+                join_workspace_.resize(join_buffers_.size());
+            }
+
+            for (std::size_t index = 0; index < join_workspace_.size(); ++index) {
+                auto& scratch = join_workspace_[index];
+                scratch.clear();
+                if (index < join_buffers_.size()) {
+                    scratch.reserve(join_buffers_[index].producers.size());
+                }
+            }
+
+            execution_workspace_dirty_ = false;
         }
 
         static std::vector<torch::Tensor> collect_layer_parameters(const Layer::Details::RegisteredLayer& layer)
@@ -2402,6 +2646,11 @@ namespace Thot {
         std::vector<CompiledStep> compiled_steps_{};
         std::vector<JoinBuffer> join_buffers_{};
         std::vector<LinkSpec> compiled_links_{};
+        std::optional<std::size_t> compiled_output_node_index_{};
+        std::vector<torch::Tensor> node_activations_{};
+        std::vector<std::vector<torch::Tensor>> join_workspace_{};
+        std::vector<Layer::Details::RegisteredLayer*> cached_layer_pointers_{};
+        bool execution_workspace_dirty_{true};
         bool routing_active_{false};
         std::unique_ptr<torch::optim::Optimizer> optimizer_{};
         std::vector<std::unique_ptr<torch::optim::Optimizer>> local_optimizers_{};

@@ -212,6 +212,20 @@ int main() {
         std::cerr << "Plotting failed: " << plotting_error.what() << std::endl;
     }
     model.save("/home/moonfloww/Projects/NNs/CIFAR_DEBUG");
+
+
+                            model.add(convStem, "stem");
+    model.add(resBlock, "res_branch"); model.add(flatten, "flatten");
+                            model.add(fc, "logits");
+
+    model.links({
+        LinkSpec{Port::parse("@input"), Port::parse("stem")},
+        LinkSpec{Port::parse("stem"), Port::parse("res_branch")},
+        LinkSpec{Port::parse("stem"), Port::parse("flatten")},
+        LinkSpec{Port::join({"res_branch", "flatten"}, MergePolicyKind::Concat, /*dim=*/1), Port::parse("logits")},
+        LinkSpec{Port::parse("logits"), Port::parse("@output")},
+    });
+
     return 0;
 }
 
