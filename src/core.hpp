@@ -51,7 +51,7 @@
 #include <torch/torch.h>
 #include <torch/cuda.h>
 #include <ATen/cuda/CUDAGraph.h>
-
+#include <c10/cuda/CUDAStream.h>
 
 #include "common/save_load.hpp"
 #include "utils/terminal.hpp"
@@ -1614,6 +1614,14 @@ namespace Thot {
                     && cuda_graph_static_output_.defined()) {
                     cuda_graph_static_input_.copy_(tensor);
                     cuda_graph_->replay();
+                    if (cuda_graph_capture_stream_) {
+                        at::cuda::CUDAStreamGuard guard(*cuda_graph_capture_stream_);
+                        cuda_graph_static_input_.copy_(tensor);
+                        cuda_graph_->replay();
+                    } else {
+                        cuda_graph_static_input_.copy_(tensor);
+                        cuda_graph_->replay();
+                    }
                     return cuda_graph_static_output_.clone();
                 }
 
@@ -1630,13 +1638,20 @@ namespace Thot {
 
             cuda_graph_.emplace();
             auto& graph = *cuda_graph_;
-            graph.capture_begin();
-            auto captured_output = execute_plan_eager(cuda_graph_static_input_,
-                                                      cuda_graph_node_activations_,
-                                                      cuda_graph_join_workspace_,
-                                                      /*preserve_workspace_for_graph=*/true);
-            cuda_graph_static_output_ = captured_output;
-            graph.capture_end();
+            auto capture_stream = at::cuda::getStreamFromPool(/*isHighPriority=*/false,
+                                                                          device_.index());
+            cuda_graph_capture_stream_ = capture_stream;
+            torch::Tensor captured_output;
+            {
+                at::cuda::CUDAStreamGuard guard(capture_stream);
+                graph.capture_begin();
+                captured_output = execute_plan_eager(cuda_graph_static_input_,
+                                                     cuda_graph_node_activations_,
+                                                     cuda_graph_join_workspace_,
+                                                     /*preserve_workspace_for_graph=*/true);
+                cuda_graph_static_output_ = captured_output;
+                graph.capture_end();
+            }
             cuda_graph_captured_ = true;
 
             return captured_output.clone();
@@ -2406,6 +2421,7 @@ namespace Thot {
             cuda_graph_join_workspace_.clear();
             cuda_graph_input_shape_.reset();
             cuda_graph_input_dtype_.reset();
+            cuda_graph_capture_stream_.reset();
         }
 
         static std::vector<torch::Tensor> collect_layer_parameters(const Layer::Details::RegisteredLayer& layer)
@@ -3108,6 +3124,7 @@ namespace Thot {
         bool cuda_graph_enabled_{false};
         bool cuda_graph_captured_{false};
         std::optional<at::cuda::CUDAGraph> cuda_graph_{};
+        std::optional<at::cuda::CUDAStream> cuda_graph_capture_stream_{};
         torch::Tensor cuda_graph_static_input_{};
         torch::Tensor cuda_graph_static_output_{};
         std::vector<torch::Tensor> cuda_graph_node_activations_{};
