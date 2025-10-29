@@ -1367,7 +1367,7 @@ namespace Thot {
             }
 
             for (auto& slot : node_activations_) {
-                slot = {};
+                slot = torch::Tensor{};
             }
             for (auto& scratch : join_workspace_) {
                 scratch.clear();
@@ -1934,7 +1934,7 @@ namespace Thot {
                 node_activations_.assign(compiled_nodes_.size(), torch::Tensor{});
             } else {
                 for (auto& slot : node_activations_) {
-                    slot = {};
+                    slot = torch::Tensor{};
                 }
             }
 

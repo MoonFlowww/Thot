@@ -131,8 +131,8 @@ int main() {
 
             Thot::LinkSpec{Thot::Port::parse("S2"), Thot::Port::parse("flat")},
             Thot::LinkSpec{Thot::Port::parse("flat"), Thot::Port::parse("FC1")},
-            Thot::LinkSpec{Thot::Port::parse("FC1"), Thot::Port::parse("HD")},
-            Thot::LinkSpec{Thot::Port::parse("HD"), Thot::Port::parse("FC2")},
+            Thot::LinkSpec{Thot::Port::parse("FC1"), Thot::Port::parse("HDFin")},
+            Thot::LinkSpec{Thot::Port::parse("HDFin"), Thot::Port::parse("FC2")},
 
             Thot::LinkSpec{Thot::Port::parse("FC2"), Thot::Port::parse("@output")}
         });
