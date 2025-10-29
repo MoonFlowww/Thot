@@ -1678,6 +1678,22 @@ namespace Thot {
                 c10::cuda::CUDAStreamGuard guard(capture_stream);
                 bool capture_began = false;
                 try {
+                    // Many CUDA kernels lazily instantiate state such as cuDNN handles when
+                    // executed for the first time on a stream. These allocations are not graph
+                    // capture-safe and will invalidate the capture if they occur inside
+                    // `capture_begin`/`capture_end`. Run a warm-up pass on the capture stream so
+                    // that all lazy initialization happens outside of the capture window.
+                    execute_plan_eager(cuda_graph_static_input_,
+                                       cuda_graph_node_activations_,
+                                       cuda_graph_join_workspace_,
+                                       /*preserve_workspace_for_graph=*/true);
+
+                    // The warm-up pass can populate the CUDA graph workspaces and may mutate the
+                    // static input when layers perform in-place operations. Refresh the static
+                    // buffers to ensure the subsequent capture observes the original inputs and an
+                    // empty workspace state.
+                    cuda_graph_static_input_.copy_(tensor);
+                    prepare_cuda_graph_workspace();
                     graph.capture_begin();
                     capture_began = true;
                     captured_output = execute_plan_eager(cuda_graph_static_input_,
