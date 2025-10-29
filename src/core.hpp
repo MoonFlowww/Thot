@@ -46,7 +46,7 @@
 #include <limits>
 #include <cctype>
 #include <iterator>
-
+#include <array>
 
 #include <torch/torch.h>
 #include <torch/cuda.h>
@@ -1563,37 +1563,53 @@ namespace Thot {
 
         [[nodiscard]] torch::Tensor forward(torch::Tensor input, ForwardOptions options)
         {
-            auto execute = [&](torch::Tensor tensor, bool chunking_active) {
+            torch::Tensor original_input = input;
+            torch::Tensor working_input = std::move(input);
+
+            auto execute_forward = [&](torch::Tensor tensor, bool chunking_active) {
                 return execute_plan(std::move(tensor), chunking_active);
             };
 
-            if (input.defined() && input.device() != device_) {
-                input = input.to(device_);
-            }
+            auto perform_forward = [&]() -> torch::Tensor {
+                auto tensor = working_input;
+                if (tensor.defined() && tensor.device() != device_) {
+                    tensor = tensor.to(device_);
+                }
 
-            const bool can_buffer = options.buffering_enabled() && input.defined() && input.dim() > 0;
-            if (!can_buffer) {
-                return execute(std::move(input), /*chunking_active=*/false);
-            }
+                const bool can_buffer = options.buffering_enabled() && tensor.defined() && tensor.dim() > 0;
+                if (!can_buffer) {
+                    return execute_forward(std::move(tensor), /*chunking_active=*/false);
+                }
 
-            const auto chunk_limit = static_cast<int64_t>(*options.max_chunk_size);
-            if (chunk_limit <= 0) {
-                return execute(std::move(input), /*chunking_active=*/false);
-            }
-            const auto leading = input.size(0);
-            if (leading == 0 || leading <= chunk_limit) {
-                return execute(std::move(input), /*chunking_active=*/false);
-            }
-            std::vector<torch::Tensor> outputs;
-            outputs.reserve(static_cast<std::size_t>((leading + chunk_limit - 1) / chunk_limit));
+                const auto chunk_limit = static_cast<int64_t>(*options.max_chunk_size);
+                if (chunk_limit <= 0) {
+                    return execute_forward(std::move(tensor), /*chunking_active=*/false);
+                }
+                const auto leading = tensor.size(0);
+                if (leading == 0 || leading <= chunk_limit) {
+                    return execute_forward(std::move(tensor), /*chunking_active=*/false);
+                }
+                std::vector<torch::Tensor> outputs;
+                outputs.reserve(static_cast<std::size_t>((leading + chunk_limit - 1) / chunk_limit));
 
-            for (int64_t offset = 0; offset < leading; offset += chunk_limit) {
-                const auto current = std::min<int64_t>(chunk_limit, leading - offset);
-                auto chunk = input.narrow(0, offset, current);
-                outputs.push_back(execute(std::move(chunk), /*chunking_active=*/true));
-            }
+                for (int64_t offset = 0; offset < leading; offset += chunk_limit) {
+                    const auto current = std::min<int64_t>(chunk_limit, leading - offset);
+                    auto chunk = tensor.narrow(0, offset, current);
+                    outputs.push_back(execute_forward(std::move(chunk), /*chunking_active=*/true));
+                }
 
-            return torch::cat(outputs, 0);
+                return torch::cat(outputs, 0);
+            };
+
+            return with_cuda_failover(
+                "forward pass",
+                [&]() { return perform_forward(); },
+                [&](const c10::Error&) {
+                    working_input = original_input;
+                    if (working_input.defined() && !working_input.device().is_cpu()) {
+                        working_input = working_input.to(torch::kCPU);
+                    }
+                });
         }
 
         torch::Tensor execute_plan(torch::Tensor tensor, bool chunking_active = false)
@@ -2440,6 +2456,58 @@ namespace Thot {
             cuda_graph_capture_stream_.reset();
         }
 
+        template <class Fn, class Recovery>
+decltype(auto) with_cuda_failover(std::string_view context, Fn&& fn, Recovery&& recovery)
+        {
+            bool retried = false;
+            while (true) {
+                try {
+                    return fn();
+                } catch (const c10::Error& error) {
+                    if (retried || !should_retry_on_cuda_failure(error)) {
+                        throw;
+                    }
+                    TORCH_WARN("Encountered CUDA failure during ", context, ": ", error.what(),
+                               ". Falling back to CPU execution.");
+                    to_device(false);
+                    invalidate_execution_workspace();
+                    recovery(error);
+                    retried = true;
+                }
+            }
+        }
+
+        [[nodiscard]] bool should_retry_on_cuda_failure(const c10::Error& error) const
+        {
+            if (!device_.is_cuda()) {
+                return false;
+            }
+
+            const std::string message = error.what();
+            std::string normalized;
+            normalized.reserve(message.size());
+            std::transform(message.begin(), message.end(), std::back_inserter(normalized),
+                           [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+
+            static constexpr std::array<std::string_view, 6> triggers = {
+                "cudnn_status_internal_error",
+                "device_allocation_failed",
+                "cudnn_status_alloc_failed",
+                "cuda error: out of memory",
+                "cuda runtime error",
+                "no cuda gpus are available"
+            };
+
+            for (auto trigger : triggers) {
+                if (normalized.find(trigger) != std::string::npos) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+
         static std::vector<torch::Tensor> collect_layer_parameters(const Layer::Details::RegisteredLayer& layer)
         {
             std::vector<torch::Tensor> parameters;
@@ -2695,7 +2763,7 @@ namespace Thot {
                                    const std::optional<TensorDataset>& test_dataset,
                                    const TrainOptions& options)
             {
-                const auto device = model.device();
+                const auto& device = model.device();
                 const auto total_samples = train_dataset.inputs.size(0);
                 const auto batch_size = static_cast<std::int64_t>(options.batch_size);
 
@@ -2764,59 +2832,77 @@ namespace Thot {
                     };
 
                     auto process_batch = [&](torch::Tensor batch_inputs, torch::Tensor batch_targets) {
-                        if (!batch_inputs.defined() || !batch_targets.defined()) {
-                            return std::int64_t{0};
-                        }
-
-                        const auto current_batch = batch_targets.size(0);
-                        if (current_batch <= 0) {
-                            return std::int64_t{0};
-                        }
-
-                        model.zero_grad();
-                        auto prediction = model.forward(batch_inputs);
-
-                        if (!prediction.sizes().equals(batch_targets.sizes())) {
-                            if (batch_targets.numel() == prediction.numel()) {
-                                batch_targets = batch_targets.reshape_as(prediction);
-                            }
-                        }
-
-                        auto loss = model.compute_loss(prediction, batch_targets);
-                        if (loss.dim() != 0) {
-                            loss = loss.mean();
-                        }
-                        if (regularization_active) {
-                            auto regularization_penalty = model.compute_regularization_penalty();
-                            if (regularization_penalty.defined()) {
-                                if (regularization_penalty.device() != loss.device()) {
-                                    regularization_penalty = regularization_penalty.to(loss.device());
+                        return model.with_cuda_failover(
+                            "training step",
+                            [&]() -> std::int64_t {
+                                if (!batch_inputs.defined() || !batch_targets.defined()) {
+                                    return std::int64_t{0};
                                 }
-                                if (regularization_penalty.scalar_type() != loss.scalar_type()) {
-                                    regularization_penalty = regularization_penalty.to(loss.scalar_type());
+                                const auto current_batch = batch_targets.size(0);
+                                 if (current_batch <= 0) {
+                                     return std::int64_t{0};
+                                 }
+
+                                if (accumulation.defined() && accumulation.device() != model.device()) {
+                                    accumulation = accumulation.to(model.device());
                                 }
-                                loss = loss + regularization_penalty;
-                            }
-                        }
 
-                        loss.backward();
-                        model.step();
+                                model.zero_grad();
+                                auto prediction = model.forward(batch_inputs);
+
+                                if (!prediction.sizes().equals(batch_targets.sizes())) {
+                                    if (batch_targets.numel() == prediction.numel()) {
+                                        batch_targets = batch_targets.reshape_as(prediction);
+                                    }
+                                }
+                                auto loss = model.compute_loss(prediction, batch_targets);
+                                if (loss.dim() != 0) {
+                                    loss = loss.mean();
+                                }
+                                if (regularization_active) {
+                                    auto regularization_penalty = model.compute_regularization_penalty();
+                                    if (regularization_penalty.defined()) {
+                                        if (regularization_penalty.device() != loss.device()) {
+                                            regularization_penalty = regularization_penalty.to(loss.device());
+                                        }
+                                        if (regularization_penalty.scalar_type() != loss.scalar_type()) {
+                                            regularization_penalty = regularization_penalty.to(loss.scalar_type());
+                                        }
+                                        loss = loss + regularization_penalty;
+                                    }
+                                }
+                                loss.backward();
+                                model.step();
 
 
-                        if (regularization_active) {
-                            model.update_regularization_states(step_index, true);
-                        }
-                        ++step_index;
+                                if (regularization_active) {
+                                    model.update_regularization_states(step_index, true);
+                                }
+                                ++step_index;
 
-
-                        auto loss_tensor = loss.detach();
-                        if (loss_tensor.device() != accumulation.device()) {
-                            loss_tensor = loss_tensor.to(accumulation.device());
-                        }
-                        loss_tensor = loss_tensor.to(torch::kFloat64);
-                        loss_tensor.mul_(static_cast<double>(current_batch));
-                        accumulation.add_(loss_tensor);
-                        return current_batch;
+                                auto loss_tensor = loss.detach();
+                                if (loss_tensor.device() != accumulation.device()) {
+                                    loss_tensor = loss_tensor.to(accumulation.device());
+                                }
+                                loss_tensor = loss_tensor.to(torch::kFloat64);
+                                loss_tensor.mul_(static_cast<double>(current_batch));
+                                accumulation.add_(loss_tensor);
+                                return current_batch;
+                            },
+                            [&](const c10::Error&) {
+                                if (batch_inputs.defined() && !batch_inputs.device().is_cpu()) {
+                                    batch_inputs = batch_inputs.to(torch::kCPU);
+                                }
+                                if (batch_targets.defined() && !batch_targets.device().is_cpu()) {
+                                    batch_targets = batch_targets.to(torch::kCPU);
+                                }
+                                if (accumulation.defined() && !accumulation.device().is_cpu()) {
+                                    accumulation = accumulation.to(torch::kCPU);
+                                }
+                                best_parameters.clear();
+                                best_buffers.clear();
+                                best_state_captured = false;
+                            });
                     };
 
                     if constexpr (BufferVRAM) {
@@ -2969,7 +3055,7 @@ namespace Thot {
                     return std::nullopt;
                 }
 
-                const auto device = model.device();
+                const auto& device = model.device();
                 const auto total_samples = dataset.inputs.size(0);
                 const auto local_batch = static_cast<std::int64_t>(batch_size);
                 const bool regularization_active = model.has_regularization();
@@ -3024,6 +3110,11 @@ namespace Thot {
                             loss = loss + regularization_penalty;
                         }
                     }
+
+                    if (accumulation.device() != model.device()) {
+                        accumulation = accumulation.to(model.device());
+                    }
+
 
                     auto loss_tensor = loss.detach();
                     if (loss_tensor.device() != accumulation.device()) {
