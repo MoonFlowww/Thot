@@ -3107,7 +3107,7 @@ namespace Thot {
         bool routing_active_{false};
         bool cuda_graph_enabled_{false};
         bool cuda_graph_captured_{false};
-        std::optional<torch::cuda::CUDAGraph> cuda_graph_{};
+        std::optional<at::cuda::CUDAGraph> cuda_graph_{};
         torch::Tensor cuda_graph_static_input_{};
         torch::Tensor cuda_graph_static_output_{};
         std::vector<torch::Tensor> cuda_graph_node_activations_{};
