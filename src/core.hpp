@@ -47,6 +47,8 @@
 #include <cctype>
 #include <iterator>
 #include <array>
+#include <atomic>
+
 
 #include <torch/torch.h>
 #include <torch/cuda.h>
@@ -804,7 +806,8 @@ namespace Thot {
         // routing into a CUDA graph the first time `forward` observes static CUDA
         // shapes. The capture requires CUDA execution and static tensor metadata; the
         // runtime automatically falls back to the eager path for CPU execution,
-        // forward chunking and dynamic shapes.
+        // forward chunking, dynamic shapes and every training invocation. CUDA graph
+        // acceleration is therefore intended for inference workloads only.
         void links(std::vector<LinkSpec> specifications, bool enable_cuda_graph = false)
         {
             cuda_graph_enabled_ = enable_cuda_graph;
@@ -1630,10 +1633,21 @@ namespace Thot {
                 return execute_eager(std::move(tensor));
             }
 
+            const bool autograd_active = torch::GradMode::is_enabled()
+                             || (tensor.defined() && tensor.requires_grad());
+
             const bool wants_cuda_graph = cuda_graph_enabled_ && !chunking_active;
             const bool routing_ready = has_compiled_routing() && !compiled_nodes_.empty();
 
-            if (!wants_cuda_graph || !routing_ready || !device_.is_cuda()) {
+            if (autograd_active && wants_cuda_graph) {
+                static std::atomic<bool> warned{false};
+                bool expected = false;
+                if (warned.compare_exchange_strong(expected, true)) {
+                    TORCH_WARN("CUDA graph acceleration is inference-only; falling back to eager execution because autograd is enabled.");
+                }
+            }
+
+            if (autograd_active || !wants_cuda_graph || !routing_ready || !device_.is_cuda()) {
                 return execute_eager(std::move(tensor));
             }
 
