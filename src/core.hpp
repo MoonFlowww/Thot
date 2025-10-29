@@ -1676,13 +1676,29 @@ namespace Thot {
             torch::Tensor captured_output;
             {
                 c10::cuda::CUDAStreamGuard guard(capture_stream);
-                graph.capture_begin();
-                captured_output = execute_plan_eager(cuda_graph_static_input_,
-                                                     cuda_graph_node_activations_,
-                                                     cuda_graph_join_workspace_,
-                                                     /*preserve_workspace_for_graph=*/true);
-                cuda_graph_static_output_ = captured_output;
-                graph.capture_end();
+                bool capture_began = false;
+                try {
+                    graph.capture_begin();
+                    capture_began = true;
+                    captured_output = execute_plan_eager(cuda_graph_static_input_,
+                                                         cuda_graph_node_activations_,
+                                                         cuda_graph_join_workspace_,
+                                                         /*preserve_workspace_for_graph=*/true);
+                    cuda_graph_static_output_ = captured_output;
+                    graph.capture_end();
+                    capture_began = false;
+                } catch (...) {
+                    if (capture_began) {
+                        try {
+                            graph.capture_end();
+                        } catch (const c10::Error& end_error) {
+                            TORCH_WARN("Failed to end CUDA graph capture after error: ",
+                                       end_error.what());
+                        }
+                    }
+                    reset_cuda_graph_capture();
+                    throw;
+                }
             }
             cuda_graph_captured_ = true;
 
@@ -2470,6 +2486,7 @@ namespace Thot {
                     }
                     TORCH_WARN("Encountered CUDA failure during ", context, ": ", error.what(),
                                ". Falling back to CPU execution.");
+                    reset_cuda_graph_capture();
                     to_device(false);
                     invalidate_execution_workspace();
                     std::forward<Recovery>(recovery)(error);
