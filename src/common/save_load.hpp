@@ -1022,14 +1022,8 @@ namespace Thot::Common::SaveLoad {
                     tree.put("type", "centering_variance");
                     tree.put("options.coefficient", options.coefficient);
                     tree.put("options.target_std", options.target_std);
-                } else if constexpr (std::is_same_v<DescriptorType, Regularization::TotalVariationDescriptor>) {
-                    tree.put("type", "total_variation");
-                    tree.put("options.coefficient", options.coefficient);
                 } else if constexpr (std::is_same_v<DescriptorType, Regularization::JacobianNormDescriptor>) {
                     tree.put("type", "jacobian_norm");
-                    tree.put("options.coefficient", options.coefficient);
-                } else if constexpr (std::is_same_v<DescriptorType, Regularization::InputGradientPenaltyDescriptor>) {
-                    tree.put("type", "input_gradient_penalty");
                     tree.put("options.coefficient", options.coefficient);
                 } else if constexpr (std::is_same_v<DescriptorType, Regularization::WGANGPDescriptor>) {
                     tree.put("type", "wgan_gp");
@@ -1159,20 +1153,10 @@ namespace Thot::Common::SaveLoad {
             options.target_std = Detail::get_numeric<double>(tree, "options.target_std", context);
             return Regularization::Descriptor{Regularization::Details::CenteringVarianceDescriptor{options}};
         }
-        if (type == "total_variation") {
-            Regularization::Details::TotalVariationOptions options;
-            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
-            return Regularization::Descriptor{Regularization::Details::TotalVariationDescriptor{options}};
-        }
         if (type == "jacobian_norm") {
             Regularization::Details::JacobianNormOptions options;
             options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
             return Regularization::Descriptor{Regularization::Details::JacobianNormDescriptor{options}};
-        }
-        if (type == "input_gradient_penalty") {
-            Regularization::Details::InputGradientPenaltyOptions options;
-            options.coefficient = Detail::get_numeric<double>(tree, "options.coefficient", context);
-            return Regularization::Descriptor{Regularization::Details::InputGradientPenaltyDescriptor{options}};
         }
         if (type == "wgan_gp") {
             Regularization::Details::WGANGPOptions options;
