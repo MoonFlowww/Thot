@@ -10,7 +10,7 @@ namespace Thot::Initialization {
         KaimingNormal,
         KaimingUniform,
         ZeroBias,
-        Dirac,
+        Dirac, // https://arxiv.org/pdf/1706.00388
         Lyapunov,
     };
 
