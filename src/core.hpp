@@ -2907,9 +2907,11 @@ namespace Thot {
                             if (current_batch <= 0) {
                                 return std::int64_t{0};
                             }
+
                             if (accumulation.defined() && accumulation.device() != model.device()) {
                                 accumulation = accumulation.to(model.device());
                             }
+
 
                             model.zero_grad();
                             auto prediction = model.forward(batch_inputs);
@@ -2935,44 +2937,47 @@ namespace Thot {
                                     }
                                     loss = loss + regularization_penalty;
                                 }
+                            }
+                            loss.backward({}, retain_graph);
+                            model.step();
 
-                                loss.backward({}, retain_graph);
-                                model.step();
-                                if (regularization_active) {
-                                    model.update_regularization_states(step_index, true);
-                                }
-                                ++step_index;
 
-                                auto loss_tensor = loss.detach();
-                                if (loss_tensor.device() != accumulation.device()) {
-                                    loss_tensor = loss_tensor.to(accumulation.device());
-                                }
-                                loss_tensor = loss_tensor.to(torch::kFloat64);
-                                loss_tensor.mul_(static_cast<double>(current_batch));
-                                accumulation.add_(loss_tensor);
-                                return current_batch;
-                            };
-                            auto execute_training = [&]() -> std::int64_t {
-                                if (retain_graph_required) {
-                                    return run_training_step(true);
-                                }
+                            if (regularization_active) {
+                                model.update_regularization_states(step_index, true);
+                            }
+                            ++step_index;
 
-                                try {
-                                    return run_training_step(false);
-                                } catch (const c10::Error& error) {
-                                    if (!requires_retain_graph_retry(error)) {
-                                        throw;
-                                }
-                                    retain_graph_required = true;
-                                    model.zero_grad(true);
-                                    return run_training_step(true);
-                                }
-                            };
+                            auto loss_tensor = loss.detach();
+                            if (loss_tensor.device() != accumulation.device()) {
+                                loss_tensor = loss_tensor.to(accumulation.device());
+                            }
+                            loss_tensor = loss_tensor.to(torch::kFloat64);
+                            loss_tensor.mul_(static_cast<double>(current_batch));
+                            accumulation.add_(loss_tensor);
+                            return current_batch;
+                        };
 
-                            return model.with_cuda_failover(
-                                "training step",
-                                [&]() -> std::int64_t {
-                                    return execute_training();
+                        auto execute_training = [&]() -> std::int64_t {
+                            if (retain_graph_required) {
+                                return run_training_step(true);
+                            }
+
+                            try {
+                                return run_training_step(false);
+                            } catch (const c10::Error& error) {
+                                if (!requires_retain_graph_retry(error)) {
+                                    throw;
+                                }
+                                retain_graph_required = true;
+                                model.zero_grad(true);
+                                return run_training_step(true);
+                            }
+                        };
+
+                        return model.with_cuda_failover(
+                            "training step",
+                            [&]() -> std::int64_t {
+                                return execute_training();
                             },
                             [&](const c10::Error&) {
                                 if (batch_inputs.defined() && !batch_inputs.device().is_cpu()) {
