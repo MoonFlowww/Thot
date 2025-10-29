@@ -42,6 +42,10 @@
 #include <deque>
 #include <filesystem>
 #include <unordered_map>
+#include <limits>
+#include <cctype>
+
+
 
 #include <torch/torch.h>
 
@@ -77,6 +81,167 @@ namespace Thot {
 
     template <class... Ts>
     Overloaded(Ts...) -> Overloaded<Ts...>;
+
+    enum class MergePolicyKind {
+        Strict,
+        Broadcast,
+        Concat
+    };
+
+    struct Port {
+        enum class Kind {
+            Input,
+            Output,
+            Module,
+            Join
+        };
+
+        Kind kind{Kind::Module};
+        std::string identifier{};
+        std::string attribute{};
+        std::string representation{};
+        MergePolicyKind merge_policy{MergePolicyKind::Strict};
+        std::optional<std::size_t> node_index{};
+        std::optional<std::size_t> join_index{};
+
+        Port() = default;
+
+        Port(Kind kind, std::string identifier, std::string attribute, MergePolicyKind merge)
+            : kind(kind),
+              identifier(std::move(identifier)),
+              attribute(std::move(attribute)),
+              representation(build_representation()),
+              merge_policy(merge)
+        {
+        }
+
+        [[nodiscard]] bool is_input() const noexcept { return kind == Kind::Input; }
+        [[nodiscard]] bool is_output() const noexcept { return kind == Kind::Output; }
+        [[nodiscard]] bool is_module() const noexcept { return kind == Kind::Module; }
+        [[nodiscard]] bool is_join() const noexcept { return kind == Kind::Join; }
+        [[nodiscard]] const std::string& describe() const noexcept { return representation; }
+        [[nodiscard]] std::string storage_key() const
+        {
+            if (attribute.empty()) {
+                return identifier;
+            }
+            return identifier + ":" + attribute;
+        }
+
+        void assign_node(std::size_t value) { node_index = value; }
+        void assign_join(std::size_t value) { join_index = value; }
+
+        static Port parse(std::string_view specification)
+        {
+            const auto trimmed = trim(specification);
+            if (trimmed.empty()) {
+                throw std::invalid_argument("Port::parse requires a non-empty specification.");
+            }
+
+            auto [token, attribute] = split_token(trimmed);
+            token = trim(token);
+            attribute = trim(attribute);
+
+            Port port{};
+            port.attribute.assign(attribute.begin(), attribute.end());
+            port.representation.assign(trimmed.begin(), trimmed.end());
+
+            if (token.empty()) {
+                throw std::invalid_argument("Port::parse encountered an empty identifier in '" + port.representation + "'.");
+            }
+
+            if (token.front() == '@') {
+                auto sentinel = token.substr(1);
+                if (sentinel == "input") {
+                    port.kind = Kind::Input;
+                } else if (sentinel == "output") {
+                    port.kind = Kind::Output;
+                } else {
+                    throw std::invalid_argument("Unsupported sentinel port '@" + std::string(sentinel) + "'.");
+                }
+                port.identifier.assign(sentinel.begin(), sentinel.end());
+            } else {
+                port.kind = Kind::Module;
+                port.identifier.assign(token.begin(), token.end());
+            }
+
+            if (port.identifier.empty()) {
+                throw std::invalid_argument("Port specification '" + port.representation + "' is missing an identifier.");
+            }
+
+            port.merge_policy = MergePolicyKind::Strict;
+            return port;
+        }
+
+        static Port join(std::string_view name, MergePolicyKind policy = MergePolicyKind::Strict)
+        {
+            const auto trimmed = trim(name);
+            if (trimmed.empty()) {
+                throw std::invalid_argument("Port::join requires a non-empty name.");
+            }
+
+            auto [token, attribute] = split_token(trimmed);
+            token = trim(token);
+            attribute = trim(attribute);
+
+            if (token.empty()) {
+                throw std::invalid_argument("Join port specification cannot be empty.");
+            }
+
+            Port port{};
+            port.kind = Kind::Join;
+            port.identifier.assign(token.begin(), token.end());
+            port.attribute.assign(attribute.begin(), attribute.end());
+            port.merge_policy = policy;
+            std::string repr{"join("};
+            repr.append(trimmed.begin(), trimmed.end());
+            repr.push_back(')');
+            port.representation = std::move(repr);
+            return port;
+        }
+
+    private:
+        [[nodiscard]] std::string build_representation() const
+        {
+            if (!representation.empty()) {
+                return representation;
+            }
+            std::string repr = identifier;
+            if (!attribute.empty()) {
+                repr.append(1, ':');
+                repr.append(attribute);
+            }
+            return repr;
+        }
+
+        static std::pair<std::string_view, std::string_view> split_token(std::string_view token)
+        {
+            const auto position = token.find_first_of(".:");
+            if (position == std::string_view::npos) {
+                return {token, std::string_view{}};
+            }
+            return {token.substr(0, position), token.substr(position + 1)};
+        }
+
+        static std::string_view trim(std::string_view token)
+        {
+            while (!token.empty() && std::isspace(static_cast<unsigned char>(token.front()))) {
+                token.remove_prefix(1);
+            }
+            while (!token.empty() && std::isspace(static_cast<unsigned char>(token.back()))) {
+                token.remove_suffix(1);
+            }
+            return token;
+        }
+    };
+
+    struct LinkSpec {
+        Port source{};
+        Port target{};
+
+        LinkSpec() = default;
+        LinkSpec(Port source, Port target) : source(std::move(source)), target(std::move(target)) {}
+    };
 
     namespace Core {
         template <std::size_t BufferVRAMBatches>
@@ -234,6 +399,33 @@ namespace Thot {
             }
         };
 
+        struct CompiledNode {
+            enum class Kind {
+                Input,
+                Module,
+                Join,
+                Output
+            };
+
+            Kind kind{Kind::Module};
+            std::size_t index{std::numeric_limits<std::size_t>::max()};
+            MergePolicyKind merge{MergePolicyKind::Strict};
+            std::string label{};
+            std::vector<std::size_t> inputs{};
+            std::vector<std::size_t> outputs{};
+        };
+
+        struct CompiledStep {
+            std::size_t node_index{std::numeric_limits<std::size_t>::max()};
+            std::vector<std::size_t> dependencies{};
+        };
+
+        struct JoinBuffer {
+            std::size_t node_index{std::numeric_limits<std::size_t>::max()};
+            MergePolicyKind policy{MergePolicyKind::Strict};
+            std::vector<std::size_t> producers{};
+        };
+
 
 
         using ModuleDescriptor = Common::SaveLoad::ModuleDescriptor;
@@ -242,7 +434,7 @@ namespace Thot {
             if (regularization_configured_)
                 throw std::logic_error("Cannot add modules after regularization has been configured.");
 
-            compiled_routing_plan_.reset();
+            clear_compiled_graph();
 
             const std::string module_name = std::move(name);
             if (!module_name.empty() && module_name_index_.find(module_name) != module_name_index_.end()) {
@@ -465,6 +657,279 @@ namespace Thot {
                 module_name_index_[module_descriptors_.back().name] = module_descriptors_.size() - 1;
             }
         }
+
+        void links(std::vector<LinkSpec> specifications)
+        {
+            if (specifications.empty()) {
+                clear_compiled_graph();
+                return;
+            }
+
+            std::vector<CompiledNode> nodes;
+            std::vector<CompiledStep> steps;
+            std::vector<JoinBuffer> joins;
+            std::vector<LinkSpec> resolved_links;
+
+            nodes.reserve(layers_.size() + specifications.size() * 2 + 2);
+            resolved_links.reserve(specifications.size());
+
+            CompiledNode input_node{};
+            input_node.kind = CompiledNode::Kind::Input;
+            input_node.label = "@input";
+            nodes.push_back(std::move(input_node));
+            const std::size_t input_node_index = 0;
+
+            std::vector<std::size_t> module_node_indices(layers_.size(), std::numeric_limits<std::size_t>::max());
+            for (std::size_t index = 0; index < layers_.size(); ++index) {
+                CompiledNode node{};
+                node.kind = CompiledNode::Kind::Module;
+                node.index = index;
+                if (module_descriptors_.size() > index && !module_descriptors_[index].name.empty()) {
+                    node.label = module_descriptors_[index].name;
+                } else {
+                    node.label = "#" + std::to_string(index);
+                }
+                nodes.push_back(std::move(node));
+                module_node_indices[index] = nodes.size() - 1;
+            }
+
+            std::optional<std::size_t> output_node_index{};
+            std::unordered_map<std::string, std::size_t> join_lookup{};
+            std::unordered_map<std::size_t, std::size_t> join_buffer_lookup{};
+
+            auto ensure_output_node = [&]() -> std::size_t {
+                if (output_node_index) {
+                    return *output_node_index;
+                }
+                CompiledNode node{};
+                node.kind = CompiledNode::Kind::Output;
+                node.label = "@output";
+                nodes.push_back(std::move(node));
+                output_node_index = nodes.size() - 1;
+                return *output_node_index;
+            };
+
+            auto ensure_join_node = [&](const Port& port) -> std::size_t {
+                const auto key = port.storage_key();
+                auto it = join_lookup.find(key);
+                if (it != join_lookup.end()) {
+                    const auto node_index = it->second;
+                    const auto buffer_index = join_buffer_lookup.at(node_index);
+                    const auto& buffer = joins[buffer_index];
+                    if (buffer.policy != port.merge_policy) {
+                        throw std::invalid_argument("Join node '" + port.describe()
+                                                     + "' requested with conflicting merge policies.");
+                    }
+                    return node_index;
+                }
+
+                CompiledNode node{};
+                node.kind = CompiledNode::Kind::Join;
+                node.merge = port.merge_policy;
+                node.index = joins.size();
+                node.label = key;
+                nodes.push_back(node);
+                const std::size_t node_index = nodes.size() - 1;
+
+                JoinBuffer buffer{};
+                buffer.node_index = node_index;
+                buffer.policy = port.merge_policy;
+                join_buffer_lookup[node_index] = joins.size();
+                joins.push_back(std::move(buffer));
+
+                join_lookup.emplace(key, node_index);
+                return node_index;
+            };
+
+            auto parse_numeric_identifier = [](std::string_view token) -> std::optional<std::size_t> {
+                if (token.empty()) {
+                    return std::nullopt;
+                }
+                if (token.front() == '#') {
+                    token.remove_prefix(1);
+                }
+                if (token.empty()) {
+                    return std::nullopt;
+                }
+                std::size_t value = 0;
+                for (char character : token) {
+                    if (!std::isdigit(static_cast<unsigned char>(character))) {
+                        return std::nullopt;
+                    }
+                    value = value * 10 + static_cast<std::size_t>(character - '0');
+                }
+                return value;
+            };
+
+            auto resolve_module = [&](const Port& port) -> std::size_t {
+                if (port.identifier.empty()) {
+                    throw std::invalid_argument("Module port '" + port.describe() + "' is missing an identifier.");
+                }
+
+                std::optional<std::size_t> module_index{};
+                auto by_name = module_name_index_.find(port.identifier);
+                if (by_name != module_name_index_.end()) {
+                    module_index = by_name->second;
+                } else {
+                    module_index = parse_numeric_identifier(port.identifier);
+                }
+
+                if (!module_index.has_value() || *module_index >= module_node_indices.size()) {
+                    throw std::invalid_argument("Unknown module referenced by port '" + port.describe() + "'.");
+                }
+
+                const auto node_index = module_node_indices[*module_index];
+                if (node_index == std::numeric_limits<std::size_t>::max()) {
+                    throw std::invalid_argument("Module port '" + port.describe() + "' could not be resolved.");
+                }
+                return node_index;
+            };
+
+            auto resolve_port = [&](Port& port) -> std::size_t {
+                switch (port.kind) {
+                    case Port::Kind::Input: {
+                        port.assign_node(input_node_index);
+                        return input_node_index;
+                    }
+                    case Port::Kind::Output: {
+                        const auto index = ensure_output_node();
+                        port.assign_node(index);
+                        return index;
+                    }
+                    case Port::Kind::Module: {
+                        const auto index = resolve_module(port);
+                        port.assign_node(index);
+                        return index;
+                    }
+                    case Port::Kind::Join: {
+                        const auto index = ensure_join_node(port);
+                        port.assign_node(index);
+                        auto it = join_buffer_lookup.find(index);
+                        if (it != join_buffer_lookup.end()) {
+                            port.assign_join(it->second);
+                        }
+                        return index;
+                    }
+                }
+                throw std::invalid_argument("Unsupported port kind encountered while resolving links.");
+            };
+
+            std::unordered_map<std::size_t, std::size_t> consumer_inbound{};
+
+            for (auto& specification : specifications) {
+                auto link = specification;
+                const auto source_index = resolve_port(link.source);
+                const auto target_index = resolve_port(link.target);
+
+                const auto source_kind = nodes[source_index].kind;
+                const auto target_kind = nodes[target_index].kind;
+
+                if (source_kind == CompiledNode::Kind::Output) {
+                    throw std::invalid_argument("Output port '" + link.source.describe() + "' cannot be used as a source.");
+                }
+
+                if (target_kind == CompiledNode::Kind::Input) {
+                    throw std::invalid_argument("Input port '" + link.target.describe() + "' cannot be used as a target.");
+                }
+
+                if (target_kind != CompiledNode::Kind::Join) {
+                    auto& inbound = consumer_inbound[target_index];
+                    if (inbound > 0) {
+                        throw std::invalid_argument("Consumer port '" + link.target.describe()
+                                                     + "' already has a producer.");
+                    }
+                    ++inbound;
+                }
+
+                nodes[source_index].outputs.push_back(target_index);
+                nodes[target_index].inputs.push_back(source_index);
+
+                if (target_kind == CompiledNode::Kind::Join) {
+                    const auto buffer_index = join_buffer_lookup.at(target_index);
+                    auto& buffer = joins[buffer_index];
+                    if (std::find(buffer.producers.begin(), buffer.producers.end(), source_index)
+                        != buffer.producers.end()) {
+                        throw std::invalid_argument("Join node '" + link.target.describe()
+                                                     + "' already receives input from '" + link.source.describe()
+                                                     + "'.");
+                    }
+                    buffer.producers.push_back(source_index);
+                }
+
+                resolved_links.push_back(std::move(link));
+            }
+
+            for (const auto& join : joins) {
+                const auto& node = nodes[join.node_index];
+                if (join.producers.empty()) {
+                    throw std::invalid_argument("Join node '" + node.label + "' has no producers.");
+                }
+                if (node.outputs.empty()) {
+                    throw std::invalid_argument("Join node '" + node.label + "' has no consumers.");
+                }
+            }
+
+            std::vector<std::size_t> indegree(nodes.size(), 0);
+            for (std::size_t node_index = 0; node_index < nodes.size(); ++node_index) {
+                for (auto target : nodes[node_index].outputs) {
+                    if (target >= indegree.size()) {
+                        throw std::invalid_argument("Link specification references an invalid node index.");
+                    }
+                    ++indegree[target];
+                }
+            }
+
+            std::deque<std::size_t> queue;
+            queue.clear();
+            for (std::size_t node_index = 0; node_index < nodes.size(); ++node_index) {
+                if (indegree[node_index] == 0) {
+                    queue.push_back(node_index);
+                }
+            }
+
+            steps.reserve(nodes.size());
+            std::size_t visited = 0;
+            while (!queue.empty()) {
+                const auto node_index = queue.front();
+                queue.pop_front();
+                ++visited;
+
+                if (node_index != input_node_index) {
+                    CompiledStep step{};
+                    step.node_index = node_index;
+                    step.dependencies = nodes[node_index].inputs;
+                    steps.push_back(std::move(step));
+                }
+
+                for (auto target : nodes[node_index].outputs) {
+                    auto& degree = indegree[target];
+                    if (degree == 0) {
+                        continue;
+                    }
+                    --degree;
+                    if (degree == 0) {
+                        queue.push_back(target);
+                    }
+                }
+            }
+
+            if (visited != nodes.size()) {
+                throw std::invalid_argument("Link specification contains cycles; unable to compile routing graph.");
+            }
+
+            compiled_nodes_ = std::move(nodes);
+            compiled_steps_ = std::move(steps);
+            join_buffers_ = std::move(joins);
+            compiled_links_ = std::move(resolved_links);
+            routing_active_ = true;
+        }
+
+        [[nodiscard]] bool has_compiled_routing() const noexcept { return routing_active_; }
+        [[nodiscard]] const std::vector<CompiledNode>& compiled_nodes() const noexcept { return compiled_nodes_; }
+        [[nodiscard]] const std::vector<CompiledStep>& compiled_steps() const noexcept { return compiled_steps_; }
+        [[nodiscard]] const std::vector<JoinBuffer>& join_buffers() const noexcept { return join_buffers_; }
+        [[nodiscard]] const std::vector<LinkSpec>& compiled_links() const noexcept { return compiled_links_; }
+
 
         void set_optimizer(Optimizer::Descriptor descriptor, std::optional<LrScheduler::Descriptor> scheduler = std::nullopt) {
             if (layers_.empty()) {
@@ -1229,6 +1694,16 @@ namespace Thot {
         }
 
 
+        void clear_compiled_graph() noexcept
+        {
+            routing_active_ = false;
+            compiled_nodes_.clear();
+            compiled_steps_.clear();
+            join_buffers_.clear();
+            compiled_links_.clear();
+        }
+
+
         void register_layer_runtime(const Layer::Details::RegisteredLayer& layer)
         {
             layer_parameters_.push_back(collect_layer_parameters(layer));
@@ -1923,8 +2398,11 @@ namespace Thot {
         TrainingTelemetry telemetry_{};
         std::size_t module_index_{0};
         std::unordered_map<std::string, std::size_t> module_name_index_{};
-        using RoutingPlan = std::vector<std::size_t>;
-        std::optional<RoutingPlan> compiled_routing_plan_{};
+        std::vector<CompiledNode> compiled_nodes_{};
+        std::vector<CompiledStep> compiled_steps_{};
+        std::vector<JoinBuffer> join_buffers_{};
+        std::vector<LinkSpec> compiled_links_{};
+        bool routing_active_{false};
         std::unique_ptr<torch::optim::Optimizer> optimizer_{};
         std::vector<std::unique_ptr<torch::optim::Optimizer>> local_optimizers_{};
         std::unique_ptr<LrScheduler::Details::Scheduler> scheduler_{};
@@ -1978,7 +2456,7 @@ namespace Thot {
             device_ = preserved_device;
             model_name_ = std::move(preserved_model_name);
             module_name_index_.clear();
-            compiled_routing_plan_.reset();
+            clear_compiled_graph();
         }
 
         static std::string format_tensor_shape(const torch::Tensor& tensor) {

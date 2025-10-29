@@ -18,7 +18,7 @@ int instance() {
     encoder.positional_encoding.type = Thot::Block::Transformer::Classic::PositionalEncodingType::Sinusoidal;
     encoder.positional_encoding.dropout = 0.05;
     encoder.dropout = 0.1;
-    model.block(Thot::Block::Transformer::Classic::Encoder(encoder));
+    model.add(Thot::Block::Transformer::Classic::Encoder(encoder));
 
     Thot::Block::Transformer::Classic::DecoderOptions decoder{};
     decoder.layers = 2;
@@ -29,7 +29,7 @@ int instance() {
     decoder.layer_norm.eps = 1e-4;
     decoder.positional_encoding.type = Thot::Block::Transformer::Classic::PositionalEncodingType::Learned;
     decoder.dropout = 0.05;
-    model.block(Thot::Block::Transformer::Classic::Decoder(decoder));
+    model.add(Thot::Block::Transformer::Classic::Decoder(decoder));
 
 
 
