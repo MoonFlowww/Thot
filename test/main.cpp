@@ -20,27 +20,27 @@ int main() {
     const int64_t steps_per_epoch = (N + B - 1) / B;
     if (!IsLoading) {
         model.add(Thot::Block::Sequential({
-        Thot::Layer::Conv2d(
-            {3, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
-            Thot::Activation::Identity,
-            Thot::Initialization::HeNormal
-        ),
-        Thot::Layer::BatchNorm2d(
-            {64, 1e-5, 0.1, true, true},
-            Thot::Activation::SiLU
-        ),
-        Thot::Layer::Conv2d(
-            {64, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
-            Thot::Activation::Identity,
-            Thot::Initialization::HeNormal,
-            {}
-        ),
-        Thot::Layer::BatchNorm2d(
-            {64, 1e-5, 0.1, true, true},
-            Thot::Activation::SiLU
-        ),
-        Thot::Layer::MaxPool2d({{2, 2}, {2, 2}})
-    }));
+            Thot::Layer::Conv2d(
+                {3, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
+                Thot::Activation::Identity,
+                Thot::Initialization::HeNormal
+            ),
+            Thot::Layer::BatchNorm2d(
+                {64, 1e-5, 0.1, true, true},
+                Thot::Activation::SiLU
+            ),
+            Thot::Layer::Conv2d(
+                {64, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
+                Thot::Activation::Identity,
+                Thot::Initialization::HeNormal,
+                {}
+            ),
+            Thot::Layer::BatchNorm2d(
+                {64, 1e-5, 0.1, true, true},
+                Thot::Activation::SiLU
+            ),
+            Thot::Layer::MaxPool2d({{2, 2}, {2, 2}})
+        }));
 
         model.add(Thot::Layer::HardDropout({ .probability = 0.3 }));
 
@@ -77,7 +77,21 @@ int main() {
                 Thot::Activation::Identity,
                 Thot::Initialization::HeNormal
             )
-        }, 1, {}, { .final_activation = Thot::Activation::SiLU }));
+        }, 1, {.use_projection = true, .projection =
+            {
+            Thot::Layer::Conv2d(
+       {64, 128, {1, 1}, {2, 2}, {0, 0}, {1, 1}, 1, false},
+       Thot::Activation::Identity,
+       Thot::Initialization::HeNormal
+       ),
+       Thot::Layer::BatchNorm2d(
+           {128, 1e-5, 0.1, true, true},
+           Thot::Activation::Identity
+       )
+        }
+
+
+        }, { .final_activation = Thot::Activation::SiLU }));
 
         model.add(Thot::Layer::HardDropout({ .probability = 0.3 }));
 
