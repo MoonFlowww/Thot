@@ -52,6 +52,7 @@
 #include <torch/cuda.h>
 #include <ATen/cuda/CUDAGraph.h>
 #include <c10/cuda/CUDAStream.h>
+#include <c10/cuda/CUDAGuard.h>
 
 #include "common/save_load.hpp"
 #include "utils/terminal.hpp"
@@ -1615,7 +1616,7 @@ namespace Thot {
                     cuda_graph_static_input_.copy_(tensor);
                     cuda_graph_->replay();
                     if (cuda_graph_capture_stream_) {
-                        at::cuda::CUDAStreamGuard guard(*cuda_graph_capture_stream_);
+                        c10::cuda::CUDAStreamGuard guard(*cuda_graph_capture_stream_);
                         cuda_graph_static_input_.copy_(tensor);
                         cuda_graph_->replay();
                     } else {
@@ -1643,7 +1644,7 @@ namespace Thot {
             cuda_graph_capture_stream_ = capture_stream;
             torch::Tensor captured_output;
             {
-                at::cuda::CUDAStreamGuard guard(capture_stream);
+                c10::cuda::CUDAStreamGuard guard(capture_stream);
                 graph.capture_begin();
                 captured_output = execute_plan_eager(cuda_graph_static_input_,
                                                      cuda_graph_node_activations_,
