@@ -44,7 +44,7 @@
 #include <unordered_map>
 #include <limits>
 #include <cctype>
-
+#include <iterator>
 
 
 #include <torch/torch.h>
@@ -399,6 +399,18 @@ namespace Thot {
             }
         };
 
+
+        struct ModuleNameBinding {
+            std::size_t entry{std::numeric_limits<std::size_t>::max()};
+            std::size_t exit{std::numeric_limits<std::size_t>::max()};
+            std::vector<std::size_t> layers{};
+
+            [[nodiscard]] bool has_entry() const noexcept
+            {
+                return entry != std::numeric_limits<std::size_t>::max();
+            }
+        };
+
         struct CompiledNode {
             enum class Kind {
                 Input,
@@ -446,6 +458,15 @@ namespace Thot {
             auto store_layer = [&](Layer::Details::RegisteredLayer registered_layer) {
                 registered_layer.name = module_name;
                 layers_.push_back(std::move(registered_layer));
+                const auto layer_index = layers_.size() - 1;
+                if (!module_name.empty()) {
+                    auto& binding = module_name_index_[module_name];
+                    if (!binding.has_entry()) {
+                        binding.entry = layer_index;
+                    }
+                    binding.exit = layer_index;
+                    binding.layers.push_back(layer_index);
+                }
                 register_layer_runtime(layers_.back());
             };
             auto register_layer = [&](auto&& concrete_descriptor) {
@@ -654,9 +675,6 @@ namespace Thot {
 
             std::visit(module_dispatcher, std::move(descriptor));
             module_descriptors_.emplace_back(std::move(preserved_descriptor), module_name);
-            if (!module_descriptors_.back().name.empty()) {
-                module_name_index_[module_descriptors_.back().name] = module_descriptors_.size() - 1;
-            }
         }
 
         void links(std::vector<LinkSpec> specifications)
@@ -685,8 +703,19 @@ namespace Thot {
                 CompiledNode node{};
                 node.kind = CompiledNode::Kind::Module;
                 node.index = index;
-                if (module_descriptors_.size() > index && !module_descriptors_[index].name.empty()) {
-                    node.label = module_descriptors_[index].name;
+                const auto& layer = layers_[index];
+                if (!layer.name.empty()) {
+                    node.label = layer.name;
+                    auto binding = module_name_index_.find(layer.name);
+                    if (binding != module_name_index_.end() && binding->second.layers.size() > 1) {
+                        const auto& sequence = binding->second.layers;
+                        auto position = std::find(sequence.begin(), sequence.end(), index);
+                        if (position != sequence.end()) {
+                            node.label.append("[");
+                            node.label.append(std::to_string(std::distance(sequence.begin(), position)));
+                            node.label.append("]");
+                        }
+                    }
                 } else {
                     node.label = "#" + std::to_string(index);
                 }
@@ -812,7 +841,12 @@ namespace Thot {
                 return value;
             };
 
-            auto resolve_module = [&](const Port& port) -> std::size_t {
+            enum class PortRole {
+                Source,
+                Target
+            };
+
+            auto resolve_module = [&](const Port& port, PortRole role) -> std::size_t {
                 if (port.identifier.empty()) {
                     throw std::invalid_argument("Module port '" + port.describe() + "' is missing an identifier.");
                 }
@@ -820,7 +854,21 @@ namespace Thot {
                 std::optional<std::size_t> module_index{};
                 auto by_name = module_name_index_.find(port.identifier);
                 if (by_name != module_name_index_.end()) {
-                    module_index = by_name->second;
+                    const auto& binding = by_name->second;
+                    if (!binding.has_entry()) {
+                        throw std::invalid_argument("Module port '" + port.describe() + "' references an unregistered module name.");
+                    }
+                    if (role == PortRole::Source) {
+                        if (binding.exit == std::numeric_limits<std::size_t>::max()) {
+                            throw std::invalid_argument("Module port '" + port.describe() + "' could not resolve an output endpoint.");
+                        }
+                        module_index = binding.exit;
+                    } else {
+                        if (binding.entry == std::numeric_limits<std::size_t>::max()) {
+                            throw std::invalid_argument("Module port '" + port.describe() + "' could not resolve an input endpoint.");
+                        }
+                        module_index = binding.entry;
+                    }
                 } else {
                     module_index = parse_numeric_identifier(port.identifier);
                 }
@@ -836,7 +884,7 @@ namespace Thot {
                 return node_index;
             };
 
-            auto resolve_port = [&](Port& port) -> std::size_t {
+            auto resolve_port = [&](Port& port, PortRole role) -> std::size_t {
                 switch (port.kind) {
                     case Port::Kind::Input: {
                         port.assign_node(input_node_index);
@@ -848,7 +896,7 @@ namespace Thot {
                         return index;
                     }
                     case Port::Kind::Module: {
-                        const auto index = resolve_module(port);
+                        const auto index = resolve_module(port, role);
                         port.assign_node(index);
                         return index;
                     }
@@ -869,8 +917,8 @@ namespace Thot {
 
             for (auto& specification : specifications) {
                 auto link = specification;
-                const auto source_index = resolve_port(link.source);
-                const auto target_index = resolve_port(link.target);
+                const auto source_index = resolve_port(link.source, PortRole::Source);
+                const auto target_index = resolve_port(link.target, PortRole::Target);
 
                 const auto source_kind = nodes[source_index].kind;
                 const auto target_kind = nodes[target_index].kind;
@@ -908,6 +956,49 @@ namespace Thot {
                 }
 
                 resolved_links.push_back(std::move(link));
+            }
+
+            for (const auto& [name, binding] : module_name_index_) {
+                if (binding.layers.size() < 2) {
+                    continue;
+                }
+
+                for (std::size_t offset = 1; offset < binding.layers.size(); ++offset) {
+                    const auto upstream_layer = binding.layers[offset - 1];
+                    const auto downstream_layer = binding.layers[offset];
+                    if (upstream_layer >= module_node_indices.size() || downstream_layer >= module_node_indices.size()) {
+                        throw std::invalid_argument("Module name '" + name + "' is out of sync with registered layers.");
+                    }
+
+                    const auto upstream_node = module_node_indices[upstream_layer];
+                    const auto downstream_node = module_node_indices[downstream_layer];
+                    if (upstream_node >= nodes.size() || downstream_node >= nodes.size()) {
+                        throw std::invalid_argument("Module name '" + name + "' resolved to an invalid node index.");
+                    }
+
+                    auto& upstream_outputs = nodes[upstream_node].outputs;
+                    if (std::find(upstream_outputs.begin(), upstream_outputs.end(), downstream_node) != upstream_outputs.end()) {
+                        continue;
+                    }
+
+                    auto& downstream_inputs = nodes[downstream_node].inputs;
+                    if (!downstream_inputs.empty()) {
+                        throw std::invalid_argument("Module node '" + nodes[downstream_node].label
+                                                     + "' already has a producer; unable to auto-link sequential block '"
+                                                     + name + "'.");
+                    }
+
+                    auto& inbound = consumer_inbound[downstream_node];
+                    if (inbound > 0) {
+                        throw std::invalid_argument("Module node '" + nodes[downstream_node].label
+                                                     + "' already has a producer; unable to auto-link sequential block '"
+                                                     + name + "'.");
+                    }
+                    ++inbound;
+
+                    upstream_outputs.push_back(downstream_node);
+                    downstream_inputs.push_back(upstream_node);
+                }
             }
 
             for (const auto& join : joins) {
@@ -2659,7 +2750,7 @@ namespace Thot {
         mutable std::optional<std::vector<int64_t>> last_input_shape_{};
         TrainingTelemetry telemetry_{};
         std::size_t module_index_{0};
-        std::unordered_map<std::string, std::size_t> module_name_index_{};
+        std::unordered_map<std::string, ModuleNameBinding> module_name_index_{};
         std::vector<CompiledNode> compiled_nodes_{};
         std::vector<CompiledStep> compiled_steps_{};
         std::vector<JoinBuffer> join_buffers_{};
