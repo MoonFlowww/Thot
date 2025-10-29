@@ -2167,10 +2167,24 @@ namespace Thot {
             if (!loss_descriptor_.has_value()) {
                 throw std::logic_error("Loss function has not been configured.");
             }
+            torch::Tensor adjusted_target = target;
+            if (prediction.defined() && adjusted_target.defined()
+                && adjusted_target.device() != prediction.device()) {
+                adjusted_target = adjusted_target.to(prediction.device(), adjusted_target.scalar_type());
+                }
+
+            std::optional<torch::Tensor> adjusted_weight = weight;
+            if (prediction.defined() && adjusted_weight.has_value() && adjusted_weight->defined()) {
+                const auto& weight_tensor = *adjusted_weight;
+                if (weight_tensor.device() != prediction.device()
+                    || weight_tensor.scalar_type() != prediction.scalar_type()) {
+                    adjusted_weight = weight_tensor.to(prediction.device(), prediction.scalar_type());
+                    }
+            }
             return std::visit(
-                            [&](const auto& descriptor) {
-                                return Loss::Details::compute(descriptor, prediction, target, weight);
-                            }, *loss_descriptor_);
+                [&](const auto& descriptor) {
+                    return Loss::Details::compute(descriptor, prediction, adjusted_target, adjusted_weight);
+                }, *loss_descriptor_);
         }
 
         auto evaluate(torch::Tensor evaluation_inputs, torch::Tensor evaluation_targets, Evaluation::ClassificationDescriptor descriptor, std::vector<Metric::Classification::Descriptor> metrics, Evaluation::Options options = {}) -> Evaluation::ClassificationReport {
