@@ -42,6 +42,7 @@
 #include <deque>
 #include <filesystem>
 #include <unordered_map>
+#include <unordered_set>
 #include <limits>
 #include <cctype>
 #include <iterator>
@@ -103,6 +104,8 @@ namespace Thot {
         MergePolicyKind merge_policy{MergePolicyKind::Strict};
         std::optional<std::size_t> node_index{};
         std::optional<std::size_t> join_index{};
+        std::vector<std::string> join_members{};
+        std::optional<int64_t> join_dimension{};
 
         Port() = default;
 
@@ -122,6 +125,14 @@ namespace Thot {
         [[nodiscard]] const std::string& describe() const noexcept { return representation; }
         [[nodiscard]] std::string storage_key() const
         {
+            if (!join_members.empty()) {
+                std::string key = identifier;
+                if (!attribute.empty()) {
+                    key.append(":");
+                    key.append(attribute);
+                }
+                return key;
+            }
             if (attribute.empty()) {
                 return identifier;
             }
@@ -199,6 +210,85 @@ namespace Thot {
             port.representation = std::move(repr);
             return port;
         }
+
+        static Port join(
+            std::initializer_list<std::string_view> names,
+            MergePolicyKind policy = MergePolicyKind::Strict)
+        {
+            return join(names, policy, std::nullopt);
+        }
+
+        static Port join(
+            std::initializer_list<std::string_view> names,
+            MergePolicyKind policy,
+            int64_t concat_dimension)
+        {
+            return join(names, policy, std::optional<int64_t>{concat_dimension});
+        }
+
+        static Port join(
+            std::initializer_list<std::string_view> names,
+            MergePolicyKind policy,
+            std::optional<int64_t> concat_dimension)
+        {
+            if (names.size() == 0) {
+                throw std::invalid_argument("Port::join requires at least one module name when using the aggregate form.");
+            }
+
+            std::vector<std::string> original_order;
+            original_order.reserve(names.size());
+            std::vector<std::string> canonical;
+            canonical.reserve(names.size());
+
+            for (auto name : names) {
+                const auto trimmed = trim(name);
+                if (trimmed.empty()) {
+                    throw std::invalid_argument("Join specification contains an empty module name.");
+                }
+                original_order.emplace_back(trimmed.begin(), trimmed.end());
+                canonical.push_back(original_order.back());
+            }
+
+            std::sort(canonical.begin(), canonical.end());
+            canonical.erase(std::unique(canonical.begin(), canonical.end()), canonical.end());
+
+            std::string identifier{"@join["};
+            for (std::size_t index = 0; index < canonical.size(); ++index) {
+                if (index > 0) {
+                    identifier.append("|");
+                }
+                identifier.append(canonical[index]);
+            }
+            identifier.push_back(']');
+
+            Port port{};
+            port.kind = Kind::Join;
+            port.identifier = std::move(identifier);
+            port.merge_policy = policy;
+            port.join_members = std::move(canonical);
+            port.join_dimension = concat_dimension;
+
+            if (concat_dimension) {
+                port.attribute = "dim=" + std::to_string(*concat_dimension);
+            }
+
+            std::string repr{"join("};
+            for (std::size_t index = 0; index < original_order.size(); ++index) {
+                if (index > 0) {
+                    repr.append(", ");
+                }
+                repr.append(original_order[index]);
+            }
+            if (concat_dimension) {
+                repr.append("; dim=");
+                repr.append(std::to_string(*concat_dimension));
+            }
+            repr.push_back(')');
+            port.representation = std::move(repr);
+
+            return port;
+        }
+
 
     private:
         [[nodiscard]] std::string build_representation() const
@@ -430,6 +520,37 @@ namespace Thot {
         struct CompiledStep {
             std::size_t node_index{std::numeric_limits<std::size_t>::max()};
             std::vector<std::size_t> dependencies{};
+        };
+
+        struct ExecutionStep {
+            enum class Kind {
+                Module,
+                Join,
+                Output
+            };
+
+            Kind kind{Kind::Module};
+            std::size_t activation_index{std::numeric_limits<std::size_t>::max()};
+
+            struct ModuleData {
+                Layer::Details::RegisteredLayer* layer{nullptr};
+                std::size_t input_index{std::numeric_limits<std::size_t>::max()};
+            };
+
+            struct JoinData {
+                MergePolicyKind policy{MergePolicyKind::Strict};
+                std::vector<std::size_t> producers{};
+                std::size_t workspace_index{std::numeric_limits<std::size_t>::max()};
+                std::optional<int64_t> concat_dimension{};
+            };
+
+            struct OutputData {
+                std::size_t input_index{std::numeric_limits<std::size_t>::max()};
+            };
+
+            ModuleData module{};
+            JoinData join{};
+            OutputData output{};
         };
 
         struct JoinBuffer {
@@ -728,6 +849,9 @@ namespace Thot {
             std::unordered_map<std::size_t, std::size_t> join_buffer_lookup{};
 
             auto parse_concat_dimension = [](const Port& port) -> std::optional<int64_t> {
+                if (port.join_dimension) {
+                    return port.join_dimension;
+                }
                 if (port.attribute.empty()) {
                     return std::nullopt;
                 }
@@ -804,7 +928,7 @@ namespace Thot {
                 node.kind = CompiledNode::Kind::Join;
                 node.merge = port.merge_policy;
                 node.index = joins.size();
-                node.label = key;
+                node.label = port.describe();
                 nodes.push_back(node);
                 const std::size_t node_index = nodes.size() - 1;
 
@@ -914,6 +1038,47 @@ namespace Thot {
             };
 
             std::unordered_map<std::size_t, std::size_t> consumer_inbound{};
+
+            std::unordered_set<std::string> auto_link_keys{};
+            auto record_join_edge = [&](const LinkSpec& spec) {
+                if (!spec.target.is_join()) {
+                    return;
+                }
+                const auto key = spec.source.storage_key() + "->" + spec.target.storage_key();
+                auto_link_keys.insert(key);
+            };
+
+            for (const auto& specification : specifications) {
+                record_join_edge(specification);
+            }
+
+            std::vector<LinkSpec> inferred_links;
+            inferred_links.reserve(specifications.size());
+            auto schedule_join_members = [&](const Port& port) {
+                if (!port.is_join() || port.join_members.empty()) {
+                    return;
+                }
+                for (const auto& member : port.join_members) {
+                    auto module_port = Port::parse(member);
+                    auto join_port = port;
+                    join_port.node_index.reset();
+                    join_port.join_index.reset();
+                    const auto key = module_port.storage_key() + "->" + join_port.storage_key();
+                    if (auto_link_keys.insert(key).second) {
+                        inferred_links.emplace_back(std::move(module_port), std::move(join_port));
+                    }
+                }
+            };
+
+            for (const auto& specification : specifications) {
+                schedule_join_members(specification.source);
+                schedule_join_members(specification.target);
+            }
+
+            specifications.insert(
+                specifications.end(),
+                std::make_move_iterator(inferred_links.begin()),
+                std::make_move_iterator(inferred_links.end()));
 
             for (auto& specification : specifications) {
                 auto link = specification;
@@ -1077,6 +1242,78 @@ namespace Thot {
 
             if (visited != nodes.size()) {
                 throw std::invalid_argument("Link specification contains cycles; unable to compile routing graph.");
+            }
+
+            std::vector<std::size_t> join_workspace_reservations(joins.size(), 0);
+            for (std::size_t index = 0; index < joins.size(); ++index) {
+                join_workspace_reservations[index] = joins[index].producers.size();
+            }
+
+            std::vector<ExecutionStep> execution_steps;
+            execution_steps.reserve(steps.size());
+
+            for (const auto& step : steps) {
+                const auto node_index = step.node_index;
+                const auto& node = nodes[node_index];
+
+                ExecutionStep execution{};
+                execution.activation_index = node_index;
+
+                switch (node.kind) {
+                    case CompiledNode::Kind::Input: {
+                        continue;
+                    }
+                    case CompiledNode::Kind::Module: {
+                        if (node.index >= layers_.size()) {
+                            throw std::invalid_argument(
+                                "Module node '" + node.label + "' references an invalid layer index.");
+                        }
+                        if (step.dependencies.size() != 1) {
+                            throw std::invalid_argument(
+                                "Module node '" + node.label + "' must have exactly one dependency.");
+                        }
+
+                        execution.kind = ExecutionStep::Kind::Module;
+                        execution.module.layer = &layers_[node.index];
+                        execution.module.input_index = step.dependencies.front();
+                        break;
+                    }
+                    case CompiledNode::Kind::Join: {
+                        if (node.index >= joins.size()) {
+                            throw std::invalid_argument(
+                                "Join node '" + node.label + "' references an invalid join buffer index.");
+                        }
+                        const auto& buffer = joins[node.index];
+                        if (buffer.producers.empty()) {
+                            throw std::invalid_argument(
+                                "Join node '" + node.label + "' has no producers after compilation.");
+                        }
+
+                        execution.kind = ExecutionStep::Kind::Join;
+                        execution.join.policy = buffer.policy;
+                        execution.join.producers = buffer.producers;
+                        execution.join.workspace_index = node.index;
+                        execution.join.concat_dimension = buffer.concat_dimension;
+                        break;
+                    }
+                    case CompiledNode::Kind::Output: {
+                        if (step.dependencies.size() != 1) {
+                            throw std::invalid_argument("Output node must have exactly one dependency.");
+                        }
+
+                        execution.kind = ExecutionStep::Kind::Output;
+                        execution.output.input_index = step.dependencies.front();
+                        break;
+                    }
+                }
+
+                execution_steps.push_back(std::move(execution));
+            }
+
+            const std::size_t resolved_output_index = output_node_index.value_or(
+                steps.empty() ? input_node_index : steps.back().node_index);
+            if (resolved_output_index >= nodes.size()) {
+                throw std::invalid_argument("Resolved output node index is out of range for the compiled graph.");
             }
 
             compiled_nodes_ = std::move(nodes);
@@ -1359,9 +1596,7 @@ namespace Thot {
             ensure_execution_workspace();
 
             constexpr std::size_t kInputNodeIndex = 0;
-            if (node_activations_.size() <= kInputNodeIndex) {
-                throw std::runtime_error("Execution workspace is not aligned with compiled routing graph.");
-            }
+
 
             node_activations_[kInputNodeIndex] = std::move(tensor);
 

@@ -42,8 +42,6 @@ int main() {
             Thot::Layer::MaxPool2d({{2, 2}, {2, 2}})
         }), "stem");
 
-
-
         model.add(Thot::Block::Residual({
             Thot::Layer::HardDropout({ .probability = 0.3 }),
             Thot::Layer::Conv2d(
@@ -87,22 +85,21 @@ int main() {
             { .final_activation = Thot::Activation::SiLU }), "R2");
 
 
-
         model.add(Thot::Block::Sequential({
             Thot::Layer::Conv2d(
-{64, 128, {3, 3}, {2, 2}, {1, 1}, {1, 1}, 1, false},
+                {64, 128, {3, 3}, {2, 2}, {1, 1}, {1, 1}, 1, false},
                 Thot::Activation::Identity,
                 Thot::Initialization::HeNormal
             ),
             Thot::Layer::BatchNorm2d(
-{128, 1e-5, 0.1, true, true},
+                {128, 1e-5, 0.1, true, true},
                 Thot::Activation::SiLU
             )
         }), "S1");
 
         model.add(Thot::Block::Sequential({
             Thot::Layer::Conv2d(
-{128, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
+                {128, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
                 Thot::Activation::Identity,
                 Thot::Initialization::HeNormal
             ),
@@ -112,12 +109,30 @@ int main() {
             )
         }), "S2");
 
+        model.add(Thot::Block::Sequential({
+            Thot::Layer::Conv2d(
+                {256, 32, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
+                Thot::Activation::Identity,
+                Thot::Initialization::HeNormal
+            ),
+            Thot::Layer::BatchNorm2d(
+                {32, 1e-5, 0.1, true, true},
+                Thot::Activation::SiLU
+            ),
+            Thot::Layer::Conv2d(
+                {32, 8, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
+                Thot::Activation::Identity,
+                Thot::Initialization::HeNormal
+            ),
+        }), "Send");
+
+
         model.add(Thot::Layer::Flatten(), "flat");
 
-        model.add(Thot::Layer::FC({16384, 512, true}, Thot::Activation::SiLU, Thot::Initialization::HeNormal), "FC1");
+        model.add(Thot::Layer::FC({512, 256, true}, Thot::Activation::SiLU, Thot::Initialization::HeNormal), "FC1");
         model.add(Thot::Layer::HardDropout({.probability = 0.5}), "HDFin");
-        model.add(Thot::Layer::FC({512, 10, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal), "FC2");
-
+        model.add(Thot::Layer::FC({256, 10, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal), "FC2");
+        model.eval();
 
         model.links({
             Thot::LinkSpec{Thot::Port::parse("@input"), Thot::Port::parse("stem")},
@@ -128,13 +143,15 @@ int main() {
             Thot::LinkSpec{Thot::Port::parse("stem"), Thot::Port::parse("S1")}, // path #2
             Thot::LinkSpec{Thot::Port::parse("S1"), Thot::Port::parse("S2")},
 
-            Thot::LinkSpec{Thot::Port::join({"R2", "S2"}, Thot::MergePolicyKind::Concat), Thot::Port::parse("flat")}, // join
+            Thot::LinkSpec{Thot::Port::join({"R2", "S2"}, Thot::MergePolicyKind::Concat), Thot::Port::parse("Send")}, // join
 
+            Thot::LinkSpec{Thot::Port::parse("Send"), Thot::Port::parse("flat")},
             Thot::LinkSpec{Thot::Port::parse("flat"), Thot::Port::parse("FC1")},
             Thot::LinkSpec{Thot::Port::parse("FC1"), Thot::Port::parse("HDFin")},
             Thot::LinkSpec{Thot::Port::parse("HDFin"), Thot::Port::parse("FC2")},
             Thot::LinkSpec{Thot::Port::parse("FC2"), Thot::Port::parse("@output")}
         });
+
 
 
         model.set_optimizer(
