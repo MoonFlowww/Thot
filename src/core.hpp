@@ -2521,13 +2521,15 @@ namespace Thot {
             std::transform(message.begin(), message.end(), std::back_inserter(normalized),
                            [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
 
-            static constexpr std::array<std::string_view, 6> triggers = {
+            static constexpr std::array<std::string_view, 8> triggers = {
                 "cudnn_status_internal_error",
                 "device_allocation_failed",
                 "cudnn_status_alloc_failed",
                 "cuda error: out of memory",
                 "cuda runtime error",
-                "no cuda gpus are available"
+                "no cuda gpus are available",
+                "cuda error stream capture invalidated",
+                "operation failed due to a previous error during capture"
             };
 
             for (auto trigger : triggers) {
