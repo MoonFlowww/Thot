@@ -77,21 +77,13 @@ int main() {
                 Thot::Activation::Identity,
                 Thot::Initialization::HeNormal
             )
-        }, 1, {.use_projection = true, .projection =
-            {
-            Thot::Layer::Conv2d(
-       {64, 128, {1, 1}, {2, 2}, {0, 0}, {1, 1}, 1, false},
-       Thot::Activation::Identity,
-       Thot::Initialization::HeNormal
-       ),
-       Thot::Layer::BatchNorm2d(
-           {128, 1e-5, 0.1, true, true},
-           Thot::Activation::Identity
-       )
-        }
-
-
-        }, { .final_activation = Thot::Activation::SiLU }));
+        }, 1,
+        {.use_projection = true, .projection = Thot::Layer::Conv2d(
+                    {64, 128, {1, 1}, {2, 2}, {0, 0}, {1, 1}, 1, false},
+                    Thot::Activation::Identity,
+                    Thot::Initialization::HeNormal)
+            },
+            { .final_activation = Thot::Activation::SiLU }));
 
         model.add(Thot::Layer::HardDropout({ .probability = 0.3 }));
 
@@ -126,7 +118,7 @@ int main() {
         model.add(Thot::Layer::FC({128, 512, true}, Thot::Activation::SiLU, Thot::Initialization::HeNormal));
         model.add(Thot::Layer::HardDropout({.probability = 0.5}));
         model.add(Thot::Layer::FC({512, 10, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal));
-    
+
 
         model.set_optimizer(
             Thot::Optimizer::AdamW({.learning_rate=1e-4, .weight_decay=5e-4}),
@@ -167,27 +159,6 @@ int main() {
         model.train(train_images, train_labels, {.epoch = epochs, .batch_size = B, .shuffle = true, .buffer_vram = 0, .restore_best_state = true,
                         .test = std::make_pair(validation_images, validation_labels)});
     }
-
-    model.evaluate(test_images, test_labels, Thot::Evaluation::Classification,{
-        Thot::Metric::Classification::Accuracy,
-        Thot::Metric::Classification::Precision,
-        Thot::Metric::Classification::Recall,
-        Thot::Metric::Classification::F1,
-        Thot::Metric::Classification::TruePositiveRate,
-        Thot::Metric::Classification::TrueNegativeRate,
-        Thot::Metric::Classification::Top1Error,
-        Thot::Metric::Classification::ExpectedCalibrationError,
-        Thot::Metric::Classification::MaximumCalibrationError,
-        Thot::Metric::Classification::CohensKappa,
-        Thot::Metric::Classification::LogLoss,
-        Thot::Metric::Classification::BrierScore,
-    });
-
-
-    if (!IsLoading) {
-        model.calibrate(train_images, train_labels, {Thot::Calibration::TemperatureScalingDescriptor{}}, true, std::make_pair(train_images, train_labels)); // std::make_pair(test_images, test_labels)
-    }
-
 
     model.evaluate(test_images, test_labels, Thot::Evaluation::Classification,{
         Thot::Metric::Classification::Accuracy,
@@ -246,45 +217,146 @@ int main() {
 
 
 /*
+ --------------------------------------CIFAR10--------------------------------------
+        model.add(Thot::Block::Sequential({
+            Thot::Layer::Conv2d(
+                {3, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
+                Thot::Activation::Identity,
+                Thot::Initialization::HeNormal
+            ),
+            Thot::Layer::BatchNorm2d(
+                {64, 1e-5, 0.1, true, true},
+                Thot::Activation::SiLU
+            ),
+            Thot::Layer::Conv2d(
+                {64, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
+                Thot::Activation::Identity,
+                Thot::Initialization::HeNormal,
+                {}
+            ),
+            Thot::Layer::BatchNorm2d(
+                {64, 1e-5, 0.1, true, true},
+                Thot::Activation::SiLU
+            ),
+            Thot::Layer::MaxPool2d({{2, 2}, {2, 2}})
+        }));
 
-model.set_optimizer(
-    Thot::Optimizer::AdamW({.learning_rate=1e-3, .weight_decay=5e-4}),
-        Thot::LrScheduler::CosineAnnealing({
-        .T_max = (epochs) * steps_per_epoch,
-        .eta_min = 3e-7,
-        .warmup_steps = 5*steps_per_epoch,
-        .warmup_start_factor = 0.1
-    })
-);
+        model.add(Thot::Layer::HardDropout({ .probability = 0.3 }));
 
 
-model.set_loss(Thot::Loss::CrossEntropy({.label_smoothing=0.05f}));
+        model.add(Thot::Block::Residual({
+            Thot::Layer::Conv2d(
+                {64, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
+                Thot::Activation::Identity,
+                Thot::Initialization::HeNormal
+            ),
+            Thot::Layer::BatchNorm2d(
+                {64, 1e-5, 0.1, true, true},
+                Thot::Activation::SiLU
+            ),
+            Thot::Layer::Conv2d(
+                {64, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
+                Thot::Activation::Identity,
+                Thot::Initialization::HeNormal
+            )
+        }, 3, {}, { .final_activation = Thot::Activation::SiLU }));
 
-model.set_regularization({ Thot::Regularization::SWAG({
-  .coefficient = 1e-3,
-  .variance_epsilon = 1e-6,
-  .start_step = static_cast<size_t>(0.85 * (steps_per_epoch*epochs)),
-  .accumulation_stride = static_cast<size_t>(steps_per_epoch),
-  .max_snapshots = 20,
-})});
+        model.add(Thot::Block::Residual({
+            Thot::Layer::Conv2d(
+                {64, 128, {3, 3}, {2, 2}, {1, 1}, {1, 1}, 1, false},
+                Thot::Activation::Identity,
+                Thot::Initialization::HeNormal
+            ),
+            Thot::Layer::BatchNorm2d(
+                {128, 1e-5, 0.1, true, true},
+                Thot::Activation::SiLU
+            ),
+            Thot::Layer::Conv2d(
+                {128, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
+                Thot::Activation::Identity,
+                Thot::Initialization::HeNormal
+            )
+        }, 1,
+        {.use_projection = true, .projection = Thot::Layer::Conv2d(
+                    {64, 128, {1, 1}, {2, 2}, {0, 0}, {1, 1}, 1, false},
+                    Thot::Activation::Identity,
+                    Thot::Initialization::HeNormal)
+            },
+            { .final_activation = Thot::Activation::SiLU }));
+
+        model.add(Thot::Layer::HardDropout({ .probability = 0.3 }));
+
+        model.add(Thot::Block::Sequential({
+            Thot::Layer::Conv2d(
+                {128, 256, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
+                Thot::Activation::Identity,
+                Thot::Initialization::HeNormal
+            ),
+            Thot::Layer::BatchNorm2d(
+                {256, 1e-5, 0.1, true, true},
+                Thot::Activation::SiLU
+            ),
+            Thot::Layer::AdaptiveAvgPool2d({{1, 1}})
+        }));
+
+        model.add(Thot::Block::Sequential({
+            Thot::Layer::Conv2d(
+                {256, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
+                Thot::Activation::Identity,
+                Thot::Initialization::HeNormal
+            ),
+            Thot::Layer::BatchNorm2d(
+                {128, 1e-5, 0.1, true, true},
+                Thot::Activation::SiLU
+            ),
+            Thot::Layer::AdaptiveAvgPool2d({{1, 1}})
+        }));
+
+        model.add(Thot::Layer::Flatten());
+
+        model.add(Thot::Layer::FC({128, 512, true}, Thot::Activation::SiLU, Thot::Initialization::HeNormal));
+        model.add(Thot::Layer::HardDropout({.probability = 0.5}));
+        model.add(Thot::Layer::FC({512, 10, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal));
+
+
+        model.set_optimizer(
+            Thot::Optimizer::AdamW({.learning_rate=1e-4, .weight_decay=5e-4}),
+                Thot::LrScheduler::CosineAnnealing({
+                .T_max = static_cast<size_t>(epochs*0.85) * steps_per_epoch,
+                .eta_min = 3e-7,
+                .warmup_steps = 5*static_cast<size_t>(steps_per_epoch),
+                .warmup_start_factor = 0.1
+            })
+        );
+
+        model.set_loss(Thot::Loss::CrossEntropy({.label_smoothing=0.02f}));
+
+        model.set_regularization({ Thot::Regularization::SWAG({
+          .coefficient = 1e-3,
+          .variance_epsilon = 1e-6,
+          .start_step = static_cast<size_t>(0.85 * (steps_per_epoch*epochs)),
+          .accumulation_stride = static_cast<size_t>(steps_per_epoch),
+          .max_snapshots = 20,
+        })});
+
 
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┓
 ┃ Evaluation: Classification ┃          ┃                    ┃
 ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━┫
 ┃ Metric                     ┃    Macro ┃ Weighted (support) ┃
 ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━┫
-┃ Accuracy                   ┃ 0.882600 ┃           0.882600 ┃
-┃ Precision                  ┃ 0.882892 ┃           0.882892 ┃
-┃ Recall                     ┃ 0.882600 ┃           0.882600 ┃
-┃ F1 score                   ┃ 0.881857 ┃           0.881857 ┃
-┃ True positive rate         ┃ 0.882600 ┃           0.882600 ┃
-┃ True negative rate         ┃ 0.986956 ┃           0.986956 ┃
-┃ Top-1 error                ┃ 0.117400 ┃           0.117400 ┃
-┃ Expected calibration error ┃ 0.034671 ┃           0.034671 ┃
-┃ Maximum calibration error  ┃ 0.244972 ┃           0.244972 ┃
-┃ Cohen's kappa              ┃ 0.869556 ┃           0.869556 ┃
-┃ Log loss                   ┃ 0.451599 ┃           0.451599 ┃
-┃ Brier score                ┃ 0.185568 ┃           0.185568 ┃
+┃ Accuracy                   ┃ 0.974560 ┃           0.974560 ┃
+┃ Precision                  ┃ 0.872237 ┃           0.872237 ┃
+┃ Recall                     ┃ 0.872800 ┃           0.872800 ┃
+┃ F1 score                   ┃ 0.872213 ┃           0.872213 ┃
+┃ True positive rate         ┃ 0.872800 ┃           0.872800 ┃
+┃ True negative rate         ┃ 0.985867 ┃           0.985867 ┃
+┃ Top-1 error                ┃ 0.127200 ┃           0.127200 ┃
+┃ Expected calibration error ┃ 0.037887 ┃           0.037887 ┃
+┃ Maximum calibration error  ┃ 0.148656 ┃           0.148656 ┃
+┃ Cohen's kappa              ┃ 0.858667 ┃           0.858667 ┃
+┃ Log loss                   ┃ 0.415918 ┃           0.415918 ┃
+┃ Brier score                ┃ 0.190100 ┃           0.190100 ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┻━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━┛
 
 */
