@@ -1644,15 +1644,15 @@ namespace Thot {
                                          && *cuda_graph_input_dtype_ == tensor.scalar_type();
                 if (shape_match && dtype_match && cuda_graph_ && cuda_graph_static_input_.defined()
                     && cuda_graph_static_output_.defined()) {
-                    cuda_graph_static_input_.copy_(tensor);
-                    cuda_graph_->replay();
+                    auto replay_graph = [&]() {
+                        cuda_graph_static_input_.copy_(tensor);
+                        cuda_graph_->replay();
+                    };
                     if (cuda_graph_capture_stream_) {
                         c10::cuda::CUDAStreamGuard guard(*cuda_graph_capture_stream_);
-                        cuda_graph_static_input_.copy_(tensor);
-                        cuda_graph_->replay();
+                        replay_graph();
                     } else {
-                        cuda_graph_static_input_.copy_(tensor);
-                        cuda_graph_->replay();
+                        replay_graph();
                     }
                     return cuda_graph_static_output_.clone();
                 }
