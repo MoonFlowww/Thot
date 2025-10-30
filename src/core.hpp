@@ -3072,8 +3072,7 @@ namespace Thot {
 
 namespace Thot {
     template <class Descriptor, class... Args>
-    decltype(auto) Model::plot(Descriptor descriptor, Args&&... args)
-    {
+    decltype(auto) Model::plot(Descriptor descriptor, Args&&... args) {
         return Plot::Render(*this,
                             std::move(descriptor),
                             std::forward<Args>(args)...);
