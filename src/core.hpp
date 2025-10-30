@@ -3185,10 +3185,10 @@ namespace Thot {
                     loss_tensor.mul_(static_cast<double>(current_batch));
                     accumulation.add_(loss_tensor);
                     weight += current_batch;
-                    prediction = {};
-                    batch_inputs = {};
-                    batch_targets = {};
-                    loss = {};
+                    prediction = torch::Tensor{};
+                    batch_inputs = torch::Tensor{};
+                    batch_targets = torch::Tensor{};
+                    loss = torch::Tensor{};
 
                     return current_batch;
                 };

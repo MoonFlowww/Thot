@@ -613,7 +613,7 @@ const auto device = model.device();
             auto predictions = model.forward(input_batch);
             auto logits = predictions.detach();
 
-            predictions = {};
+            predictions = torch::Tensor{};
 
             if (logits.dim() == 1) {
                 logits = logits.unsqueeze(1);
@@ -832,9 +832,9 @@ const auto device = model.device();
                     }
                 }
             }
-            logits = {};
+            logits = torch::Tensor{};
             probabilities = torch::Tensor{};
-            predicted = {};
+            predicted = torch::Tensor{};
             input_batch = torch::Tensor{};
         };
 
