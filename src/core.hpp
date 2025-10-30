@@ -560,6 +560,57 @@ namespace Thot {
             std::optional<int64_t> concat_dimension{};
         };
 
+        struct GraphExecutionWorkspace {
+            torch::Tensor input{};
+            torch::Tensor output{};
+            std::vector<torch::Tensor> node_buffers{};
+            std::vector<std::vector<torch::Tensor>> join_scratch{};
+
+            void invalidate() noexcept
+            {
+                input = torch::Tensor{};
+                output = torch::Tensor{};
+                node_buffers.clear();
+                join_scratch.clear();
+            }
+
+            void ensure_node_capacity(std::size_t count)
+            {
+                if (node_buffers.size() != count) {
+                    node_buffers.resize(count);
+                }
+            }
+
+            void ensure_join_scratch(const std::vector<JoinBuffer>& join_buffers)
+            {
+                if (join_scratch.size() != join_buffers.size()) {
+                    join_scratch.resize(join_buffers.size());
+                }
+
+                for (std::size_t index = 0; index < join_scratch.size(); ++index) {
+                    auto& scratch = join_scratch[index];
+                    scratch.reserve(join_buffers[index].producers.size());
+                }
+            }
+
+            void bind_input(std::size_t index)
+            {
+                if (index >= node_buffers.size()) {
+                    ensure_node_capacity(index + 1);
+                }
+                node_buffers[index] = input;
+            }
+
+            void bind_output(std::size_t index)
+            {
+                if (index >= node_buffers.size()) {
+                    ensure_node_capacity(index + 1);
+                }
+                node_buffers[index] = output;
+            }
+        };
+
+
 
 
         using ModuleDescriptor = Common::SaveLoad::ModuleDescriptor;
@@ -1244,11 +1295,6 @@ namespace Thot {
                 throw std::invalid_argument("Link specification contains cycles; unable to compile routing graph.");
             }
 
-            std::vector<std::size_t> join_workspace_reservations(joins.size(), 0);
-            for (std::size_t index = 0; index < joins.size(); ++index) {
-                join_workspace_reservations[index] = joins[index].producers.size();
-            }
-
             std::vector<ExecutionStep> execution_steps;
             execution_steps.reserve(steps.size());
 
@@ -1596,9 +1642,13 @@ namespace Thot {
             ensure_execution_workspace();
 
             constexpr std::size_t kInputNodeIndex = 0;
+            copy_into_graph_input_buffer(std::move(tensor));
+
+            auto& workspace = graph_workspace_;
 
 
-            node_activations_[kInputNodeIndex] = std::move(tensor);
+            const auto output_index = compiled_output_node_index_.value_or(compiled_steps_.empty() ? kInputNodeIndex : compiled_steps_.back().node_index);
+            workspace.bind_output(output_index);
 
             for (const auto& step : compiled_steps_) {
                 const auto node_index = step.node_index;
@@ -1619,10 +1669,10 @@ namespace Thot {
                             throw std::runtime_error("Module node is missing its dependency in the compiled graph.");
                         }
                         const auto upstream_index = step.dependencies.front();
-                        if (upstream_index >= node_activations_.size()) {
+                        if (upstream_index >= workspace.node_buffers.size()) {
                             throw std::runtime_error("Module dependency index is invalid.");
                         }
-                        auto input_tensor = node_activations_[upstream_index];
+                        auto input_tensor = workspace.node_buffers[upstream_index];
                         if (!input_tensor.defined()) {
                             throw std::runtime_error("Module dependency tensor is undefined during plan execution.");
                         }
@@ -1632,7 +1682,8 @@ namespace Thot {
                         }
                         auto output_tensor = layer->forward(input_tensor);
                         output_tensor = Activation::Details::apply(layer->activation, std::move(output_tensor));
-                        node_activations_[node_index] = std::move(output_tensor);
+                        auto& destination = workspace.node_buffers[node_index];
+                        copy_tensor_into(destination, output_tensor);
                         break;
                     }
                     case CompiledNode::Kind::Join: {
@@ -1640,18 +1691,18 @@ namespace Thot {
                             throw std::runtime_error("Join buffer cache is out of sync with compiled graph.");
                         }
                         auto& buffer = join_buffers_[node.index];
-                        auto& scratch = join_workspace_[node.index];
+                        auto& scratch = workspace.join_scratch[node.index];
                         scratch.clear();
                         scratch.reserve(buffer.producers.size());
                         for (auto producer : buffer.producers) {
-                            if (producer >= node_activations_.size()) {
+                            if (producer >= workspace.node_buffers.size()) {
                                 throw std::runtime_error("Join producer index is invalid.");
                             }
-                            auto value = node_activations_[producer];
+                            auto value = workspace.node_buffers[producer];
                             if (!value.defined()) {
                                 throw std::runtime_error("Join producer tensor is undefined during plan execution.");
                             }
-                            scratch.push_back(std::move(value));
+                            scratch.push_back(value);
                         }
 
                         torch::Tensor joined;
@@ -1683,8 +1734,10 @@ namespace Thot {
                             }
                         }
 
+                        auto& destination = workspace.node_buffers[node_index];
+                        copy_tensor_into(destination, joined);
+
                         scratch.clear();
-                        node_activations_[node_index] = std::move(joined);
                         break;
                     }
                     case CompiledNode::Kind::Output: {
@@ -1692,32 +1745,33 @@ namespace Thot {
                             throw std::runtime_error("Output node has no dependencies in the compiled graph.");
                         }
                         const auto upstream_index = step.dependencies.front();
-                        if (upstream_index >= node_activations_.size()) {
+                        if (upstream_index >= workspace.node_buffers.size()) {
                             throw std::runtime_error("Output dependency index is invalid.");
                         }
-                        node_activations_[node_index] = node_activations_[upstream_index];
+                        auto upstream_tensor = workspace.node_buffers[upstream_index];
+                        if (!upstream_tensor.defined()) {
+                            throw std::runtime_error("Output dependency tensor is undefined during plan execution.");
+                        }
+                        copy_tensor_into(workspace.output, upstream_tensor);
+                        workspace.bind_output(node_index);
                         break;
                     }
                 }
             }
 
-            const auto output_index = compiled_output_node_index_.value_or(
-                compiled_steps_.empty() ? kInputNodeIndex : compiled_steps_.back().node_index);
-            if (output_index >= node_activations_.size()) {
+            if (output_index >= workspace.node_buffers.size()) {
                 throw std::runtime_error("Compiled output index is invalid.");
             }
 
-            auto result = node_activations_[output_index];
-            if (!result.defined()) {
+            auto output_tensor = workspace.node_buffers[output_index];
+            if (!output_tensor.defined()) {
                 throw std::runtime_error("Model::forward produced an undefined tensor at the output node.");
             }
 
-            for (auto& slot : node_activations_) {
-                slot = torch::Tensor{};
-            }
-            for (auto& scratch : join_workspace_) {
-                scratch.clear();
-            }
+            copy_tensor_into(workspace.output, output_tensor);
+            workspace.bind_output(output_index);
+
+            auto result = graph_output_tensor();
 
             return apply_calibrations(std::move(result));
         }
@@ -2206,6 +2260,22 @@ namespace Thot {
         static std::vector<int64_t> tensor_shape_vector(const torch::Tensor& tensor);
         static std::string describe_activation(Activation::Type type);
         static std::string describe_module(const Layer::Details::RegisteredLayer& layer);
+        static void copy_tensor_into(torch::Tensor& destination, const torch::Tensor& source)
+        {
+            if (!source.defined()) {
+                destination = torch::Tensor{};
+                return;
+            }
+
+            if (!destination.defined()
+                || destination.sizes() != source.sizes()
+                || destination.scalar_type() != source.scalar_type()
+                || destination.device() != source.device()) {
+                destination = torch::empty_like(source);
+                }
+
+            destination.copy_(source);
+        }
 
         void record_epoch_telemetry(TrainingTelemetry::EpochSnapshot snapshot)
         {
@@ -2239,6 +2309,21 @@ namespace Thot {
         }
 
 
+
+        void copy_into_graph_input_buffer(torch::Tensor tensor)
+        {
+            constexpr std::size_t kInputNodeIndex = 0;
+            copy_tensor_into(graph_workspace_.input, tensor);
+            graph_workspace_.bind_input(kInputNodeIndex);
+        }
+
+        [[nodiscard]] const torch::Tensor& graph_output_tensor() const noexcept
+        {
+            return graph_workspace_.output;
+        }
+
+
+
         void clear_compiled_graph() noexcept
         {
             routing_active_ = false;
@@ -2262,8 +2347,7 @@ namespace Thot {
         void invalidate_execution_workspace() noexcept
         {
             execution_workspace_dirty_ = true;
-            node_activations_.clear();
-            join_workspace_.clear();
+            graph_workspace_.invalidate();
             cached_layer_pointers_.clear();
         }
 
@@ -2276,24 +2360,28 @@ namespace Thot {
                 }
             }
 
-            if (execution_workspace_dirty_ || node_activations_.size() != compiled_nodes_.size()) {
-                node_activations_.assign(compiled_nodes_.size(), torch::Tensor{});
-            } else {
-                for (auto& slot : node_activations_) {
-                    slot = torch::Tensor{};
-                }
+            if (!has_compiled_routing() || compiled_nodes_.empty()) {
+                execution_workspace_dirty_ = false;
+                return;
             }
 
-            if (execution_workspace_dirty_ || join_workspace_.size() != join_buffers_.size()) {
-                join_workspace_.resize(join_buffers_.size());
+            auto& workspace = graph_workspace_;
+
+            if (execution_workspace_dirty_ || workspace.node_buffers.size() != compiled_nodes_.size()) {
+                workspace.ensure_node_capacity(compiled_nodes_.size());
             }
 
-            for (std::size_t index = 0; index < join_workspace_.size(); ++index) {
-                auto& scratch = join_workspace_[index];
+            workspace.ensure_join_scratch(join_buffers_);
+
+            constexpr std::size_t kInputNodeIndex = 0;
+            workspace.bind_input(kInputNodeIndex);
+
+            const auto output_index = compiled_output_node_index_.value_or(
+                compiled_steps_.empty() ? kInputNodeIndex : compiled_steps_.back().node_index);
+            workspace.bind_output(output_index);
+
+            for (auto& scratch : workspace.join_scratch) {
                 scratch.clear();
-                if (index < join_buffers_.size()) {
-                    scratch.reserve(join_buffers_[index].producers.size());
-                }
             }
 
             execution_workspace_dirty_ = false;
@@ -2993,6 +3081,7 @@ namespace Thot {
         std::optional<std::size_t> compiled_output_node_index_{};
         std::vector<torch::Tensor> node_activations_{};
         std::vector<std::vector<torch::Tensor>> join_workspace_{};
+        GraphExecutionWorkspace graph_workspace_{};
         std::vector<Layer::Details::RegisteredLayer*> cached_layer_pointers_{};
         bool execution_workspace_dirty_{true};
         bool routing_active_{false};

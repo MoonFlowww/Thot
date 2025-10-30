@@ -15,7 +15,7 @@ int main() {
     model.to_device(torch::cuda::is_available());
     const int64_t N = 200000;
     const int64_t B = std::pow(2,7);
-    const int64_t epochs = 80;
+    const int64_t epochs = 20;
 
     const int64_t steps_per_epoch = (N + B - 1) / B;
     if (!IsLoading) {
@@ -173,7 +173,7 @@ int main() {
           .start_step = static_cast<size_t>(0.85 * (steps_per_epoch*epochs)),
           .accumulation_stride = static_cast<size_t>(steps_per_epoch),
           .max_snapshots = 20,
-        })});
+        }), Thot::Regularization::JacobianNorm({})});
 
     }
 
