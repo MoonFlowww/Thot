@@ -2871,8 +2871,8 @@ namespace Thot {
                 destination = torch::empty_like(source);
             } else {
                 destination = destination.detach();
-                if (destination.requires_grad() != source.requires_grad()) {
-                    destination.set_requires_grad(source.requires_grad());
+                if (destination.requires_grad()) {
+                    destination.set_requires_grad(false);
                 }
             }
 
