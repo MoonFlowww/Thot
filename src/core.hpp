@@ -402,6 +402,14 @@ namespace Thot {
         TORCH_MODULE(SequentialBlockModule);
     }
 
+
+    // Execution mode for CUDA graph optimisation.
+    enum class GraphMode {
+        Disabled,
+        Capture,
+        Replay
+    };
+
     struct TrainOptions {
         std::size_t epoch{Core::kDefaultTrainingConfig.epochs};
         std::size_t batch_size{Core::kDefaultTrainingConfig.batch_size};
@@ -412,6 +420,7 @@ namespace Thot {
         std::optional<std::pair<torch::Tensor, torch::Tensor>> validation{};
         std::optional<std::pair<torch::Tensor, torch::Tensor>> test{};
         std::ostream* stream{&std::cout};
+        GraphMode graph_mode{GraphMode::Disabled};  // Enable CUDA graph capture/replay; pad or drop remainder batches first.
     };
 
     class Model : public torch::nn::Module {
@@ -482,10 +491,21 @@ namespace Thot {
 
         struct ForwardOptions {
             std::optional<std::size_t> max_chunk_size{};
+            GraphMode graph_mode{GraphMode::Disabled};  // Graph capture/replay disables chunking; pad/drop to maintain static shapes.
 
             [[nodiscard]] bool buffering_enabled() const noexcept
             {
-                return max_chunk_size.has_value() && *max_chunk_size > 0;
+                return graph_mode == GraphMode::Disabled && max_chunk_size.has_value() && *max_chunk_size > 0;
+            }
+
+            [[nodiscard]] bool graph_capture_requested() const noexcept
+            {
+                return graph_mode == GraphMode::Capture;
+            }
+
+            [[nodiscard]] bool graph_replay_requested() const noexcept
+            {
+                return graph_mode == GraphMode::Replay;
             }
         };
 
@@ -1593,6 +1613,13 @@ namespace Thot {
                 input = input.to(device_);
             }
 
+            const auto graph_mode = options.graph_mode;
+            const bool graph_mode_active = graph_mode != GraphMode::Disabled;
+            if (graph_mode_active) {
+                ensure_graph_input_shape(graph_mode, input);
+            }
+
+
             const bool can_buffer = options.buffering_enabled() && input.defined() && input.dim() > 0;
             if (!can_buffer) {
                 return execute(std::move(input));
@@ -2257,9 +2284,118 @@ namespace Thot {
 
         }
     private:
+        void reset_graph_shape_cache(GraphMode mode) const;
+        void ensure_graph_input_shape(GraphMode mode, const torch::Tensor& tensor) const;
+        void ensure_graph_batch_shapes(GraphMode mode,
+                                       const torch::Tensor& inputs,
+                                       const torch::Tensor& targets) const;
+        void ensure_graph_replay_ready(GraphMode mode) const;
+        void enforce_graph_shape(GraphMode mode,
+                                 const torch::Tensor& tensor,
+                                 std::optional<std::vector<int64_t>>& storage,
+                                 std::string_view tensor_label) const;
         static std::vector<int64_t> tensor_shape_vector(const torch::Tensor& tensor);
+        static std::string format_shape_vector(const std::vector<int64_t>& shape);
         static std::string describe_activation(Activation::Type type);
         static std::string describe_module(const Layer::Details::RegisteredLayer& layer);
+        void reset_graph_shape_cache(GraphMode mode) const
+        {
+            if (mode == GraphMode::Capture) {
+                last_input_shape_.reset();
+                last_target_shape_.reset();
+            }
+        }
+
+        void ensure_graph_input_shape(GraphMode mode, const torch::Tensor& tensor) const
+        {
+            enforce_graph_shape(mode, tensor, last_input_shape_, "input");
+        }
+
+        void ensure_graph_batch_shapes(GraphMode mode,
+                                       const torch::Tensor& inputs,
+                                       const torch::Tensor& targets) const
+        {
+            enforce_graph_shape(mode, inputs, last_input_shape_, "input");
+            enforce_graph_shape(mode, targets, last_target_shape_, "target");
+        }
+
+        void ensure_graph_replay_ready(GraphMode mode) const
+        {
+            if (mode != GraphMode::Replay) {
+                return;
+            }
+            if (!last_input_shape_ || !last_target_shape_) {
+                throw std::logic_error(
+                    "Graph replay requested before a capture pass recorded the training batch shapes.");
+            }
+        }
+
+        void enforce_graph_shape(GraphMode mode,
+                                 const torch::Tensor& tensor,
+                                 std::optional<std::vector<int64_t>>& storage,
+                                 std::string_view tensor_label) const
+        {
+            if (mode == GraphMode::Disabled) {
+                return;
+            }
+            if (!tensor.defined()) {
+                throw std::invalid_argument(
+                    std::string("Graph optimisation requires a defined ") + std::string(tensor_label)
+                    + " tensor during " + (mode == GraphMode::Capture ? "capture." : "replay."));
+            }
+
+            auto shape = tensor_shape_vector(tensor);
+
+            if (mode == GraphMode::Capture) {
+                if (!storage.has_value()) {
+                    storage = shape;
+                } else if (*storage != shape) {
+                    throw std::invalid_argument(
+                        "Graph capture observed inconsistent " + std::string(tensor_label)
+                        + " tensor shapes. Expected " + format_shape_vector(*storage)
+                        + " but received " + format_shape_vector(shape) + ".");
+                }
+                return;
+            }
+
+            if (!storage.has_value()) {
+                throw std::logic_error(
+                    "Graph replay requested for " + std::string(tensor_label)
+                    + " tensors before a capture pass recorded the shape.");
+            }
+
+            if (*storage != shape) {
+                throw std::invalid_argument(
+                    "Graph replay expected " + std::string(tensor_label) + " tensor shape "
+                    + format_shape_vector(*storage) + " but received " + format_shape_vector(shape) + ".");
+            }
+        }
+
+        static std::vector<int64_t> tensor_shape_vector(const torch::Tensor& tensor)
+        {
+            std::vector<int64_t> shape;
+            const auto sizes = tensor.sizes();
+            shape.reserve(static_cast<std::size_t>(sizes.size()));
+            for (int64_t index = 0; index < sizes.size(); ++index) {
+                shape.push_back(sizes[index]);
+            }
+            return shape;
+        }
+
+        static std::string format_shape_vector(const std::vector<int64_t>& shape)
+        {
+            std::ostringstream stream;
+            stream << '(';
+            for (std::size_t index = 0; index < shape.size(); ++index) {
+                if (index > 0) {
+                    stream << ", ";
+                }
+                stream << shape[index];
+            }
+            stream << ')';
+            return stream.str();
+        }
+
         static void copy_tensor_into(torch::Tensor& destination, const torch::Tensor& source)
         {
             if (!source.defined()) {
@@ -2645,6 +2781,14 @@ namespace Thot {
                 const auto device = model.device();
                 const auto total_samples = train_dataset.inputs.size(0);
                 const auto batch_size = static_cast<std::int64_t>(options.batch_size);
+                const auto graph_mode = options.graph_mode;
+                const bool graph_mode_active = graph_mode != GraphMode::Disabled;
+
+                if (graph_mode == GraphMode::Capture) {
+                    model.reset_graph_shape_cache(graph_mode);
+                } else if (graph_mode == GraphMode::Replay) {
+                    model.ensure_graph_replay_ready(graph_mode);
+                }
 
                 torch::TensorOptions index_options = torch::TensorOptions().dtype(torch::kLong);
 
@@ -2684,6 +2828,14 @@ namespace Thot {
                         if (current_batch <= 0) {
                             return std::pair<torch::Tensor, torch::Tensor>{torch::Tensor{}, torch::Tensor{}};
                         }
+                        if (graph_mode_active && current_batch != batch_size) {
+                            throw std::invalid_argument(
+                                "Graph optimisation requires every batch to match the captured batch size ("
+                                + std::to_string(batch_size)
+                                + "). Received " + std::to_string(current_batch)
+                                + " samples; pad or drop the remainder before enabling graph replay.");
+                        }
+
 
                         torch::Tensor batch_inputs;
                         torch::Tensor batch_targets;
@@ -2720,8 +2872,15 @@ namespace Thot {
                             return std::int64_t{0};
                         }
 
+
+                        if (graph_mode_active) {
+                            model.ensure_graph_batch_shapes(graph_mode, batch_inputs, batch_targets);
+                        }
+
                         model.zero_grad();
-                        auto prediction = model.forward(batch_inputs);
+                        ForwardOptions forward_options{};
+                        forward_options.graph_mode = graph_mode;
+                        auto prediction = model.forward(std::move(batch_inputs), std::move(forward_options));
 
                         if (!prediction.sizes().equals(batch_targets.sizes())) {
                             if (batch_targets.numel() == prediction.numel()) {
@@ -2767,34 +2926,44 @@ namespace Thot {
                     };
 
                     if constexpr (BufferVRAM) {
-                        std::deque<std::pair<torch::Tensor, torch::Tensor>> buffered_batches;
-                        std::size_t next_batch_to_load = 0;
-                        const std::size_t max_batches = total_batches == 0 ? 1 : total_batches;
-                        const std::size_t buffer_limit = std::max<std::size_t>(1,
-                            std::min<std::size_t>(options.buffer_vram + 1, max_batches));
-
-                        auto maintain_buffer = [&](std::size_t current_index) {
-                            const std::size_t desired_size = std::min(buffer_limit, total_batches - current_index);
-                            while (buffered_batches.size() < desired_size && next_batch_to_load < total_batches) {
-                                auto batch = fetch_batch(next_batch_to_load);
-                                buffered_batches.push_back(std::move(batch));
-                                ++next_batch_to_load;
+                        if (graph_mode_active) {
+                            for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
+                                auto batch_pair = fetch_batch(batch_index);
+                                const auto processed = process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
+                                weight += processed;
                             }
-                        };
+                        } else {
+                            std::deque<std::pair<torch::Tensor, torch::Tensor>> buffered_batches;
+                            std::size_t next_batch_to_load = 0;
+                            const std::size_t max_batches = total_batches == 0 ? 1 : total_batches;
+                            const std::size_t buffer_limit = std::max<std::size_t>(1,
+                                std::min<std::size_t>(options.buffer_vram + 1, max_batches));
 
-                        for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
-                            maintain_buffer(batch_index);
-                            if (buffered_batches.empty()) {
-                                break;
+                            auto maintain_buffer = [&](std::size_t current_index) {
+                                const std::size_t desired_size = std::min(buffer_limit, total_batches - current_index);
+                                while (buffered_batches.size() < desired_size && next_batch_to_load < total_batches) {
+                                    auto batch = fetch_batch(next_batch_to_load);
+                                    buffered_batches.push_back(std::move(batch));
+                                    ++next_batch_to_load;
+                                }
+                            };
+
+                            for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
+                                maintain_buffer(batch_index);
+                                if (buffered_batches.empty()) {
+                                    break;
+                                }
+
+
+                                auto batch_pair = std::move(buffered_batches.front());
+                                buffered_batches.pop_front();
+
+                                const auto processed = process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
+                                weight += processed;
+
+
+                                maintain_buffer(batch_index + 1);
                             }
-
-                            auto batch_pair = std::move(buffered_batches.front());
-                            buffered_batches.pop_front();
-
-                            const auto processed = process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
-                            weight += processed;
-
-                            maintain_buffer(batch_index + 1);
                         }
                     } else {
                         for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
@@ -3071,6 +3240,7 @@ namespace Thot {
         std::vector<torch::Tensor> global_regularization_parameters_{};
         std::vector<RegularizationBinding> global_regularization_bindings_{};
         mutable std::optional<std::vector<int64_t>> last_input_shape_{};
+        mutable std::optional<std::vector<int64_t>> last_target_shape_{};
         TrainingTelemetry telemetry_{};
         std::size_t module_index_{0};
         std::unordered_map<std::string, ModuleNameBinding> module_name_index_{};
