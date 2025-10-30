@@ -133,6 +133,8 @@ int main() {
         model.add(Thot::Layer::HardDropout({.probability = 0.5}), "HDFin");
         model.add(Thot::Layer::FC({256, 10, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal), "FC2");
 
+
+
         model.links({
             Thot::LinkSpec{Thot::Port::parse("@input"), Thot::Port::parse("stem")},
 
