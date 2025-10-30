@@ -19,11 +19,23 @@
 namespace Thot::Optimizer::Details {
 
     namespace detail {
-        inline auto make_scalar_like(const torch::Tensor& reference, double value) -> torch::Tensor {
-            if (reference.defined()) {
-                return torch::full({}, value, reference.options());
+        namespace muon {
+            inline auto make_scalar_like(const torch::Tensor& reference, double value) -> torch::Tensor {
+                if (reference.defined()) {
+                    return torch::full({}, value, reference.options());
+                }
+                return torch::full({}, value, torch::TensorOptions().dtype(torch::kFloat));
             }
-            return torch::full({}, value, torch::TensorOptions().dtype(torch::kFloat));
+
+            inline void ensure_step_tensor(torch::Tensor& storage, const torch::Tensor& reference)
+            {
+                const auto options = torch::TensorOptions().dtype(torch::kFloat64).device(reference.device());
+                if (!storage.defined()) {
+                    storage = torch::zeros({}, options);
+                } else if (storage.device() != reference.device() || storage.scalar_type() != torch::kFloat64) {
+                    storage = storage.to(options);
+                }
+            }
         }
 
         inline auto make_step_scalar_like(const torch::Tensor& reference, double value) -> torch::Tensor
@@ -46,8 +58,8 @@ namespace Thot::Optimizer::Details {
             }
 
             auto current_norm = torch::linalg_vector_norm(update);
-            auto threshold = detail::make_scalar_like(current_norm, max_norm);
-            auto eps_scalar = detail::make_scalar_like(current_norm, eps);
+            auto threshold = detail::muon::make_scalar_like(current_norm, max_norm);
+            auto eps_scalar = detail::muon::make_scalar_like(current_norm, eps);
             auto scale = (threshold / (current_norm + eps_scalar)).clamp_max(1.0);
             return update * scale;
         }
@@ -58,15 +70,6 @@ namespace Thot::Optimizer::Details {
             }
         }
 
-        inline void ensure_step_tensor(torch::Tensor& storage, const torch::Tensor& reference)
-        {
-            const auto options = torch::TensorOptions().dtype(torch::kFloat64).device(reference.device());
-            if (!storage.defined()) {
-                storage = torch::zeros({}, options);
-            } else if (storage.device() != reference.device() || storage.scalar_type() != torch::kFloat64) {
-                storage = storage.to(options);
-            }
-        }
 
         inline void apply_weight_decay(torch::Tensor& update, const torch::Tensor& param, double weight_decay) {
             if (weight_decay == 0.0) {
@@ -148,7 +151,7 @@ namespace Thot::Optimizer::Details {
         auto& exp_avg = state.exp_avg();
         auto& step = state.step();
         detail::ensure_tensor_like(exp_avg, grad);
-        detail::ensure_step_tensor(step, grad);
+        detail::muon::ensure_step_tensor(step, grad);
 
         auto step_increment = detail::make_step_scalar_like(step, 1.0);
         step.add_(step_increment);
@@ -250,7 +253,7 @@ namespace Thot::Optimizer::Details {
         detail::ensure_tensor_like(exp_avg, grad);
         detail::ensure_tensor_like(exp_avg_sq, grad);
 
-        detail::ensure_step_tensor(step, grad);
+        detail::muon::ensure_step_tensor(step, grad);
         auto step_increment = detail::make_step_scalar_like(step, 1.0);
         step.add_(step_increment);
 
@@ -424,7 +427,7 @@ namespace Thot::Optimizer::Details {
         detail::ensure_tensor_like(exp_avg, grad);
         detail::ensure_tensor_like(exp_avg_sq, grad);
 
-        detail::ensure_step_tensor(step, grad);
+        detail::muon::ensure_step_tensor(step, grad);
         auto step_increment = detail::make_step_scalar_like(step, 1.0);
         step.add_(step_increment);
 
@@ -532,7 +535,7 @@ namespace Thot::Optimizer::Details {
                             detail::ensure_tensor_like(state.exp_avg(), param);
                             detail::ensure_tensor_like(state.exp_avg_sq(), param);
                         }
-                        detail::ensure_step_tensor(state.step(), param);
+                        detail::muon::ensure_step_tensor(state.step(), param);
                     }
                 }
             }
