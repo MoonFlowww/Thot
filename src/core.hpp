@@ -2864,19 +2864,11 @@ namespace Thot {
                 return;
             }
 
-            if (!destination.defined()
-                || destination.sizes() != source.sizes()
-                || destination.scalar_type() != source.scalar_type()
-                || destination.device() != source.device()) {
-                destination = torch::empty_like(source);
-            } else {
-                destination = destination.detach();
-                if (destination.requires_grad()) {
-                    destination.set_requires_grad(false);
-                }
+            if (destination.defined() && destination.is_alias_of(source)) {
+                return;
             }
 
-            destination.copy_(source);
+            destination = source.clone();
         }
 
         void record_epoch_telemetry(TrainingTelemetry::EpochSnapshot snapshot)
