@@ -3715,13 +3715,13 @@ namespace Thot {
                 }
                 if (options.restore_best_state && best_state_captured) {
                     std::cout << "[Thot] Reloading best state of the network..." << std::endl;
+                    torch::NoGradGuard no_grad{};
                     auto parameters = model.parameters();
                     const auto parameter_limit = std::min(parameters.size(), best_parameters.size());
                     for (std::size_t index = 0; index < parameter_limit; ++index) {
                         auto& target = parameters[index];
                         const auto& source = best_parameters[index];
                         if (target.defined() && source.defined()) {
-                            target.detach_();
                             target.copy_(source);
                         }
                     }
@@ -3732,7 +3732,6 @@ namespace Thot {
                         auto& target = buffers[index];
                         const auto& source = best_buffers[index];
                         if (target.defined() && source.defined()) {
-                            target.detach_();
                             target.copy_(source);
                         }
                     }
