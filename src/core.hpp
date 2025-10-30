@@ -25,6 +25,7 @@
 #include <functional>
 #include <chrono>
 #include <cstddef>
+#include <deque>
 #include <initializer_list>
 #include <cmath>
 #include <memory>
@@ -2284,18 +2285,111 @@ namespace Thot {
 
         }
     private:
-        void reset_graph_shape_cache(GraphMode mode) const;
-        void ensure_graph_input_shape(GraphMode mode, const torch::Tensor& tensor) const;
+        void reset_graph_shape_cache(GraphMode mode) const
+        {
+            if (mode == GraphMode::Disabled) {
+                return;
+            }
+
+            graph_input_shape_cache_.reset();
+            graph_target_shape_cache_.reset();
+        }
+
+        void ensure_graph_input_shape(GraphMode mode, const torch::Tensor& tensor) const
+        {
+            if (mode == GraphMode::Disabled) {
+                return;
+            }
+
+            enforce_graph_shape(mode, tensor, graph_input_shape_cache_, "input tensor");
+        }
+
         void ensure_graph_batch_shapes(GraphMode mode,
                                        const torch::Tensor& inputs,
-                                       const torch::Tensor& targets) const;
-        void ensure_graph_replay_ready(GraphMode mode) const;
+                                       const torch::Tensor& targets) const
+        {
+            if (mode == GraphMode::Disabled) {
+                return;
+            }
+
+            ensure_graph_input_shape(mode, inputs);
+            enforce_graph_shape(mode, targets, graph_target_shape_cache_, "target tensor");
+        }
+
+        void ensure_graph_replay_ready(GraphMode mode) const
+        {
+            if (mode != GraphMode::Replay) {
+                return;
+            }
+
+            if (!graph_input_shape_cache_) {
+                throw std::runtime_error(
+                    "CUDA graph replay requested but no cached input tensor shape is available. "
+                    "Run capture before attempting replay.");
+            }
+
+            if (!graph_target_shape_cache_) {
+                throw std::runtime_error(
+                    "CUDA graph replay requested but no cached target tensor shape is available. "
+                    "Run capture before attempting replay.");
+            }
+        }
         void enforce_graph_shape(GraphMode mode,
                                  const torch::Tensor& tensor,
                                  std::optional<std::vector<int64_t>>& storage,
-                                 std::string_view tensor_label) const;
-        static std::vector<int64_t> tensor_shape_vector(const torch::Tensor& tensor);
-        static std::string format_shape_vector(const std::vector<int64_t>& shape);
+                                 std::string_view tensor_label) const
+        {
+            if (mode == GraphMode::Disabled) {
+                return;
+            }
+
+            if (!tensor.defined()) {
+                throw std::invalid_argument(
+                    std::string("CUDA graph ") + std::string(tensor_label) + " must be defined.");
+            }
+
+            const auto shape = tensor_shape_vector(tensor);
+
+            if (!storage.has_value()) {
+                if (mode == GraphMode::Replay) {
+                    throw std::runtime_error(
+                        std::string("CUDA graph replay requested but no cached ")
+                        + std::string(tensor_label)
+                        + " shape is available. Capture a graph before replaying.");
+                }
+
+                storage = shape;
+                return;
+            }
+
+            if (*storage != shape) {
+                const auto expected = format_shape_vector(*storage);
+                const auto actual = format_shape_vector(shape);
+                throw std::runtime_error(
+                    std::string("CUDA graph ") + std::string(tensor_label) + " shape mismatch. Expected "
+                    + expected + " but received " + actual + ".");
+            }
+        }
+
+        static std::vector<int64_t> tensor_shape_vector(const torch::Tensor& tensor)
+        {
+            const auto sizes = tensor.sizes();
+            return std::vector<int64_t>(sizes.begin(), sizes.end());
+        }
+
+        static std::string format_shape_vector(const std::vector<int64_t>& shape)
+        {
+            std::ostringstream stream;
+            stream << '[';
+            for (std::size_t index = 0; index < shape.size(); ++index) {
+                if (index > 0) {
+                    stream << ", ";
+                }
+                stream << shape[index];
+            }
+            stream << ']';
+            return stream.str();
+        }
         static std::string describe_activation(Activation::Type type);
         static std::string describe_module(const Layer::Details::RegisteredLayer& layer);
 
@@ -2882,7 +2976,7 @@ namespace Thot {
 
                     std::optional<double> test_loss{};
                     if (test_dataset) {
-                        test_loss = compute_dataset_loss<BufferVRAM>(model, *test_dataset, options.batch_size);
+                        test_loss = compute_dataset_loss<BufferVRAM>(model, *test_dataset, options.batch_size, options.buffer_vram);
                     }
 
                     bool improved = false;
@@ -2980,7 +3074,7 @@ namespace Thot {
 
 
             template <bool BufferVRAM>
-            static std::optional<double> compute_dataset_loss(Model& model, const TensorDataset& dataset, std::size_t batch_size) {
+            static std::optional<double> compute_dataset_loss(Model& model, const TensorDataset& dataset, std::size_t batch_size, std::size_t buffer_vram) {
                 if (!dataset.inputs.defined() || !dataset.targets.defined()) {
                     return std::nullopt;
                 }
@@ -2988,46 +3082,85 @@ namespace Thot {
                     return std::nullopt;
                 }
 
+                if (batch_size == 0) {
+                    throw std::invalid_argument("Batch size must be greater than zero when computing dataset loss.");
+                }
+
+                if constexpr (!BufferVRAM) {
+                    (void)buffer_vram;
+                }
+
                 const auto device = model.device();
                 const auto total_samples = dataset.inputs.size(0);
-                const auto local_batch = static_cast<std::int64_t>(batch_size);
                 const bool regularization_active = model.has_regularization();
 
                 torch::NoGradGuard no_grad;
                 const bool was_training = model.is_training();
                 model.eval();
 
+                torch::Tensor dataset_inputs = dataset.inputs;
+                torch::Tensor dataset_targets = dataset.targets;
+
+                if constexpr (BufferVRAM) {
+                    if (!device.is_cuda()) {
+                        throw std::runtime_error("VRAM buffering for dataset loss requires the model to be on a CUDA device.");
+                    }
+                    if (dataset_inputs.defined() && !dataset_inputs.device().is_cpu()) {
+                        dataset_inputs = dataset_inputs.to(torch::kCPU);
+                    }
+                    if (dataset_targets.defined() && !dataset_targets.device().is_cpu()) {
+                        dataset_targets = dataset_targets.to(torch::kCPU);
+                    }
+                }
+
+                const auto batch_extent = static_cast<std::int64_t>(batch_size);
+                const std::size_t total_batches = total_samples > 0
+                    ? static_cast<std::size_t>((total_samples + batch_extent - 1) / batch_extent)
+                    : 0;
+
+
                 auto accumulation = torch::zeros({}, torch::TensorOptions().dtype(torch::kFloat64).device(device));
                 std::int64_t weight = 0;
 
-                for (std::int64_t offset = 0; offset < total_samples; offset += local_batch) {
+                auto fetch_batch = [&](std::size_t batch_index) {
+                    const auto offset = static_cast<std::int64_t>(batch_index) * batch_extent;
                     const auto remaining = total_samples - offset;
-                    const auto current_batch = std::min<std::int64_t>(local_batch, remaining);
+                    const auto current_batch = std::min<std::int64_t>(batch_extent, remaining);
                     if (current_batch <= 0) {
-                        break;
+                        return std::pair<torch::Tensor, torch::Tensor>{torch::Tensor{}, torch::Tensor{}};
                     }
-                    torch::Tensor inputs;
-                    torch::Tensor targets;
+                    auto batch_inputs = dataset_inputs.narrow(0, offset, current_batch);
+                    auto batch_targets = dataset_targets.narrow(0, offset, current_batch);
 
-                    inputs = dataset.inputs.narrow(0, offset, current_batch);
-                    targets = dataset.targets.narrow(0, offset, current_batch);
-
-                    if (inputs.device() != device) {
-                        inputs = inputs.to(device);
+                    if (batch_inputs.defined() && batch_inputs.device() != device) {
+                        batch_inputs = batch_inputs.to(device);
                     }
-                    if (targets.device() != device) {
-                        targets = targets.to(device);
+                    if (batch_targets.defined() && batch_targets.device() != device) {
+                        batch_targets = batch_targets.to(device);
                     }
 
-                    auto prediction = model.forward(inputs);
+                    return std::pair<torch::Tensor, torch::Tensor>{std::move(batch_inputs), std::move(batch_targets)};
+                };
 
-                    if (!prediction.sizes().equals(targets.sizes())) {
-                        if (targets.numel() == prediction.numel()) {
-                            targets = targets.reshape_as(prediction);
+                auto process_batch = [&](torch::Tensor batch_inputs, torch::Tensor batch_targets) {
+                    if (!batch_inputs.defined() || !batch_targets.defined()) {
+                        return std::int64_t{0};
+                    }
+
+                    const auto current_batch = batch_targets.size(0);
+                    if (current_batch <= 0) {
+                        return std::int64_t{0};
+                    }
+
+                    auto prediction = model.forward(batch_inputs);
+
+                    if (!prediction.sizes().equals(batch_targets.sizes())) {
+                        if (batch_targets.numel() == prediction.numel()) {
+                            batch_targets = batch_targets.reshape_as(prediction);
                         }
                     }
 
-                    auto loss = model.compute_loss(prediction, targets);
+                    auto loss = model.compute_loss(prediction, batch_targets);
                     if (loss.dim() != 0) {
                         loss = loss.mean();
                     }
@@ -3052,6 +3185,47 @@ namespace Thot {
                     loss_tensor.mul_(static_cast<double>(current_batch));
                     accumulation.add_(loss_tensor);
                     weight += current_batch;
+                    prediction = {};
+                    batch_inputs = {};
+                    batch_targets = {};
+                    loss = {};
+
+                    return current_batch;
+                };
+
+                if constexpr (BufferVRAM) {
+                    std::deque<std::pair<torch::Tensor, torch::Tensor>> buffered_batches;
+                    std::size_t next_batch_to_load = 0;
+                    const std::size_t max_batches = total_batches == 0 ? 1 : total_batches;
+                    const std::size_t buffer_limit = std::max<std::size_t>(std::size_t{1},
+                        std::min<std::size_t>(buffer_vram + 1, max_batches));
+
+                    auto maintain_buffer = [&](std::size_t current_index) {
+                        const std::size_t desired_size = std::min(buffer_limit, total_batches - current_index);
+                        while (buffered_batches.size() < desired_size && next_batch_to_load < total_batches) {
+                            buffered_batches.push_back(fetch_batch(next_batch_to_load));
+                            ++next_batch_to_load;
+                        }
+                    };
+
+                    for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
+                        maintain_buffer(batch_index);
+                        if (buffered_batches.empty()) {
+                            break;
+                        }
+
+                        auto batch_pair = std::move(buffered_batches.front());
+                        buffered_batches.pop_front();
+
+                        process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
+
+                        maintain_buffer(batch_index + 1);
+                    }
+                } else {
+                    for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
+                        auto batch_pair = fetch_batch(batch_index);
+                        process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
+                    }
                 }
                 if (was_training) {
                     model.train();
@@ -3144,6 +3318,8 @@ namespace Thot {
         std::vector<RegularizationBinding> global_regularization_bindings_{};
         mutable std::optional<std::vector<int64_t>> last_input_shape_{};
         mutable std::optional<std::vector<int64_t>> last_target_shape_{};
+        mutable std::optional<std::vector<int64_t>> graph_input_shape_cache_{};
+        mutable std::optional<std::vector<int64_t>> graph_target_shape_cache_{};
         TrainingTelemetry telemetry_{};
         std::size_t module_index_{0};
         std::unordered_map<std::string, ModuleNameBinding> module_name_index_{};

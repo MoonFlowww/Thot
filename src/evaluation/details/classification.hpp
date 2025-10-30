@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <cstddef>
 #include <cstdint>
 #include <iomanip>
@@ -28,6 +29,7 @@ namespace Thot::Evaluation::Details::Classification {
 
     struct Options {
         std::size_t batch_size{0};
+        std::size_t buffer_vram{0};
         std::size_t calibration_bins{15};
         bool print_summary{true};
         bool print_per_class{true};
@@ -560,15 +562,58 @@ namespace Thot::Evaluation::Details::Classification {
         double total_log_loss = 0.0;
         double total_brier = 0.0;
 
-        for (std::size_t start = 0; start < total_samples; start += batch_size) {
-            const std::size_t remaining = total_samples - start;
-            const std::size_t current_batch = std::min(batch_size, remaining);
+const auto device = model.device();
+        const bool device_supports_buffer = device.is_cuda();
+        if (options.buffer_vram > 0 && !device_supports_buffer) {
+            throw std::runtime_error("VRAM buffering during evaluation requires the model to be on a CUDA device.");
+        }
+        const bool use_buffer = device_supports_buffer || options.buffer_vram > 0;
 
-            auto input_batch = inputs.slice(0, start, start + current_batch);
-            auto target_batch = targets.slice(0, start, start + current_batch);
+        if (device.is_cuda()) {
+            if (inputs.defined() && !inputs.device().is_cpu()) {
+                inputs = inputs.to(torch::kCPU);
+            }
+            if (targets.defined() && !targets.device().is_cpu()) {
+                targets = targets.to(torch::kCPU);
+            }
+        }
+
+        const std::size_t total_batches = batch_size == 0
+                                        ? std::size_t{0}
+                                        : (total_samples + batch_size - 1) / batch_size;
+
+        auto fetch_batch = [&](std::size_t batch_index) {
+            const auto offset = static_cast<std::int64_t>(batch_index) * static_cast<std::int64_t>(batch_size);
+            const auto remaining = static_cast<std::int64_t>(total_samples) - offset;
+            const auto current_batch = std::min<std::int64_t>(static_cast<std::int64_t>(batch_size), remaining);
+            if (current_batch <= 0) {
+                return std::pair<torch::Tensor, torch::Tensor>{torch::Tensor{}, torch::Tensor{}};
+            }
+
+            auto input_batch = inputs.narrow(0, offset, current_batch);
+            auto target_batch = targets.narrow(0, offset, current_batch);
+
+            if (input_batch.defined() && input_batch.device() != device) {
+                input_batch = input_batch.to(device);
+            }
+            if (target_batch.defined() && target_batch.device() != device) {
+                target_batch = target_batch.to(device);
+            }
+
+            return std::pair<torch::Tensor, torch::Tensor>{std::move(input_batch), std::move(target_batch)};
+        };
+
+        auto process_batch = [&](torch::Tensor input_batch, torch::Tensor target_batch) {
+            if (!input_batch.defined() || !target_batch.defined()) {
+                return;
+            }
+
+            const std::size_t current_batch = static_cast<std::size_t>(target_batch.size(0));
 
             auto predictions = model.forward(input_batch);
             auto logits = predictions.detach();
+
+            predictions = {};
 
             if (logits.dim() == 1) {
                 logits = logits.unsqueeze(1);
@@ -629,6 +674,7 @@ namespace Thot::Evaluation::Details::Classification {
             }
 
             auto target_cpu = target_batch.to(torch::kCPU);
+            target_batch = torch::Tensor{};
             if (target_cpu.dtype() == torch::kFloat32 || target_cpu.dtype() == torch::kFloat64) {
                 if (target_cpu.dim() > 1 && target_cpu.size(1) == static_cast<long>(num_classes)) {
                     target_cpu = target_cpu.argmax(1);
@@ -785,6 +831,43 @@ namespace Thot::Evaluation::Details::Classification {
                         lrap_sum += detail::safe_div(1.0, static_cast<double>(rank));
                     }
                 }
+            }
+            logits = {};
+            probabilities = torch::Tensor{};
+            predicted = {};
+            input_batch = torch::Tensor{};
+        };
+
+        if (use_buffer) {
+            std::deque<std::pair<torch::Tensor, torch::Tensor>> buffered_batches;
+            std::size_t next_batch_to_load = 0;
+            const std::size_t buffer_limit = std::max<std::size_t>(std::size_t{1}, std::min<std::size_t>(options.buffer_vram + 1, total_batches));
+
+            auto maintain_buffer = [&](std::size_t current_index) {
+                const std::size_t desired_size = std::min(buffer_limit, total_batches - current_index);
+                while (buffered_batches.size() < desired_size && next_batch_to_load < total_batches) {
+                    buffered_batches.push_back(fetch_batch(next_batch_to_load));
+                    ++next_batch_to_load;
+                }
+            };
+
+            for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
+                maintain_buffer(batch_index);
+                if (buffered_batches.empty()) {
+                    break;
+                }
+
+                auto batch_pair = std::move(buffered_batches.front());
+                buffered_batches.pop_front();
+
+                process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
+
+                maintain_buffer(batch_index + 1);
+            }
+        } else {
+            for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
+                auto batch_pair = fetch_batch(batch_index);
+                process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
             }
         }
 
