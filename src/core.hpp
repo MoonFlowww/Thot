@@ -2717,6 +2717,49 @@ namespace Thot {
             }
         }
 
+        torch::Tensor graph_train_step(torch::Tensor batch_inputs, torch::Tensor batch_targets, GraphMode graph_mode, bool regularization_active) {
+            zero_grad();
+
+            ForwardOptions forward_options{};
+            forward_options.graph_mode = graph_mode;
+            auto prediction = forward(std::move(batch_inputs), std::move(forward_options));
+
+            if (!prediction.sizes().equals(batch_targets.sizes())) {
+                if (batch_targets.numel() == prediction.numel()) {
+                    batch_targets = batch_targets.reshape_as(prediction);
+                }
+            }
+
+            auto loss = compute_loss(prediction, batch_targets);
+            if (loss.dim() != 0) {
+                loss = loss.mean();
+            }
+            if (regularization_active) {
+                auto regularization_penalty = compute_regularization_penalty();
+                if (regularization_penalty.defined()) {
+                    if (regularization_penalty.device() != loss.device()) {
+                        regularization_penalty = regularization_penalty.to(loss.device());
+                    }
+                    if (regularization_penalty.scalar_type() != loss.scalar_type()) {
+                        regularization_penalty = regularization_penalty.to(loss.scalar_type());
+                    }
+                    loss = loss + regularization_penalty;
+                }
+            }
+
+            loss.backward();
+            step_optimizers();
+
+            return loss;
+        }
+
+        void step_scheduler()
+        {
+            if (scheduler_) {
+                scheduler_->step();
+            }
+        }
+
 
 
         struct TrainingDetails {
@@ -2874,36 +2917,8 @@ namespace Thot {
                             model.ensure_graph_batch_shapes(graph_mode, batch_inputs, batch_targets);
                         }
 
-                        model.zero_grad();
-                        ForwardOptions forward_options{};
-                        forward_options.graph_mode = graph_mode;
-                        auto prediction = model.forward(std::move(batch_inputs), std::move(forward_options));
-
-                        if (!prediction.sizes().equals(batch_targets.sizes())) {
-                            if (batch_targets.numel() == prediction.numel()) {
-                                batch_targets = batch_targets.reshape_as(prediction);
-                            }
-                        }
-
-                        auto loss = model.compute_loss(prediction, batch_targets);
-                        if (loss.dim() != 0) {
-                            loss = loss.mean();
-                        }
-                        if (regularization_active) {
-                            auto regularization_penalty = model.compute_regularization_penalty();
-                            if (regularization_penalty.defined()) {
-                                if (regularization_penalty.device() != loss.device()) {
-                                    regularization_penalty = regularization_penalty.to(loss.device());
-                                }
-                                if (regularization_penalty.scalar_type() != loss.scalar_type()) {
-                                    regularization_penalty = regularization_penalty.to(loss.scalar_type());
-                                }
-                                loss = loss + regularization_penalty;
-                            }
-                        }
-
-                        loss.backward();
-                        model.step();
+                        auto loss = model.graph_train_step(std::move(batch_inputs), std::move(batch_targets), graph_mode, regularization_active);
+                        model.step_scheduler();
 
 
                         if (regularization_active) {
@@ -3356,6 +3371,16 @@ namespace Thot {
             step_impl_ = scheduler_ ? &Model::step_configured<true> : &Model::step_configured<false>;
         }
 
+        void step_optimizers()
+        {
+            if (optimizer_) {
+                optimizer_->step();
+            }
+            for (auto& optimizer : local_optimizers_) {
+                optimizer->step();
+            }
+        }
+
         void step_not_configured() {
             throw std::logic_error("Optimizer has not been configured.");
         }
@@ -3363,16 +3388,9 @@ namespace Thot {
         template <bool WithScheduler>
         void step_configured() {
             if constexpr (WithScheduler) {
-                if (scheduler_) {
-                    scheduler_->step();
-                }
+                step_scheduler();
             }
-            if (optimizer_) {
-                optimizer_->step();
-            }
-            for (auto& optimizer : local_optimizers_) {
-                optimizer->step();
-            }
+            step_optimizers();
         }
         [[nodiscard]] std::size_t next_module_index() noexcept { return module_index_++; }
 
