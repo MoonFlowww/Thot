@@ -538,21 +538,18 @@ namespace Thot {
         explicit Model(std::string_view name = {}) : name_(name) {}
         [[nodiscard]] const TrainingTelemetry& training_telemetry() const noexcept { return telemetry_; }
         void clear_training_telemetry() noexcept { telemetry_.clear(); }
-        Model& train(bool on = true) override {
+        void train(bool on = true) override {
             torch::nn::Module::train(on);
             if (on) {
                 invalidate_graph_capture(GraphExecutionPhase::Training);
             } else {
                 invalidate_graph_capture(GraphExecutionPhase::Inference);
             }
-            return *this;
         }
 
-        Model& eval() override
-        {
+        void eval() {
             torch::nn::Module::train(false);
             invalidate_graph_capture(GraphExecutionPhase::Inference);
-            return *this;
         }
         [[nodiscard]] const std::string& name() const noexcept { return name_; }
 
@@ -1821,22 +1818,22 @@ namespace Thot {
 
         [[nodiscard]] torch::Tensor forward(torch::Tensor input, ForwardOptions options)
         {
-            const auto graph_mode = options.graph_mode;
+            const auto phase = is_training() ? GraphExecutionPhase::Training : GraphExecutionPhase::Inference;
+            const auto requested_graph_mode = options.graph_mode;
+            const bool graph_mode_active = graph_execution_enabled(requested_graph_mode, phase);
+            const auto resolved_graph_mode = graph_mode_active ? requested_graph_mode : GraphMode::Disabled;
+            options.graph_mode = resolved_graph_mode;
+
             auto execute = [&](torch::Tensor tensor) {
-                return execute_plan(std::move(tensor), graph_mode);
+                return execute_plan(std::move(tensor), resolved_graph_mode);
             };
 
             if (input.defined() && input.device() != device_) {
                 input = input.to(device_);
             }
 
-            const auto phase = is_training() ? GraphExecutionPhase::Training : GraphExecutionPhase::Inference;
-            const auto requested_graph_mode = options.graph_mode;
-            const bool graph_mode_active = graph_execution_enabled(requested_graph_mode, phase);
-            const auto graph_mode = graph_mode_active ? requested_graph_mode : GraphMode::Disabled;
-            options.graph_mode = graph_mode;
-            if (graph_mode != GraphMode::Disabled) {
-                ensure_graph_input_shape(graph_mode, input);
+            if (resolved_graph_mode != GraphMode::Disabled) {
+                ensure_graph_input_shape(resolved_graph_mode, input);
             }
 
 
