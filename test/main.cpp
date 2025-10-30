@@ -196,24 +196,24 @@ int main() {
         train_options.batch_size = static_cast<std::size_t>(B);
         train_options.shuffle = true;
         train_options.buffer_vram = 0;
-        train_options.restore_best_state = true;
+        train_options.restore_best_state = false;
         train_options.test = std::make_pair(validation_images, validation_labels);
 
-        if (train_options.epoch > 0) {
-            Thot::TrainOptions capture_options = train_options;
-            capture_options.epoch = 1;
-            capture_options.graph_mode = Thot::GraphMode::Capture;
-            capture_options.monitor = false;
-            model.train(train_images, train_labels, capture_options);
 
-            if (train_options.epoch > 1) {
-                train_options.epoch -= 1;
-                train_options.graph_mode = Thot::GraphMode::Replay;
-                model.train(train_images, train_labels, train_options);
-            }
-        } else if (train_options.epoch > 0) {
-            model.train(train_images, train_labels, train_options);
-        }
+        //Graph Capture
+        Thot::TrainOptions capture_options = train_options;
+        capture_options.epoch = 1;
+        capture_options.graph_mode = Thot::GraphMode::Capture;
+        capture_options.monitor = false;
+        model.train(train_images, train_labels, capture_options);
+
+        //Graph Replay
+        train_options.epoch -= 1;
+        train_options.restore_best_state = true;
+        train_options.graph_mode = Thot::GraphMode::Replay;
+        model.train(train_images, train_labels, train_options);
+
+
     }
 
     model.evaluate(test_images, test_labels, Thot::Evaluation::Classification,{
