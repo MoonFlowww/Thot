@@ -469,6 +469,8 @@ namespace Thot {
 #endif
             bool captured{false};
             bool dirty{true};
+            torch::Tensor loss_buffer{};
+            torch::Tensor target_buffer{};
         };
 
 
@@ -830,14 +832,14 @@ namespace Thot {
                     "ebt_encoder_" + std::to_string(index),
                     Block::Transformer::EBT::EncoderModule(std::move(encoder_descriptor)));
 
-                    Layer::Details::RegisteredLayer registered_layer{};
-                    registered_layer.activation = Activation::Type::Identity;
-                    registered_layer.module = Layer::Details::to_shared_module_ptr(module);
-                    registered_layer.forward = [module](torch::Tensor input) {
-                        return module->forward(std::move(input));
-                    };
+                Layer::Details::RegisteredLayer registered_layer{};
+                registered_layer.activation = Activation::Type::Identity;
+                registered_layer.module = Layer::Details::to_shared_module_ptr(module);
+                registered_layer.forward = [module](torch::Tensor input) {
+                    return module->forward(std::move(input));
+                };
 
-                    store_layer(std::move(registered_layer));
+                store_layer(std::move(registered_layer));
                 },
                 [](const Block::Transformer::EBT::DecoderDescriptor&) {
                     throw std::invalid_argument("EBT decoder blocks are not yet supported by Model::add.");
@@ -1253,7 +1255,7 @@ namespace Thot {
                         throw std::invalid_argument("Join node '" + link.target.describe()
                                                      + "' already receives input from '" + link.source.describe()
                                                      + "'.");
-                    }
+                        }
                     buffer.producers.push_back(source_index);
                 }
 
@@ -1824,13 +1826,85 @@ namespace Thot {
             const auto resolved_graph_mode = graph_mode_active ? requested_graph_mode : GraphMode::Disabled;
             options.graph_mode = resolved_graph_mode;
 
-            auto execute = [&](torch::Tensor tensor) {
-                return execute_plan(std::move(tensor), resolved_graph_mode);
+            auto execute = [&](torch::Tensor tensor, GraphMode mode) {
+                return execute_plan(std::move(tensor), mode);
             };
 
             if (input.defined() && input.device() != device_) {
                 input = input.to(device_);
             }
+
+            if (phase == GraphExecutionPhase::Inference) {
+                if (resolved_graph_mode == GraphMode::Replay) {
+#ifdef TORCH_CUDA_AVAILABLE
+                    auto& state = graph_capture_state(phase);
+                    if (!state.captured || state.dirty || !state.graph) {
+                        throw std::runtime_error(
+                            "CUDA graph replay requested for inference before a capture was recorded.");
+                    }
+                    ensure_graph_input_shape(GraphMode::Replay, input);
+                    ensure_execution_workspace();
+                    copy_into_graph_input_buffer(std::move(input));
+                    if (!state.capture_stream.has_value()) {
+                        throw std::runtime_error(
+                            "CUDA graph replay requested for inference without an associated capture stream.");
+                    }
+                    torch::cuda::CUDAStreamGuard guard(*state.capture_stream);
+                    state.graph->replay();
+                    return graph_output_tensor();
+#else
+                    throw std::runtime_error("CUDA graph replay requested but CUDA support is unavailable.");
+#endif
+                }
+
+                if (resolved_graph_mode == GraphMode::Capture) {
+#ifdef TORCH_CUDA_AVAILABLE
+                    auto& state = graph_capture_state(phase);
+                    if (state.dirty) {
+                        reset_graph_shape_cache(GraphMode::Capture);
+                    }
+                    ensure_graph_input_shape(GraphMode::Capture, input);
+                    if (!state.graph) {
+                        state.graph = std::make_unique<torch::cuda::CUDAGraph>();
+                    } else {
+                        state.graph->reset();
+                    }
+                    if (!state.capture_stream.has_value()) {
+                        state.capture_stream = torch::cuda::getStreamFromPool();
+                    }
+                    state.captured = false;
+                    torch::cuda::CUDAStreamGuard guard(*state.capture_stream);
+                    bool capture_started = false;
+                    try {
+                        state.graph->capture_begin(*state.capture_stream);
+                        capture_started = true;
+                        auto result = execute(std::move(input), GraphMode::Capture);
+                        state.graph->capture_end();
+                        capture_started = false;
+                        state.captured = true;
+                        state.dirty = false;
+                        state.loss_buffer = torch::Tensor{};
+                        return result;
+                    } catch (...) {
+                        if (capture_started) {
+                            try {
+                                state.graph->capture_end();
+                            } catch (...) {
+                            }
+                        }
+                        state.graph->reset();
+                        state.capture_stream.reset();
+                        state.captured = false;
+                        state.dirty = true;
+                        throw;
+                    }
+#else
+                    throw std::runtime_error("CUDA graph capture requested but CUDA support is unavailable.");
+#endif
+                }
+            }
+
+
 
             if (resolved_graph_mode != GraphMode::Disabled) {
                 ensure_graph_input_shape(resolved_graph_mode, input);
@@ -1839,16 +1913,16 @@ namespace Thot {
 
             const bool can_buffer = options.buffering_enabled() && input.defined() && input.dim() > 0;
             if (!can_buffer) {
-                return execute(std::move(input));
+                return execute(std::move(input), resolved_graph_mode);
             }
 
             const auto chunk_limit = static_cast<int64_t>(*options.max_chunk_size);
             if (chunk_limit <= 0) {
-                return execute(std::move(input));
+                return execute(std::move(input), resolved_graph_mode);
             }
             const auto leading = input.size(0);
             if (leading == 0 || leading <= chunk_limit) {
-                return execute(std::move(input));
+                return execute(std::move(input), resolved_graph_mode);
             }
             std::vector<torch::Tensor> outputs;
             outputs.reserve(static_cast<std::size_t>((leading + chunk_limit - 1) / chunk_limit));
@@ -1856,7 +1930,7 @@ namespace Thot {
             for (int64_t offset = 0; offset < leading; offset += chunk_limit) {
                 const auto current = std::min<int64_t>(chunk_limit, leading - offset);
                 auto chunk = input.narrow(0, offset, current);
-                outputs.push_back(execute(std::move(chunk)));
+                outputs.push_back(execute(std::move(chunk), resolved_graph_mode));
             }
 
             return torch::cat(outputs, 0);
@@ -1867,6 +1941,10 @@ namespace Thot {
             if (tensor.defined() && tensor.device() != device_) {
                 tensor = tensor.to(device_);
             }
+            if (graph_mode == GraphMode::Replay) {
+                throw std::logic_error("Model::execute_plan cannot be invoked in replay mode.");
+            }
+
 
             auto apply_calibrations = [&](torch::Tensor value) {
                 ensure_graph_calibration_metadata_capacity(graph_mode);
@@ -2739,7 +2817,7 @@ namespace Thot {
                         != layer_regularization_bindings_[index].size()) {
                         needs_reset = true;
                         break;
-                    }
+                        }
                 }
             }
 
@@ -2763,7 +2841,7 @@ namespace Thot {
                 || graph_calibration_metadata_.size() != calibration_methods_.size()) {
                 graph_calibration_metadata_.assign(calibration_methods_.size(), {});
                 graph_calibration_metadata_dirty_ = false;
-            }
+                }
         }
 
         void mark_graph_regularization_metadata_dirty() const noexcept
@@ -2872,7 +2950,7 @@ namespace Thot {
             execution_workspace_dirty_ = true;
             graph_workspace_.invalidate();
             cached_layer_pointers_.clear();
-                        invalidate_graph_captures();
+            invalidate_graph_captures();
         }
 
         [[nodiscard]] GraphCaptureState& graph_capture_state(GraphExecutionPhase phase) noexcept
@@ -2906,6 +2984,8 @@ namespace Thot {
 #endif
             state.captured = false;
             state.dirty = true;
+            state.loss_buffer = torch::Tensor{};
+            state.target_buffer = torch::Tensor{};
         }
 
         void invalidate_graph_captures() noexcept
@@ -3170,58 +3250,155 @@ namespace Thot {
             }
         }
 
-        torch::Tensor graph_train_step(torch::Tensor batch_inputs, torch::Tensor batch_targets, GraphMode graph_mode, bool regularization_active) {
-            if (!graph_execution_enabled(graph_mode, GraphExecutionPhase::Training)) {
+        torch::Tensor graph_train_step(torch::Tensor batch_inputs, torch::Tensor batch_targets, GraphMode graph_mode, bool regularization_active)
+        {
+            const auto phase = GraphExecutionPhase::Training;
+            if (!graph_execution_enabled(graph_mode, phase)) {
                 graph_mode = GraphMode::Disabled;
             }
+            auto& state = graph_capture_state(phase);
             if (graph_mode != GraphMode::Disabled) {
                 ensure_optimizer_graph_capability(graph_mode);
                 prepare_optimizers_for_graph(graph_mode);
             }
-            zero_grad();
-
-            ForwardOptions forward_options{};
-            forward_options.graph_mode = graph_mode;
-            auto prediction = forward(std::move(batch_inputs), std::move(forward_options));
-
-            if (!prediction.sizes().equals(batch_targets.sizes())) {
-                if (batch_targets.numel() == prediction.numel()) {
-                    batch_targets = batch_targets.reshape_as(prediction);
+            auto run_training_step = [&](GraphMode mode, torch::Tensor inputs, torch::Tensor targets) {
+                if (mode != GraphMode::Disabled) {
+                    ensure_graph_input_shape(mode, inputs);
                 }
-            }
 
-            auto loss = compute_loss(prediction, batch_targets);
-            if (loss.dim() != 0) {
-                loss = loss.mean();
-            }
-            if (regularization_active) {
-                auto regularization_penalty = compute_regularization_penalty(graph_mode);
-                if (regularization_penalty.defined()) {
-                    if (graph_mode == GraphMode::Disabled) {
-                        if (regularization_penalty.device() != loss.device()) {
-                            regularization_penalty = regularization_penalty.to(loss.device());
-                        }
-                        if (regularization_penalty.scalar_type() != loss.scalar_type()) {
-                            regularization_penalty = regularization_penalty.to(loss.scalar_type());
-                        }
-                    } else {
-                        if (regularization_penalty.device() != loss.device()) {
-                            throw std::runtime_error(
-                                "Regularisation penalty device changed during CUDA graph execution.");
-                        }
-                        if (regularization_penalty.scalar_type() != loss.scalar_type()) {
-                            throw std::runtime_error(
-                                "Regularisation penalty dtype changed during CUDA graph execution.");
-                        }
+                zero_grad();
+
+                auto prediction = execute_plan(std::move(inputs), mode);
+
+                if (!prediction.sizes().equals(targets.sizes())) {
+                    if (targets.numel() == prediction.numel()) {
+                        targets = targets.reshape_as(prediction);
                     }
-                    loss = loss + regularization_penalty;
+                }
+
+
+
+                if (mode != GraphMode::Disabled) {
+                    enforce_graph_shape(mode, targets, graph_target_shape_cache_, "target tensor");
+                    copy_tensor_into(state.target_buffer, targets);
+                    targets = state.target_buffer;
+                }
+
+                auto loss = compute_loss(prediction, targets);
+                if (loss.dim() != 0) {
+                    loss = loss.mean();
+                }
+
+                if (regularization_active) {
+                    auto regularization_penalty = compute_regularization_penalty(mode);
+                    if (regularization_penalty.defined()) {
+                        if (mode == GraphMode::Disabled) {
+                            if (regularization_penalty.device() != loss.device()) {
+                                regularization_penalty = regularization_penalty.to(loss.device());
+                            }
+                            if (regularization_penalty.scalar_type() != loss.scalar_type()) {
+                                regularization_penalty = regularization_penalty.to(loss.scalar_type());
+                            }
+                        } else {
+                            if (regularization_penalty.device() != loss.device()) {
+                                throw std::runtime_error(
+                                    "Regularisation penalty device changed during CUDA graph execution.");
+                            }
+                            if (regularization_penalty.scalar_type() != loss.scalar_type()) {
+                                throw std::runtime_error(
+                                    "Regularisation penalty dtype changed during CUDA graph execution.");
+                            }
+                        }
+                        loss = loss + regularization_penalty;
+                    }
+                }
+
+                loss.backward();
+                step_optimizers();
+
+                return loss;
+            };
+
+            switch (graph_mode) {
+                case GraphMode::Disabled:
+                    return run_training_step(GraphMode::Disabled, std::move(batch_inputs), std::move(batch_targets));
+                case GraphMode::Capture: {
+#ifdef TORCH_CUDA_AVAILABLE
+                    if (state.dirty) {
+                        reset_graph_shape_cache(GraphMode::Capture);
+                    }
+
+                    if (!state.graph) {
+                        state.graph = std::make_unique<torch::cuda::CUDAGraph>();
+                    }
+                } else {
+                    state.graph->reset();
+                }
+
+                    if (!state.capture_stream.has_value()) {
+                        state.capture_stream = torch::cuda::getStreamFromPool();
+                    }
+
+                    state.captured = false;
+                    torch::cuda::CUDAStreamGuard guard(*state.capture_stream);
+
+                    bool capture_started = false;
+                    try {
+                        state.graph->capture_begin(*state.capture_stream);
+                        capture_started = true;
+                        auto loss = run_training_step(GraphMode::Capture, std::move(batch_inputs), std::move(batch_targets));
+                        state.graph->capture_end();
+                        capture_started = false;
+                        state.loss_buffer = loss;
+                        state.captured = true;
+                        state.dirty = false;
+                        return loss;
+                    } catch (...) {
+                        if (capture_started) {
+                            try {
+                                state.graph->capture_end();
+                            } catch (...) {
+                            }
+                        }
+                        state.graph->reset();
+                        state.capture_stream.reset();
+                        state.captured = false;
+                        state.dirty = true;
+                        state.loss_buffer = torch::Tensor{};
+                        throw;
+                    }
+#else
+                    throw std::runtime_error("CUDA graph capture requested but CUDA support is unavailable.");
+#endif
+                }
+                case GraphMode::Replay: {
+#ifdef TORCH_CUDA_AVAILABLE
+                    if (!state.captured || state.dirty || !state.graph) {
+                        throw std::runtime_error(
+                            "CUDA graph replay requested for training before a capture was recorded.");
+                    }
+                    ensure_graph_input_shape(GraphMode::Replay, batch_inputs);
+                    if (graph_target_shape_cache_) {
+                        batch_targets = batch_targets.reshape(*graph_target_shape_cache_);
+                    }
+                    enforce_graph_shape(GraphMode::Replay, batch_targets, graph_target_shape_cache_, "target tensor");
+                    ensure_execution_workspace();
+                    copy_into_graph_input_buffer(std::move(batch_inputs));
+                    copy_tensor_into(state.target_buffer, batch_targets);
+                    if (!state.capture_stream.has_value()) {
+                        throw std::runtime_error(
+                            "CUDA graph replay requested for training without an associated capture stream.");
+                    }
+                }
+                    torch::cuda::CUDAStreamGuard guard(*state.capture_stream);
+                    state.graph->replay();
+                    return state.loss_buffer;
+#else
+                    throw std::runtime_error("CUDA graph replay requested but CUDA support is unavailable.");
+#endif
                 }
             }
-
-            loss.backward();
-            step_optimizers();
-
-            return loss;
+            return torch::Tensor{};
         }
 
         void step_scheduler()
