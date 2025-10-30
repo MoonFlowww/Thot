@@ -52,7 +52,9 @@
 #include <torch/torch.h>
 #include <torch/optim/adamw.h>
 #include <torch/optim/sgd.h>
-
+#ifdef TORCH_CUDA_AVAILABLE
+#include <torch/cuda.h>
+#endif
 
 
 #include "common/save_load.hpp"
@@ -455,6 +457,38 @@ namespace Thot {
             RegularizationAccumulator accumulator{};
         };
 
+        enum class GraphExecutionPhase {
+            Training,
+            Inference
+        };
+
+        struct GraphCaptureState {
+#ifdef TORCH_CUDA_AVAILABLE
+            std::unique_ptr<torch::cuda::CUDAGraph> graph{};
+            std::optional<torch::cuda::CUDAStream> capture_stream{};
+#endif
+            bool captured{false};
+            bool dirty{true};
+        };
+
+
+        struct GraphTensorSignature {
+            torch::Device device{torch::kCPU};
+            torch::ScalarType dtype{torch::kFloat32};
+            std::vector<int64_t> shape{};
+        };
+
+        struct GraphRegularizationBindingInfo {
+            bool initialised{false};
+            bool participates{false};
+            GraphTensorSignature signature{};
+        };
+
+        struct GraphCalibrationInfo {
+            bool initialised{false};
+            GraphTensorSignature signature{};
+        };
+
 
     public:
         struct TrainingTelemetry {
@@ -504,7 +538,22 @@ namespace Thot {
         explicit Model(std::string_view name = {}) : name_(name) {}
         [[nodiscard]] const TrainingTelemetry& training_telemetry() const noexcept { return telemetry_; }
         void clear_training_telemetry() noexcept { telemetry_.clear(); }
-        using torch::nn::Module::train;
+        Model& train(bool on = true) override {
+            torch::nn::Module::train(on);
+            if (on) {
+                invalidate_graph_capture(GraphExecutionPhase::Training);
+            } else {
+                invalidate_graph_capture(GraphExecutionPhase::Inference);
+            }
+            return *this;
+        }
+
+        Model& eval() override
+        {
+            torch::nn::Module::train(false);
+            invalidate_graph_capture(GraphExecutionPhase::Inference);
+            return *this;
+        }
         [[nodiscard]] const std::string& name() const noexcept { return name_; }
 
 
@@ -888,8 +937,9 @@ namespace Thot {
             module_descriptors_.emplace_back(std::move(preserved_descriptor), module_name);
         }
 
-        void links(std::vector<LinkSpec> specifications)
-        {
+        void links(std::vector<LinkSpec> specifications, bool enable_graph_capture = false) {
+            graph_capture_opt_in_ = enable_graph_capture && !specifications.empty();
+            invalidate_graph_captures();
             if (specifications.empty()) {
                 clear_compiled_graph();
                 return;
@@ -1612,6 +1662,7 @@ namespace Thot {
                 global_regularization_bindings_.push_back(
                     make_regularization_binding(std::move(descriptor), global_regularization_parameters_));
             }
+            mark_graph_regularization_metadata_dirty();
         }
 
         void clear_regularization() noexcept {
@@ -1621,6 +1672,7 @@ namespace Thot {
             global_regularization_bindings_.clear();
             global_regularization_parameters_.clear();
             regularization_configured_ = false;
+            mark_graph_regularization_metadata_dirty();
         }
 
         [[nodiscard]] bool has_regularization() const noexcept {
@@ -1632,7 +1684,7 @@ namespace Thot {
                 [](const auto& bindings) { return !bindings.empty(); });
         }
 
-        [[nodiscard]] torch::Tensor compute_regularization_penalty() const {
+        [[nodiscard]] torch::Tensor compute_regularization_penalty(GraphMode graph_mode = GraphMode::Disabled) const {
             const auto fallback_options = torch::TensorOptions().dtype(torch::kFloat32).device(device_);
             const auto fallback = std::optional<torch::TensorOptions>{fallback_options};
 
@@ -1641,14 +1693,52 @@ namespace Thot {
             torch::Tensor total;
             bool initialised = false;
 
-            auto accumulate_penalty = [&](const RegularizationBinding& binding, const std::vector<torch::Tensor>& parameters) {
+            auto accumulate_penalty = [&](const RegularizationBinding& binding,
+                                          const std::vector<torch::Tensor>& parameters,
+                                          GraphRegularizationBindingInfo* metadata) {
                 if (!binding.accumulator) {
+                    if (graph_mode != GraphMode::Disabled && metadata && !metadata->initialised) {
+                        metadata->initialised = true;
+                        metadata->participates = false;
+                    }
                     return;
                 }
 
                 auto penalty = binding.accumulator(parameters, fallback);
                 if (!penalty.defined()) {
+                    if (graph_mode != GraphMode::Disabled && metadata) {
+                        if (!metadata->initialised) {
+                            metadata->initialised = true;
+                            metadata->participates = false;
+                        } else if (metadata->participates) {
+                            throw std::runtime_error(
+                                "Regularisation binding toggled its participation during CUDA graph execution. "
+                                "Disable graph mode or ensure the descriptor emits a tensor every step.");
+                        }
+                    }
                     return;
+                }
+
+                if (graph_mode != GraphMode::Disabled && metadata) {
+                    const auto signature = describe_tensor_signature(penalty);
+                    if (!metadata->initialised) {
+                        metadata->initialised = true;
+                        metadata->participates = true;
+                        metadata->signature = signature;
+                    } else {
+                        if (!metadata->participates) {
+                            throw std::runtime_error(
+                                "Regularisation binding activated after CUDA graph capture. "
+                                "Disable graph mode or adjust the descriptor to keep participation consistent.");
+                        }
+                        if (!signatures_equal(metadata->signature, signature)) {
+                            throw std::runtime_error(
+                                "Regularisation binding produced a tensor with a dynamic signature during CUDA graph execution. "
+                                "Expected "
+                                + format_signature(metadata->signature) + " but received "
+                                + format_signature(signature) + '.');
+                        }
+                    }
                 }
 
 
@@ -1657,17 +1747,31 @@ namespace Thot {
                     initialised = true;
                     return;
                 }
-                if (penalty.device() != total.device()) {
-                    penalty = penalty.to(total.device());
-                }
-                if (penalty.scalar_type() != total.scalar_type()) {
-                    penalty = penalty.to(total.scalar_type());
+                if (graph_mode == GraphMode::Disabled) {
+                    if (penalty.device() != total.device()) {
+                        penalty = penalty.to(total.device());
+                    }
+                    if (penalty.scalar_type() != total.scalar_type()) {
+                        penalty = penalty.to(total.scalar_type());
+                    }
+                } else {
+                    if (penalty.device() != total.device()) {
+                        throw std::runtime_error(
+                            "Regularisation binding returned a tensor on a different device during CUDA graph execution.");
+                    }
+                    if (penalty.scalar_type() != total.scalar_type()) {
+                        throw std::runtime_error(
+                            "Regularisation binding returned a tensor with a different dtype during CUDA graph execution.");
+                    }
                 }
                 total.add_(penalty);
             };
 
-            for (const auto& binding : global_regularization_bindings_) {
-                accumulate_penalty(binding, global_regularization_parameters_);
+            for (std::size_t index = 0; index < global_regularization_bindings_.size(); ++index) {
+                auto* metadata = graph_mode == GraphMode::Disabled
+                    ? nullptr
+                    : &graph_global_regularization_metadata_[index];
+                accumulate_penalty(global_regularization_bindings_[index], global_regularization_parameters_, metadata);
             }
 
             for (std::size_t index = 0; index < layer_regularization_bindings_.size(); ++index) {
@@ -1677,8 +1781,11 @@ namespace Thot {
                 }
 
                 const auto& parameters = layer_parameters_[index];
-                for (const auto& binding : bindings) {
-                    accumulate_penalty(binding, parameters);
+                for (std::size_t binding_index = 0; binding_index < bindings.size(); ++binding_index) {
+                    auto* metadata = graph_mode == GraphMode::Disabled
+                        ? nullptr
+                        : &graph_layer_regularization_metadata_[index][binding_index];
+                    accumulate_penalty(bindings[binding_index], parameters, metadata);
                 }
             }
 
@@ -1714,17 +1821,21 @@ namespace Thot {
 
         [[nodiscard]] torch::Tensor forward(torch::Tensor input, ForwardOptions options)
         {
+            const auto graph_mode = options.graph_mode;
             auto execute = [&](torch::Tensor tensor) {
-                return execute_plan(std::move(tensor));
+                return execute_plan(std::move(tensor), graph_mode);
             };
 
             if (input.defined() && input.device() != device_) {
                 input = input.to(device_);
             }
 
-            const auto graph_mode = options.graph_mode;
-            const bool graph_mode_active = graph_mode != GraphMode::Disabled;
-            if (graph_mode_active) {
+            const auto phase = is_training() ? GraphExecutionPhase::Training : GraphExecutionPhase::Inference;
+            const auto requested_graph_mode = options.graph_mode;
+            const bool graph_mode_active = graph_execution_enabled(requested_graph_mode, phase);
+            const auto graph_mode = graph_mode_active ? requested_graph_mode : GraphMode::Disabled;
+            options.graph_mode = graph_mode;
+            if (graph_mode != GraphMode::Disabled) {
                 ensure_graph_input_shape(graph_mode, input);
             }
 
@@ -1754,15 +1865,37 @@ namespace Thot {
             return torch::cat(outputs, 0);
         }
 
-        torch::Tensor execute_plan(torch::Tensor tensor)
+        torch::Tensor execute_plan(torch::Tensor tensor, GraphMode graph_mode)
         {
             if (tensor.defined() && tensor.device() != device_) {
                 tensor = tensor.to(device_);
             }
 
             auto apply_calibrations = [&](torch::Tensor value) {
-                for (const auto& calibration : calibration_methods_) {
+                ensure_graph_calibration_metadata_capacity(graph_mode);
+
+                for (std::size_t index = 0; index < calibration_methods_.size(); ++index) {
+                    const auto& calibration = calibration_methods_[index];
                     value = calibration->transform(std::move(value));
+
+                    if (graph_mode != GraphMode::Disabled) {
+                        if (!value.defined()) {
+                            throw std::runtime_error(
+                                "Calibration module produced an undefined tensor during CUDA graph execution.");
+                        }
+
+                        const auto signature = describe_tensor_signature(value);
+                        auto& metadata = graph_calibration_metadata_[index];
+
+                        if (!metadata.initialised) {
+                            metadata.initialised = true;
+                            metadata.signature = signature;
+                        } else if (!signatures_equal(metadata.signature, signature)) {
+                            throw std::runtime_error(
+                                "Calibration module output shape changed between CUDA graph executions. "
+                                "Disable graph mode or adjust the calibration configuration.");
+                        }
+                    }
                 }
                 return value;
             };
@@ -2213,6 +2346,7 @@ namespace Thot {
                 return std::pair<torch::Tensor, torch::Tensor>{logits, calibration_targets};
             }, std::move(processed_validation), std::move(options), plot);
             calibration_methods_.push_back(std::move(method));
+            mark_graph_calibration_metadata_dirty();
         }
 
         [[nodiscard]] torch::Tensor compute_loss(const torch::Tensor& prediction,
@@ -2541,6 +2675,110 @@ namespace Thot {
             stream << ']';
             return stream.str();
         }
+
+        static std::string scalar_type_to_string(torch::ScalarType type)
+        {
+            switch (type) {
+                case torch::kByte: return "uint8";
+                case torch::kChar: return "int8";
+                case torch::kShort: return "int16";
+                case torch::kInt: return "int32";
+                case torch::kLong: return "int64";
+                case torch::kHalf: return "float16";
+                case torch::kFloat: return "float32";
+                case torch::kDouble: return "float64";
+                case torch::kBool: return "bool";
+                case torch::kBFloat16: return "bfloat16";
+                case torch::kComplexHalf: return "complex16";
+                case torch::kComplexFloat: return "complex64";
+                case torch::kComplexDouble: return "complex128";
+                case torch::kQUInt8: return "quint8";
+                case torch::kQInt8: return "qint8";
+                case torch::kQInt32: return "qint32";
+                default: return std::to_string(static_cast<int>(type));
+            }
+        }
+
+        static GraphTensorSignature describe_tensor_signature(const torch::Tensor& tensor)
+        {
+            GraphTensorSignature signature{};
+            signature.device = tensor.device();
+            signature.dtype = tensor.scalar_type();
+            signature.shape = tensor_shape_vector(tensor);
+            return signature;
+        }
+
+        static bool signatures_equal(const GraphTensorSignature& lhs, const GraphTensorSignature& rhs)
+        {
+            return lhs.device == rhs.device && lhs.dtype == rhs.dtype && lhs.shape == rhs.shape;
+        }
+
+        static std::string format_signature(const GraphTensorSignature& signature)
+        {
+            std::ostringstream stream;
+            stream << "shape=" << format_shape_vector(signature.shape)
+                   << ", dtype=" << scalar_type_to_string(signature.dtype)
+                   << ", device=" << signature.device.str();
+            return stream.str();
+        }
+
+        void ensure_graph_regularization_metadata_capacity(GraphMode mode) const
+        {
+            if (mode == GraphMode::Disabled) {
+                return;
+            }
+
+            bool needs_reset = graph_regularization_metadata_dirty_
+                || graph_global_regularization_metadata_.size() != global_regularization_bindings_.size()
+                || graph_layer_regularization_metadata_.size() != layer_regularization_bindings_.size();
+
+            if (!needs_reset) {
+                for (std::size_t index = 0; index < graph_layer_regularization_metadata_.size(); ++index) {
+                    if (index >= layer_regularization_bindings_.size()) {
+                        needs_reset = true;
+                        break;
+                    }
+                    if (graph_layer_regularization_metadata_[index].size()
+                        != layer_regularization_bindings_[index].size()) {
+                        needs_reset = true;
+                        break;
+                    }
+                }
+            }
+
+            if (needs_reset) {
+                graph_global_regularization_metadata_.assign(global_regularization_bindings_.size(), {});
+                graph_layer_regularization_metadata_.resize(layer_regularization_bindings_.size());
+                for (std::size_t index = 0; index < layer_regularization_bindings_.size(); ++index) {
+                    graph_layer_regularization_metadata_[index].assign(layer_regularization_bindings_[index].size(), {});
+                }
+                graph_regularization_metadata_dirty_ = false;
+            }
+        }
+
+        void ensure_graph_calibration_metadata_capacity(GraphMode mode) const
+        {
+            if (mode == GraphMode::Disabled) {
+                return;
+            }
+
+            if (graph_calibration_metadata_dirty_
+                || graph_calibration_metadata_.size() != calibration_methods_.size()) {
+                graph_calibration_metadata_.assign(calibration_methods_.size(), {});
+                graph_calibration_metadata_dirty_ = false;
+            }
+        }
+
+        void mark_graph_regularization_metadata_dirty() const noexcept
+        {
+            graph_regularization_metadata_dirty_ = true;
+        }
+
+        void mark_graph_calibration_metadata_dirty() const noexcept
+        {
+            graph_calibration_metadata_dirty_ = true;
+        }
+
         static std::string describe_activation(Activation::Type type);
         static std::string describe_module(const Layer::Details::RegisteredLayer& layer);
 
@@ -2618,6 +2856,7 @@ namespace Thot {
             join_buffers_.clear();
             compiled_links_.clear();
             compiled_output_node_index_.reset();
+            graph_capture_opt_in_ = false;
             invalidate_execution_workspace();
         }
 
@@ -2627,6 +2866,7 @@ namespace Thot {
             layer_parameters_.push_back(collect_layer_parameters(layer));
             layer_regularization_bindings_.push_back(
                 bind_local_regularization(layer.local.regularization, layer_parameters_.back()));
+            mark_graph_regularization_metadata_dirty();
             invalidate_execution_workspace();
         }
 
@@ -2635,6 +2875,69 @@ namespace Thot {
             execution_workspace_dirty_ = true;
             graph_workspace_.invalidate();
             cached_layer_pointers_.clear();
+                        invalidate_graph_captures();
+        }
+
+        [[nodiscard]] GraphCaptureState& graph_capture_state(GraphExecutionPhase phase) noexcept
+        {
+            switch (phase) {
+                case GraphExecutionPhase::Training:
+                    return graph_capture_training_;
+                case GraphExecutionPhase::Inference:
+                    return graph_capture_inference_;
+            }
+            return graph_capture_training_;
+        }
+
+        [[nodiscard]] const GraphCaptureState& graph_capture_state(GraphExecutionPhase phase) const noexcept
+        {
+            switch (phase) {
+                case GraphExecutionPhase::Training:
+                    return graph_capture_training_;
+                case GraphExecutionPhase::Inference:
+                    return graph_capture_inference_;
+            }
+            return graph_capture_training_;
+        }
+
+        void invalidate_graph_capture(GraphExecutionPhase phase) noexcept
+        {
+            auto& state = graph_capture_state(phase);
+#ifdef TORCH_CUDA_AVAILABLE
+            state.graph.reset();
+            state.capture_stream.reset();
+#endif
+            state.captured = false;
+            state.dirty = true;
+        }
+
+        void invalidate_graph_captures() noexcept
+        {
+            invalidate_graph_capture(GraphExecutionPhase::Training);
+            invalidate_graph_capture(GraphExecutionPhase::Inference);
+        }
+
+        [[nodiscard]] bool graph_execution_enabled(GraphMode mode, GraphExecutionPhase phase) const noexcept
+        {
+            if (mode == GraphMode::Disabled) {
+                return false;
+            }
+            if (!graph_capture_opt_in_ || !routing_active_) {
+                return false;
+            }
+            if (!device_.is_cuda()) {
+                return false;
+            }
+#ifdef TORCH_CUDA_AVAILABLE
+            if (!torch::cuda::is_available()) {
+                return false;
+            }
+            (void)phase;
+            return true;
+#else
+            (void)phase;
+            return false;
+#endif
         }
 
         void ensure_execution_workspace()
@@ -2871,6 +3174,9 @@ namespace Thot {
         }
 
         torch::Tensor graph_train_step(torch::Tensor batch_inputs, torch::Tensor batch_targets, GraphMode graph_mode, bool regularization_active) {
+            if (!graph_execution_enabled(graph_mode, GraphExecutionPhase::Training)) {
+                graph_mode = GraphMode::Disabled;
+            }
             if (graph_mode != GraphMode::Disabled) {
                 ensure_optimizer_graph_capability(graph_mode);
                 prepare_optimizers_for_graph(graph_mode);
@@ -2892,13 +3198,24 @@ namespace Thot {
                 loss = loss.mean();
             }
             if (regularization_active) {
-                auto regularization_penalty = compute_regularization_penalty();
+                auto regularization_penalty = compute_regularization_penalty(graph_mode);
                 if (regularization_penalty.defined()) {
-                    if (regularization_penalty.device() != loss.device()) {
-                        regularization_penalty = regularization_penalty.to(loss.device());
-                    }
-                    if (regularization_penalty.scalar_type() != loss.scalar_type()) {
-                        regularization_penalty = regularization_penalty.to(loss.scalar_type());
+                    if (graph_mode == GraphMode::Disabled) {
+                        if (regularization_penalty.device() != loss.device()) {
+                            regularization_penalty = regularization_penalty.to(loss.device());
+                        }
+                        if (regularization_penalty.scalar_type() != loss.scalar_type()) {
+                            regularization_penalty = regularization_penalty.to(loss.scalar_type());
+                        }
+                    } else {
+                        if (regularization_penalty.device() != loss.device()) {
+                            throw std::runtime_error(
+                                "Regularisation penalty device changed during CUDA graph execution.");
+                        }
+                        if (regularization_penalty.scalar_type() != loss.scalar_type()) {
+                            throw std::runtime_error(
+                                "Regularisation penalty dtype changed during CUDA graph execution.");
+                        }
                     }
                     loss = loss + regularization_penalty;
                 }
@@ -2978,8 +3295,10 @@ namespace Thot {
                 const auto device = model.device();
                 const auto total_samples = train_dataset.inputs.size(0);
                 const auto batch_size = static_cast<std::int64_t>(options.batch_size);
-                const auto graph_mode = options.graph_mode;
-                const bool graph_mode_active = graph_mode != GraphMode::Disabled;
+                const auto requested_graph_mode = options.graph_mode;
+                const bool graph_mode_active = model.graph_execution_enabled(requested_graph_mode, GraphExecutionPhase::Training);
+                const auto graph_mode = graph_mode_active ? requested_graph_mode : GraphMode::Disabled;
+                const bool graph_mode_enabled = graph_mode != GraphMode::Disabled;
 
                 if (graph_mode == GraphMode::Capture) {
                     model.reset_graph_shape_cache(graph_mode);
@@ -2987,7 +3306,7 @@ namespace Thot {
                     model.ensure_graph_replay_ready(graph_mode);
                 }
 
-                if (graph_mode_active) {
+                if (graph_mode_enabled) {
                     model.ensure_optimizer_graph_capability(graph_mode);
                 }
 
@@ -3029,7 +3348,7 @@ namespace Thot {
                         if (current_batch <= 0) {
                             return std::pair<torch::Tensor, torch::Tensor>{torch::Tensor{}, torch::Tensor{}};
                         }
-                        if (graph_mode_active && current_batch != batch_size) {
+                        if (graph_mode_enabled && current_batch != batch_size) {
                             throw std::invalid_argument(
                                 "Graph optimisation requires every batch to match the captured batch size ("
                                 + std::to_string(batch_size)
@@ -3074,7 +3393,7 @@ namespace Thot {
                         }
 
 
-                        if (graph_mode_active) {
+                        if (graph_mode_enabled) {
                             model.prepare_optimizers_for_graph(graph_mode);
                             model.ensure_graph_batch_shapes(graph_mode, batch_inputs, batch_targets);
                         }
@@ -3100,7 +3419,7 @@ namespace Thot {
                     };
 
                     if constexpr (BufferVRAM) {
-                        if (graph_mode_active) {
+                        if (graph_mode_enabled) {
                             for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
                                 auto batch_pair = fetch_batch(batch_index);
                                 const auto processed = process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
@@ -3493,6 +3812,11 @@ namespace Thot {
         std::vector<std::vector<RegularizationBinding>> layer_regularization_bindings_{};
         std::vector<torch::Tensor> global_regularization_parameters_{};
         std::vector<RegularizationBinding> global_regularization_bindings_{};
+        mutable std::vector<GraphRegularizationBindingInfo> graph_global_regularization_metadata_{};
+        mutable std::vector<std::vector<GraphRegularizationBindingInfo>> graph_layer_regularization_metadata_{};
+        mutable std::vector<GraphCalibrationInfo> graph_calibration_metadata_{};
+        mutable bool graph_regularization_metadata_dirty_{true};
+        mutable bool graph_calibration_metadata_dirty_{true};
         mutable std::optional<std::vector<int64_t>> last_input_shape_{};
         mutable std::optional<std::vector<int64_t>> last_target_shape_{};
         mutable std::optional<std::vector<int64_t>> graph_input_shape_cache_{};
@@ -3508,6 +3832,9 @@ namespace Thot {
         std::vector<torch::Tensor> node_activations_{};
         std::vector<std::vector<torch::Tensor>> join_workspace_{};
         GraphExecutionWorkspace graph_workspace_{};
+        GraphCaptureState graph_capture_training_{};
+        GraphCaptureState graph_capture_inference_{};
+        bool graph_capture_opt_in_{false};
         std::vector<Layer::Details::RegisteredLayer*> cached_layer_pointers_{};
         bool execution_workspace_dirty_{true};
         bool routing_active_{false};
