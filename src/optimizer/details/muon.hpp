@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <tuple>
 #include <utility>
+#include <type_traits>
 
 #include <torch/torch.h>
 #include <torch/optim/optimizer.h>
@@ -23,6 +24,15 @@ namespace Thot::Optimizer::Details {
                 return torch::full({}, value, reference.options());
             }
             return torch::full({}, value, torch::TensorOptions().dtype(torch::kFloat));
+        }
+
+        inline auto make_step_scalar_like(const torch::Tensor& reference, double value) -> torch::Tensor
+        {
+            auto options = torch::TensorOptions().dtype(torch::kFloat64);
+            if (reference.defined()) {
+                options = options.device(reference.device());
+            }
+            return torch::full({}, value, options);
         }
 
         inline auto safe_norm(const torch::Tensor& tensor, double eps) -> torch::Tensor {
@@ -45,6 +55,16 @@ namespace Thot::Optimizer::Details {
         inline void ensure_tensor_like(torch::Tensor& storage, const torch::Tensor& reference) {
             if (!storage.defined()) {
                 storage = torch::zeros_like(reference);
+            }
+        }
+
+        inline void ensure_step_tensor(torch::Tensor& storage, const torch::Tensor& reference)
+        {
+            const auto options = torch::TensorOptions().dtype(torch::kFloat64).device(reference.device());
+            if (!storage.defined()) {
+                storage = torch::zeros({}, options);
+            } else if (storage.device() != reference.device() || storage.scalar_type() != torch::kFloat64) {
+                storage = storage.to(options);
             }
         }
 
@@ -99,13 +119,13 @@ namespace Thot::Optimizer::Details {
 
     struct MuonState : public torch::optim::OptimizerCloneableParamState<MuonState> {
         TORCH_ARG(torch::Tensor, exp_avg);
-        TORCH_ARG(int64_t, step) = 0;
+        TORCH_ARG(torch::Tensor, step);
 
     public:
 
         void serialize(torch::serialize::InputArchive& archive) override {
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, exp_avg);
-            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(int64_t, step);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, step);
         }
 
         void serialize(torch::serialize::OutputArchive& archive) const override {
@@ -115,7 +135,7 @@ namespace Thot::Optimizer::Details {
 
         void reset() {
             exp_avg(torch::Tensor());
-            step(0);
+            step(torch::Tensor());
         }
     };
 
@@ -126,7 +146,12 @@ namespace Thot::Optimizer::Details {
         auto options = raw_options.validated();
 
         auto& exp_avg = state.exp_avg();
+        auto& step = state.step();
         detail::ensure_tensor_like(exp_avg, grad);
+        detail::ensure_step_tensor(step, grad);
+
+        auto step_increment = detail::make_step_scalar_like(step, 1.0);
+        step.add_(step_increment);
 
         exp_avg.mul_(options.beta()).add_(grad, 1.0 - options.beta());
 
@@ -138,7 +163,6 @@ namespace Thot::Optimizer::Details {
         direction = detail::clip_by_max_norm(direction, options.max_update_norm(), options.eps());
 
         param.add_(direction, -options.lr());
-        state.step(state.step() + 1);
     }
 
     struct MuonDescriptor {
@@ -191,14 +215,14 @@ namespace Thot::Optimizer::Details {
     struct AdaMuonState : public torch::optim::OptimizerCloneableParamState<AdaMuonState> {
         TORCH_ARG(torch::Tensor, exp_avg);
         TORCH_ARG(torch::Tensor, exp_avg_sq);
-        TORCH_ARG(int64_t, step) = 0;
+        TORCH_ARG(torch::Tensor, step);
 
     public:
 
         void serialize(torch::serialize::InputArchive& archive) override {
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, exp_avg);
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, exp_avg_sq);
-            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(int64_t, step);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, step);
         }
 
         void serialize(torch::serialize::OutputArchive& archive) const override {
@@ -210,7 +234,7 @@ namespace Thot::Optimizer::Details {
         void reset() {
             exp_avg(torch::Tensor());
             exp_avg_sq(torch::Tensor());
-            step(0);
+            step(torch::Tensor());
         }
     };
 
@@ -222,16 +246,23 @@ namespace Thot::Optimizer::Details {
 
         auto& exp_avg = state.exp_avg();
         auto& exp_avg_sq = state.exp_avg_sq();
+        auto& step = state.step();
         detail::ensure_tensor_like(exp_avg, grad);
         detail::ensure_tensor_like(exp_avg_sq, grad);
 
-        state.step(state.step() + 1);
+        detail::ensure_step_tensor(step, grad);
+        auto step_increment = detail::make_step_scalar_like(step, 1.0);
+        step.add_(step_increment);
+
 
         exp_avg.mul_(options.beta()).add_(grad, 1.0 - options.beta());
         exp_avg_sq.mul_(options.beta2()).addcmul_(grad, grad, 1.0 - options.beta2());
 
-        auto bias_correction1 = 1.0 - std::pow(options.beta(), static_cast<double>(state.step()));
-        auto bias_correction2 = 1.0 - std::pow(options.beta2(), static_cast<double>(state.step()));
+        auto beta_tensor = detail::make_step_scalar_like(step, options.beta());
+        auto beta2_tensor = detail::make_step_scalar_like(step, options.beta2());
+        auto ones = torch::ones_like(step);
+        auto bias_correction1 = (ones - torch::pow(beta_tensor, step)).to(exp_avg.scalar_type());
+        auto bias_correction2 = (ones - torch::pow(beta2_tensor, step)).to(exp_avg_sq.scalar_type());
 
         auto corrected_exp_avg = exp_avg / bias_correction1;
         auto corrected_exp_avg_sq = exp_avg_sq / bias_correction2;
@@ -341,14 +372,14 @@ namespace Thot::Optimizer::Details {
     struct MuonManifoldState : public torch::optim::OptimizerCloneableParamState<MuonManifoldState> {
         TORCH_ARG(torch::Tensor, exp_avg);
         TORCH_ARG(torch::Tensor, exp_avg_sq);
-        TORCH_ARG(int64_t, step) = 0;
+        TORCH_ARG(torch::Tensor, step);
 
 
     public:
         void serialize(torch::serialize::InputArchive& archive) override {
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, exp_avg);
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, exp_avg_sq);
-            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(int64_t, step);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, step);
         }
 
         void serialize(torch::serialize::OutputArchive& archive) const override {
@@ -360,7 +391,7 @@ namespace Thot::Optimizer::Details {
         void reset() {
             exp_avg(torch::Tensor());
             exp_avg_sq(torch::Tensor());
-            step(0);
+            step(torch::Tensor());
         }
     };
 
@@ -389,16 +420,23 @@ namespace Thot::Optimizer::Details {
         auto options = raw_options.validated();
         auto& exp_avg = state.exp_avg();
         auto& exp_avg_sq = state.exp_avg_sq();
+        auto& step = state.step();
         detail::ensure_tensor_like(exp_avg, grad);
         detail::ensure_tensor_like(exp_avg_sq, grad);
 
-        state.step(state.step() + 1);
+        detail::ensure_step_tensor(step, grad);
+        auto step_increment = detail::make_step_scalar_like(step, 1.0);
+        step.add_(step_increment);
+
 
         exp_avg.mul_(options.beta()).add_(grad, 1.0 - options.beta());
         exp_avg_sq.mul_(options.beta2()).addcmul_(grad, grad, 1.0 - options.beta2());
 
-        auto bias_correction1 = 1.0 - std::pow(options.beta(), static_cast<double>(state.step()));
-        auto bias_correction2 = 1.0 - std::pow(options.beta2(), static_cast<double>(state.step()));
+        auto beta_tensor = detail::make_step_scalar_like(step, options.beta());
+        auto beta2_tensor = detail::make_step_scalar_like(step, options.beta2());
+        auto ones = torch::ones_like(step);
+        auto bias_correction1 = (ones - torch::pow(beta_tensor, step)).to(exp_avg.scalar_type());
+        auto bias_correction2 = (ones - torch::pow(beta2_tensor, step)).to(exp_avg_sq.scalar_type());
 
         auto corrected_exp_avg = exp_avg / bias_correction1;
         auto corrected_exp_avg_sq = exp_avg_sq / bias_correction2;
@@ -475,6 +513,28 @@ namespace Thot::Optimizer::Details {
 
             void load(torch::serialize::InputArchive& archive) override {
                 torch::optim::serialize<StateType, OptionsType>(archive, *this);
+            }
+
+            void ensure_state_initialized()
+            {
+                for (auto& group : this->param_groups_) {
+                    for (auto& param : group.params()) {
+                        auto state_it = this->state_.find(param.unsafeGetTensorImpl());
+                        if (state_it == this->state_.end()) {
+                            auto state = std::make_unique<StateType>();
+                            state->reset();
+                            state_it = this->state_.insert({param.unsafeGetTensorImpl(), std::move(state)}).first;
+                        }
+                        auto& state = static_cast<StateType&>(*state_it->second);
+                        if constexpr (std::is_same_v<StateType, MuonState>) {
+                            detail::ensure_tensor_like(state.exp_avg(), param);
+                        } else {
+                            detail::ensure_tensor_like(state.exp_avg(), param);
+                            detail::ensure_tensor_like(state.exp_avg_sq(), param);
+                        }
+                        detail::ensure_step_tensor(state.step(), param);
+                    }
+                }
             }
         };
     }

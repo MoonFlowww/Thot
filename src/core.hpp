@@ -50,6 +50,8 @@
 
 
 #include <torch/torch.h>
+#include <torch/optim/adamw.h>
+#include <torch/optim/sgd.h>
 
 
 
@@ -430,6 +432,22 @@ namespace Thot {
         using RegularizationStateStorage = std::shared_ptr<std::vector<RegularizationState>>;
         using RegularizationAccumulator = Regularization::Accumulator;
         using CalibrationMethod = Calibration::MethodPtr;
+
+
+        struct OptimizerBinding {
+            std::unique_ptr<torch::optim::Optimizer> instance{};
+            std::function<void(torch::optim::Optimizer&)> warmup{};
+            bool capture_safe{true};
+            bool warmed_up{false};
+
+            OptimizerBinding() = default;
+            OptimizerBinding(OptimizerBinding&&) noexcept = default;
+            OptimizerBinding& operator=(OptimizerBinding&&) noexcept = default;
+            OptimizerBinding(const OptimizerBinding&) = delete;
+            OptimizerBinding& operator=(const OptimizerBinding&) = delete;
+        };
+
+
 
         struct RegularizationBinding {
             Regularization::Descriptor descriptor{};
@@ -1405,27 +1423,117 @@ namespace Thot {
             }
             auto build_optimizer_for = [](const Optimizer::Descriptor& config, std::vector<torch::Tensor> parameters) {
                 return std::visit(
-                    [&](const auto& concrete_descriptor) -> std::unique_ptr<torch::optim::Optimizer> {
+                [&](const auto& concrete_descriptor) -> OptimizerBinding {
                         using DescriptorType = std::decay_t<decltype(concrete_descriptor)>;
+                    OptimizerBinding binding{};
                         if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::SGDDescriptor>) {
                             auto options = Optimizer::Details::to_torch_options(concrete_descriptor.options);
-                            return std::make_unique<torch::optim::SGD>(std::move(parameters), options);
+                            binding.instance = std::make_unique<torch::optim::SGD>(std::move(parameters), options);
+                            binding.capture_safe = true;
+                            binding.warmup = [](torch::optim::Optimizer& optimizer) {
+                                if (auto* sgd = dynamic_cast<torch::optim::SGD*>(&optimizer)) {
+                                    for (auto& group : sgd->param_groups()) {
+                                        auto& opts = static_cast<torch::optim::SGDOptions&>(group.options());
+                                        if (opts.momentum() == 0.0) {
+                                            continue;
+                                        }
+                                        for (auto& param : group.params()) {
+                                            auto& state_map = sgd->state();
+                                            auto it = state_map.find(param.unsafeGetTensorImpl());
+                                            if (it == state_map.end()) {
+                                                auto state = std::make_unique<torch::optim::SGDParamState>();
+                                                state->momentum_buffer(torch::zeros_like(param, torch::MemoryFormat::Preserve));
+                                                state_map.insert({param.unsafeGetTensorImpl(), std::move(state)});
+                                            } else {
+                                                auto& state = static_cast<torch::optim::SGDParamState&>(*it->second);
+                                                if (!state.momentum_buffer().defined()) {
+                                                    state.momentum_buffer(torch::zeros_like(param, torch::MemoryFormat::Preserve));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            };
                         } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::AdamWDescriptor>) {
                             auto options = Optimizer::Details::to_torch_options(concrete_descriptor.options);
-                            return std::make_unique<torch::optim::AdamW>(std::move(parameters), options);
+                            binding.instance = std::make_unique<torch::optim::AdamW>(std::move(parameters), options);
+                            binding.capture_safe = false;
+                            binding.warmup = [](torch::optim::Optimizer& optimizer) {
+                                if (auto* adamw = dynamic_cast<torch::optim::AdamW*>(&optimizer)) {
+                                    for (auto& group : adamw->param_groups()) {
+                                        for (auto& param : group.params()) {
+                                            auto& state_map = adamw->state();
+                                            auto it = state_map.find(param.unsafeGetTensorImpl());
+                                            if (it == state_map.end()) {
+                                                auto state = std::make_unique<torch::optim::AdamWParamState>();
+                                                state->step(0);
+                                                state->exp_avg(torch::zeros_like(param, torch::MemoryFormat::Preserve));
+                                                state->exp_avg_sq(torch::zeros_like(param, torch::MemoryFormat::Preserve));
+                                                if (static_cast<torch::optim::AdamWOptions&>(group.options()).amsgrad()) {
+                                                    state->max_exp_avg_sq(torch::zeros_like(param, torch::MemoryFormat::Preserve));
+                                                }
+                                                state_map.insert({param.unsafeGetTensorImpl(), std::move(state)});
+                                            } else {
+                                                auto& state = static_cast<torch::optim::AdamWParamState&>(*it->second);
+                                                if (!state.exp_avg().defined()) {
+                                                    state.exp_avg(torch::zeros_like(param, torch::MemoryFormat::Preserve));
+                                                }
+                                                if (!state.exp_avg_sq().defined()) {
+                                                    state.exp_avg_sq(torch::zeros_like(param, torch::MemoryFormat::Preserve));
+                                                }
+                                                if (static_cast<torch::optim::AdamWOptions&>(group.options()).amsgrad()
+                                                    && !state.max_exp_avg_sq().defined()) {
+                                                    state.max_exp_avg_sq(torch::zeros_like(param, torch::MemoryFormat::Preserve));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            };
                         } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::SophiaGDescriptor>) {
-                            return std::make_unique<Optimizer::Details::SophiaG>(std::move(parameters), concrete_descriptor.options);
+                                                        binding.instance = std::make_unique<Optimizer::Details::SophiaG>(std::move(parameters), concrete_descriptor.options);
+                            binding.capture_safe = true;
+                            binding.warmup = [](torch::optim::Optimizer& optimizer) {
+                                if (auto* sophia = dynamic_cast<Optimizer::Details::SophiaG*>(&optimizer)) {
+                                    sophia->ensure_state_initialized();
+                                }
+                            };
                         } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::SophiaHDescriptor>) {
-                            return std::make_unique<Optimizer::Details::SophiaH>(std::move(parameters), concrete_descriptor.options);
+                            binding.instance = std::make_unique<Optimizer::Details::SophiaH>(std::move(parameters), concrete_descriptor.options);
+                            binding.capture_safe = true;
+                            binding.warmup = [](torch::optim::Optimizer& optimizer) {
+                                if (auto* sophia = dynamic_cast<Optimizer::Details::SophiaH*>(&optimizer)) {
+                                    sophia->ensure_state_initialized();
+                                }
+                            };
                         } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::MuonDescriptor>) {
-                            return std::make_unique<Optimizer::Details::Muon>(std::move(parameters), concrete_descriptor.options);
+                            binding.instance = std::make_unique<Optimizer::Details::Muon>(std::move(parameters), concrete_descriptor.options);
+                            binding.capture_safe = true;
+                            binding.warmup = [](torch::optim::Optimizer& optimizer) {
+                                if (auto* muon = dynamic_cast<Optimizer::Details::Muon*>(&optimizer)) {
+                                    muon->ensure_state_initialized();
+                                }
+                            };
                         } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::AdaMuonDescriptor>) {
-                            return std::make_unique<Optimizer::Details::AdaMuon>(std::move(parameters), concrete_descriptor.options);
+                            binding.instance = std::make_unique<Optimizer::Details::AdaMuon>(std::move(parameters), concrete_descriptor.options);
+                            binding.capture_safe = true;
+                            binding.warmup = [](torch::optim::Optimizer& optimizer) {
+                                if (auto* muon = dynamic_cast<Optimizer::Details::AdaMuon*>(&optimizer)) {
+                                    muon->ensure_state_initialized();
+                                }
+                            };
                         } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::MuonManifoldDescriptor>) {
-                            return std::make_unique<Optimizer::Details::MuonManifold>(std::move(parameters), concrete_descriptor.options);
+                            binding.instance = std::make_unique<Optimizer::Details::MuonManifold>(std::move(parameters), concrete_descriptor.options);
+                            binding.capture_safe = true;
+                            binding.warmup = [](torch::optim::Optimizer& optimizer) {
+                                if (auto* muon = dynamic_cast<Optimizer::Details::MuonManifold*>(&optimizer)) {
+                                    muon->ensure_state_initialized();
+                                }
+                            };
                         } else {
                             static_assert(sizeof(DescriptorType) == 0, "Unsupported optimizer descriptor provided to Model::set_optimizer.");
                         }
+                    return binding;
                     }, config);
             };
 
@@ -1472,7 +1580,7 @@ namespace Thot {
                     throw std::logic_error("Cannot attach a scheduler without a global optimizer.");
                 scheduler_ = std::visit(
                     [&](const auto& concrete_descriptor) -> std::unique_ptr<LrScheduler::Details::Scheduler> {
-                        return LrScheduler::Details::build_scheduler(*this, *optimizer_, concrete_descriptor);
+                        return LrScheduler::Details::build_scheduler(*this, *optimizer_->instance, concrete_descriptor);
                     }, std::move(*scheduler));
 
             }
@@ -2136,13 +2244,13 @@ namespace Thot {
             bool handled{false};
 
             if (optimizer_) {
-                optimizer_->zero_grad(set_to_none);
+                optimizer_->instance->zero_grad(set_to_none);
                 handled = true;
             }
             if (!local_optimizers_.empty()) {
                 handled = true;
                 for (auto& optimizer : local_optimizers_) {
-                    optimizer->zero_grad(set_to_none);
+                    optimizer.instance->zero_grad(set_to_none);
                 }
             }
 
@@ -2166,7 +2274,7 @@ namespace Thot {
             if (!optimizer_) {
                 throw std::logic_error("Optimizer has not been configured.");
             }
-            return *optimizer_;
+            return *optimizer_->instance;
         }
 
         template <class Config, class Dataset = Core::SupervisedDataset>
@@ -2285,6 +2393,49 @@ namespace Thot {
 
         }
     private:
+        void ensure_optimizer_graph_capability(GraphMode mode) const
+        {
+            if (mode == GraphMode::Disabled) {
+                return;
+            }
+
+            auto validate_binding = [](const OptimizerBinding& binding) {
+                if (!binding.capture_safe) {
+                    throw std::runtime_error("Selected optimizer does not support CUDA graph execution.");
+                }
+            };
+
+            if (optimizer_) {
+                validate_binding(*optimizer_);
+            }
+            for (const auto& binding : local_optimizers_) {
+                validate_binding(binding);
+            }
+        }
+
+        void prepare_optimizers_for_graph(GraphMode mode)
+        {
+            if (mode == GraphMode::Disabled) {
+                return;
+            }
+
+            auto prepare_binding = [&](OptimizerBinding& binding) {
+                if (!binding.capture_safe) {
+                    throw std::runtime_error("Selected optimizer does not support CUDA graph execution.");
+                }
+                if (!binding.warmed_up && binding.warmup) {
+                    binding.warmup(*binding.instance);
+                    binding.warmed_up = true;
+                }
+            };
+
+            if (optimizer_) {
+                prepare_binding(*optimizer_);
+            }
+            for (auto& binding : local_optimizers_) {
+                prepare_binding(binding);
+            }
+        }
         void reset_graph_shape_cache(GraphMode mode) const
         {
             if (mode == GraphMode::Disabled) {
@@ -2433,9 +2584,11 @@ namespace Thot {
                 }
             };
 
-            append_from(optimizer_.get());
+            if (optimizer_) {
+                append_from(optimizer_->instance.get());
+            }
             for (auto& optimizer : local_optimizers_) {
-                append_from(optimizer.get());
+                append_from(optimizer.instance.get());
             }
 
             return learning_rates;
@@ -2718,6 +2871,10 @@ namespace Thot {
         }
 
         torch::Tensor graph_train_step(torch::Tensor batch_inputs, torch::Tensor batch_targets, GraphMode graph_mode, bool regularization_active) {
+            if (graph_mode != GraphMode::Disabled) {
+                ensure_optimizer_graph_capability(graph_mode);
+                prepare_optimizers_for_graph(graph_mode);
+            }
             zero_grad();
 
             ForwardOptions forward_options{};
@@ -2830,6 +2987,10 @@ namespace Thot {
                     model.ensure_graph_replay_ready(graph_mode);
                 }
 
+                if (graph_mode_active) {
+                    model.ensure_optimizer_graph_capability(graph_mode);
+                }
+
                 torch::TensorOptions index_options = torch::TensorOptions().dtype(torch::kLong);
 
 
@@ -2914,6 +3075,7 @@ namespace Thot {
 
 
                         if (graph_mode_active) {
+                            model.prepare_optimizers_for_graph(graph_mode);
                             model.ensure_graph_batch_shapes(graph_mode, batch_inputs, batch_targets);
                         }
 
@@ -3349,8 +3511,8 @@ namespace Thot {
         std::vector<Layer::Details::RegisteredLayer*> cached_layer_pointers_{};
         bool execution_workspace_dirty_{true};
         bool routing_active_{false};
-        std::unique_ptr<torch::optim::Optimizer> optimizer_{};
-        std::vector<std::unique_ptr<torch::optim::Optimizer>> local_optimizers_{};
+        std::optional<OptimizerBinding> optimizer_{};
+        std::vector<OptimizerBinding> local_optimizers_{};
         std::unique_ptr<LrScheduler::Details::Scheduler> scheduler_{};
         using StepImpl = void (Model::*)();
         StepImpl step_impl_{&Model::step_not_configured};
@@ -3374,10 +3536,10 @@ namespace Thot {
         void step_optimizers()
         {
             if (optimizer_) {
-                optimizer_->step();
+                optimizer_->instance->step();
             }
             for (auto& optimizer : local_optimizers_) {
-                optimizer->step();
+                optimizer.instance->step();
             }
         }
 

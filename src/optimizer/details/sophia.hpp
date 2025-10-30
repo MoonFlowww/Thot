@@ -102,13 +102,13 @@ namespace Thot::Optimizer::Details {
     };
 
     struct SophiaParamState : public torch::optim::OptimizerCloneableParamState<SophiaParamState> {
-        TORCH_ARG(int64_t, step) = 0;
+        TORCH_ARG(torch::Tensor, step);
         TORCH_ARG(torch::Tensor, momentum);
         TORCH_ARG(torch::Tensor, hessian);
 
     public:
         void serialize(torch::serialize::InputArchive& archive) override {
-            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(int64_t, step);
+            _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, step);
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, momentum);
             _TORCH_OPTIM_DESERIALIZE_TORCH_ARG(torch::Tensor, hessian);
         }
@@ -121,6 +121,22 @@ namespace Thot::Optimizer::Details {
     };
 
     namespace detail {
+        inline torch::Tensor make_scalar_like(const torch::Tensor& reference, double value)
+        {
+            TORCH_CHECK(reference.defined(), "make_scalar_like requires a defined reference tensor.");
+            return torch::full({}, value, reference.options());
+        }
+
+        inline torch::Tensor ensure_step_tensor(torch::Tensor& storage, const torch::Tensor& reference)
+        {
+            const auto options = torch::TensorOptions().dtype(torch::kFloat64).device(reference.device());
+            if (!storage.defined()) {
+                storage = torch::zeros({}, options);
+            } else if (storage.device() != reference.device() || storage.scalar_type() != torch::kFloat64) {
+                storage = storage.to(options);
+            }
+            return storage;
+        }
         struct GaussNewtonHessian {
             static torch::Tensor update(const torch::Tensor& grad) {
                 return grad.mul(grad);
@@ -167,17 +183,20 @@ namespace Thot::Optimizer::Details {
                         auto state_it = this->state_.find(param.unsafeGetTensorImpl());
                         if (state_it == this->state_.end()) {
                             auto state = std::make_unique<SophiaParamState>();
-                            state->step(0);
+                            state->step(torch::zeros({}, torch::TensorOptions().dtype(torch::kFloat64).device(param.device())));
                             state->momentum(torch::zeros_like(param, torch::MemoryFormat::Preserve));
                             state->hessian(torch::zeros_like(param, torch::MemoryFormat::Preserve));
                             state_it = this->state_.insert({param.unsafeGetTensorImpl(), std::move(state)}).first;
                         }
 
                         auto& state = static_cast<SophiaParamState&>(*state_it->second);
+                        auto& step_buffer = state.step();
                         auto& momentum = state.momentum();
                         auto& hessian = state.hessian();
 
-                        state.step(state.step() + 1);
+                        detail::ensure_step_tensor(step_buffer, param);
+                        auto step_increment = detail::make_scalar_like(step_buffer, 1.0);
+                        step_buffer.add_(step_increment);
 
                         if (options.weight_decay() != 0.0) {
                             param.mul_(1.0 - options.lr() * options.weight_decay());
@@ -186,10 +205,16 @@ namespace Thot::Optimizer::Details {
                         momentum.mul_(options.beta1()).add_(grad, 1.0 - options.beta1());
 
                         const auto update_interval = std::max<int64_t>(1, options.hessian_update_interval());
-                        if (state.step() % update_interval == 0) {
-                            auto hessian_update = HessianUpdater::update(grad);
-                            hessian.mul_(options.beta2()).add_(hessian_update, 1.0 - options.beta2());
+                        auto interval_tensor = detail::make_scalar_like(step_buffer, static_cast<double>(update_interval));
+                        auto remainder = torch::remainder(step_buffer, interval_tensor);
+                        auto update_mask = torch::eq(remainder, 0).to(hessian.scalar_type());
+
+                        auto hessian_update = HessianUpdater::update(grad);
+                        if (hessian_update.scalar_type() != hessian.scalar_type()) {
+                            hessian_update = hessian_update.to(hessian.scalar_type());
                         }
+                        hessian_update.mul_(update_mask);
+                        hessian.mul_(options.beta2()).add_(hessian_update, 1.0 - options.beta2());
 
                         auto denom = torch::add(hessian, options.rho());
                         denom = denom.add(options.eps());
@@ -211,6 +236,35 @@ namespace Thot::Optimizer::Details {
 
             void load(torch::serialize::InputArchive& archive) override {
                 torch::optim::serialize<SophiaParamState, OptionsType>(archive, *this);
+            }
+
+            void ensure_state_initialized()
+            {
+                for (auto& group : this->param_groups_) {
+                    for (auto& param : group.params()) {
+                        auto state_it = this->state_.find(param.unsafeGetTensorImpl());
+                        if (state_it == this->state_.end()) {
+                            auto state = std::make_unique<SophiaParamState>();
+                            state->step(torch::zeros({}, torch::TensorOptions().dtype(torch::kFloat64).device(param.device())));
+                            state->momentum(torch::zeros_like(param, torch::MemoryFormat::Preserve));
+                            state->hessian(torch::zeros_like(param, torch::MemoryFormat::Preserve));
+                            this->state_.insert({param.unsafeGetTensorImpl(), std::move(state)});
+                        } else {
+                            auto& state = static_cast<SophiaParamState&>(*state_it->second);
+                            if (!state.step().defined()) {
+                                state.step(torch::zeros({}, torch::TensorOptions().dtype(torch::kFloat64).device(param.device())));
+                            } else if (state.step().device() != param.device() || state.step().scalar_type() != torch::kFloat64) {
+                                state.step(state.step().to(torch::TensorOptions().dtype(torch::kFloat64).device(param.device())));
+                            }
+                            if (!state.momentum().defined()) {
+                                state.momentum(torch::zeros_like(param, torch::MemoryFormat::Preserve));
+                            }
+                            if (!state.hessian().defined()) {
+                                state.hessian(torch::zeros_like(param, torch::MemoryFormat::Preserve));
+                            }
+                        }
+                    }
+                }
             }
 
         private:
