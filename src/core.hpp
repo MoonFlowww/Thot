@@ -2869,7 +2869,12 @@ namespace Thot {
                 || destination.scalar_type() != source.scalar_type()
                 || destination.device() != source.device()) {
                 destination = torch::empty_like(source);
+            } else {
+                destination = destination.detach();
+                if (destination.requires_grad() != source.requires_grad()) {
+                    destination.set_requires_grad(source.requires_grad());
                 }
+            }
 
             destination.copy_(source);
         }
