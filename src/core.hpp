@@ -2864,11 +2864,28 @@ namespace Thot {
                 return;
             }
 
-            if (destination.defined() && destination.is_alias_of(source)) {
+            if (!destination.defined()) {
+                destination = source.clone();
                 return;
             }
 
-            destination = source.clone();
+            if (destination.is_alias_of(source)) {
+                return;
+            }
+
+            if (destination.device() != source.device()) {
+                throw std::invalid_argument("copy_tensor_into requires destination and source to share the same device.");
+            }
+
+            if (destination.dtype() != source.dtype()) {
+                throw std::invalid_argument("copy_tensor_into requires destination and source to share the same dtype.");
+            }
+
+            if (destination.sizes() != source.sizes()) {
+                throw std::invalid_argument("copy_tensor_into requires destination and source to share the same shape.");
+            }
+
+            destination.copy_(source);
         }
 
         void record_epoch_telemetry(TrainingTelemetry::EpochSnapshot snapshot)
@@ -3310,7 +3327,7 @@ namespace Thot {
                     }
                 }
 
-                loss.backward();
+                loss.backward({}, mode != GraphMode::Disabled);
                 step_optimizers();
 
                 return loss;
