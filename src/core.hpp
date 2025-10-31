@@ -3434,7 +3434,15 @@ namespace Thot {
             [[nodiscard]] static TensorDataset prepare_tensor_dataset(torch::Tensor inputs,
                                                                       torch::Tensor targets)
             {
-                return TensorDataset{std::move(inputs).contiguous(), std::move(targets).contiguous()};
+                auto prepared_inputs = std::move(inputs).contiguous();
+                auto prepared_targets = std::move(targets).contiguous();
+                if (prepared_inputs.device().is_cpu() && !prepared_inputs.is_pinned()) {
+                    prepared_inputs = prepared_inputs.pin_memory();
+                }
+                if (prepared_targets.device().is_cpu() && !prepared_targets.is_pinned()) {
+                    prepared_targets = prepared_targets.pin_memory();
+                }
+                return TensorDataset{std::move(prepared_inputs), std::move(prepared_targets)};
             }
 
             [[nodiscard]] static TensorDataset ensure_contiguous(TensorDataset dataset)
@@ -3451,6 +3459,12 @@ namespace Thot {
                 }
                 if (!dataset.targets.device().is_cpu()) {
                     dataset.targets = dataset.targets.to(torch::kCPU);
+                }
+                if (dataset.inputs.device().is_cpu() && !dataset.inputs.is_pinned()) {
+                    dataset.inputs = dataset.inputs.pin_memory();
+                }
+                if (dataset.targets.device().is_cpu() && !dataset.targets.is_pinned()) {
+                    dataset.targets = dataset.targets.pin_memory();
                 }
                 return dataset;
             }
@@ -3501,6 +3515,13 @@ namespace Thot {
 
                 torch::TensorOptions index_options = torch::TensorOptions().dtype(torch::kLong);
 
+                if (train_dataset.inputs.device().is_cpu() && !train_dataset.inputs.is_pinned()) {
+                    train_dataset.inputs = train_dataset.inputs.pin_memory();
+                }
+                if (train_dataset.targets.device().is_cpu() && !train_dataset.targets.is_pinned()) {
+                    train_dataset.targets = train_dataset.targets.pin_memory();
+                }
+
 
                 auto best_test = std::optional<double>{};
                 std::vector<torch::Tensor> best_parameters;
@@ -3510,6 +3531,33 @@ namespace Thot {
                 std::size_t step_index = 0;
 
                 const bool regularization_active = model.has_regularization();
+
+                torch::Tensor device_batch_inputs_buffer;
+                torch::Tensor device_batch_targets_buffer;
+
+                auto stage_to_device = [&](const torch::Tensor& source, torch::Tensor& buffer) {
+                    if (!source.defined() || source.device() == device) {
+                        return source;
+                    }
+
+                    const auto sizes = source.sizes();
+                    auto options = source.options().device(device);
+                    const auto memory_format = source.dim() >= 4
+                        ? torch::MemoryFormat::ChannelsLast
+                        : torch::MemoryFormat::Contiguous;
+
+                    if (!buffer.defined()
+                        || buffer.device() != device
+                        || buffer.scalar_type() != source.scalar_type()
+                        || !buffer.sizes().equals(sizes)) {
+                        buffer = torch::empty(sizes, options, memory_format);
+                        }
+
+                    const bool non_blocking = source.is_pinned();
+                    buffer.copy_(source, non_blocking);
+                    return buffer;
+                };
+
 
                 for (std::size_t epoch = 0; epoch < options.epoch; ++epoch) {
                     const auto epoch_start = std::chrono::steady_clock::now();
@@ -3556,16 +3604,21 @@ namespace Thot {
                             }
                             batch_inputs = train_dataset.inputs.index_select(0, batch_indices);
                             batch_targets = train_dataset.targets.index_select(0, batch_indices);
+                            if (batch_inputs.device().is_cpu() && !batch_inputs.is_pinned()) {
+                                batch_inputs = batch_inputs.pin_memory();
+                            }
+                            if (batch_targets.device().is_cpu() && !batch_targets.is_pinned()) {
+                                batch_targets = batch_targets.pin_memory();
+                            }
                         } else {
                             batch_inputs = train_dataset.inputs.narrow(0, offset, current_batch);
                             batch_targets = train_dataset.targets.narrow(0, offset, current_batch);
-                        }
-
-                        if (batch_inputs.defined() && batch_inputs.device() != device) {
-                            batch_inputs = batch_inputs.to(device);
-                        }
-                        if (batch_targets.defined() && batch_targets.device() != device) {
-                            batch_targets = batch_targets.to(device);
+                            if (batch_inputs.device().is_cpu() && !batch_inputs.is_pinned()) {
+                                batch_inputs = batch_inputs.pin_memory();
+                            }
+                            if (batch_targets.device().is_cpu() && !batch_targets.is_pinned()) {
+                                batch_targets = batch_targets.pin_memory();
+                            }
                         }
 
                         return std::pair<torch::Tensor, torch::Tensor>{std::move(batch_inputs), std::move(batch_targets)};
@@ -3581,13 +3634,16 @@ namespace Thot {
                             return std::int64_t{0};
                         }
 
+                        auto staged_inputs = stage_to_device(batch_inputs, device_batch_inputs_buffer);
+                        auto staged_targets = stage_to_device(batch_targets, device_batch_targets_buffer);
+
 
                         if (graph_mode_enabled) {
                             model.prepare_optimizers_for_graph(graph_mode);
-                            model.ensure_graph_batch_shapes(graph_mode, batch_inputs, batch_targets);
+                            model.ensure_graph_batch_shapes(graph_mode, staged_inputs, staged_targets);
                         }
 
-                        auto loss = model.graph_train_step(std::move(batch_inputs), std::move(batch_targets), graph_mode, regularization_active);
+                        auto loss = model.graph_train_step(std::move(staged_inputs), std::move(staged_targets), graph_mode, regularization_active);
                         model.step_scheduler();
 
 
@@ -3797,6 +3853,13 @@ namespace Thot {
                     }
                 }
 
+                if (dataset_inputs.device().is_cpu() && !dataset_inputs.is_pinned()) {
+                    dataset_inputs = dataset_inputs.pin_memory();
+                }
+                if (dataset_targets.device().is_cpu() && !dataset_targets.is_pinned()) {
+                    dataset_targets = dataset_targets.pin_memory();
+                }
+
                 const auto batch_extent = static_cast<std::int64_t>(batch_size);
                 const std::size_t total_batches = total_samples > 0
                     ? static_cast<std::size_t>((total_samples + batch_extent - 1) / batch_extent)
@@ -3806,6 +3869,33 @@ namespace Thot {
                 auto accumulation = torch::zeros({}, torch::TensorOptions().dtype(torch::kFloat64).device(device));
                 std::int64_t weight = 0;
 
+                torch::Tensor device_batch_inputs_buffer;
+                torch::Tensor device_batch_targets_buffer;
+
+                auto stage_to_device = [&](const torch::Tensor& source, torch::Tensor& buffer) {
+                    if (!source.defined() || source.device() == device) {
+                        return source;
+                    }
+
+                    const auto sizes = source.sizes();
+                    auto options = source.options().device(device);
+                    const auto memory_format = source.dim() >= 4
+                        ? torch::MemoryFormat::ChannelsLast
+                        : torch::MemoryFormat::Contiguous;
+
+                    if (!buffer.defined()
+                        || buffer.device() != device
+                        || buffer.scalar_type() != source.scalar_type()
+                        || !buffer.sizes().equals(sizes)) {
+                        buffer = torch::empty(sizes, options, memory_format);
+                        }
+
+                    const bool non_blocking = source.is_pinned();
+                    buffer.copy_(source, non_blocking);
+                    return buffer;
+                };
+
+                r
                 auto fetch_batch = [&](std::size_t batch_index) {
                     const auto offset = static_cast<std::int64_t>(batch_index) * batch_extent;
                     const auto remaining = total_samples - offset;
@@ -3816,11 +3906,11 @@ namespace Thot {
                     auto batch_inputs = dataset_inputs.narrow(0, offset, current_batch);
                     auto batch_targets = dataset_targets.narrow(0, offset, current_batch);
 
-                    if (batch_inputs.defined() && batch_inputs.device() != device) {
-                        batch_inputs = batch_inputs.to(device);
+                    if (batch_inputs.device().is_cpu() && !batch_inputs.is_pinned()) {
+                        batch_inputs = batch_inputs.pin_memory();
                     }
-                    if (batch_targets.defined() && batch_targets.device() != device) {
-                        batch_targets = batch_targets.to(device);
+                    if (batch_targets.device().is_cpu() && !batch_targets.is_pinned()) {
+                        batch_targets = batch_targets.pin_memory();
                     }
 
                     return std::pair<torch::Tensor, torch::Tensor>{std::move(batch_inputs), std::move(batch_targets)};
@@ -3836,15 +3926,18 @@ namespace Thot {
                         return std::int64_t{0};
                     }
 
-                    auto prediction = model.forward(batch_inputs);
+                    auto staged_inputs = stage_to_device(batch_inputs, device_batch_inputs_buffer);
+                    auto staged_targets = stage_to_device(batch_targets, device_batch_targets_buffer);
 
-                    if (!prediction.sizes().equals(batch_targets.sizes())) {
-                        if (batch_targets.numel() == prediction.numel()) {
-                            batch_targets = batch_targets.reshape_as(prediction);
+                    auto prediction = model.forward(staged_inputs);
+
+                    if (!prediction.sizes().equals(staged_targets.sizes())) {
+                        if (staged_targets.numel() == prediction.numel()) {
+                            staged_targets = staged_targets.reshape_as(prediction);
                         }
                     }
 
-                    auto loss = model.compute_loss(prediction, batch_targets);
+                    auto loss = model.compute_loss(prediction, staged_targets);
                     if (loss.dim() != 0) {
                         loss = loss.mean();
                     }
@@ -3870,8 +3963,8 @@ namespace Thot {
                     accumulation.add_(loss_tensor);
                     weight += current_batch;
                     prediction = torch::Tensor{};
-                    batch_inputs = torch::Tensor{};
-                    batch_targets = torch::Tensor{};
+                    staged_inputs = torch::Tensor{};
+                    staged_targets = torch::Tensor{};
                     loss = torch::Tensor{};
 
                     return current_batch;
