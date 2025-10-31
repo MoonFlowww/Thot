@@ -1974,7 +1974,7 @@ namespace Thot {
                     }
                     ensure_graph_input_shape(GraphMode::Replay, input);
                     ensure_execution_workspace();
-                    copy_into_graph_input_buffer(std::move(input));
+                    copy_into_graph_input_buffer( std::move(input), workspace_tensor_policy(GraphMode::Replay));
                     if (!state.capture_stream.has_value()) {
                         throw std::runtime_error(
                             "CUDA graph replay requested for inference without an associated capture stream.");
@@ -2116,7 +2116,7 @@ namespace Thot {
             ensure_execution_workspace();
 
             constexpr std::size_t kInputNodeIndex = 0;
-            copy_into_graph_input_buffer(std::move(tensor));
+            copy_into_graph_input_buffer(std::move(tensor), workspace_tensor_policy(graph_mode));
 
             auto& workspace = graph_workspace_;
 
@@ -2144,7 +2144,7 @@ namespace Thot {
                         auto output_tensor = layer->forward(input_tensor);
                         output_tensor = Activation::Details::apply(layer->activation, std::move(output_tensor));
                         auto& destination = workspace.node_buffers[step.activation_index];
-                        copy_tensor_into(destination, output_tensor);
+                        copy_tensor_into(destination, output_tensor, workspace_tensor_policy(graph_mode));
                         break;
                     }
                     case ExecutionStep::Kind::Join: {
@@ -2198,7 +2198,7 @@ namespace Thot {
                         assert(step.activation_index < workspace.node_buffers.size());
 #endif
                         auto& destination = workspace.node_buffers[step.activation_index];
-                        copy_tensor_into(destination, joined);
+                        copy_tensor_into(destination, joined, workspace_tensor_policy(graph_mode));
 
                         scratch.clear();
                         break;
@@ -2212,7 +2212,7 @@ namespace Thot {
 #ifndef NDEBUG
                         assert(upstream_tensor.defined());
 #endif
-                        copy_tensor_into(workspace.output, upstream_tensor);
+                        copy_tensor_into(workspace.output, upstream_tensor, workspace_tensor_policy(graph_mode));
                         workspace.bind_output(step.activation_index);
                         break;
                     }
@@ -2241,7 +2241,7 @@ namespace Thot {
                 throw std::runtime_error("Model::forward produced an undefined tensor at the output node.");
             }
 
-            copy_tensor_into(workspace.output, output_tensor);
+            copy_tensor_into(workspace.output, output_tensor, workspace_tensor_policy(graph_mode));
             workspace.bind_output(output_index);
 
             auto result = graph_output_tensor();
@@ -3043,7 +3043,27 @@ namespace Thot {
         static std::string describe_activation(Activation::Type type);
         static std::string describe_module(const Layer::Details::RegisteredLayer& layer);
 
-        static void copy_tensor_into(torch::Tensor& destination, const torch::Tensor& source)
+        enum class WorkspaceTensorPolicy {
+            RebindStorage,
+            PreserveStorage
+        };
+
+        static WorkspaceTensorPolicy workspace_tensor_policy(GraphMode mode) noexcept
+        {
+            switch (mode) {
+                case GraphMode::Capture:
+                case GraphMode::Replay:
+                    return WorkspaceTensorPolicy::PreserveStorage;
+                case GraphMode::Disabled:
+                default:
+                    return WorkspaceTensorPolicy::RebindStorage;
+            }
+        }
+
+        static void copy_tensor_into(
+            torch::Tensor& destination,
+            const torch::Tensor& source,
+            WorkspaceTensorPolicy policy = WorkspaceTensorPolicy::RebindStorage)
         {
             if (!source.defined()) {
                 destination = torch::Tensor{};
@@ -3055,7 +3075,16 @@ namespace Thot {
                 return;
             }
 
+
+            if (policy == WorkspaceTensorPolicy::RebindStorage) {
+                destination = source.clone(torch::MemoryFormat::Preserve);
+                return;
+            }
+
             if (destination.is_alias_of(source)) {
+                if (destination.requires_grad() != source.requires_grad()) {
+                    destination.requires_grad_(source.requires_grad());
+                }
                 return;
             }
 
@@ -3071,6 +3100,8 @@ namespace Thot {
                 throw std::invalid_argument("copy_tensor_into requires destination and source to share the same shape.");
             }
 
+            destination = destination.detach();
+            destination.requires_grad_(source.requires_grad());
             destination.copy_(source);
         }
 
@@ -3109,10 +3140,10 @@ namespace Thot {
 
 
 
-        void copy_into_graph_input_buffer(torch::Tensor tensor)
+        void copy_into_graph_input_buffer(torch::Tensor tensor, WorkspaceTensorPolicy policy)
         {
             constexpr std::size_t kInputNodeIndex = 0;
-            copy_tensor_into(graph_workspace_.input, tensor);
+            copy_tensor_into(graph_workspace_.input, tensor, policy);
             graph_workspace_.bind_input(kInputNodeIndex);
         }
 
@@ -3619,7 +3650,10 @@ namespace Thot {
                         enforce_graph_shape(mode, targets, graph_target_shape_cache_, "target tensor");
                         auto detached_targets = targets.detach();
                         detached_targets.requires_grad_(false);
-                        copy_tensor_into(state.target_buffer, detached_targets);
+                        copy_tensor_into(
+                            state.target_buffer,
+                            detached_targets,
+                            workspace_tensor_policy(mode));
                         targets = state.target_buffer;
                     }
 
@@ -3694,7 +3728,7 @@ namespace Thot {
                     }
                     ensure_execution_workspace();
                     ensure_graph_input_shape(GraphMode::Capture, batch_inputs);
-                    copy_into_graph_input_buffer(std::move(batch_inputs));
+                    copy_into_graph_input_buffer(std::move(batch_inputs), workspace_tensor_policy(GraphMode::Capture));
                     batch_inputs = graph_workspace_.input;
 
                     state.target_buffer = batch_targets.detach();
@@ -3760,10 +3794,13 @@ namespace Thot {
                     }
                     enforce_graph_shape(GraphMode::Replay, batch_targets, graph_target_shape_cache_, "target tensor");
                     ensure_execution_workspace();
-                    copy_into_graph_input_buffer(std::move(batch_inputs));
+                    copy_into_graph_input_buffer(std::move(batch_inputs), workspace_tensor_policy(GraphMode::Replay));
                     auto detached_targets = batch_targets.detach();
                     detached_targets.requires_grad_(false);
-                    copy_tensor_into(state.target_buffer, detached_targets);
+                    copy_tensor_into(
+                        state.target_buffer,
+                        detached_targets,
+                        workspace_tensor_policy(GraphMode::Replay));
                     if (!state.capture_stream.has_value()) {
                         throw std::runtime_error(
                             "CUDA graph replay requested for training without an associated capture stream.");
