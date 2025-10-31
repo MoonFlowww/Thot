@@ -60,6 +60,7 @@
 #include <ATen/cuda/CUDAEvent.h>
 #include <ATen/cuda/CUDAStream.h>
 #endif
+#include <ATen/DeviceGuard.h>
 #include <ATen/autocast_mode.h>
 
 #include "common/save_load.hpp"
@@ -1606,7 +1607,7 @@ namespace Thot {
                         } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::AdamWDescriptor>) {
                             auto options = Optimizer::Details::to_torch_options(concrete_descriptor.options);
                             binding.instance = std::make_unique<torch::optim::AdamW>(std::move(parameters), options);
-                            binding.capture_safe = false;
+                            binding.capture_safe = true;
                             auto buckets = warmup_buckets;
                             binding.warmup = [buckets = std::move(buckets)](torch::optim::Optimizer& optimizer) {
                                 if (auto* adamw = dynamic_cast<torch::optim::AdamW*>(&optimizer)) {
@@ -1617,12 +1618,19 @@ namespace Thot {
                                             return static_cast<const torch::optim::AdamWOptions&>(group.options()).amsgrad();
                                         });
 
+                                    torch::NoGradGuard no_grad{};
+                                    at::OptionalDeviceGuard device_guard;
+
                                     auto& state_map = adamw->state();
                                     for (const auto& bucket : buckets) {
                                         for (const auto& param : bucket) {
-                                            if (!param.requires_grad()) {
+                                            if (!param.defined() || !param.requires_grad()) {
                                                 continue;
                                             }
+
+
+                                            device_guard.reset_device(param.device());
+
 
                                             auto* key = param.unsafeGetTensorImpl();
                                             auto it = state_map.find(key);

@@ -32,49 +32,49 @@ int fake_main()
 #else
     const bool cuda_available = false;
 #endif
-
-    bool threw = false;
+    bool capture_threw = false;
+    std::string capture_message;
     try {
         model.train(inputs, targets, options);
     } catch (const std::runtime_error& error) {
-        threw = true;
-        const std::string message = error.what();
-#ifdef TORCH_CUDA_AVAILABLE
-        if (cuda_available) {
-            if (message.find("capture-safe") == std::string::npos) {
-                std::cerr << "Expected capture-safe guidance in error message, got: " << message << '\n';
-                return 1;
-            }
-        } else {
-            if (message.find("CUDA graph capture requested but CUDA support is unavailable.") == std::string::npos) {
-                std::cerr << "Unexpected error message when CUDA unavailable: " << message << '\n';
-                return 1;
-            }
-            std::cout << "CUDA unavailable; regression scenario skipped." << std::endl;
-            return 0;
-        }
-#else
-        if (message.find("CUDA graph capture requested but CUDA support is unavailable.") == std::string::npos) {
-            std::cerr << "Unexpected error message when CUDA unavailable: " << message << '\n';
-            return 1;
-        }
-        std::cout << "CUDA unavailable; regression scenario skipped." << std::endl;
-        return 0;
-#endif
+        capture_threw = true;
+        capture_message = error.what();
     }
 
 #ifdef TORCH_CUDA_AVAILABLE
     if (!cuda_available) {
+        if (!capture_threw
+            || capture_message.find("CUDA graph capture requested but CUDA support is unavailable.") == std::string::npos) {
+            std::cerr << "Unexpected behaviour when CUDA unavailable: " << capture_message << '\n';
+            return 1;
+            }
         std::cout << "CUDA unavailable; regression scenario skipped." << std::endl;
         return 0;
     }
+#else
+    if (!capture_threw
+        || capture_message.find("CUDA graph capture requested but CUDA support is unavailable.") == std::string::npos) {
+        std::cerr << "Unexpected behaviour when CUDA unavailable: " << capture_message << '\n';
+        return 1;
+        }
+    std::cout << "CUDA unavailable; regression scenario skipped." << std::endl;
+    return 0;
 #endif
 
-    if (!threw) {
-        std::cerr << "Expected graph-mode training with AdamW to throw." << '\n';
+    if (capture_threw) {
+        std::cerr << "Graph capture with AdamW should not throw when CUDA is available: " << capture_message << '\n';
         return 1;
     }
 
-    std::cout << "AdamW CPU graph capture regression test passed." << std::endl;
+    auto replay_options = options;
+    replay_options.graph_mode = Thot::GraphMode::Replay;
+    try {
+        model.train(inputs, targets, replay_options);
+    } catch (const std::exception& error) {
+        std::cerr << "Graph replay with AdamW failed: " << error.what() << '\n';
+        return 1;
+    }
+
+    std::cout << "AdamW CUDA graph capture regression test passed." << std::endl;
     return 0;
 }

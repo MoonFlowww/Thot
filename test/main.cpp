@@ -197,6 +197,7 @@ int main() {
         train_options.shuffle = true;
         train_options.buffer_vram = 0;
         train_options.restore_best_state = false;
+        train_options.enable_amp=true;
         train_options.test = std::make_pair(validation_images, validation_labels);
 
 
