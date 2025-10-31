@@ -1944,7 +1944,16 @@ namespace Thot {
             const auto phase = is_training() ? GraphExecutionPhase::Training : GraphExecutionPhase::Inference;
             const auto requested_graph_mode = options.graph_mode;
             const bool graph_mode_active = graph_execution_enabled(requested_graph_mode, phase);
-            const auto resolved_graph_mode = graph_mode_active ? requested_graph_mode : GraphMode::Disabled;
+            auto resolved_graph_mode = graph_mode_active ? requested_graph_mode : GraphMode::Disabled;
+
+#ifdef TORCH_CUDA_AVAILABLE
+            if (phase == GraphExecutionPhase::Inference && resolved_graph_mode == GraphMode::Capture) {
+                auto& state = graph_capture_state(phase);
+                if (state.captured && !state.dirty) {
+                    resolved_graph_mode = GraphMode::Replay;
+                }
+            }
+#endif
             options.graph_mode = resolved_graph_mode;
 
             auto execute = [&](torch::Tensor tensor, GraphMode mode) {
