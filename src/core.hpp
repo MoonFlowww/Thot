@@ -3649,7 +3649,7 @@ namespace Thot {
 
                 zero_grad();
 
-                return loss;
+                return loss.detach();
             };
 
             switch (graph_mode) {
@@ -3687,7 +3687,8 @@ namespace Thot {
                         auto loss = run_training_step(GraphMode::Capture, std::move(batch_inputs), std::move(batch_targets));
                         state.graph->capture_end();
                         capture_started = false;
-                        state.loss_buffer = loss;
+                        auto detached_loss = loss.detach();
+                        state.loss_buffer = detached_loss;
                         state.captured = true;
                         state.dirty = false;
 #ifdef TORCH_CUDA_AVAILABLE
@@ -3699,7 +3700,7 @@ namespace Thot {
                             state.amp_scaler_state_valid = false;
                         }
 #endif
-                        return loss;
+                        return detached_loss;
                     } catch (...) {
                         if (capture_started) {
                             try {
