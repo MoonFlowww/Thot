@@ -3635,7 +3635,7 @@ namespace Thot {
                     }
                 }
 
-                const bool retain_graph = (mode == GraphMode::Capture);
+                const bool retain_graph = (mode != GraphMode::Disabled);
 #ifdef TORCH_CUDA_AVAILABLE
                 if (use_amp) {
                     auto scaled_loss = amp_scaler_->scale(loss);
@@ -3651,7 +3651,8 @@ namespace Thot {
 
                 zero_grad();
 
-                return loss.detach();
+                loss.detach_();
+                return loss;
             };
 
             switch (graph_mode) {
@@ -3692,6 +3693,7 @@ namespace Thot {
                         capture_started = false;
                         state.loss_buffer = loss.detach();
                         state.loss_buffer.requires_grad_(false);
+                        loss.detach_();
                         state.captured = true;
                         state.dirty = false;
 #ifdef TORCH_CUDA_AVAILABLE
