@@ -2994,6 +2994,27 @@ namespace Thot {
             invalidate_execution_workspace();
         }
 
+        template <typename ConvolutionImpl>
+        void apply_tensor_memory_format_to_convolution(ConvolutionImpl* convolution)
+        {
+            if (!convolution) {
+                return;
+            }
+
+            auto apply_to_parameter = [&](torch::Tensor& parameter) {
+                if (!parameter.defined()) {
+                    return;
+                }
+                parameter = parameter.to(
+                    parameter.options(), /*non_blocking*/false, /*copy*/false, tensor_memory_format_);
+            };
+
+            apply_to_parameter(convolution->weight);
+            if (convolution->bias.defined()) {
+                apply_to_parameter(convolution->bias);
+            }
+        }
+
 
         void register_layer_runtime(const Layer::Details::RegisteredLayer& layer)
         {
@@ -3005,10 +3026,10 @@ namespace Thot {
             if (layer.module) {
                 if (auto* conv1d = dynamic_cast<torch::nn::Conv1dImpl*>(layer.module.get())) {
                     has_convolutional_layers_ = true;
-                    conv1d->to(tensor_memory_format_);
+                    apply_tensor_memory_format_to_convolution(conv1d);
                 } else if (auto* conv2d = dynamic_cast<torch::nn::Conv2dImpl*>(layer.module.get())) {
                     has_convolutional_layers_ = true;
-                    conv2d->to(tensor_memory_format_);
+                    apply_tensor_memory_format_to_convolution(conv2d);
                 }
             }
         }
@@ -3033,9 +3054,9 @@ namespace Thot {
                     continue;
                 }
                 if (auto* conv1d = dynamic_cast<torch::nn::Conv1dImpl*>(layer.module.get())) {
-                    conv1d->to(tensor_memory_format_);
+                    apply_tensor_memory_format_to_convolution(conv1d);
                 } else if (auto* conv2d = dynamic_cast<torch::nn::Conv2dImpl*>(layer.module.get())) {
-                    conv2d->to(tensor_memory_format_);
+                    apply_tensor_memory_format_to_convolution(conv2d);
                 }
             }
         }
