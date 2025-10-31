@@ -3327,7 +3327,8 @@ namespace Thot {
                     }
                 }
 
-                loss.backward({}, mode != GraphMode::Disabled);
+                const bool retain_graph = (mode == GraphMode::Capture);
+                loss.backward({}, retain_graph);
                 step_optimizers();
 
                 return loss;
