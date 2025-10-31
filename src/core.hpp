@@ -1988,7 +1988,7 @@ namespace Thot {
                     if (!state.graph) {
                         state.graph = std::make_unique<torch::cuda::CUDAGraph>();
                     } else {
-                        state.graph->reset()
+                        state.graph->reset();
                     }
                     if (!state.capture_stream.has_value()) {
                         state.capture_stream = torch::cuda::getStreamFromPool();
