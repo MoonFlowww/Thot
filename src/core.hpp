@@ -53,9 +53,10 @@
 #include <torch/optim/adamw.h>
 #include <torch/optim/sgd.h>
 #ifdef TORCH_CUDA_AVAILABLE
-#include <torch/cuda.h>
+#include <torch/cuda.h
+#include <torch/cuda/amp.h>
 #endif
-
+#include <ATen/autocast_mode.h>
 
 #include "common/save_load.hpp"
 #include "utils/terminal.hpp"
@@ -426,6 +427,7 @@ namespace Thot {
         std::optional<std::pair<torch::Tensor, torch::Tensor>> test{};
         std::ostream* stream{&std::cout};
         GraphMode graph_mode{GraphMode::Disabled};  // Enable CUDA graph capture/replay; pad or drop remainder batches first.
+        bool enable_amp{false};
     };
 
     class Model : public torch::nn::Module {
@@ -466,6 +468,8 @@ namespace Thot {
 #ifdef TORCH_CUDA_AVAILABLE
             std::unique_ptr<torch::cuda::CUDAGraph> graph{};
             std::optional<torch::cuda::CUDAStream> capture_stream{};
+            torch::Dict<std::string, torch::Tensor> amp_scaler_state{};
+            bool amp_scaler_state_valid{false};
 #endif
             bool captured{false};
             bool dirty{true};
@@ -1867,7 +1871,7 @@ namespace Thot {
                     if (!state.graph) {
                         state.graph = std::make_unique<torch::cuda::CUDAGraph>();
                     } else {
-                        state.graph->reset();
+                        state.graph->reset()
                     }
                     if (!state.capture_stream.has_value()) {
                         state.capture_stream = torch::cuda::getStreamFromPool();
@@ -2476,6 +2480,7 @@ namespace Thot {
         [[nodiscard]] std::size_t local_optimizer_count() const noexcept {
             return local_optimizers_.size();
         }
+        [[nodiscard]] bool is_amp_training_active() const noexcept { return amp_training_active_; }
 
         [[nodiscard]] bool has_loss() const noexcept { return loss_descriptor_.has_value(); }
 
@@ -2554,6 +2559,18 @@ namespace Thot {
             if (effective_options.stream == nullptr) {
                 effective_options.monitor = false;
             }
+#ifdef TORCH_CUDA_AVAILABLE
+            amp_training_active_ = effective_options.enable_amp && device_.is_cuda();
+            if (amp_training_active_) {
+                ensure_amp_scaler();
+            } else {
+                amp_scaler_.reset();
+            }
+#else
+            (void)effective_options.enable_amp;
+            amp_training_active_ = false;
+#endif
+            zero_grad();
             auto training_dataset = TrainingDetails::prepare_tensor_dataset(std::move(train_inputs), std::move(train_targets));
             std::optional<typename TrainingDetails::TensorDataset> test_dataset{};
             auto build_evaluation_dataset = [&](const std::pair<torch::Tensor, torch::Tensor>& dataset,
@@ -3264,8 +3281,7 @@ namespace Thot {
             }
         }
 
-        torch::Tensor graph_train_step(torch::Tensor batch_inputs, torch::Tensor batch_targets, GraphMode graph_mode, bool regularization_active)
-        {
+        torch::Tensor graph_train_step(torch::Tensor batch_inputs, torch::Tensor batch_targets, GraphMode graph_mode, bool regularization_active, bool amp_enabled) {
             const auto phase = GraphExecutionPhase::Training;
             if (!graph_execution_enabled(graph_mode, phase)) {
                 graph_mode = GraphMode::Disabled;
@@ -3275,61 +3291,91 @@ namespace Thot {
                 ensure_optimizer_graph_capability(graph_mode);
                 prepare_optimizers_for_graph(graph_mode);
             }
+#ifdef TORCH_CUDA_AVAILABLE
+            const bool use_amp = amp_enabled && device_.is_cuda();
+            if (use_amp) {
+                ensure_amp_scaler();
+            }
+#else
+            (void)amp_enabled;
+            const bool use_amp = false;
+#endif
+            const auto autocast_device_type = device_.type();
+            const auto autocast_dtype = use_amp ? determine_autocast_dtype() : torch::kFloat32;
             auto run_training_step = [&](GraphMode mode, torch::Tensor inputs, torch::Tensor targets) {
-                if (mode != GraphMode::Disabled) {
-                    ensure_graph_input_shape(mode, inputs);
-                }
-
-                zero_grad();
-
-                auto prediction = execute_plan(std::move(inputs), mode);
-
-                if (!prediction.sizes().equals(targets.sizes())) {
-                    if (targets.numel() == prediction.numel()) {
-                        targets = targets.reshape_as(prediction);
-                    }
-                }
-
-
-
-                if (mode != GraphMode::Disabled) {
-                    enforce_graph_shape(mode, targets, graph_target_shape_cache_, "target tensor");
-                    copy_tensor_into(state.target_buffer, targets);
+                if (mode == GraphMode::Capture) {
                     targets = state.target_buffer;
                 }
 
-                auto loss = compute_loss(prediction, targets);
-                if (loss.dim() != 0) {
-                    loss = loss.mean();
+                if (mode != GraphMode::Disabled) {
+                    ensure_graph_input_shape(mode, inputs);
                 }
+                torch::Tensor prediction;
+                torch::Tensor loss;
 
-                if (regularization_active) {
-                    auto regularization_penalty = compute_regularization_penalty(mode);
-                    if (regularization_penalty.defined()) {
-                        if (mode == GraphMode::Disabled) {
-                            if (regularization_penalty.device() != loss.device()) {
-                                regularization_penalty = regularization_penalty.to(loss.device());
-                            }
-                            if (regularization_penalty.scalar_type() != loss.scalar_type()) {
-                                regularization_penalty = regularization_penalty.to(loss.scalar_type());
-                            }
-                        } else {
-                            if (regularization_penalty.device() != loss.device()) {
-                                throw std::runtime_error(
-                                    "Regularisation penalty device changed during CUDA graph execution.");
-                            }
-                            if (regularization_penalty.scalar_type() != loss.scalar_type()) {
-                                throw std::runtime_error(
-                                    "Regularisation penalty dtype changed during CUDA graph execution.");
-                            }
+                {
+                    AutocastGuard autocast_guard(use_amp, autocast_device_type, autocast_dtype);
+                    prediction = execute_plan(std::move(inputs), mode);
+
+                    if (!prediction.sizes().equals(targets.sizes())) {
+                        if (targets.numel() == prediction.numel()) {
+                            targets = targets.reshape_as(prediction);
                         }
-                        loss = loss + regularization_penalty;
+                    }
+
+                    if (mode != GraphMode::Disabled) {
+                        enforce_graph_shape(mode, targets, graph_target_shape_cache_, "target tensor");
+                        copy_tensor_into(state.target_buffer, targets);
+                        targets = state.target_buffer;
+                    }
+
+                    loss = compute_loss(prediction, targets);
+                    if (loss.dim() != 0) {
+                        loss = loss.mean();
+                    }
+
+
+
+                    if (regularization_active) {
+                        auto regularization_penalty = compute_regularization_penalty(mode);
+                        if (regularization_penalty.defined()) {
+                            if (mode == GraphMode::Disabled) {
+                                if (regularization_penalty.device() != loss.device()) {
+                                    regularization_penalty = regularization_penalty.to(loss.device());
+                                }
+                                if (regularization_penalty.scalar_type() != loss.scalar_type()) {
+                                    regularization_penalty = regularization_penalty.to(loss.scalar_type());
+                                }
+                            } else {
+                                if (regularization_penalty.device() != loss.device()) {
+                                    throw std::runtime_error(
+                                        "Regularisation penalty device changed during CUDA graph execution.");
+                                }
+                                if (regularization_penalty.scalar_type() != loss.scalar_type()) {
+                                    throw std::runtime_error(
+                                        "Regularisation penalty dtype changed during CUDA graph execution.");
+                                }
+                            }
+                            loss = loss + regularization_penalty;
+                        }
                     }
                 }
 
                 const bool retain_graph = (mode == GraphMode::Capture);
-                loss.backward({}, retain_graph);
-                step_optimizers();
+#ifdef TORCH_CUDA_AVAILABLE
+                if (use_amp) {
+                    auto scaled_loss = amp_scaler_->scale(loss);
+                    scaled_loss.backward({}, retain_graph);
+                    step_optimizers_with_scaler(*amp_scaler_);
+                    amp_scaler_->update();
+                } else
+#endif
+                {
+                    loss.backward({}, retain_graph);
+                    step_optimizers();
+                }
+
+                zero_grad();
 
                 return loss;
             };
@@ -3343,16 +3389,21 @@ namespace Thot {
                         reset_graph_shape_cache(GraphMode::Capture);
                     }
 
-                    if (!state.graph) {
-                        state.graph = std::make_unique<torch::cuda::CUDAGraph>();
+                    } else {
+                        state.graph->reset();
                     }
-                } else {
-                    state.graph->reset();
-                }
+
 
                     if (!state.capture_stream.has_value()) {
                         state.capture_stream = torch::cuda::getStreamFromPool();
                     }
+                    ensure_execution_workspace();
+                    ensure_graph_input_shape(GraphMode::Capture, batch_inputs);
+                    copy_into_graph_input_buffer(std::move(batch_inputs));
+                    batch_inputs = graph_workspace_.input;
+
+                    copy_tensor_into(state.target_buffer, batch_targets);
+                    batch_targets = state.target_buffer;
 
                     state.captured = false;
                     torch::cuda::CUDAStreamGuard guard(*state.capture_stream);
@@ -3367,6 +3418,15 @@ namespace Thot {
                         state.loss_buffer = loss;
                         state.captured = true;
                         state.dirty = false;
+#ifdef TORCH_CUDA_AVAILABLE
+                        if (use_amp && amp_scaler_) {
+                            state.amp_scaler_state = amp_scaler_->state_dict();
+                            state.amp_scaler_state_valid = true;
+                        } else {
+                            state.amp_scaler_state.clear();
+                            state.amp_scaler_state_valid = false;
+                        }
+#endif
                         return loss;
                     } catch (...) {
                         if (capture_started) {
@@ -3380,6 +3440,10 @@ namespace Thot {
                         state.captured = false;
                         state.dirty = true;
                         state.loss_buffer = torch::Tensor{};
+#ifdef TORCH_CUDA_AVAILABLE
+                        state.amp_scaler_state.clear();
+                        state.amp_scaler_state_valid = false;
+#endif
                         throw;
                     }
 #else
@@ -3406,7 +3470,18 @@ namespace Thot {
                     }
                 }
                     torch::cuda::CUDAStreamGuard guard(*state.capture_stream);
+#ifdef TORCH_CUDA_AVAILABLE
+                    if (use_amp && amp_scaler_ && state.amp_scaler_state_valid) {
+                        amp_scaler_->load_state_dict(state.amp_scaler_state);
+                    }
+#endif
                     state.graph->replay();
+#ifdef TORCH_CUDA_AVAILABLE
+                    if (use_amp && amp_scaler_) {
+                        state.amp_scaler_state = amp_scaler_->state_dict();
+                        state.amp_scaler_state_valid = true;
+                    }
+#endif
                     return state.loss_buffer;
 #else
                     throw std::runtime_error("CUDA graph replay requested but CUDA support is unavailable.");
@@ -3502,6 +3577,7 @@ namespace Thot {
                 const bool graph_mode_active = model.graph_execution_enabled(requested_graph_mode, GraphExecutionPhase::Training);
                 const auto graph_mode = graph_mode_active ? requested_graph_mode : GraphMode::Disabled;
                 const bool graph_mode_enabled = graph_mode != GraphMode::Disabled;
+                const bool amp_enabled = model.is_amp_training_active();
 
                 if (graph_mode == GraphMode::Capture) {
                     model.reset_graph_shape_cache(graph_mode);
@@ -3705,7 +3781,7 @@ namespace Thot {
                                     model.ensure_graph_batch_shapes(batch_graph_mode, batch_inputs, batch_targets);
                                 }
 
-                                loss = model.graph_train_step(batch_inputs, batch_targets, batch_graph_mode, regularization_active);
+                                loss = model.graph_train_step(batch_inputs, batch_targets, batch_graph_mode, regularization_active, amp_enabled);
 
                                 if (graph_mode == GraphMode::Capture) {
                                     if (batch_signature) {
@@ -4228,6 +4304,10 @@ namespace Thot {
         torch::Device device_{torch::kCPU, 0};
         bool regularization_configured_{false};
         std::string model_name_{};
+        bool amp_training_active_{false};
+#ifdef TORCH_CUDA_AVAILABLE
+        std::optional<torch::cuda::amp::GradScaler> amp_scaler_{};
+#endif
 
 
 
@@ -4248,6 +4328,17 @@ namespace Thot {
                 optimizer.instance->step();
             }
         }
+#ifdef TORCH_CUDA_AVAILABLE
+        void step_optimizers_with_scaler(torch::cuda::amp::GradScaler& scaler)
+        {
+            if (optimizer_) {
+                scaler.step(*optimizer_->instance);
+            }
+            for (auto& optimizer : local_optimizers_) {
+                scaler.step(*optimizer.instance);
+            }
+        }
+#endif
 
         void step_not_configured() {
             throw std::logic_error("Optimizer has not been configured.");
@@ -4289,6 +4380,61 @@ namespace Thot {
             stream << ')';
             return stream.str();
         }
+        struct AutocastGuard {
+            AutocastGuard(bool enabled, c10::DeviceType device_type, torch::ScalarType dtype)
+                : enabled_(enabled), device_type_(device_type)
+            {
+                if (enabled_) {
+                    previous_enabled_ = at::autocast::is_autocast_enabled(device_type_);
+                    previous_dtype_ = at::autocast::get_autocast_dtype(device_type_);
+                    at::autocast::set_autocast_dtype(device_type_, dtype);
+                    at::autocast::set_autocast_enabled(device_type_, true);
+                }
+            }
+
+            AutocastGuard(const AutocastGuard&) = delete;
+            AutocastGuard& operator=(const AutocastGuard&) = delete;
+            AutocastGuard(AutocastGuard&&) = delete;
+            AutocastGuard& operator=(AutocastGuard&&) = delete;
+
+            ~AutocastGuard()
+            {
+                if (enabled_) {
+                    at::autocast::set_autocast_enabled(device_type_, previous_enabled_);
+                    at::autocast::set_autocast_dtype(device_type_, previous_dtype_);
+                }
+            }
+
+        private:
+            bool enabled_{false};
+            c10::DeviceType device_type_{c10::DeviceType::CPU};
+            bool previous_enabled_{false};
+            torch::ScalarType previous_dtype_{torch::kFloat32};
+        };
+
+        [[nodiscard]] torch::ScalarType determine_autocast_dtype() const
+        {
+            for (const auto& parameter : this->parameters(/*recurse=*/false)) {
+                if (parameter.defined()) {
+                    return parameter.scalar_type();
+                }
+            }
+            for (const auto& buffer : this->buffers(/*recurse=*/false)) {
+                if (buffer.defined()) {
+                    return buffer.scalar_type();
+                }
+            }
+            return torch::kFloat32;
+        }
+
+#ifdef TORCH_CUDA_AVAILABLE
+        void ensure_amp_scaler()
+        {
+            if (!amp_scaler_) {
+                amp_scaler_.emplace();
+            }
+        }
+#endif
     };
 }
 
