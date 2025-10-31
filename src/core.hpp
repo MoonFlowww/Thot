@@ -3597,7 +3597,9 @@ namespace Thot {
 
                     if (mode != GraphMode::Disabled) {
                         enforce_graph_shape(mode, targets, graph_target_shape_cache_, "target tensor");
-                        copy_tensor_into(state.target_buffer, targets);
+                        auto detached_targets = targets.detach();
+                        detached_targets.requires_grad_(false);
+                        copy_tensor_into(state.target_buffer, detached_targets);
                         targets = state.target_buffer;
                     }
 
@@ -3674,7 +3676,8 @@ namespace Thot {
                     copy_into_graph_input_buffer(std::move(batch_inputs));
                     batch_inputs = graph_workspace_.input;
 
-                    copy_tensor_into(state.target_buffer, batch_targets);
+                    state.target_buffer = batch_targets.detach();
+                    state.target_buffer.requires_grad_(false);
                     batch_targets = state.target_buffer;
 
                     state.captured = false;
@@ -3687,8 +3690,8 @@ namespace Thot {
                         auto loss = run_training_step(GraphMode::Capture, std::move(batch_inputs), std::move(batch_targets));
                         state.graph->capture_end();
                         capture_started = false;
-                        auto detached_loss = loss.detach();
-                        state.loss_buffer = detached_loss;
+                        state.loss_buffer = loss.detach();
+                        state.loss_buffer.requires_grad_(false);
                         state.captured = true;
                         state.dirty = false;
 #ifdef TORCH_CUDA_AVAILABLE
@@ -3700,7 +3703,7 @@ namespace Thot {
                             state.amp_scaler_state_valid = false;
                         }
 #endif
-                        return detached_loss;
+                        return state.loss_buffer;
                     } catch (...) {
                         if (capture_started) {
                             try {
@@ -3736,7 +3739,9 @@ namespace Thot {
                     enforce_graph_shape(GraphMode::Replay, batch_targets, graph_target_shape_cache_, "target tensor");
                     ensure_execution_workspace();
                     copy_into_graph_input_buffer(std::move(batch_inputs));
-                    copy_tensor_into(state.target_buffer, batch_targets);
+                    auto detached_targets = batch_targets.detach();
+                    detached_targets.requires_grad_(false);
+                    copy_tensor_into(state.target_buffer, detached_targets);
                     if (!state.capture_stream.has_value()) {
                         throw std::runtime_error(
                             "CUDA graph replay requested for training without an associated capture stream.");
