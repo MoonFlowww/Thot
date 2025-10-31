@@ -535,6 +535,7 @@ namespace Thot::Block::Details::Transformer::EBT {
         return descriptor;
     }
 
+
     [[nodiscard]] inline auto Decoder(const DecoderOptions& options) -> DecoderDescriptor
     {
         DecoderDescriptor descriptor{};
