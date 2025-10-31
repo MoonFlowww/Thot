@@ -1968,9 +1968,6 @@ namespace Thot {
                 return execute_plan(std::move(tensor), mode);
             };
 
-            if (input.defined() && input.device() != device_) {
-                input = input.to(device_);
-            }
 
             if (phase == GraphExecutionPhase::Inference) {
                 if (resolved_graph_mode == GraphMode::Replay) {
@@ -1982,7 +1979,8 @@ namespace Thot {
                     }
                     ensure_graph_input_shape(GraphMode::Replay, input);
                     ensure_execution_workspace();
-                    copy_into_graph_input_buffer( std::move(input), workspace_tensor_policy(GraphMode::Replay));
+                    input = stage_tensor_for_execution(std::move(input));
+                    copy_into_graph_input_buffer(std::move(input), workspace_tensor_policy(GraphMode::Replay));
                     if (!state.capture_stream.has_value()) {
                         throw std::runtime_error(
                             "CUDA graph replay requested for inference without an associated capture stream.");
@@ -2076,9 +2074,7 @@ namespace Thot {
 
         torch::Tensor execute_plan(torch::Tensor tensor, GraphMode graph_mode)
         {
-            if (tensor.defined() && tensor.device() != device_) {
-                tensor = tensor.to(device_);
-            }
+            tensor = stage_tensor_for_execution(std::move(tensor));
             if (graph_mode == GraphMode::Replay) {
                 throw std::logic_error("Model::execute_plan cannot be invoked in replay mode.");
             }
@@ -2444,9 +2440,6 @@ namespace Thot {
                     }
 
                     auto batch_inputs = dataset_inputs.narrow(0, offset, current_batch);
-                    if (batch_inputs.device() != device_) {
-                        batch_inputs = batch_inputs.to(device_);
-                    }
 
                     auto batch_targets = dataset_targets.narrow(0, offset, current_batch);
                     if (!batch_targets.device().is_cpu()) {
@@ -2777,6 +2770,12 @@ namespace Thot {
         [[nodiscard]] torch::MemoryFormat preferred_tensor_memory_format() const noexcept
         {
             return tensor_memory_format_;
+        }
+
+
+        void set_staging_observer(std::function<void(const torch::Tensor&, bool)> observer)
+        {
+            staging_observer_ = std::move(observer);
         }
     private:
         void ensure_optimizer_graph_capability(GraphMode mode) const
@@ -3144,6 +3143,63 @@ namespace Thot {
             }
 
             return learning_rates;
+        }
+
+        [[nodiscard]] torch::Tensor ensure_input_memory_format(torch::Tensor tensor) const
+        {
+            if (!tensor.defined()) {
+                return tensor;
+            }
+
+            auto ensure_contiguous = [&](torch::MemoryFormat format, int64_t min_dim) {
+                if (tensor.dim() >= min_dim) {
+                    if (!tensor.is_contiguous(format)) {
+                        tensor = tensor.contiguous(format);
+                    }
+                } else if (!tensor.is_contiguous()) {
+                    tensor = tensor.contiguous();
+                }
+            };
+
+            switch (tensor_memory_format_) {
+                case torch::MemoryFormat::ChannelsLast:
+                    ensure_contiguous(torch::MemoryFormat::ChannelsLast, /*min_dim=*/4);
+                    break;
+                case torch::MemoryFormat::ChannelsLast3d:
+                    ensure_contiguous(torch::MemoryFormat::ChannelsLast3d, /*min_dim=*/5);
+                    break;
+                default:
+                    if (!tensor.is_contiguous()) {
+                        tensor = tensor.contiguous();
+                    }
+                    break;
+            }
+
+            return tensor;
+        }
+
+        [[nodiscard]] torch::Tensor stage_tensor_for_execution(torch::Tensor tensor) const
+        {
+            if (!tensor.defined()) {
+                return tensor;
+            }
+
+            tensor = ensure_input_memory_format(std::move(tensor));
+
+            if (tensor.device().is_cpu() && device_.is_cuda() && !tensor.is_pinned()) {
+                tensor = tensor.pin_memory();
+            }
+
+            if (tensor.device().is_cpu() && staging_observer_) {
+                staging_observer_(tensor, device_.is_cuda());
+            }
+
+            if (tensor.device() != device_) {
+                tensor = tensor.to(device_, /*non_blocking=*/device_.is_cuda());
+                tensor = ensure_input_memory_format(std::move(tensor));
+            }
+
+            return tensor;
         }
 
 
@@ -4740,6 +4796,7 @@ namespace Thot {
         bool regularization_configured_{false};
         std::string model_name_{};
         torch::MemoryFormat tensor_memory_format_{torch::MemoryFormat::Contiguous};
+        std::function<void(const torch::Tensor&, bool)> staging_observer_{};
         bool has_convolutional_layers_{false};
         bool amp_training_active_{false};
 #ifdef TORCH_CUDA_AVAILABLE

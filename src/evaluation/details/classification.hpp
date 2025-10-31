@@ -607,13 +607,7 @@ namespace Thot::Evaluation::Details::Classification {
             }
             inputs = ensure_memory_format(std::move(inputs));
         } else {
-            if (inputs.defined() && inputs.device() != device) {
-                inputs = inputs.to(device, /*non_blocking=*/non_blocking_transfers);
-            }
             inputs = ensure_memory_format(std::move(inputs));
-            if (targets.defined() && targets.device() != device) {
-                targets = targets.to(device, /*non_blocking=*/non_blocking_transfers);
-            }
         }
 
         const std::size_t total_batches = batch_size == 0
@@ -631,13 +625,7 @@ namespace Thot::Evaluation::Details::Classification {
             auto input_batch = inputs.narrow(0, offset, current_batch);
             auto target_batch = targets.narrow(0, offset, current_batch);
 
-            if (input_batch.defined() && input_batch.device() != device) {
-                input_batch = input_batch.to(device, /*non_blocking=*/non_blocking_transfers);
-            }
             input_batch = ensure_memory_format(std::move(input_batch));
-            if (target_batch.defined() && target_batch.device() != device) {
-                target_batch = target_batch.to(device, /*non_blocking=*/non_blocking_transfers);
-            }
 
             return std::pair<torch::Tensor, torch::Tensor>{std::move(input_batch), std::move(target_batch)};
         };
