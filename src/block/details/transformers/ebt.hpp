@@ -9,11 +9,18 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <deque>
 #include <tuple>
 #include <utility>
 #include <vector>
 #include <cmath>
+
 #include <torch/torch.h>
+
+#ifdef TORCH_CUDA_AVAILABLE
+#include <ATen/cuda/CUDAEvent.h>
+#include <ATen/cuda/CUDAStream.h>
+#endif
 
 namespace Thot::Block::Details::Transformer::EBT {
     enum class ModalityType {
@@ -338,6 +345,67 @@ namespace Thot::Block::Details::Transformer::EBT {
                 torch::Tensor previous_energy{};
 
                 for (std::size_t step = 0; step < refinement_options_.max_steps; ++step) {
+                    auto evaluate_plateau = [&](double improvement_value) {
+                    if (!refinement_options_.stop_on_plateau) {
+                        return false;
+                    }
+                    if (std::abs(improvement_value) < refinement_options_.tolerance) {
+                        return true;
+                    }
+                    if (improvement_value < -refinement_options_.tolerance) {
+                        return true;
+                    }
+                    return false;
+                };
+
+#ifdef TORCH_CUDA_AVAILABLE
+                struct PendingImprovement {
+                    at::cuda::CUDAEvent event{};
+                    torch::Tensor value;
+                };
+                std::deque<PendingImprovement> pending_improvements{};
+#endif
+
+                auto poll_pending_improvements = [&](bool synchronise_all) {
+#ifdef TORCH_CUDA_AVAILABLE
+                    if (!state.is_cuda()) {
+                        return false;
+                    }
+                    if (at::cuda::isCurrentStreamCapturing()) {
+                        return false;
+                    }
+
+                    while (!pending_improvements.empty()) {
+                        auto& front = pending_improvements.front();
+                        if (!synchronise_all && !front.event.query()) {
+                            return false;
+                        }
+                        if (synchronise_all && !front.event.query()) {
+                            front.event.synchronize();
+                        }
+                        if (!front.event.query()) {
+                            return false;
+                        }
+                        auto improvement_value = front.value.item<double>();
+                        pending_improvements.pop_front();
+                        if (evaluate_plateau(improvement_value)) {
+                            return true;
+                        }
+                    }
+#else
+                    (void)synchronise_all;
+#endif
+                    return false;
+                };
+
+                bool should_break = false;
+
+                for (std::size_t step = 0; step < refinement_options_.max_steps && !should_break; ++step) {
+#ifdef TORCH_CUDA_AVAILABLE
+                    if (poll_pending_improvements(false)) {
+                        break;
+                    }
+#endif
                     auto prediction_features = prediction_embedding_->forward(state);
                     auto combined_features = combine_with_context(std::move(prediction_features), context);
                     auto energy_batch = energy_->forward(combined_features);
@@ -345,12 +413,20 @@ namespace Thot::Block::Details::Transformer::EBT {
                     energy_history.push_back(energy_scalar.detach());
 
                     if (previous_energy.defined()) {
-                        auto improvement = (previous_energy - energy_batch).mean().item<double>();
-                        if (refinement_options_.stop_on_plateau && std::abs(improvement) < refinement_options_.tolerance) {
-                            break;
-                        }
-                        if (refinement_options_.stop_on_plateau && improvement < -refinement_options_.tolerance) {
-                            break;
+                        auto improvement = (previous_energy - energy_batch).mean();
+#ifdef TORCH_CUDA_AVAILABLE
+                        if (state.is_cuda()) {
+                            auto staged = improvement.detach().to(torch::kCPU, torch::kFloat64, /*non_blocking=*/true);
+                            at::cuda::CUDAEvent event;
+                            event.record(at::cuda::getCurrentCUDAStream());
+                            pending_improvements.push_back(PendingImprovement{std::move(event), std::move(staged)});
+                        } else
+#endif
+                        {
+                            should_break = evaluate_plateau(improvement.item<double>());
+                            if (should_break) {
+                                break;
+                            }
                         }
                     }
 
@@ -367,6 +443,15 @@ namespace Thot::Block::Details::Transformer::EBT {
                     velocity = optimizer_options_.momentum * velocity + gradients;
                     state = state - optimizer_options_.learning_rate * velocity;
                 }
+
+#ifdef TORCH_CUDA_AVAILABLE
+                    if (!should_break) {
+                        should_break = poll_pending_improvements(true);
+                    }
+#else
+                    (void)should_break;
+#endif
+
 
                 if (energy_history.empty()) {
                     energy_history.push_back(torch::zeros({}, state.options()));

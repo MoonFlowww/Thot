@@ -54,8 +54,11 @@
 #include <torch/optim/adamw.h>
 #include <torch/optim/sgd.h>
 #ifdef TORCH_CUDA_AVAILABLE
-#include <torch/cuda.h
+#include <torch/cuda.h>
 #include <torch/cuda/amp.h>
+#include <ATen/cuda/CUDAContext.h>
+#include <ATen/cuda/CUDAEvent.h>
+#include <ATen/cuda/CUDAStream.h>
 #endif
 #include <ATen/autocast_mode.h>
 
@@ -500,21 +503,98 @@ namespace Thot {
 
     public:
         struct TrainingTelemetry {
+            struct DeferredScalar {
+                torch::Tensor host_tensor{};
+#ifdef TORCH_CUDA_AVAILABLE
+                mutable std::shared_ptr<at::cuda::CUDAEvent> ready_event{};
+                int device_index{-1};
+#endif
+                mutable std::optional<double> cached_value{};
+
+                DeferredScalar() = default;
+
+                static DeferredScalar from_tensor(torch::Tensor tensor, const torch::Device& device)
+                {
+                    DeferredScalar scalar{};
+
+                    if (!tensor.defined()) {
+                        return scalar;
+                    }
+
+                    tensor = tensor.detach();
+                    if (tensor.scalar_type() != torch::kFloat64) {
+                        tensor = tensor.to(torch::kFloat64);
+                    }
+
+#ifdef TORCH_CUDA_AVAILABLE
+                    if (device.is_cuda()) {
+                        const auto device_index = device.index();
+                        auto stream = at::cuda::getCurrentCUDAStream(device_index);
+                        auto host_copy = tensor.to(torch::kCPU, torch::kFloat64, /*non_blocking=*/true);
+                        auto event = std::make_shared<at::cuda::CUDAEvent>();
+                        event->record(stream);
+                        scalar.host_tensor = std::move(host_copy);
+                        scalar.ready_event = std::move(event);
+                        scalar.device_index = device_index;
+                        return scalar;
+                    }
+#endif
+
+                    scalar.host_tensor = tensor.to(torch::kCPU, torch::kFloat64);
+                    return scalar;
+                }
+
+                [[nodiscard]] bool defined() const noexcept { return host_tensor.defined(); }
+
+                double materialize() const
+                {
+                    if (!host_tensor.defined()) {
+                        return 0.0;
+                    }
+
+#ifdef TORCH_CUDA_AVAILABLE
+                    if (ready_event) {
+                        auto wait_stream = at::cuda::getCurrentCUDAStream(device_index);
+                        ready_event->block(wait_stream);
+                        wait_stream.synchronize();
+                        ready_event.reset();
+                    }
+#endif
+
+                    if (!cached_value) {
+                        cached_value = host_tensor.item<double>();
+                    }
+
+                    return *cached_value;
+                }
+            };
             struct EpochSnapshot {
                 std::size_t epoch_index{};
-                double train_loss{};
-                std::optional<double> test_loss{};
+                DeferredScalar train_loss{};
+                std::optional<DeferredScalar> test_loss{};
                 std::optional<double> delta{};
                 std::vector<double> learning_rates{};
                 std::chrono::system_clock::time_point timestamp{};
                 double duration_seconds{};
+
+
+                [[nodiscard]] double train_loss_value() const { return train_loss.materialize(); }
+
+                [[nodiscard]] std::optional<double> test_loss_value() const
+                {
+                    if (!test_loss) {
+                        return std::nullopt;
+                    }
+                    return test_loss->materialize();
+                }
             };
 
             struct DatasetLossSnapshot {
-                double loss{};
+                DeferredScalar loss{};
                 std::size_t sample_count{};
                 std::vector<double> learning_rates{};
                 std::chrono::system_clock::time_point timestamp{};
+                [[nodiscard]] double loss_value() const { return loss.materialize(); }
             };
 
             [[nodiscard]] const std::vector<EpochSnapshot>& epochs() const noexcept { return epochs_; }
@@ -2077,7 +2157,7 @@ namespace Thot {
                         }
 
                         torch::Tensor joined;
-                        switch (buffer.policy) {
+                        switch (step.join.policy) {
                             case MergePolicyKind::Strict: {
 #ifndef NDEBUG
                                 assert(scratch.size() == 1);
@@ -4113,13 +4193,23 @@ namespace Thot {
                         }
                     }
 
-                    const auto train_loss = weight > 0
-                        ? accumulation.item<double>() / static_cast<double>(weight)
-                        : 0.0;
+                    TrainingTelemetry::DeferredScalar train_loss_scalar;
+                    if (weight > 0) {
+                        auto averaged_loss_tensor = accumulation / static_cast<double>(weight);
+                        train_loss_scalar = TrainingTelemetry::DeferredScalar::from_tensor(std::move(averaged_loss_tensor), device);
+                    } else {
+                        auto zero_tensor = accumulation.detach();
+                        zero_tensor.zero_();
+                        train_loss_scalar = TrainingTelemetry::DeferredScalar::from_tensor(std::move(zero_tensor), device);
+                    }
+                    std::optional<TrainingTelemetry::DeferredScalar> test_loss_scalar{};
 
                     std::optional<double> test_loss{};
                     if (test_dataset) {
-                        test_loss = compute_dataset_loss<BufferVRAM>(model, *test_dataset, options.batch_size, options.buffer_vram);
+                        test_loss_scalar = compute_dataset_loss<BufferVRAM>(model, *test_dataset, options.batch_size, options.buffer_vram);
+                        if (test_loss_scalar) {
+                            test_loss = test_loss_scalar->materialize();
+                        }
                     }
 
                     bool improved = false;
@@ -4170,8 +4260,8 @@ namespace Thot {
                     auto learning_rates = model.collect_learning_rates();
                     model.record_epoch_telemetry({
                         epoch + 1,
-                        train_loss,
-                        test_loss,
+                        train_loss_scalar,
+                        test_loss_scalar,
                         delta,
                         std::move(learning_rates),
                         epoch_timestamp,
@@ -4182,14 +4272,15 @@ namespace Thot {
                         log_epoch(*options.stream,
                                   epoch + 1,
                                   options.epoch,
-                                  train_loss,
-                                  test_loss,
+                                  train_loss_scalar,
+                                  test_loss_scalar,
                                   delta,
                                   improved,
                                   duration_seconds);
                     }
                 }
                 if (options.restore_best_state && best_state_captured) {
+                    const auto train_loss = train_loss_scalar.materialize();
                     std::cout << "[Thot] Reloading best state of the network..." << std::endl;
                     torch::NoGradGuard no_grad{};
                     auto parameters = model.parameters();
@@ -4216,7 +4307,7 @@ namespace Thot {
 
 
             template <bool BufferVRAM>
-            static std::optional<double> compute_dataset_loss(Model& model, const TensorDataset& dataset, std::size_t batch_size, std::size_t buffer_vram) {
+            static std::optional<TrainingTelemetry::DeferredScalar> compute_dataset_loss(Model& model, const TensorDataset& dataset, std::size_t batch_size, std::size_t buffer_vram) {
                 if (!dataset.inputs.defined() || !dataset.targets.defined()) {
                     return std::nullopt;
                 }
@@ -4442,17 +4533,18 @@ namespace Thot {
                     return std::nullopt;
                 }
 
-                const double averaged_loss = accumulation.item<double>() / static_cast<double>(weight);
+                auto averaged_loss_tensor = accumulation / static_cast<double>(weight);
+                auto loss_scalar = TrainingTelemetry::DeferredScalar::from_tensor(std::move(averaged_loss_tensor), device);
                 auto learning_rates = model.collect_learning_rates();
                 const auto timestamp = std::chrono::system_clock::now();
                 model.record_dataset_loss_telemetry({
-                    averaged_loss,
+                    loss_scalar,
                     static_cast<std::size_t>(dataset.inputs.size(0)),
                     std::move(learning_rates),
                     timestamp
                 });
 
-                return averaged_loss;
+                return loss_scalar;
             }
 
             static void log_epoch(std::ostream& stream,
