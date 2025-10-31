@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <functional>
 #include <chrono>
+#include <cassert>
 #include <cstddef>
 #include <deque>
 #include <initializer_list>
@@ -1452,6 +1453,7 @@ namespace Thot {
 
             compiled_nodes_ = std::move(nodes);
             compiled_steps_ = std::move(steps);
+            execution_steps_ = std::move(execution_steps);
             join_buffers_ = std::move(joins);
             compiled_links_ = std::move(resolved_links);
             compiled_output_node_index_ = output_node_index;
@@ -1470,29 +1472,47 @@ namespace Thot {
             if (layers_.empty()) {
                 throw std::logic_error("Cannot create optimizer before any layer has been registered.");
             }
-            auto build_optimizer_for = [](const Optimizer::Descriptor& config, std::vector<torch::Tensor> parameters) {
+            refresh_layer_parameter_cache();
+
+            auto build_optimizer_for = [](const Optimizer::Descriptor& config,
+                                          std::vector<torch::Tensor> parameters,
+                                          std::vector<std::vector<torch::Tensor>> warmup_buckets) {
                 return std::visit(
-                [&](const auto& concrete_descriptor) -> OptimizerBinding {
+                    [&](const auto& concrete_descriptor) -> OptimizerBinding {
                         using DescriptorType = std::decay_t<decltype(concrete_descriptor)>;
-                    OptimizerBinding binding{};
+                        OptimizerBinding binding{};
                         if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::SGDDescriptor>) {
                             auto options = Optimizer::Details::to_torch_options(concrete_descriptor.options);
                             binding.instance = std::make_unique<torch::optim::SGD>(std::move(parameters), options);
                             binding.capture_safe = true;
-                            binding.warmup = [](torch::optim::Optimizer& optimizer) {
+                            auto buckets = warmup_buckets;
+                            binding.warmup = [buckets = std::move(buckets)](torch::optim::Optimizer& optimizer) {
                                 if (auto* sgd = dynamic_cast<torch::optim::SGD*>(&optimizer)) {
-                                    for (auto& group : sgd->param_groups()) {
-                                        auto& opts = static_cast<torch::optim::SGDOptions&>(group.options());
-                                        if (opts.momentum() == 0.0) {
-                                            continue;
+                                    const bool momentum_enabled = std::any_of(
+                                            sgd->param_groups().begin(),
+                                            sgd->param_groups().end(),
+                                            [](const auto& group) {
+                                                const auto& opts = static_cast<const torch::optim::SGDOptions&>(group.options());
+                                                return opts.momentum() != 0.0;
+                                            });
+                                        if (!momentum_enabled) {
+                                            return;
                                         }
-                                        for (auto& param : group.params()) {
-                                            auto& state_map = sgd->state();
-                                            auto it = state_map.find(param.unsafeGetTensorImpl());
+
+                                        auto& state_map = sgd->state();
+                                        for (const auto& bucket : buckets) {
+                                            for (const auto& param : bucket) {
+                                                if (!param.requires_grad()) {
+                                                    continue;
+                                                }
+
+                                                auto* key = param.unsafeGetTensorImpl();
+                                                auto it = state_map.find(key);
+
                                             if (it == state_map.end()) {
                                                 auto state = std::make_unique<torch::optim::SGDParamState>();
                                                 state->momentum_buffer(torch::zeros_like(param, torch::MemoryFormat::Preserve));
-                                                state_map.insert({param.unsafeGetTensorImpl(), std::move(state)});
+                                                state_map.insert({key, std::move(state)});
                                             } else {
                                                 auto& state = static_cast<torch::optim::SGDParamState&>(*it->second);
                                                 if (!state.momentum_buffer().defined()) {
@@ -1507,21 +1527,34 @@ namespace Thot {
                             auto options = Optimizer::Details::to_torch_options(concrete_descriptor.options);
                             binding.instance = std::make_unique<torch::optim::AdamW>(std::move(parameters), options);
                             binding.capture_safe = false;
-                            binding.warmup = [](torch::optim::Optimizer& optimizer) {
+                            auto buckets = warmup_buckets;
+                            binding.warmup = [buckets = std::move(buckets)](torch::optim::Optimizer& optimizer) {
                                 if (auto* adamw = dynamic_cast<torch::optim::AdamW*>(&optimizer)) {
-                                    for (auto& group : adamw->param_groups()) {
-                                        for (auto& param : group.params()) {
-                                            auto& state_map = adamw->state();
-                                            auto it = state_map.find(param.unsafeGetTensorImpl());
+                                    const bool any_amsgrad = std::any_of(
+                                        adamw->param_groups().begin(),
+                                        adamw->param_groups().end(),
+                                        [](const auto& group) {
+                                            return static_cast<const torch::optim::AdamWOptions&>(group.options()).amsgrad();
+                                        });
+
+                                    auto& state_map = adamw->state();
+                                    for (const auto& bucket : buckets) {
+                                        for (const auto& param : bucket) {
+                                            if (!param.requires_grad()) {
+                                                continue;
+                                            }
+
+                                            auto* key = param.unsafeGetTensorImpl();
+                                            auto it = state_map.find(key);
                                             if (it == state_map.end()) {
                                                 auto state = std::make_unique<torch::optim::AdamWParamState>();
                                                 state->step(0);
                                                 state->exp_avg(torch::zeros_like(param, torch::MemoryFormat::Preserve));
                                                 state->exp_avg_sq(torch::zeros_like(param, torch::MemoryFormat::Preserve));
-                                                if (static_cast<torch::optim::AdamWOptions&>(group.options()).amsgrad()) {
+                                                if (any_amsgrad) {
                                                     state->max_exp_avg_sq(torch::zeros_like(param, torch::MemoryFormat::Preserve));
                                                 }
-                                                state_map.insert({param.unsafeGetTensorImpl(), std::move(state)});
+                                                state_map.insert({key, std::move(state)});
                                             } else {
                                                 auto& state = static_cast<torch::optim::AdamWParamState&>(*it->second);
                                                 if (!state.exp_avg().defined()) {
@@ -1530,8 +1563,7 @@ namespace Thot {
                                                 if (!state.exp_avg_sq().defined()) {
                                                     state.exp_avg_sq(torch::zeros_like(param, torch::MemoryFormat::Preserve));
                                                 }
-                                                if (static_cast<torch::optim::AdamWOptions&>(group.options()).amsgrad()
-                                                    && !state.max_exp_avg_sq().defined()) {
+                                                if (any_amsgrad && !state.max_exp_avg_sq().defined()) {
                                                     state.max_exp_avg_sq(torch::zeros_like(param, torch::MemoryFormat::Preserve));
                                                 }
                                             }
@@ -1591,7 +1623,11 @@ namespace Thot {
             local_optimizers_.clear();
 
             std::vector<torch::Tensor> global_parameters{};
-            for (const auto& layer : layers_) {
+            std::vector<std::vector<torch::Tensor>> global_warmup_buckets{};
+            global_warmup_buckets.reserve(layers_.size());
+
+            for (std::size_t index = 0; index < layers_.size(); ++index) {
+                const auto& layer = layers_[index];
                 if (!layer.module) {
                     if (layer.local.optimizer.has_value()) {
                         throw std::logic_error("Local optimizer requested for a layer without a registered module.");
@@ -1599,12 +1635,7 @@ namespace Thot {
                     continue;
                 }
 
-                auto parameters = [&]() {
-                    if (auto sequential_block = std::dynamic_pointer_cast<ModelDetails::SequentialBlockModuleImpl>(layer.module)) {
-                        return sequential_block->parameters();
-                    }
-                    return layer.module->parameters();
-                }();
+                const auto& parameters = layer_parameters_[index];
                 if (parameters.empty()) {
                     if (layer.local.optimizer.has_value()) {
                         throw std::logic_error("Local optimizer requested for a layer without trainable parameters.");
@@ -1613,14 +1644,24 @@ namespace Thot {
                 }
 
                 if (layer.local.optimizer.has_value()) {
-                    local_optimizers_.push_back(build_optimizer_for(*layer.local.optimizer, std::move(parameters)));
+                    std::vector<torch::Tensor> optimizer_parameters(parameters.begin(), parameters.end());
+                    std::vector<std::vector<torch::Tensor>> warmup_buckets;
+                    warmup_buckets.emplace_back(parameters.begin(), parameters.end());
+                    local_optimizers_.push_back(build_optimizer_for(
+                        *layer.local.optimizer,
+                        std::move(optimizer_parameters),
+                        std::move(warmup_buckets)));
                 } else {
                     global_parameters.insert(global_parameters.end(), parameters.begin(), parameters.end());
+                    global_warmup_buckets.emplace_back(parameters.begin(), parameters.end());
                 }
             }
 
             if (!global_parameters.empty()) {
-                optimizer_ = build_optimizer_for(descriptor, std::move(global_parameters));
+                optimizer_ = build_optimizer_for(
+                    descriptor,
+                    std::move(global_parameters),
+                    std::move(global_warmup_buckets));
             }
 
             scheduler_.reset();
@@ -1975,7 +2016,7 @@ namespace Thot {
                 return value;
             };
 
-            if (!has_compiled_routing() || compiled_nodes_.empty()) {
+            if (!has_compiled_routing() || execution_steps_.empty()) {
                 for (auto& layer : layers_) {
                     tensor = layer.forward(std::move(tensor));
                     tensor = Activation::Details::apply(layer.activation, std::move(tensor));
@@ -1991,77 +2032,63 @@ namespace Thot {
             auto& workspace = graph_workspace_;
 
 
-            const auto output_index = compiled_output_node_index_.value_or(compiled_steps_.empty() ? kInputNodeIndex : compiled_steps_.back().node_index);
+            const auto output_index = resolve_output_node_index();
+#ifndef NDEBUG
+            assert(output_index < workspace.node_buffers.size());
+#endif
             workspace.bind_output(output_index);
 
-            for (const auto& step : compiled_steps_) {
-                const auto node_index = step.node_index;
-                if (node_index >= compiled_nodes_.size()) {
-                    throw std::runtime_error("Compiled step references an unknown node index.");
-                }
-
-                const auto& node = compiled_nodes_[node_index];
-                switch (node.kind) {
-                    case CompiledNode::Kind::Input: {
-                        break;
-                    }
-                    case CompiledNode::Kind::Module: {
-                        if (node.index >= cached_layer_pointers_.size()) {
-                            throw std::runtime_error("Module cache is out of sync with compiled graph.");
-                        }
-                        if (step.dependencies.empty()) {
-                            throw std::runtime_error("Module node is missing its dependency in the compiled graph.");
-                        }
-                        const auto upstream_index = step.dependencies.front();
-                        if (upstream_index >= workspace.node_buffers.size()) {
-                            throw std::runtime_error("Module dependency index is invalid.");
-                        }
-                        auto input_tensor = workspace.node_buffers[upstream_index];
-                        if (!input_tensor.defined()) {
-                            throw std::runtime_error("Module dependency tensor is undefined during plan execution.");
-                        }
-                        auto* layer = cached_layer_pointers_[node.index];
-                        if (!layer) {
-                            throw std::runtime_error("Cached layer pointer is null during plan execution.");
-                        }
+            for (const auto& step : execution_steps_) {
+                switch (step.kind) {
+                    case ExecutionStep::Kind::Module: {
+                        const auto input_index = step.module.input_index;
+#ifndef NDEBUG
+                        assert(step.module.layer != nullptr);
+                        assert(input_index < workspace.node_buffers.size());
+                        assert(step.activation_index < workspace.node_buffers.size());
+#endif
+                        auto input_tensor = workspace.node_buffers[input_index];
+#ifndef NDEBUG
+                        assert(input_tensor.defined());
+#endif
+                        auto* layer = step.module.layer;
                         auto output_tensor = layer->forward(input_tensor);
                         output_tensor = Activation::Details::apply(layer->activation, std::move(output_tensor));
-                        auto& destination = workspace.node_buffers[node_index];
+                        auto& destination = workspace.node_buffers[step.activation_index];
                         copy_tensor_into(destination, output_tensor);
                         break;
                     }
-                    case CompiledNode::Kind::Join: {
-                        if (node.index >= join_buffers_.size()) {
-                            throw std::runtime_error("Join buffer cache is out of sync with compiled graph.");
-                        }
-                        auto& buffer = join_buffers_[node.index];
-                        auto& scratch = workspace.join_scratch[node.index];
+                    case ExecutionStep::Kind::Join: {
+#ifndef NDEBUG
+                        assert(step.join.workspace_index < workspace.join_scratch.size());
+#endif
+                        auto& scratch = workspace.join_scratch[step.join.workspace_index];
                         scratch.clear();
-                        scratch.reserve(buffer.producers.size());
-                        for (auto producer : buffer.producers) {
-                            if (producer >= workspace.node_buffers.size()) {
-                                throw std::runtime_error("Join producer index is invalid.");
-                            }
+                        scratch.reserve(step.join.producers.size());
+                        for (auto producer : step.join.producers) {
+#ifndef NDEBUG
+                            assert(producer < workspace.node_buffers.size());
+#endif
                             auto value = workspace.node_buffers[producer];
-                            if (!value.defined()) {
-                                throw std::runtime_error("Join producer tensor is undefined during plan execution.");
-                            }
+#ifndef NDEBUG
+                            assert(value.defined());
+#endif
                             scratch.push_back(value);
                         }
 
                         torch::Tensor joined;
                         switch (buffer.policy) {
                             case MergePolicyKind::Strict: {
-                                if (scratch.size() != 1) {
-                                    throw std::runtime_error("Strict join expected exactly one producer.");
-                                }
+#ifndef NDEBUG
+                                assert(scratch.size() == 1);
+#endif
                                 joined = scratch.front();
                                 break;
                             }
                             case MergePolicyKind::Broadcast: {
-                                if (scratch.empty()) {
-                                    throw std::runtime_error("Broadcast join has no producers.");
-                                }
+#ifndef NDEBUG
+                                assert(!scratch.empty());
+#endif
                                 joined = scratch.front();
                                 for (std::size_t index = 1; index < scratch.size(); ++index) {
                                     joined = joined + scratch[index];
@@ -2069,43 +2096,56 @@ namespace Thot {
                                 break;
                             }
                             case MergePolicyKind::Concat: {
-                                if (scratch.empty()) {
-                                    throw std::runtime_error("Concat join has no producers.");
-                                }
-                                const auto dimension = buffer.concat_dimension.value_or(1);
+#ifndef NDEBUG
+                                assert(!scratch.empty());
+#endif
+                                const auto dimension = step.join.concat_dimension.value_or(1);
                                 joined = torch::cat(scratch, dimension);
                                 break;
                             }
                         }
 
-                        auto& destination = workspace.node_buffers[node_index];
+#ifndef NDEBUG
+                        assert(step.activation_index < workspace.node_buffers.size());
+#endif
+                        auto& destination = workspace.node_buffers[step.activation_index];
                         copy_tensor_into(destination, joined);
 
                         scratch.clear();
                         break;
                     }
-                    case CompiledNode::Kind::Output: {
-                        if (step.dependencies.empty()) {
-                            throw std::runtime_error("Output node has no dependencies in the compiled graph.");
-                        }
-                        const auto upstream_index = step.dependencies.front();
-                        if (upstream_index >= workspace.node_buffers.size()) {
-                            throw std::runtime_error("Output dependency index is invalid.");
-                        }
+                    case ExecutionStep::Kind::Output: {
+                        const auto upstream_index = step.output.input_index;
+#ifndef NDEBUG
+                        assert(upstream_index < workspace.node_buffers.size());
+#endif
                         auto upstream_tensor = workspace.node_buffers[upstream_index];
-                        if (!upstream_tensor.defined()) {
-                            throw std::runtime_error("Output dependency tensor is undefined during plan execution.");
-                        }
+#ifndef NDEBUG
+                        assert(upstream_tensor.defined());
+#endif
                         copy_tensor_into(workspace.output, upstream_tensor);
-                        workspace.bind_output(node_index);
+                        workspace.bind_output(step.activation_index);
                         break;
                     }
                 }
-            }
 
-            if (output_index >= workspace.node_buffers.size()) {
-                throw std::runtime_error("Compiled output index is invalid.");
+
+#ifndef NDEBUG
+                if (step.kind == ExecutionStep::Kind::Module) {
+                    const auto node_index = step.activation_index;
+                    if (node_index < compiled_nodes_.size()) {
+                        const auto& node = compiled_nodes_[node_index];
+                        if (node.kind == CompiledNode::Kind::Module) {
+                            assert(node.index < cached_layer_pointers_.size());
+                            assert(cached_layer_pointers_[node.index] == step.module.layer);
+                        }
+                    }
+                }
+#endif
             }
+#ifndef NDEBUG
+            assert(output_index < workspace.node_buffers.size());
+#endif
 
             auto output_tensor = workspace.node_buffers[output_index];
             if (!output_tensor.defined()) {
@@ -2975,6 +3015,19 @@ namespace Thot {
             return graph_workspace_.output;
         }
 
+        [[nodiscard]] std::size_t resolve_output_node_index() const noexcept
+        {
+            constexpr std::size_t kInputNodeIndex = 0;
+            if (compiled_output_node_index_) {
+                return *compiled_output_node_index_;
+            }
+            if (execution_steps_.empty()) {
+                return kInputNodeIndex;
+            }
+            return execution_steps_.back().activation_index;
+        }
+
+
 
 
         void clear_compiled_graph() noexcept
@@ -2982,6 +3035,7 @@ namespace Thot {
             routing_active_ = false;
             compiled_nodes_.clear();
             compiled_steps_.clear();
+            execution_steps_.clear();
             join_buffers_.clear();
             compiled_links_.clear();
             compiled_output_node_index_.reset();
@@ -3026,6 +3080,27 @@ namespace Thot {
                     has_convolutional_layers_ = true;
                     apply_tensor_memory_format_to_convolution(conv2d);
                 }
+            }
+        }
+
+        void refresh_layer_parameter_cache()
+        {
+            if (layer_parameters_.size() != layers_.size()) {
+                layer_parameters_.resize(layers_.size());
+            }
+
+            for (std::size_t index = 0; index < layers_.size(); ++index) {
+                layer_parameters_[index] = collect_layer_parameters(layers_[index]);
+            }
+
+            bool has_local_regularization = std::any_of(
+                layer_regularization_bindings_.begin(),
+                layer_regularization_bindings_.end(),
+                [](const auto& bindings) { return !bindings.empty(); });
+
+            if (regularization_configured_ || has_local_regularization) {
+                global_regularization_parameters_ = collect_global_trainable_parameters();
+                mark_graph_regularization_metadata_dirty();
             }
         }
 
@@ -3137,24 +3212,52 @@ namespace Thot {
                 }
             }
 
-            if (!has_compiled_routing() || compiled_nodes_.empty()) {
+            if (!has_compiled_routing() || execution_steps_.empty()) {
                 execution_workspace_dirty_ = false;
                 return;
             }
 
             auto& workspace = graph_workspace_;
 
-            if (execution_workspace_dirty_ || workspace.node_buffers.size() != compiled_nodes_.size()) {
-                workspace.ensure_node_capacity(compiled_nodes_.size());
+            constexpr std::size_t kInputNodeIndex = 0;
+
+            auto required_capacity = kInputNodeIndex + 1;
+            auto consider_index = [&](std::size_t index) {
+                required_capacity = std::max(required_capacity, index + 1);
+            };
+
+            for (const auto& step : execution_steps_) {
+                consider_index(step.activation_index);
+                switch (step.kind) {
+                    case ExecutionStep::Kind::Module: {
+                        consider_index(step.module.input_index);
+                        break;
+                    }
+                    case ExecutionStep::Kind::Join: {
+                        for (auto producer : step.join.producers) {
+                            consider_index(producer);
+                        }
+                        break;
+                    }
+                    case ExecutionStep::Kind::Output: {
+                        consider_index(step.output.input_index);
+                        break;
+                    }
+                }
+            }
+
+            if (execution_workspace_dirty_ || workspace.node_buffers.size() != required_capacity) {
+                workspace.ensure_node_capacity(required_capacity);
             }
 
             workspace.ensure_join_scratch(join_buffers_);
 
-            constexpr std::size_t kInputNodeIndex = 0;
             workspace.bind_input(kInputNodeIndex);
 
-            const auto output_index = compiled_output_node_index_.value_or(
-                compiled_steps_.empty() ? kInputNodeIndex : compiled_steps_.back().node_index);
+            const auto output_index = resolve_output_node_index();
+#ifndef NDEBUG
+            assert(output_index < workspace.node_buffers.size());
+#endif
             workspace.bind_output(output_index);
 
             for (auto& scratch : workspace.join_scratch) {
@@ -4432,6 +4535,7 @@ namespace Thot {
         std::unordered_map<std::string, ModuleNameBinding> module_name_index_{};
         std::vector<CompiledNode> compiled_nodes_{};
         std::vector<CompiledStep> compiled_steps_{};
+        std::vector<ExecutionStep> execution_steps_{};
         std::vector<JoinBuffer> join_buffers_{};
         std::vector<LinkSpec> compiled_links_{};
         std::optional<std::size_t> compiled_output_node_index_{};
