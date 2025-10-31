@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 #include <tuple>
+#include <type_traits>
 
 #include <torch/torch.h>
 
@@ -562,19 +563,56 @@ namespace Thot::Evaluation::Details::Classification {
         double total_log_loss = 0.0;
         double total_brier = 0.0;
 
-const auto device = model.device();
+        const auto device = model.device();
+        const bool non_blocking_transfers = device.is_cuda();
         const bool device_supports_buffer = device.is_cuda();
         if (options.buffer_vram > 0 && !device_supports_buffer) {
             throw std::runtime_error("VRAM buffering during evaluation requires the model to be on a CUDA device.");
         }
-        const bool use_buffer = device_supports_buffer || options.buffer_vram > 0;
+        const bool use_buffer = options.buffer_vram > 0;
 
-        if (device.is_cuda()) {
+        const bool expects_channels_last = [&]() {
+            if constexpr (requires(const Model& m) { static_cast<bool>(m.expects_channels_last_inputs()); }) {
+                return static_cast<bool>(model.expects_channels_last_inputs());
+            } else if constexpr (requires(const Model& m) { static_cast<bool>(m.prefers_channels_last_inputs()); }) {
+                return static_cast<bool>(model.prefers_channels_last_inputs());
+            } else if constexpr (requires(const Model& m) { static_cast<bool>(m.channels_last_inputs()); }) {
+                return static_cast<bool>(model.channels_last_inputs());
+            }
+            return false;
+        }();
+
+        auto ensure_memory_format = [&](torch::Tensor tensor) {
+            if (!tensor.defined() || !expects_channels_last) {
+                return tensor;
+            }
+            if (tensor.dim() == 4) {
+                if (!tensor.is_contiguous(torch::MemoryFormat::ChannelsLast)) {
+                    tensor = tensor.contiguous(torch::MemoryFormat::ChannelsLast);
+                }
+            } else if (tensor.dim() == 5) {
+                if (!tensor.is_contiguous(torch::MemoryFormat::ChannelsLast3d)) {
+                    tensor = tensor.contiguous(torch::MemoryFormat::ChannelsLast3d);
+                }
+            }
+            return tensor;
+        };
+
+        if (use_buffer) {
             if (inputs.defined() && !inputs.device().is_cpu()) {
                 inputs = inputs.to(torch::kCPU);
             }
             if (targets.defined() && !targets.device().is_cpu()) {
                 targets = targets.to(torch::kCPU);
+            }
+            inputs = ensure_memory_format(std::move(inputs));
+        } else {
+            if (inputs.defined() && inputs.device() != device) {
+                inputs = inputs.to(device, /*non_blocking=*/non_blocking_transfers);
+            }
+            inputs = ensure_memory_format(std::move(inputs));
+            if (targets.defined() && targets.device() != device) {
+                targets = targets.to(device, /*non_blocking=*/non_blocking_transfers);
             }
         }
 
@@ -594,10 +632,11 @@ const auto device = model.device();
             auto target_batch = targets.narrow(0, offset, current_batch);
 
             if (input_batch.defined() && input_batch.device() != device) {
-                input_batch = input_batch.to(device);
+                input_batch = input_batch.to(device, /*non_blocking=*/non_blocking_transfers);
             }
+            input_batch = ensure_memory_format(std::move(input_batch));
             if (target_batch.defined() && target_batch.device() != device) {
-                target_batch = target_batch.to(device);
+                target_batch = target_batch.to(device, /*non_blocking=*/non_blocking_transfers);
             }
 
             return std::pair<torch::Tensor, torch::Tensor>{std::move(input_batch), std::move(target_batch)};
@@ -621,7 +660,8 @@ const auto device = model.device();
                 logits = logits.reshape({logits.size(0), -1});
             }
 
-            logits = logits.to(torch::kCPU, torch::kFloat64);
+            auto logits_cpu = logits.to(torch::kCPU, torch::kFloat64, /*non_blocking=*/non_blocking_transfers);
+            logits = std::move(logits_cpu);
             if (logits.dim() != 2) {
                 throw std::runtime_error("Classification evaluation expects two-dimensional logits.");
             }
@@ -655,7 +695,7 @@ const auto device = model.device();
                 }
             }
 
-            auto predicted = logits.argmax(1).to(torch::kCPU, torch::kLong);
+            auto predicted = logits.argmax(1).to(torch::kLong);
 
             torch::Tensor probabilities;
             double* probabilities_ptr = nullptr;
@@ -670,10 +710,10 @@ const auto device = model.device();
             if (needs_top3) {
                 const auto topk = static_cast<long>(needs_top5 ? 5 : 3);
                 auto topk_result = logits.topk(topk, 1, true, true);
-                topk_indices_tensor = std::get<1>(topk_result).to(torch::kCPU, torch::kLong);
+                topk_indices_tensor = std::get<1>(topk_result).to(torch::kLong);
             }
 
-            auto target_cpu = target_batch.to(torch::kCPU);
+            auto target_cpu = target_batch.to(torch::kCPU, /*non_blocking=*/non_blocking_transfers);
             target_batch = torch::Tensor{};
             if (target_cpu.dtype() == torch::kFloat32 || target_cpu.dtype() == torch::kFloat64) {
                 if (target_cpu.dim() > 1 && target_cpu.size(1) == static_cast<long>(num_classes)) {
