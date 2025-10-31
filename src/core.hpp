@@ -3532,6 +3532,10 @@ namespace Thot {
 
                 const bool regularization_active = model.has_regularization();
 
+                std::unordered_map<std::string, bool> graph_capture_ready{};
+                std::optional<std::string> active_graph_signature{};
+
+
                 torch::Tensor device_batch_inputs_buffer;
                 torch::Tensor device_batch_targets_buffer;
 
@@ -3624,6 +3628,22 @@ namespace Thot {
                         return std::pair<torch::Tensor, torch::Tensor>{std::move(batch_inputs), std::move(batch_targets)};
                     };
 
+                    auto describe_tensor_signature = [](const torch::Tensor& tensor) {
+                        std::ostringstream stream;
+                        stream << tensor.device().str() << ';' << static_cast<int>(tensor.scalar_type());
+                        stream << ';' << tensor.dim();
+                        for (const auto dimension : tensor.sizes()) {
+                            stream << ',' << dimension;
+                        }
+                        return stream.str();
+                    };
+
+                    auto describe_batch_signature = [&](const torch::Tensor& inputs, const torch::Tensor& targets) {
+                        std::ostringstream stream;
+                        stream << describe_tensor_signature(inputs) << '|' << describe_tensor_signature(targets);
+                        return stream.str();
+                    };
+
                     auto process_batch = [&](torch::Tensor batch_inputs, torch::Tensor batch_targets) {
                         if (!batch_inputs.defined() || !batch_targets.defined()) {
                             return std::int64_t{0};
@@ -3634,16 +3654,94 @@ namespace Thot {
                             return std::int64_t{0};
                         }
 
+                        torch::Tensor loss;
+                        bool replay_retry_attempted = false;
+
+
                         auto staged_inputs = stage_to_device(batch_inputs, device_batch_inputs_buffer);
                         auto staged_targets = stage_to_device(batch_targets, device_batch_targets_buffer);
 
 
-                        if (graph_mode_enabled) {
-                            model.prepare_optimizers_for_graph(graph_mode);
-                            model.ensure_graph_batch_shapes(graph_mode, staged_inputs, staged_targets);
+                        while (true) {
+                            GraphMode batch_graph_mode = graph_mode;
+                            std::optional<std::string> batch_signature{};
+
+                            if (graph_mode == GraphMode::Capture) {
+                                batch_signature = describe_batch_signature(batch_inputs, batch_targets);
+
+                                bool capture_ready = false;
+                                if (batch_signature) {
+                                    if (active_graph_signature && *active_graph_signature == *batch_signature) {
+                                        auto readiness = graph_capture_ready.find(*batch_signature);
+                                        capture_ready = (readiness != graph_capture_ready.end()) && readiness->second;
+                                    }
+                                }
+
+                                if (!capture_ready) {
+                                    batch_graph_mode = GraphMode::Capture;
+
+                                    if (!batch_signature) {
+                                        throw std::runtime_error("Failed to describe CUDA graph batch signature.");
+                                    }
+
+                                    graph_capture_ready[*batch_signature] = false;
+
+                                    if (!active_graph_signature || *active_graph_signature != *batch_signature) {
+                                        if (active_graph_signature) {
+                                            graph_capture_ready[*active_graph_signature] = false;
+                                        }
+                                        active_graph_signature.reset();
+                                    }
+
+                                    model.reset_graph_shape_cache(GraphMode::Capture);
+                                } else {
+                                    batch_graph_mode = GraphMode::Replay;
+                                }
+                            }
+
+                            try {
+                                if (graph_mode_enabled) {
+                                    model.prepare_optimizers_for_graph(batch_graph_mode);
+                                    model.ensure_graph_batch_shapes(batch_graph_mode, batch_inputs, batch_targets);
+                                }
+
+                                loss = model.graph_train_step(batch_inputs, batch_targets, batch_graph_mode, regularization_active);
+
+                                if (graph_mode == GraphMode::Capture) {
+                                    if (batch_signature) {
+                                        if (batch_graph_mode == GraphMode::Capture) {
+                                            graph_capture_ready[*batch_signature] = true;
+                                            active_graph_signature = *batch_signature;
+                                        } else if (batch_graph_mode == GraphMode::Replay) {
+                                            active_graph_signature = *batch_signature;
+                                        }
+                                    }
+                                }
+
+                                break;
+                            } catch (const std::runtime_error&) {
+                                if (!(graph_mode == GraphMode::Capture)) {
+                                    throw;
+                                }
+
+                                if (!batch_signature) {
+                                    throw;
+                                }
+
+                                if (batch_graph_mode == GraphMode::Replay && !replay_retry_attempted) {
+                                    graph_capture_ready[*batch_signature] = false;
+                                    if (active_graph_signature && *active_graph_signature == *batch_signature) {
+                                        active_graph_signature.reset();
+                                    }
+                                    model.reset_graph_shape_cache(GraphMode::Capture);
+                                    replay_retry_attempted = true;
+                                    continue;
+                                }
+
+                                throw;
+                            }
                         }
 
-                        auto loss = model.graph_train_step(std::move(staged_inputs), std::move(staged_targets), graph_mode, regularization_active);
                         model.step_scheduler();
 
 
@@ -3895,7 +3993,7 @@ namespace Thot {
                     return buffer;
                 };
 
-                r
+
                 auto fetch_batch = [&](std::size_t batch_index) {
                     const auto offset = static_cast<std::int64_t>(batch_index) * batch_extent;
                     const auto remaining = total_samples - offset;
