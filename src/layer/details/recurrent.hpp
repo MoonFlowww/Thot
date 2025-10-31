@@ -187,11 +187,11 @@ namespace Thot::Layer::Details {
             registered_layer.module = to_shared_module_ptr(module);
             registered_layer.local = descriptor.local;
             struct RecurrentForwardFunctor {
-                decltype(module.get()) module;
+                decltype(module.get()) module_ptr;
 
                 torch::Tensor operator()(torch::Tensor input) const
                 {
-                    auto output = module->forward(std::move(input));
+                    auto output = module_ptr->forward(std::move(input));
                     return Detail::take_recurrent_output(std::move(output));
                 }
             };

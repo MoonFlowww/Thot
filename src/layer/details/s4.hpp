@@ -517,11 +517,11 @@ namespace Thot::Layer::Details {
         registered_layer.module = to_shared_module_ptr(module);
         registered_layer.local = descriptor.local;
         struct S4Forward {
-            decltype(module.get()) module;
+            decltype(module.get()) module_ptr;
 
             torch::Tensor operator()(torch::Tensor input) const
             {
-                auto result = module->forward(std::move(input));
+                auto result = module_ptr->forward(std::move(input));
                 return std::move(result.output);
             }
         };

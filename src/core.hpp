@@ -867,11 +867,11 @@ namespace Thot {
                     registered_layer.activation = Activation::Type::Identity;
                     registered_layer.module = Layer::Details::to_shared_module_ptr(module);
                     struct TransformerDecoderForward {
-                        decltype(module.get()) module;
+                        decltype(module.get()) module_ptr;
 
                         torch::Tensor operator()(torch::Tensor input) const
                         {
-                            auto result = module->forward(std::move(input), torch::Tensor{});
+                            auto result = module_ptr->forward(std::move(input), torch::Tensor{});
                             return std::move(result.main);
                         }
                     };
