@@ -770,9 +770,8 @@ namespace Thot {
                     registered_layer.activation = Activation::Type::Identity;
                     registered_layer.module = Layer::Details::to_shared_module_ptr(module);
                     registered_layer.local = std::move(sequential.local);
-                    registered_layer.forward = [module](torch::Tensor input) {
-                        return module->forward(std::move(input));
-                    };
+                    registered_layer.bind_module_forward(module.get());
+
 
                     store_layer(std::move(registered_layer));
                 } else {
@@ -805,9 +804,7 @@ namespace Thot {
                 registered_layer.activation = Activation::Type::Identity;
                 registered_layer.module = Layer::Details::to_shared_module_ptr(module);
                 registered_layer.local = std::move(residual_local);
-                registered_layer.forward = [module](torch::Tensor input) {
-                    return module->forward(std::move(input));
-                };
+                registered_layer.bind_module_forward(module.get());
 
                 store_layer(std::move(registered_layer));
             };
@@ -822,9 +819,7 @@ namespace Thot {
                     Layer::Details::RegisteredLayer registered_layer{};
                     registered_layer.activation = Activation::Type::Identity;
                     registered_layer.module = Layer::Details::to_shared_module_ptr(module);
-                    registered_layer.forward = [module](torch::Tensor input) {
-                        return module->forward(std::move(input));
-                    };
+                    registered_layer.bind_module_forward(module.get());
 
                     store_layer(std::move(registered_layer));
                 },
@@ -840,9 +835,7 @@ namespace Thot {
                 Layer::Details::RegisteredLayer registered_layer{};
                 registered_layer.activation = Activation::Type::Identity;
                 registered_layer.module = Layer::Details::to_shared_module_ptr(module);
-                registered_layer.forward = [module](torch::Tensor input) {
-                    return module->forward(std::move(input));
-                };
+                registered_layer.bind_module_forward(module.get());
 
                 store_layer(std::move(registered_layer));
                 },
@@ -858,9 +851,7 @@ namespace Thot {
                 Layer::Details::RegisteredLayer registered_layer{};
                 registered_layer.activation = Activation::Type::Identity;
                 registered_layer.module = Layer::Details::to_shared_module_ptr(module);
-                registered_layer.forward = [module](torch::Tensor input) {
-                    return module->forward(std::move(input));
-                };
+                registered_layer.bind_module_forward(module.get());
 
                 layers_.push_back(std::move(registered_layer));
                 register_layer_runtime(layers_.back());
@@ -874,10 +865,16 @@ namespace Thot {
                     Layer::Details::RegisteredLayer registered_layer{};
                     registered_layer.activation = Activation::Type::Identity;
                     registered_layer.module = Layer::Details::to_shared_module_ptr(module);
-                    registered_layer.forward = [module](torch::Tensor input) {
-                        auto result = module->forward(std::move(input), torch::Tensor{});
-                        return std::move(result.main);
+                    struct TransformerDecoderForward {
+                        decltype(module.get()) module;
+
+                        torch::Tensor operator()(torch::Tensor input) const
+                        {
+                            auto result = module->forward(std::move(input), torch::Tensor{});
+                            return std::move(result.main);
+                        }
                     };
+                    registered_layer.bind_inline_forward(TransformerDecoderForward{module.get()});
 
                     store_layer(std::move(registered_layer));
                 },
@@ -890,9 +887,7 @@ namespace Thot {
                     Layer::Details::RegisteredLayer registered_layer{};
                     registered_layer.activation = Activation::Type::Identity;
                     registered_layer.module = Layer::Details::to_shared_module_ptr(module);
-                    registered_layer.forward = [module](torch::Tensor input) {
-                        return module->forward(std::move(input));
-                    };
+                    registered_layer.bind_module_forward(module.get());
 
                     store_layer(std::move(registered_layer));
                 }

@@ -103,9 +103,7 @@ namespace Thot::Layer::Details {
                     auto module = owner.register_module("maxpool1d_" + std::to_string(index),
                                                         torch::nn::MaxPool1d(torch_options));
                     registered_layer.module = to_shared_module_ptr(module);
-                    registered_layer.forward = [module](torch::Tensor input) {
-                        return module->forward(std::move(input));
-                    };
+                    registered_layer.bind_module_forward(module.get());
                 } else if constexpr (std::is_same_v<OptionType, AvgPool1dOptions>) {
                     auto torch_options = torch::nn::AvgPool1dOptions(options.kernel_size)
                                               .ceil_mode(options.ceil_mode)
@@ -120,23 +118,17 @@ namespace Thot::Layer::Details {
                     auto module = owner.register_module("avgpool1d_" + std::to_string(index),
                                                         torch::nn::AvgPool1d(torch_options));
                     registered_layer.module = to_shared_module_ptr(module);
-                    registered_layer.forward = [module](torch::Tensor input) {
-                        return module->forward(std::move(input));
-                    };
+                    registered_layer.bind_module_forward(module.get());
                 } else if constexpr (std::is_same_v<OptionType, AdaptiveAvgPool1dOptions>) {
                     auto module = owner.register_module("adaptive_avgpool1d_" + std::to_string(index),
                                                         torch::nn::AdaptiveAvgPool1d(options.output_size));
                     registered_layer.module = to_shared_module_ptr(module);
-                    registered_layer.forward = [module](torch::Tensor input) {
-                        return module->forward(std::move(input));
-                    };
+                    registered_layer.bind_module_forward(module.get());
                 } else if constexpr (std::is_same_v<OptionType, AdaptiveMaxPool1dOptions>) {
                     auto module = owner.register_module("adaptive_maxpool1d_" + std::to_string(index),
                                                         torch::nn::AdaptiveMaxPool1d(options.output_size));
                     registered_layer.module = to_shared_module_ptr(module);
-                    registered_layer.forward = [module](torch::Tensor input) {
-                        return module->forward(std::move(input));
-                    };
+                    registered_layer.bind_module_forward(module.get());
                 } else if constexpr (std::is_same_v<OptionType, MaxPool2dOptions>) {
                     auto torch_options = torch::nn::MaxPool2dOptions(options.kernel_size).ceil_mode(options.ceil_mode);
                     if (!options.stride.empty()) {
@@ -152,9 +144,7 @@ namespace Thot::Layer::Details {
                     auto module = owner.register_module("maxpool2d_" + std::to_string(index),
                                                         torch::nn::MaxPool2d(torch_options));
                     registered_layer.module = to_shared_module_ptr(module);
-                    registered_layer.forward = [module](torch::Tensor input) {
-                        return module->forward(std::move(input));
-                    };
+                    registered_layer.bind_module_forward(module.get());
                 } else if constexpr (std::is_same_v<OptionType, AvgPool2dOptions>) {
                     auto torch_options = torch::nn::AvgPool2dOptions(options.kernel_size)
                                               .ceil_mode(options.ceil_mode)
@@ -169,23 +159,17 @@ namespace Thot::Layer::Details {
                     auto module = owner.register_module("avgpool2d_" + std::to_string(index),
                                                         torch::nn::AvgPool2d(torch_options));
                     registered_layer.module = to_shared_module_ptr(module);
-                    registered_layer.forward = [module](torch::Tensor input) {
-                        return module->forward(std::move(input));
-                    };
+                    registered_layer.bind_module_forward(module.get());
                 } else if constexpr (std::is_same_v<OptionType, AdaptiveAvgPool2dOptions>) {
                     auto module = owner.register_module("adaptive_avgpool2d_" + std::to_string(index),
                                                         torch::nn::AdaptiveAvgPool2d(options.output_size));
                     registered_layer.module = to_shared_module_ptr(module);
-                    registered_layer.forward = [module](torch::Tensor input) {
-                        return module->forward(std::move(input));
-                    };
+                    registered_layer.bind_module_forward(module.get());
                 } else if constexpr (std::is_same_v<OptionType, AdaptiveMaxPool2dOptions>) {
                     auto module = owner.register_module("adaptive_maxpool2d_" + std::to_string(index),
                                                         torch::nn::AdaptiveMaxPool2d(options.output_size));
                     registered_layer.module = to_shared_module_ptr(module);
-                    registered_layer.forward = [module](torch::Tensor input) {
-                        return module->forward(std::move(input));
-                    };
+                    registered_layer.bind_module_forward(module.get());
                 }
             },
             descriptor.options);

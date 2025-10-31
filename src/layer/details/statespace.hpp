@@ -223,10 +223,16 @@ namespace Thot::Layer::Details {
         registered_layer.activation = descriptor.activation.type;
         registered_layer.module = to_shared_module_ptr(module);
         registered_layer.local = descriptor.local;
-        registered_layer.forward = [module](torch::Tensor input) {
-            auto output = module->forward(std::move(input));
-            return std::move(output.output);
+        struct StateSpaceForward {
+            decltype(module.get()) module;
+
+            torch::Tensor operator()(torch::Tensor input) const
+            {
+                auto output = module->forward(std::move(input));
+                return std::move(output.output);
+            }
         };
+        registered_layer.bind_inline_forward(StateSpaceForward{module.get()});
         return registered_layer;
     }
 }

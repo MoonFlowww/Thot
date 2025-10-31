@@ -64,7 +64,7 @@ namespace Thot::Layer::Details {
         registered_layer.activation = descriptor.activation.type;
         registered_layer.module = to_shared_module_ptr(module);
         registered_layer.local = descriptor.local;
-        registered_layer.forward = [module](torch::Tensor input) { return module->forward(std::move(input)); };
+        registered_layer.bind_module_forward(module.get());
         return registered_layer;
     }
 

@@ -5,6 +5,7 @@
 #include <vector>
 #include <algorithm>
 #include <cctype>
+#include <type_traits>
 
 #include "../../activation/activation.hpp"
 #include "../../initialization/initialization.hpp"
@@ -53,6 +54,31 @@ namespace Thot::Layer::Details {
         ::Thot::LocalConfig local{};
     };
 
+    template <typename T, typename = void>
+    struct has_preferred_tensor_memory_format : std::false_type {};
+
+    template <typename T>
+    struct has_preferred_tensor_memory_format<T, std::void_t<decltype(std::declval<T&>().preferred_tensor_memory_format())>>
+        : std::true_type {};
+
+    template <typename T>
+    inline constexpr bool has_preferred_tensor_memory_format_v = has_preferred_tensor_memory_format<T>::value;
+
+    template <typename Module>
+    void apply_memory_format(Module& module, torch::MemoryFormat format)
+    {
+        for (auto& parameter : module->parameters()) {
+            auto contiguous = parameter.detach().contiguous(format);
+            contiguous.set_requires_grad(parameter.requires_grad());
+            parameter.set_data(contiguous);
+        }
+
+        for (auto& buffer : module->buffers()) {
+            auto contiguous = buffer.detach().contiguous(format);
+            buffer.set_data(contiguous);
+        }
+    }
+
     template <class Owner>
     RegisteredLayer build_registered_layer(Owner& owner, const Conv1dDescriptor& descriptor, std::size_t index)
     {
@@ -94,8 +120,10 @@ namespace Thot::Layer::Details {
         }
 
         auto module = owner.register_module("conv1d_" + std::to_string(index), torch::nn::Conv1d(options));
-        if (owner.preferred_tensor_memory_format() == torch::MemoryFormat::ChannelsLast) {
-            module->to(torch::MemoryFormat::ChannelsLast);
+        if constexpr (has_preferred_tensor_memory_format_v<Owner>) {
+            if (owner.preferred_tensor_memory_format() == torch::MemoryFormat::ChannelsLast) {
+                apply_memory_format(module, torch::MemoryFormat::ChannelsLast);
+            }
         }
         ::Thot::Initialization::Details::apply_module_initialization(module, descriptor);
 
@@ -103,7 +131,7 @@ namespace Thot::Layer::Details {
         registered_layer.activation = descriptor.activation.type;
         registered_layer.module = to_shared_module_ptr(module);
         registered_layer.local = descriptor.local;
-        registered_layer.forward = [module](torch::Tensor input) { return module->forward(std::move(input)); };
+        registered_layer.bind_module_forward(module.get());
         return registered_layer;
     }
 
@@ -130,8 +158,7 @@ namespace Thot::Layer::Details {
         options.bias(descriptor.options.bias);
         if (!descriptor.options.padding_mode.empty()) {
             auto padding_mode = descriptor.options.padding_mode;
-            std::transform(padding_mode.begin(), padding_mode.end(), padding_mode.begin(),
-                           [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+            std::transform(padding_mode.begin(), padding_mode.end(), padding_mode.begin(), [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
 
             if (padding_mode == "zeros") {
                 options.padding_mode(torch::kZeros);
@@ -142,14 +169,15 @@ namespace Thot::Layer::Details {
             } else if (padding_mode == "circular") {
                 options.padding_mode(torch::kCircular);
             } else {
-                throw std::invalid_argument("Unsupported padding mode provided to Conv2d descriptor: " +
-                                            descriptor.options.padding_mode);
+                throw std::invalid_argument("Unsupported padding mode provided to Conv2d descriptor: " + descriptor.options.padding_mode);
             }
         }
 
         auto module = owner.register_module("conv2d_" + std::to_string(index), torch::nn::Conv2d(options));
-        if (owner.preferred_tensor_memory_format() == torch::MemoryFormat::ChannelsLast) {
-            module->to(torch::MemoryFormat::ChannelsLast);
+        if constexpr (has_preferred_tensor_memory_format_v<Owner>) {
+            if (owner.preferred_tensor_memory_format() == torch::MemoryFormat::ChannelsLast) {
+                apply_memory_format(module, torch::MemoryFormat::ChannelsLast);
+            }
         }
         ::Thot::Initialization::Details::apply_module_initialization(module, descriptor);
 
@@ -157,7 +185,7 @@ namespace Thot::Layer::Details {
         registered_layer.activation = descriptor.activation.type;
         registered_layer.module = to_shared_module_ptr(module);
         registered_layer.local = descriptor.local;
-        registered_layer.forward = [module](torch::Tensor input) { return module->forward(std::move(input)); };
+        registered_layer.bind_module_forward(module.get());
         return registered_layer;
     }
 

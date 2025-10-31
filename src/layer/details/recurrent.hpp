@@ -186,10 +186,16 @@ namespace Thot::Layer::Details {
             registered_layer.activation = descriptor.activation.type;
             registered_layer.module = to_shared_module_ptr(module);
             registered_layer.local = descriptor.local;
-            registered_layer.forward = [module](torch::Tensor input) {
-                auto output = module->forward(std::move(input));
-                return Detail::take_recurrent_output(std::move(output));
+            struct RecurrentForwardFunctor {
+                decltype(module.get()) module;
+
+                torch::Tensor operator()(torch::Tensor input) const
+                {
+                    auto output = module->forward(std::move(input));
+                    return Detail::take_recurrent_output(std::move(output));
+                }
             };
+            registered_layer.bind_inline_forward(RecurrentForwardFunctor{module.get()});
             return registered_layer;
         }
 
