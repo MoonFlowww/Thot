@@ -3900,6 +3900,8 @@ namespace Thot {
                 torch::Tensor device_batch_targets_buffer;
                 const bool channels_last_inputs = options.memory_format == torch::MemoryFormat::ChannelsLast;
 
+                TrainingTelemetry::DeferredScalar last_train_loss_scalar;
+
                 auto ensure_layout = [&](torch::Tensor tensor, bool apply_channels_last) {
                     if (!tensor.defined()) {
                         return tensor;
@@ -4202,6 +4204,9 @@ namespace Thot {
                         zero_tensor.zero_();
                         train_loss_scalar = TrainingTelemetry::DeferredScalar::from_tensor(std::move(zero_tensor), device);
                     }
+
+                    last_train_loss_scalar = train_loss_scalar;
+
                     std::optional<TrainingTelemetry::DeferredScalar> test_loss_scalar{};
 
                     std::optional<double> test_loss{};
@@ -4269,18 +4274,19 @@ namespace Thot {
                     });
 
                     if (options.monitor && options.stream) {
+                        const auto train_loss_value = train_loss_scalar.materialize();
                         log_epoch(*options.stream,
                                   epoch + 1,
                                   options.epoch,
-                                  train_loss_scalar,
-                                  test_loss_scalar,
+                                  train_loss_value,
+                                  test_loss,
                                   delta,
                                   improved,
                                   duration_seconds);
                     }
                 }
                 if (options.restore_best_state && best_state_captured) {
-                    const auto train_loss = train_loss_scalar.materialize();
+                    [[maybe_unused]] const auto train_loss = last_train_loss_scalar.materialize();
                     std::cout << "[Thot] Reloading best state of the network..." << std::endl;
                     torch::NoGradGuard no_grad{};
                     auto parameters = model.parameters();
