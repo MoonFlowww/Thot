@@ -428,6 +428,7 @@ namespace Thot {
         std::ostream* stream{&std::cout};
         GraphMode graph_mode{GraphMode::Disabled};  // Enable CUDA graph capture/replay; pad or drop remainder batches first.
         bool enable_amp{false};
+        torch::MemoryFormat memory_format{torch::MemoryFormat::Contiguous};
     };
 
     class Model : public torch::nn::Module {
@@ -2571,7 +2572,24 @@ namespace Thot {
             amp_training_active_ = false;
 #endif
             zero_grad();
-            auto training_dataset = TrainingDetails::prepare_tensor_dataset(std::move(train_inputs), std::move(train_targets));
+            const bool requested_channels_last = effective_options.memory_format == torch::MemoryFormat::ChannelsLast;
+            bool channels_last_applicable = requested_channels_last && device_.is_cuda() && has_convolutional_layers_;
+#ifdef TORCH_CUDA_AVAILABLE
+            channels_last_applicable = channels_last_applicable && torch::cuda::is_available();
+#endif
+            if (channels_last_applicable) {
+                channels_last_applicable = train_inputs.dim() >= 4;
+            }
+
+            effective_options.memory_format = channels_last_applicable
+                ? torch::MemoryFormat::ChannelsLast
+                : torch::MemoryFormat::Contiguous;
+
+            set_tensor_memory_format(effective_options.memory_format);
+
+            auto training_dataset = TrainingDetails::prepare_tensor_dataset(std::move(train_inputs),
+                                                                            std::move(train_targets),
+                                                                            effective_options.memory_format);
             std::optional<typename TrainingDetails::TensorDataset> test_dataset{};
             auto build_evaluation_dataset = [&](const std::pair<torch::Tensor, torch::Tensor>& dataset,
                                                 std::string_view name) {
@@ -2582,7 +2600,9 @@ namespace Thot {
                     throw std::invalid_argument("Mismatched number of " + std::string(name)
                                                 + " samples between inputs and targets.");
                 }
-                return TrainingDetails::prepare_tensor_dataset(dataset.first, dataset.second);
+                return TrainingDetails::prepare_tensor_dataset(dataset.first,
+                                               dataset.second,
+                                               effective_options.memory_format);
             };
 
             if (options.test.has_value()) {
@@ -2593,12 +2613,16 @@ namespace Thot {
 
             const bool use_buffer = effective_options.buffer_vram > 0;
 
-            training_dataset = TrainingDetails::ensure_contiguous(std::move(training_dataset));
-            training_dataset = TrainingDetails::ensure_cpu(std::move(training_dataset));
+            training_dataset = TrainingDetails::ensure_contiguous(std::move(training_dataset),
+                                                                  effective_options.memory_format);
+            training_dataset = TrainingDetails::ensure_cpu(std::move(training_dataset),
+                                                           effective_options.memory_format);
 
             if (test_dataset) {
-                *test_dataset = TrainingDetails::ensure_contiguous(std::move(*test_dataset));
-                *test_dataset = TrainingDetails::ensure_cpu(std::move(*test_dataset));
+                *test_dataset = TrainingDetails::ensure_contiguous(std::move(*test_dataset),
+                                                                   effective_options.memory_format);
+                *test_dataset = TrainingDetails::ensure_cpu(std::move(*test_dataset),
+                                                            effective_options.memory_format);
             }
 
 
@@ -2617,6 +2641,10 @@ namespace Thot {
                 }
             }
 
+        }
+        [[nodiscard]] torch::MemoryFormat preferred_tensor_memory_format() const noexcept
+        {
+            return tensor_memory_format_;
         }
     private:
         void ensure_optimizer_graph_capability(GraphMode mode) const
@@ -2882,7 +2910,7 @@ namespace Thot {
             }
 
             if (!destination.defined()) {
-                destination = source.clone();
+                destination = source.clone(torch::MemoryFormat::Preserve);
                 return;
             }
 
@@ -2974,6 +3002,42 @@ namespace Thot {
                 bind_local_regularization(layer.local.regularization, layer_parameters_.back()));
             mark_graph_regularization_metadata_dirty();
             invalidate_execution_workspace();
+            if (layer.module) {
+                if (auto* conv1d = dynamic_cast<torch::nn::Conv1dImpl*>(layer.module.get())) {
+                    has_convolutional_layers_ = true;
+                    conv1d->to(tensor_memory_format_);
+                } else if (auto* conv2d = dynamic_cast<torch::nn::Conv2dImpl*>(layer.module.get())) {
+                    has_convolutional_layers_ = true;
+                    conv2d->to(tensor_memory_format_);
+                }
+            }
+        }
+
+        void set_tensor_memory_format(torch::MemoryFormat format)
+        {
+            if (tensor_memory_format_ == format) {
+                return;
+            }
+            tensor_memory_format_ = format;
+            apply_tensor_memory_format_to_convolutions();
+        }
+
+        void apply_tensor_memory_format_to_convolutions()
+        {
+            if (!has_convolutional_layers_) {
+                return;
+            }
+
+            for (auto& layer : layers_) {
+                if (!layer.module) {
+                    continue;
+                }
+                if (auto* conv1d = dynamic_cast<torch::nn::Conv1dImpl*>(layer.module.get())) {
+                    conv1d->to(tensor_memory_format_);
+                } else if (auto* conv2d = dynamic_cast<torch::nn::Conv2dImpl*>(layer.module.get())) {
+                    conv2d->to(tensor_memory_format_);
+                }
+            }
         }
 
         void invalidate_execution_workspace() noexcept
@@ -3126,17 +3190,17 @@ namespace Thot {
                         for (const auto& parameter : parameters) {
                             if constexpr (std::is_same_v<DescriptorType, Regularization::EWCDescriptor>) {
                                 Regularization::Details::EWCState state{};
-                                state.reference = parameter.detach().clone();
+                                state.reference = parameter.detach().clone(torch::MemoryFormat::Preserve);
                                 state.fisher_information = torch::zeros_like(parameter);
                                 storage->emplace_back(std::move(state));
                             } else if constexpr (std::is_same_v<DescriptorType, Regularization::MASDescriptor>) {
                                 Regularization::Details::MASState state{};
-                                state.reference = parameter.detach().clone();
+                                state.reference = parameter.detach().clone(torch::MemoryFormat::Preserve);
                                 state.importance = torch::zeros_like(parameter);
                                 storage->emplace_back(std::move(state));
                             } else if constexpr (std::is_same_v<DescriptorType, Regularization::SIDescriptor>) {
                                 Regularization::Details::SIState state{};
-                                state.reference = parameter.detach().clone();
+                                state.reference = parameter.detach().clone(torch::MemoryFormat::Preserve);
                                 state.importance = torch::zeros_like(parameter);
                                 storage->emplace_back(std::move(state));
                             }
@@ -3227,7 +3291,7 @@ namespace Thot {
                                 continue;
                             }
 
-                            auto snapshot_tensor = snapshot.clone();
+                            auto snapshot_tensor = snapshot.clone(torch::MemoryFormat::Preserve);
                             if (!snapshot_tensor.defined()) {
                                 continue;
                             }
@@ -3506,10 +3570,17 @@ namespace Thot {
                 torch::Tensor targets;
             };
 
-            [[nodiscard]] static TensorDataset prepare_tensor_dataset(torch::Tensor inputs,
-                                                                      torch::Tensor targets)
+            [[nodiscard]] static TensorDataset prepare_tensor_dataset(torch::Tensor inputs, torch::Tensor targets, torch::MemoryFormat memory_format = torch::MemoryFormat::Contiguous)
             {
-                auto prepared_inputs = std::move(inputs).contiguous();
+                auto prepared_inputs = std::move(inputs);
+                if (memory_format == torch::MemoryFormat::ChannelsLast && prepared_inputs.defined()
+                    && prepared_inputs.dim() >= 4) {
+                    if (!prepared_inputs.is_contiguous(torch::MemoryFormat::ChannelsLast)) {
+                        prepared_inputs = prepared_inputs.contiguous(torch::MemoryFormat::ChannelsLast);
+                    }
+                    } else {
+                        prepared_inputs = prepared_inputs.contiguous();
+                    }
                 auto prepared_targets = std::move(targets).contiguous();
                 if (prepared_inputs.device().is_cpu() && !prepared_inputs.is_pinned()) {
                     prepared_inputs = prepared_inputs.pin_memory();
@@ -3520,17 +3591,31 @@ namespace Thot {
                 return TensorDataset{std::move(prepared_inputs), std::move(prepared_targets)};
             }
 
-            [[nodiscard]] static TensorDataset ensure_contiguous(TensorDataset dataset)
+            [[nodiscard]] static TensorDataset ensure_contiguous(TensorDataset dataset, torch::MemoryFormat memory_format = torch::MemoryFormat::Contiguous)
             {
-                dataset.inputs = dataset.inputs.contiguous();
+                if (dataset.inputs.defined()) {
+                    if (memory_format == torch::MemoryFormat::ChannelsLast && dataset.inputs.dim() >= 4) {
+                        if (!dataset.inputs.is_contiguous(torch::MemoryFormat::ChannelsLast)) {
+                            dataset.inputs = dataset.inputs.contiguous(torch::MemoryFormat::ChannelsLast);
+                        }
+                    } else if (!dataset.inputs.is_contiguous()) {
+                        dataset.inputs = dataset.inputs.contiguous();
+                    }
+                }
                 dataset.targets = dataset.targets.contiguous();
                 return dataset;
             }
 
-            [[nodiscard]] static TensorDataset ensure_cpu(TensorDataset dataset)
+            [[nodiscard]] static TensorDataset ensure_cpu(TensorDataset dataset, torch::MemoryFormat memory_format = torch::MemoryFormat::Contiguous)
             {
                 if (!dataset.inputs.device().is_cpu()) {
-                    dataset.inputs = dataset.inputs.to(torch::kCPU);
+                    if (memory_format == torch::MemoryFormat::ChannelsLast && dataset.inputs.dim() >= 4) {
+                        auto options = dataset.inputs.options().device(torch::kCPU);
+                        dataset.inputs = dataset.inputs.to(options, /*non_blocking*/false, /*copy*/false,
+                                                           torch::MemoryFormat::ChannelsLast);
+                    } else {
+                        dataset.inputs = dataset.inputs.to(torch::kCPU);
+                    }
                 }
                 if (!dataset.targets.device().is_cpu()) {
                     dataset.targets = dataset.targets.to(torch::kCPU);
@@ -3614,27 +3699,43 @@ namespace Thot {
 
                 torch::Tensor device_batch_inputs_buffer;
                 torch::Tensor device_batch_targets_buffer;
+                const bool channels_last_inputs = options.memory_format == torch::MemoryFormat::ChannelsLast;
 
-                auto stage_to_device = [&](const torch::Tensor& source, torch::Tensor& buffer) {
-                    if (!source.defined() || source.device() == device) {
-                        return source;
+                auto ensure_layout = [&](torch::Tensor tensor, bool apply_channels_last) {
+                    if (!tensor.defined()) {
+                        return tensor;
+                    }
+                    if (apply_channels_last && tensor.dim() >= 4) {
+                        if (!tensor.is_contiguous(torch::MemoryFormat::ChannelsLast)) {
+                            tensor = tensor.contiguous(torch::MemoryFormat::ChannelsLast);
+                        }
+                    } else if (!tensor.is_contiguous()) {
+                        tensor = tensor.contiguous();
+                    }
+                    return tensor;
+                };
+
+                auto stage_to_device = [&](torch::Tensor tensor, torch::Tensor& buffer, bool apply_channels_last) {
+                    tensor = ensure_layout(std::move(tensor), apply_channels_last);
+                    if (!tensor.defined() || tensor.device() == device) {
+                        return tensor;
+                    }
+                    auto options = tensor.options().device(device);
+                    if (apply_channels_last && tensor.dim() >= 4) {
+                        return tensor.to(options, /*non_blocking*/false, /*copy*/false,
+                                         torch::MemoryFormat::ChannelsLast);
                     }
 
-                    const auto sizes = source.sizes();
-                    auto options = source.options().device(device);
-                    const auto memory_format = source.dim() >= 4
-                        ? torch::MemoryFormat::ChannelsLast
-                        : torch::MemoryFormat::Contiguous;
+                    const bool non_blocking = tensor.is_pinned();
 
                     if (!buffer.defined()
                         || buffer.device() != device
-                        || buffer.scalar_type() != source.scalar_type()
-                        || !buffer.sizes().equals(sizes)) {
-                        buffer = torch::empty(sizes, options, memory_format);
+                        || buffer.scalar_type() != tensor.scalar_type()
+                        || !buffer.sizes().equals(tensor.sizes())) {
+                        buffer = torch::empty(tensor.sizes(), options, torch::MemoryFormat::Contiguous);
                         }
 
-                    const bool non_blocking = source.is_pinned();
-                    buffer.copy_(source, non_blocking);
+                    buffer.copy_(tensor, non_blocking);
                     return buffer;
                 };
 
@@ -3684,6 +3785,8 @@ namespace Thot {
                             }
                             batch_inputs = train_dataset.inputs.index_select(0, batch_indices);
                             batch_targets = train_dataset.targets.index_select(0, batch_indices);
+                            batch_inputs = ensure_layout(std::move(batch_inputs), channels_last_inputs);
+                            batch_targets = ensure_layout(std::move(batch_targets), false);
                             if (batch_inputs.device().is_cpu() && !batch_inputs.is_pinned()) {
                                 batch_inputs = batch_inputs.pin_memory();
                             }
@@ -3693,6 +3796,8 @@ namespace Thot {
                         } else {
                             batch_inputs = train_dataset.inputs.narrow(0, offset, current_batch);
                             batch_targets = train_dataset.targets.narrow(0, offset, current_batch);
+                            batch_inputs = ensure_layout(std::move(batch_inputs), channels_last_inputs);
+                            batch_targets = ensure_layout(std::move(batch_targets), false);
                             if (batch_inputs.device().is_cpu() && !batch_inputs.is_pinned()) {
                                 batch_inputs = batch_inputs.pin_memory();
                             }
@@ -3734,8 +3839,12 @@ namespace Thot {
                         bool replay_retry_attempted = false;
 
 
-                        auto staged_inputs = stage_to_device(batch_inputs, device_batch_inputs_buffer);
-                        auto staged_targets = stage_to_device(batch_targets, device_batch_targets_buffer);
+                        batch_inputs = stage_to_device(std::move(batch_inputs),
+                                                       device_batch_inputs_buffer,
+                                                       channels_last_inputs);
+                        batch_targets = stage_to_device(std::move(batch_targets),
+                                                        device_batch_targets_buffer,
+                                                        false);
 
 
                         while (true) {
@@ -3918,7 +4027,7 @@ namespace Thot {
 
                         for (auto& parameter : model.parameters()) {
                             if (parameter.defined()) {
-                                best_parameters.push_back(parameter.detach().clone());
+                                best_parameters.push_back(parameter.detach().clone(torch::MemoryFormat::Preserve));
                             } else {
                                 best_parameters.push_back({});
                             }
@@ -3926,7 +4035,7 @@ namespace Thot {
 
                         for (auto& buffer : model.buffers()) {
                             if (buffer.defined()) {
-                                best_buffers.push_back(buffer.detach().clone());
+                                best_buffers.push_back(buffer.detach().clone(torch::MemoryFormat::Preserve));
                             } else {
                                 best_buffers.push_back({});
                             }
@@ -4027,6 +4136,25 @@ namespace Thot {
                     }
                 }
 
+                const bool channels_last_inputs = model.preferred_tensor_memory_format() == torch::MemoryFormat::ChannelsLast;
+
+                auto ensure_layout = [&](torch::Tensor tensor, bool apply_channels_last) {
+                    if (!tensor.defined()) {
+                        return tensor;
+                    }
+                    if (apply_channels_last && tensor.dim() >= 4) {
+                        if (!tensor.is_contiguous(torch::MemoryFormat::ChannelsLast)) {
+                            tensor = tensor.contiguous(torch::MemoryFormat::ChannelsLast);
+                        }
+                    } else if (!tensor.is_contiguous()) {
+                        tensor = tensor.contiguous();
+                    }
+                    return tensor;
+                };
+
+                dataset_inputs = ensure_layout(std::move(dataset_inputs), channels_last_inputs);
+                dataset_targets = ensure_layout(std::move(dataset_targets), false);
+
                 if (dataset_inputs.device().is_cpu() && !dataset_inputs.is_pinned()) {
                     dataset_inputs = dataset_inputs.pin_memory();
                 }
@@ -4046,26 +4174,27 @@ namespace Thot {
                 torch::Tensor device_batch_inputs_buffer;
                 torch::Tensor device_batch_targets_buffer;
 
-                auto stage_to_device = [&](const torch::Tensor& source, torch::Tensor& buffer) {
-                    if (!source.defined() || source.device() == device) {
-                        return source;
+                auto stage_to_device = [&](torch::Tensor tensor, torch::Tensor& buffer, bool apply_channels_last) {
+                    tensor = ensure_layout(std::move(tensor), apply_channels_last);
+                    if (!tensor.defined() || tensor.device() == device) {
+                        return tensor;
                     }
 
-                    const auto sizes = source.sizes();
-                    auto options = source.options().device(device);
-                    const auto memory_format = source.dim() >= 4
-                        ? torch::MemoryFormat::ChannelsLast
-                        : torch::MemoryFormat::Contiguous;
+                    auto options = tensor.options().device(device);
+                    if (apply_channels_last && tensor.dim() >= 4) {
+                        return tensor.to(options, /*non_blocking*/false, /*copy*/false,
+                                         torch::MemoryFormat::ChannelsLast);
+                    }
+                    const bool non_blocking = tensor.is_pinned();
 
                     if (!buffer.defined()
                         || buffer.device() != device
-                        || buffer.scalar_type() != source.scalar_type()
-                        || !buffer.sizes().equals(sizes)) {
-                        buffer = torch::empty(sizes, options, memory_format);
+                        || buffer.scalar_type() != tensor.scalar_type()
+                        || !buffer.sizes().equals(tensor.sizes())) {
+                        buffer = torch::empty(tensor.sizes(), options, torch::MemoryFormat::Contiguous);
                         }
 
-                    const bool non_blocking = source.is_pinned();
-                    buffer.copy_(source, non_blocking);
+                    buffer.copy_(tensor, non_blocking);
                     return buffer;
                 };
 
@@ -4079,6 +4208,8 @@ namespace Thot {
                     }
                     auto batch_inputs = dataset_inputs.narrow(0, offset, current_batch);
                     auto batch_targets = dataset_targets.narrow(0, offset, current_batch);
+                    batch_inputs = ensure_layout(std::move(batch_inputs), channels_last_inputs);
+                    batch_targets = ensure_layout(std::move(batch_targets), false);
 
                     if (batch_inputs.device().is_cpu() && !batch_inputs.is_pinned()) {
                         batch_inputs = batch_inputs.pin_memory();
@@ -4100,8 +4231,12 @@ namespace Thot {
                         return std::int64_t{0};
                     }
 
-                    auto staged_inputs = stage_to_device(batch_inputs, device_batch_inputs_buffer);
-                    auto staged_targets = stage_to_device(batch_targets, device_batch_targets_buffer);
+                    auto staged_inputs = stage_to_device(std::move(batch_inputs),
+                                                         device_batch_inputs_buffer,
+                                                         channels_last_inputs);
+                    auto staged_targets = stage_to_device(std::move(batch_targets),
+                                                          device_batch_targets_buffer,
+                                                          false);
 
                     auto prediction = model.forward(staged_inputs);
 
@@ -4304,6 +4439,8 @@ namespace Thot {
         torch::Device device_{torch::kCPU, 0};
         bool regularization_configured_{false};
         std::string model_name_{};
+        torch::MemoryFormat tensor_memory_format_{torch::MemoryFormat::Contiguous};
+        bool has_convolutional_layers_{false};
         bool amp_training_active_{false};
 #ifdef TORCH_CUDA_AVAILABLE
         std::optional<torch::cuda::amp::GradScaler> amp_scaler_{};

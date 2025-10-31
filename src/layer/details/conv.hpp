@@ -94,6 +94,9 @@ namespace Thot::Layer::Details {
         }
 
         auto module = owner.register_module("conv1d_" + std::to_string(index), torch::nn::Conv1d(options));
+        if (owner.preferred_tensor_memory_format() == torch::MemoryFormat::ChannelsLast) {
+            module->to(torch::MemoryFormat::ChannelsLast);
+        }
         ::Thot::Initialization::Details::apply_module_initialization(module, descriptor);
 
         RegisteredLayer registered_layer{};
@@ -145,6 +148,9 @@ namespace Thot::Layer::Details {
         }
 
         auto module = owner.register_module("conv2d_" + std::to_string(index), torch::nn::Conv2d(options));
+        if (owner.preferred_tensor_memory_format() == torch::MemoryFormat::ChannelsLast) {
+            module->to(torch::MemoryFormat::ChannelsLast);
+        }
         ::Thot::Initialization::Details::apply_module_initialization(module, descriptor);
 
         RegisteredLayer registered_layer{};
