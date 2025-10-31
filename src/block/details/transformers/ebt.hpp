@@ -329,7 +329,11 @@ namespace Thot::Block::Details::Transformer::EBT {
                     expanded_shape[0],
                     expanded_shape[1],
                     context_features.size(-1)});
-                return torch::cat({prediction_features, context_features}, -1);
+                std::vector<torch::Tensor> concat_inputs{};
+                concat_inputs.reserve(2);
+                concat_inputs.push_back(std::move(prediction_features));
+                concat_inputs.push_back(std::move(context_features));
+                return torch::cat(concat_inputs, -1);
             }
 
             std::pair<torch::Tensor, torch::Tensor> run_refinement(torch::Tensor predictions, const torch::Tensor& context)
@@ -344,8 +348,7 @@ namespace Thot::Block::Details::Transformer::EBT {
 
                 torch::Tensor previous_energy{};
 
-                for (std::size_t step = 0; step < refinement_options_.max_steps; ++step) {
-                    auto evaluate_plateau = [&](double improvement_value) {
+                auto evaluate_plateau = [&](double improvement_value) {
                     if (!refinement_options_.stop_on_plateau) {
                         return false;
                     }
@@ -432,7 +435,10 @@ namespace Thot::Block::Details::Transformer::EBT {
 
                     previous_energy = energy_batch.detach();
 
-                    auto gradients = torch::autograd::grad({energy_scalar}, {state}, {}, true, true)[0];
+                    torch::autograd::variable_list outputs{energy_scalar};
+                    torch::autograd::variable_list inputs{state};
+                    torch::autograd::variable_list grad_outputs{};
+                    auto gradients = torch::autograd::grad(outputs, inputs, grad_outputs, /*retain_graph=*/true, /*create_graph=*/true)[0];
                     if (optimizer_options_.gradient_clip_norm > 0.0) {
                         auto grad_norm = gradients.norm().clamp_min(1e-12);
                         auto max_norm = optimizer_options_.gradient_clip_norm;
@@ -445,11 +451,11 @@ namespace Thot::Block::Details::Transformer::EBT {
                 }
 
 #ifdef TORCH_CUDA_AVAILABLE
-                    if (!should_break) {
-                        should_break = poll_pending_improvements(true);
-                    }
+                if (!should_break) {
+                    should_break = poll_pending_improvements(true);
+                }
 #else
-                    (void)should_break;
+                (void)should_break;
 #endif
 
 
