@@ -2777,17 +2777,23 @@ namespace Thot {
                 return;
             }
 
-            auto validate_binding = [](const OptimizerBinding& binding) {
-                if (!binding.capture_safe) {
-                    throw std::runtime_error("Selected optimizer does not support CUDA graph execution.");
+            auto build_error_message = [](const OptimizerBinding& binding) {
+                std::string optimizer_name{"optimizer"};
+                if (binding.instance) {
+                    if (dynamic_cast<torch::optim::AdamW*>(binding.instance.get())) {
+                        optimizer_name = "AdamW";
+                    }
                 }
+                return std::string("Optimizer '") + optimizer_name + "' does not support CUDA graph execution; CUDA graphs remain unsupported until a capture-safe " + optimizer_name + " variant is implemented.";
             };
 
             if (optimizer_) {
-                validate_binding(*optimizer_);
+                if (!optimizer_->capture_safe)
+                    throw std::runtime_error(build_error_message(*optimizer_));
             }
             for (const auto& binding : local_optimizers_) {
-                validate_binding(binding);
+                if (!binding.capture_safe)
+                    throw std::runtime_error(build_error_message(binding));
             }
         }
 
@@ -2796,10 +2802,21 @@ namespace Thot {
             if (mode == GraphMode::Disabled) {
                 return;
             }
+            auto build_error_message = [](const OptimizerBinding& binding) {
+                std::string optimizer_name{"optimizer"};
+                if (binding.instance) {
+                    if (dynamic_cast<torch::optim::AdamW*>(binding.instance.get())) {
+                        optimizer_name = "AdamW";
+                    }
+                }
+                return std::string("Optimizer '") + optimizer_name
+                    + "' does not support CUDA graph execution; CUDA graphs remain unsupported until a capture-safe "
+                    + optimizer_name + " variant is implemented.";
+            };
 
             auto prepare_binding = [&](OptimizerBinding& binding) {
                 if (!binding.capture_safe) {
-                    throw std::runtime_error("Selected optimizer does not support CUDA graph execution.");
+                    throw std::runtime_error(build_error_message(binding));
                 }
                 if (!binding.warmed_up && binding.warmup) {
                     binding.warmup(*binding.instance);
@@ -3558,10 +3575,13 @@ namespace Thot {
             if (!graph_execution_enabled(graph_mode, phase)) {
                 graph_mode = GraphMode::Disabled;
             }
-            auto& state = graph_capture_state(phase);
             if (graph_mode != GraphMode::Disabled) {
                 ensure_optimizer_graph_capability(graph_mode);
+            }
+            auto& state = graph_capture_state(phase);
+            if (graph_mode != GraphMode::Disabled) {
                 prepare_optimizers_for_graph(graph_mode);
+
             }
 #ifdef TORCH_CUDA_AVAILABLE
             const bool use_amp = amp_enabled && device_.is_cuda();
