@@ -173,7 +173,7 @@ int main() {
           .start_step = static_cast<size_t>(0.85 * (steps_per_epoch*epochs)),
           .accumulation_stride = static_cast<size_t>(steps_per_epoch),
           .max_snapshots = 20,
-        }), Thot::Regularization::JacobianNorm({})});
+        })});
 
     }
 

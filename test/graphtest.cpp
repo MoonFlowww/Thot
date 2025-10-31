@@ -3,7 +3,7 @@
 #include <stdexcept>
 #include <string>
 
-int main()
+int fake_main()
 {
     Thot::Model model{"adamw_graph_cpu_regression"};
     model.to_device(torch::cuda::is_available());
