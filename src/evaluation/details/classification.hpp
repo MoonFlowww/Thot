@@ -654,8 +654,17 @@ namespace Thot::Evaluation::Details::Classification {
                 logits = logits.reshape({logits.size(0), -1});
             }
 
-            auto logits_cpu = logits.to(torch::kCPU, torch::kFloat64, /*non_blocking=*/non_blocking_transfers);
-            logits = std::move(logits_cpu);
+            if (!logits.device().is_cpu()) {
+                if (non_blocking_transfers) {
+                    auto deferred_logits = Model::DeferredHostTensor::from_tensor(logits, /*non_blocking=*/true);
+                    logits = deferred_logits.materialize();
+                } else {
+                    logits = logits.to(torch::kCPU, logits.scalar_type(), /*non_blocking=*/false);
+                }
+            }
+            if (logits.scalar_type() != torch::kFloat64) {
+                logits = logits.to(torch::kFloat64);
+            }
             if (logits.dim() != 2) {
                 throw std::runtime_error("Classification evaluation expects two-dimensional logits.");
             }
@@ -669,8 +678,14 @@ namespace Thot::Evaluation::Details::Classification {
 
             if (!target_cpu.defined())
                 return;
-            if (!target_cpu.device().is_cpu())
-                target_cpu = target_cpu.to(torch::kCPU, non_blocking_transfers);
+            if (!target_cpu.device().is_cpu()) {
+                if (non_blocking_transfers) {
+                    auto deferred_targets = Model::DeferredHostTensor::from_tensor(target_cpu, /*non_blocking=*/true);
+                    target_cpu = deferred_targets.materialize();
+                } else {
+                    target_cpu = target_cpu.to(torch::kCPU, target_cpu.scalar_type(), /*non_blocking=*/false);
+                }
+            }
 
             const std::size_t current_batch = static_cast<std::size_t>(target_cpu.size(0));
 
