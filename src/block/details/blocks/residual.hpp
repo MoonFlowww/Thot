@@ -33,7 +33,7 @@ namespace Thot::Block::Details {
         ::Thot::LocalConfig local{};
     };
 
-     class ResidualBlockImpl : public torch::nn::Module {
+    class ResidualBlockImpl : public torch::nn::Module {
     public:
         explicit ResidualBlockImpl(ResidualDescriptor descriptor)
             : final_activation_(descriptor.output.final_activation.type)
@@ -72,6 +72,22 @@ namespace Thot::Block::Details {
                     "dropout",
                     torch::nn::Dropout(torch::nn::DropoutOptions(descriptor.output.dropout)));
             }
+            apply_tensor_memory_format_to_convolutions();
+        }
+
+        void set_preferred_tensor_memory_format(torch::MemoryFormat format)
+        {
+            if (preferred_tensor_memory_format_ == format) {
+                return;
+            }
+
+            preferred_tensor_memory_format_ = format;
+            apply_tensor_memory_format_to_convolutions();
+        }
+
+        [[nodiscard]] torch::MemoryFormat preferred_tensor_memory_format() const noexcept
+        {
+            return preferred_tensor_memory_format_;
         }
 
         torch::Tensor forward(torch::Tensor input)
@@ -131,13 +147,63 @@ namespace Thot::Block::Details {
         }
 
     private:
+        template <typename ConvolutionImpl>
+       void apply_tensor_memory_format_to_convolution(ConvolutionImpl* convolution)
+        {
+            if (!convolution) {
+                return;
+            }
+
+            auto apply_to_parameter = [&](torch::Tensor& parameter) {
+                if (!parameter.defined()) {
+                    return;
+                }
+
+                parameter = parameter.to(
+                 parameter.options(),
+                 /*non_blocking=*/false,
+                 /*copy=*/false,
+                 preferred_tensor_memory_format_);
+            };
+
+            apply_to_parameter(convolution->weight);
+            if (convolution->bias.defined()) {
+                apply_to_parameter(convolution->bias);
+            }
+        }
+
+        void apply_tensor_memory_format_to_layer(::Thot::Layer::Details::RegisteredLayer& layer)
+        {
+            if (!layer.module) {
+                return;
+            }
+
+            if (auto* conv1d = dynamic_cast<torch::nn::Conv1dImpl*>(layer.module.get())) {
+                apply_tensor_memory_format_to_convolution(conv1d);
+            } else if (auto* conv2d = dynamic_cast<torch::nn::Conv2dImpl*>(layer.module.get())) {
+                apply_tensor_memory_format_to_convolution(conv2d);
+            }
+        }
+
+        void apply_tensor_memory_format_to_convolutions()
+        {
+            for (auto& layers : block_layers_) {
+                for (auto& layer : layers) {
+                    apply_tensor_memory_format_to_layer(layer);
+                }
+            }
+
+            if (projection_layer_) {
+                apply_tensor_memory_format_to_layer(*projection_layer_);
+            }
+        }
         std::vector<std::vector<::Thot::Layer::Details::RegisteredLayer>> block_layers_{};
         std::optional<::Thot::Layer::Details::RegisteredLayer> projection_layer_{};
         ::Thot::Activation::Type final_activation_{::Thot::Activation::Type::Identity};
         torch::nn::Dropout dropout_{nullptr};
+        torch::MemoryFormat preferred_tensor_memory_format_{torch::MemoryFormat::Contiguous};
     };
 
     TORCH_MODULE(ResidualBlock);
 }
-
 #endif // THOT_BLOCK_DETAILS_RESIDUAL_HPP

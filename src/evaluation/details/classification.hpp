@@ -635,11 +635,7 @@ namespace Thot::Evaluation::Details::Classification {
             batch.inputs = std::move(input_batch);
             batch.targets = std::move(target_batch);
             if (batch.targets.defined()) {
-                if (!batch.targets.device().is_cpu()) {
-                    batch.reference_targets = batch.targets.to(torch::kCPU, /*non_blocking=*/non_blocking_transfers);
-                } else {
-                    batch.reference_targets = batch.targets;
-                }
+                batch.reference_targets = Model::DeferredHostTensor::from_tensor(batch.targets, non_blocking_transfers);
             }
 
             return batch;
@@ -664,11 +660,17 @@ namespace Thot::Evaluation::Details::Classification {
                 throw std::runtime_error("Classification evaluation expects two-dimensional logits.");
             }
 
-            auto target_tensor = batch.reference_targets.defined() ? batch.reference_targets : batch.targets;
-            if (!target_tensor.defined()) {
-                return;
+            torch::Tensor target_cpu;
+            if (batch.reference_targets.defined()) {
+                target_cpu = batch.reference_targets.materialize();
+            } else {
+                target_cpu = batch.targets;
             }
-            auto target_cpu = target_tensor.to(torch::kCPU, /*non_blocking=*/non_blocking_transfers);
+
+            if (!target_cpu.defined())
+                return;
+            if (!target_cpu.device().is_cpu())
+                target_cpu = target_cpu.to(torch::kCPU, non_blocking_transfers);
 
             const std::size_t current_batch = static_cast<std::size_t>(target_cpu.size(0));
 
