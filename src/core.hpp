@@ -63,6 +63,9 @@
 #include <ATen/DeviceGuard.h>
 #include <ATen/autocast_mode.h>
 
+
+#include "common/streaming.hpp"
+
 #include "common/graph.hpp"
 #include "common/save_load.hpp"
 #include "utils/terminal.hpp"
@@ -135,12 +138,7 @@ namespace Thot {
         inline constexpr auto kDefaultTrainingConfig = DefaultTrainingConfig{};
     }
 
-    // Execution mode for CUDA graph optimisation.
-    enum class GraphMode {
-        Disabled,
-        Capture,
-        Replay
-    };
+
 
     struct TrainOptions {
         std::size_t epoch{Core::kDefaultTrainingConfig.epochs};
@@ -386,95 +384,6 @@ namespace Thot {
         }
         [[nodiscard]] const std::string& name() const noexcept { return name_; }
 
-
-        struct ForwardOptions {
-            std::optional<std::size_t> max_chunk_size{};
-            GraphMode graph_mode{GraphMode::Disabled};  // Graph capture/replay disables chunking; pad/drop to maintain static shapes.
-
-            [[nodiscard]] bool buffering_enabled() const noexcept
-            {
-                return graph_mode == GraphMode::Disabled && max_chunk_size.has_value() && *max_chunk_size > 0;
-            }
-
-            [[nodiscard]] bool graph_capture_requested() const noexcept
-            {
-                return graph_mode == GraphMode::Capture;
-            }
-
-            [[nodiscard]] bool graph_replay_requested() const noexcept
-            {
-                return graph_mode == GraphMode::Replay;
-            }
-        };
-
-        struct StreamingOptions {
-            std::size_t batch_size{0};
-            std::size_t buffer_batches{0};
-            std::optional<std::size_t> forward_chunk_size{};
-        };
-
-        struct DeferredHostTensor {
-            torch::Tensor host_tensor{};
-#ifdef TORCH_CUDA_AVAILABLE
-            mutable std::shared_ptr<at::cuda::CUDAEvent> ready_event{};
-            int device_index{-1};
-#endif
-
-            DeferredHostTensor() = default;
-
-            static DeferredHostTensor from_tensor(torch::Tensor tensor, bool non_blocking = false)
-            {
-                DeferredHostTensor deferred{};
-
-                if (!tensor.defined()) {
-                    return deferred;
-                }
-
-                if (!tensor.device().is_cuda()) {
-                    deferred.host_tensor = std::move(tensor);
-                    return deferred;
-                }
-
-#ifdef TORCH_CUDA_AVAILABLE
-                const auto device_index = tensor.device().index();
-                auto host_copy = tensor.to(torch::kCPU, tensor.scalar_type(), non_blocking);
-                deferred.host_tensor = std::move(host_copy);
-                deferred.device_index = device_index;
-
-                if (non_blocking) {
-                    auto stream = at::cuda::getCurrentCUDAStream(device_index);
-                    auto event = std::make_shared<at::cuda::CUDAEvent>();
-                    event->record(stream);
-                    deferred.ready_event = std::move(event);
-                }
-                return deferred;
-#else
-                deferred.host_tensor = tensor.to(torch::kCPU);
-                return deferred;
-#endif
-            }
-
-            [[nodiscard]] bool defined() const noexcept { return host_tensor.defined(); }
-
-            torch::Tensor materialize() const
-            {
-#ifdef TORCH_CUDA_AVAILABLE
-                if (ready_event) {
-                    if (!ready_event->query()) {
-                        ready_event->synchronize();
-                    }
-                    ready_event.reset();
-                }
-#endif
-                return host_tensor;
-            }
-        };
-
-        struct StreamingBatch {
-            torch::Tensor inputs{};
-            torch::Tensor targets{};
-            DeferredHostTensor reference_targets{};
-        };
 
         template <class PrepareBatch, class ConsumeBatch>
         bool stream_forward(torch::Tensor dataset_inputs,

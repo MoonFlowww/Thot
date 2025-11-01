@@ -141,5 +141,6 @@ add_executable(test_Thot test/main.cpp
         src/regularization/details/common.hpp
         test/graphtest.cpp
         src/common/graph.hpp
+        src/common/streaming.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)

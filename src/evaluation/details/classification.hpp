@@ -21,6 +21,7 @@
 
 #include <torch/torch.h>
 
+#include "../../common/streaming.hpp"
 #include "../../metric/metric.hpp"
 #include "../../plot/details/statistics.hpp"
 #include "../../utils/terminal.hpp"
@@ -614,7 +615,7 @@ namespace Thot::Evaluation::Details::Classification {
                                         ? std::size_t{0}
                                         : (total_samples + batch_size - 1) / batch_size;
 
-        typename Model::StreamingOptions streaming_options{};
+        Thot::StreamingOptions streaming_options{};
         if (batch_size > 0) {
             streaming_options.batch_size = batch_size;
         }
@@ -623,7 +624,7 @@ namespace Thot::Evaluation::Details::Classification {
         }
 
         auto prepare_batch = [&](torch::Tensor input_batch, torch::Tensor target_batch)
-            -> std::optional<typename Model::StreamingBatch>
+            -> std::optional<Thot::StreamingBatch>
         {
             if (!input_batch.defined() || !target_batch.defined()) {
                 return std::nullopt;
@@ -631,17 +632,17 @@ namespace Thot::Evaluation::Details::Classification {
 
             input_batch = ensure_memory_format(std::move(input_batch));
 
-            typename Model::StreamingBatch batch{};
+            Thot::StreamingBatch batch{};
             batch.inputs = std::move(input_batch);
             batch.targets = std::move(target_batch);
             if (batch.targets.defined()) {
-                batch.reference_targets = Model::DeferredHostTensor::from_tensor(batch.targets, non_blocking_transfers);
+                batch.reference_targets = Thot::DeferredHostTensor::from_tensor(batch.targets, non_blocking_transfers);
             }
 
             return batch;
         };
 
-        auto process_batch = [&](torch::Tensor logits_tensor, typename Model::StreamingBatch batch) {
+        auto process_batch = [&](torch::Tensor logits_tensor, Thot::StreamingBatch batch) {
             if (!logits_tensor.defined()) {
                 return;
             }
@@ -656,7 +657,7 @@ namespace Thot::Evaluation::Details::Classification {
 
             if (!logits.device().is_cpu()) {
                 if (non_blocking_transfers) {
-                    auto deferred_logits = Model::DeferredHostTensor::from_tensor(logits, /*non_blocking=*/true);
+                    auto deferred_logits = Thot::DeferredHostTensor::from_tensor(logits, /*non_blocking=*/true);
                     logits = deferred_logits.materialize();
                 } else {
                     logits = logits.to(torch::kCPU, logits.scalar_type(), /*non_blocking=*/false);
@@ -680,7 +681,7 @@ namespace Thot::Evaluation::Details::Classification {
                 return;
             if (!target_cpu.device().is_cpu()) {
                 if (non_blocking_transfers) {
-                    auto deferred_targets = Model::DeferredHostTensor::from_tensor(target_cpu, /*non_blocking=*/true);
+                    auto deferred_targets = Thot::DeferredHostTensor::from_tensor(target_cpu, /*non_blocking=*/true);
                     target_cpu = deferred_targets.materialize();
                 } else {
                     target_cpu = target_cpu.to(torch::kCPU, target_cpu.scalar_type(), /*non_blocking=*/false);
