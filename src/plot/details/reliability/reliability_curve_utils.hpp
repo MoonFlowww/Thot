@@ -302,7 +302,7 @@ namespace Thot::Plot::Details::Reliability::Curves {
 
             torch::Tensor outputs;
             try {
-                Model::ForwardOptions options{};
+                ForwardOptions options{};
                 options.max_chunk_size = 256;
                 outputs = model.forward(std::move(inputs), options);
             } catch (...) {
