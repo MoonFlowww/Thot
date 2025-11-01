@@ -614,33 +614,43 @@ namespace Thot::Evaluation::Details::Classification {
                                         ? std::size_t{0}
                                         : (total_samples + batch_size - 1) / batch_size;
 
-        auto fetch_batch = [&](std::size_t batch_index) {
-            const auto offset = static_cast<std::int64_t>(batch_index) * static_cast<std::int64_t>(batch_size);
-            const auto remaining = static_cast<std::int64_t>(total_samples) - offset;
-            const auto current_batch = std::min<std::int64_t>(static_cast<std::int64_t>(batch_size), remaining);
-            if (current_batch <= 0) {
-                return std::pair<torch::Tensor, torch::Tensor>{torch::Tensor{}, torch::Tensor{}};
-            }
+        Model::StreamingOptions streaming_options{};
+        if (batch_size > 0) {
+            streaming_options.batch_size = batch_size;
+        }
+        if (use_buffer) {
+            streaming_options.buffer_batches = options.buffer_vram + 1;
+        }
 
-            auto input_batch = inputs.narrow(0, offset, current_batch);
-            auto target_batch = targets.narrow(0, offset, current_batch);
+        auto prepare_batch = [&](torch::Tensor input_batch, torch::Tensor target_batch)
+            -> std::optional<typename Model::StreamingBatch>
+        {
+            if (!input_batch.defined() || !target_batch.defined()) {
+                return std::nullopt;
+            }
 
             input_batch = ensure_memory_format(std::move(input_batch));
 
-            return std::pair<torch::Tensor, torch::Tensor>{std::move(input_batch), std::move(target_batch)};
+            typename Model::StreamingBatch batch{};
+            batch.inputs = std::move(input_batch);
+            batch.targets = std::move(target_batch);
+            if (batch.targets.defined()) {
+                if (!batch.targets.device().is_cpu()) {
+                    batch.reference_targets = batch.targets.to(torch::kCPU, /*non_blocking=*/non_blocking_transfers);
+                } else {
+                    batch.reference_targets = batch.targets;
+                }
+            }
+
+            return batch;
         };
 
-        auto process_batch = [&](torch::Tensor input_batch, torch::Tensor target_batch) {
-            if (!input_batch.defined() || !target_batch.defined()) {
+        auto process_batch = [&](torch::Tensor logits_tensor, typename Model::StreamingBatch batch) {
+            if (!logits_tensor.defined()) {
                 return;
             }
 
-            const std::size_t current_batch = static_cast<std::size_t>(target_batch.size(0));
-
-            auto predictions = model.forward(input_batch);
-            auto logits = predictions.detach();
-
-            predictions = torch::Tensor{};
+            auto logits = logits_tensor.detach();
 
             if (logits.dim() == 1) {
                 logits = logits.unsqueeze(1);
@@ -653,6 +663,14 @@ namespace Thot::Evaluation::Details::Classification {
             if (logits.dim() != 2) {
                 throw std::runtime_error("Classification evaluation expects two-dimensional logits.");
             }
+
+            auto target_tensor = batch.reference_targets.defined() ? batch.reference_targets : batch.targets;
+            if (!target_tensor.defined()) {
+                return;
+            }
+            auto target_cpu = target_tensor.to(torch::kCPU, /*non_blocking=*/non_blocking_transfers);
+
+            const std::size_t current_batch = static_cast<std::size_t>(target_cpu.size(0));
 
             const std::size_t batch_classes = static_cast<std::size_t>(logits.size(1));
             if (num_classes == 0) {
@@ -701,8 +719,6 @@ namespace Thot::Evaluation::Details::Classification {
                 topk_indices_tensor = std::get<1>(topk_result).to(torch::kLong);
             }
 
-            auto target_cpu = target_batch.to(torch::kCPU, /*non_blocking=*/non_blocking_transfers);
-            target_batch = torch::Tensor{};
             if (target_cpu.dtype() == torch::kFloat32 || target_cpu.dtype() == torch::kFloat64) {
                 if (target_cpu.dim() > 1 && target_cpu.size(1) == static_cast<long>(num_classes)) {
                     target_cpu = target_cpu.argmax(1);
@@ -863,41 +879,10 @@ namespace Thot::Evaluation::Details::Classification {
             logits = torch::Tensor{};
             probabilities = torch::Tensor{};
             predicted = torch::Tensor{};
-            input_batch = torch::Tensor{};
+            batch.target = torch::Tensor{};
         };
 
-        if (use_buffer) {
-            std::deque<std::pair<torch::Tensor, torch::Tensor>> buffered_batches;
-            std::size_t next_batch_to_load = 0;
-            const std::size_t buffer_limit = std::max<std::size_t>(std::size_t{1}, std::min<std::size_t>(options.buffer_vram + 1, total_batches));
-
-            auto maintain_buffer = [&](std::size_t current_index) {
-                const std::size_t desired_size = std::min(buffer_limit, total_batches - current_index);
-                while (buffered_batches.size() < desired_size && next_batch_to_load < total_batches) {
-                    buffered_batches.push_back(fetch_batch(next_batch_to_load));
-                    ++next_batch_to_load;
-                }
-            };
-
-            for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
-                maintain_buffer(batch_index);
-                if (buffered_batches.empty()) {
-                    break;
-                }
-
-                auto batch_pair = std::move(buffered_batches.front());
-                buffered_batches.pop_front();
-
-                process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
-
-                maintain_buffer(batch_index + 1);
-            }
-        } else {
-            for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
-                auto batch_pair = fetch_batch(batch_index);
-                process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
-            }
-        }
+        model.stream_forward(inputs, targets, streaming_options, prepare_batch, process_batch);
 
         const double total_samples_d = static_cast<double>(total_samples);
         for (auto& counts : class_counts) {

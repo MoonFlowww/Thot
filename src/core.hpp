@@ -664,6 +664,8 @@ namespace Thot {
         };
 
 
+
+
         struct ModuleNameBinding {
             std::size_t entry{std::numeric_limits<std::size_t>::max()};
             std::size_t exit{std::numeric_limits<std::size_t>::max()};
@@ -2406,90 +2408,70 @@ namespace Thot {
                 throw std::invalid_argument("Calibration requires defined input and target tensors.");
             }
 
-            auto maybe_chunked_forward = [this, &options](const torch::Tensor& dataset_inputs, const torch::Tensor& dataset_targets) -> std::optional<std::pair<torch::Tensor, torch::Tensor>> {
-                const bool buffering_enabled = options.forward_buffer_batches > 0;
-                const bool has_leading_dimension = dataset_inputs.dim() > 0;
-                if (!buffering_enabled || !has_leading_dimension || dataset_inputs.size(0) <= 0) {
+            auto build_streaming_outputs = [this, &options](torch::Tensor dataset_inputs, torch::Tensor dataset_targets) -> std::optional<std::pair<torch::Tensor, torch::Tensor>> {
+                if (!dataset_inputs.defined() || dataset_inputs.dim() == 0 || dataset_inputs.size(0) == 0) {
                     return std::nullopt;
                 }
 
 
 
-                const auto chunk_size_value = static_cast<std::int64_t>(options.forward_chunk_size.value_or(Core::kDefaultTrainingConfig.batch_size));
-                if (chunk_size_value <= 0) {
-                    throw std::invalid_argument("Calibration forward chunk size must be positive when buffering is enabled.");
+                StreamingOptions streaming_options{};
+                streaming_options.forward_chunk_size = options.forward_chunk_size;
+                if (options.forward_buffer_batches > 0) {
+                    const auto chunk_size_value = static_cast<std::size_t>(options.forward_chunk_size.value_or(Core::kDefaultTrainingConfig.batch_size));
+                    if (chunk_size_value == 0) {
+                        throw std::invalid_argument("Calibration forward chunk size must be positive when buffering is enabled.");
+                    }
+                    streaming_options.batch_size = chunk_size_value;
+                    streaming_options.buffer_batches = options.forward_buffer_batches;
                 }
-
-                const auto total_samples = dataset_inputs.size(0);
-                const auto total_batches = static_cast<std::size_t>((total_samples + chunk_size_value - 1) / chunk_size_value);
-
-                if (total_batches == 0) {
-                    return std::nullopt;
-                }
-
-                std::deque<std::pair<torch::Tensor, torch::Tensor>> buffered_batches;
-                std::size_t next_batch_to_load = 0;
-                const std::size_t buffer_limit = std::max<std::size_t>(1, options.forward_buffer_batches);
-
-                auto fetch_batch = [&](std::size_t batch_index) {
-                    const auto offset = static_cast<std::int64_t>(batch_index) * chunk_size_value;
-                    const auto remaining = total_samples - offset;
-                    const auto current_batch = std::min<std::int64_t>(chunk_size_value, remaining);
-                    if (current_batch <= 0) {
-                        return std::pair<torch::Tensor, torch::Tensor>{torch::Tensor{}, torch::Tensor{}};
-                    }
-
-                    auto batch_inputs = dataset_inputs.narrow(0, offset, current_batch);
-
-                    auto batch_targets = dataset_targets.narrow(0, offset, current_batch);
-                    if (!batch_targets.device().is_cpu()) {
-                        batch_targets = batch_targets.to(torch::kCPU);
-                    }
-
-                    return std::pair<torch::Tensor, torch::Tensor>{std::move(batch_inputs), std::move(batch_targets)};
-                };
-
-                auto maintain_buffer = [&](std::size_t current_index) {
-                    const auto desired_size = std::min(buffer_limit, total_batches - current_index);
-                    while (buffered_batches.size() < desired_size && next_batch_to_load < total_batches) {
-                        auto batch = fetch_batch(next_batch_to_load);
-                        if (batch.first.defined() && batch.second.defined()) {
-                            buffered_batches.push_back(std::move(batch));
-                        }
-                        ++next_batch_to_load;
-                    }
-                };
 
                 std::vector<torch::Tensor> logits_chunks;
-                logits_chunks.reserve(total_batches);
                 std::vector<torch::Tensor> target_chunks;
-                target_chunks.reserve(total_batches);
+                logits_chunks.reserve(8); // TODO: Modify
+                target_chunks.reserve(8);
 
-                for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
-                    maintain_buffer(batch_index);
-                    if (buffered_batches.empty()) {
-                        break;
+                auto prepare = [&](torch::Tensor batch_inputs, torch::Tensor batch_targets) -> std::optional<StreamingBatch> {
+                    if (!batch_inputs.defined() || !batch_targets.defined()) {
+                        return std::nullopt;
                     }
 
-                    auto batch_pair = std::move(buffered_batches.front());
-                    buffered_batches.pop_front();
+                    StreamingBatch batch{};
+                    batch.inputs = std::move(batch_inputs);
+                    batch.targets = std::move(batch_targets);
 
-                    auto batch_logits = forward(std::move(batch_pair.first));
-                    if (!batch_logits.device().is_cpu()) {
-                        batch_logits = batch_logits.to(torch::kCPU);
+                    if (batch.targets.defined()) {
+                        if (!batch.targets.device().is_cpu()) {
+                            batch.reference_targets = batch.targets.to(torch::kCPU);
+                        } else {
+                            batch.reference_targets = batch.targets;
+                        }
                     }
-                    logits_chunks.push_back(batch_logits.detach());
 
-                    auto batch_targets = std::move(batch_pair.second);
-                    if (!batch_targets.device().is_cpu()) {
-                        batch_targets = batch_targets.to(torch::kCPU);
+                    return batch;
+                };
+
+                auto consume = [&](torch::Tensor outputs, StreamingBatch batch) {
+                    auto logits_batch = std::move(outputs);
+                    if (logits_batch.defined() && !logits_batch.device().is_cpu()) {
+                        logits_batch = logits_batch.to(torch::kCPU);
                     }
-                    target_chunks.push_back(std::move(batch_targets));
+                    if (logits_batch.defined()) {
+                        logits_chunks.push_back(logits_batch.detach());
+                    }
 
-                    maintain_buffer(batch_index + 1);
-                }
+                    torch::Tensor targets_cpu = batch.reference_targets.defined() ? batch.reference_targets : batch.targets;
+                    if (targets_cpu.defined() && !targets_cpu.device().is_cpu()) {
+                        targets_cpu = targets_cpu.to(torch::kCPU);
+                    }
+                    if (targets_cpu.defined()) {
+                        target_chunks.push_back(targets_cpu.detach());
+                    }
+                };
 
-                if (!logits_chunks.empty() && !target_chunks.empty()) {
+                const bool processed = stream_forward(std::move(dataset_inputs), std::move(dataset_targets), streaming_options, prepare, consume);
+
+                if (processed && !logits_chunks.empty() && !target_chunks.empty()) {
                     return std::pair<torch::Tensor, torch::Tensor>{
                         torch::cat(logits_chunks, 0),
                         torch::cat(target_chunks, 0)
@@ -2499,7 +2481,7 @@ namespace Thot {
                 return std::nullopt;
             };
 
-            auto calibration_pair = maybe_chunked_forward(inputs, targets);
+            auto calibration_pair = build_streaming_outputs(inputs, targets);
             torch::Tensor logits;
             torch::Tensor calibration_targets;
 
@@ -2527,7 +2509,7 @@ namespace Thot {
                 const auto& validation_inputs = validation->first;
                 const auto& validation_targets = validation->second;
                 if (validation_inputs.defined() && validation_targets.defined()) {
-                    if (auto validation_pair = maybe_chunked_forward(validation_inputs, validation_targets)) {
+                    if (auto validation_pair = build_streaming_outputs(validation_inputs, validation_targets)) {
                         processed_validation = std::move(*validation_pair);
                     } else {
                         ForwardOptions forward_options{};
@@ -4553,37 +4535,12 @@ namespace Thot {
                 };
 
 
-                auto fetch_batch = [&](std::size_t batch_index) {
-                    const auto offset = static_cast<std::int64_t>(batch_index) * batch_extent;
-                    const auto remaining = total_samples - offset;
-                    const auto current_batch = std::min<std::int64_t>(batch_extent, remaining);
-                    if (current_batch <= 0) {
-                        return std::pair<torch::Tensor, torch::Tensor>{torch::Tensor{}, torch::Tensor{}};
+                auto prepare_batch = [&](torch::Tensor batch_inputs, torch::Tensor batch_targets) -> std::optional<StreamingBatch> {
+                    if (!batch_inputs.defined() || !batch_targets.defined()) {
+                        return std::nullopt;
                     }
-                    auto batch_inputs = dataset_inputs.narrow(0, offset, current_batch);
-                    auto batch_targets = dataset_targets.narrow(0, offset, current_batch);
                     batch_inputs = ensure_layout(std::move(batch_inputs), channels_last_inputs);
                     batch_targets = ensure_layout(std::move(batch_targets), false);
-
-                    if (batch_inputs.device().is_cpu() && !batch_inputs.is_pinned()) {
-                        batch_inputs = batch_inputs.pin_memory();
-                    }
-                    if (batch_targets.device().is_cpu() && !batch_targets.is_pinned()) {
-                        batch_targets = batch_targets.pin_memory();
-                    }
-
-                    return std::pair<torch::Tensor, torch::Tensor>{std::move(batch_inputs), std::move(batch_targets)};
-                };
-
-                auto process_batch = [&](torch::Tensor batch_inputs, torch::Tensor batch_targets) {
-                    if (!batch_inputs.defined() || !batch_targets.defined()) {
-                        return std::int64_t{0};
-                    }
-
-                    const auto current_batch = batch_targets.size(0);
-                    if (current_batch <= 0) {
-                        return std::int64_t{0};
-                    }
 
                     auto staged_inputs = stage_to_device(std::move(batch_inputs),
                                                          device_batch_inputs_buffer,
@@ -4592,7 +4549,27 @@ namespace Thot {
                                                           device_batch_targets_buffer,
                                                           false);
 
-                    auto prediction = model.forward(staged_inputs);
+                    if (!staged_inputs.defined() || !staged_targets.defined()) {
+                        return std::nullopt;
+                    }
+
+                    StreamingBatch batch{};
+                    batch.inputs = std::move(staged_inputs);
+                    batch.targets = std::move(staged_targets);
+                    return batch;
+                };
+
+                auto consume_batch = [&](torch::Tensor prediction, StreamingBatch batch) {
+                    if (!prediction.defined() || !batch.targets.defined()) {
+                        return;
+                    }
+
+                    auto staged_targets = std::move(batch.targets);
+                    const auto current_batch = staged_targets.size(0);
+                    if (current_batch <= 0) {
+                        return;
+                    }
+
 
                     if (!prediction.sizes().equals(staged_targets.sizes())) {
                         if (staged_targets.numel() == prediction.numel()) {
@@ -4625,48 +4602,21 @@ namespace Thot {
                     loss_tensor.mul_(static_cast<double>(current_batch));
                     accumulation.add_(loss_tensor);
                     weight += current_batch;
-                    prediction = torch::Tensor{};
-                    staged_inputs = torch::Tensor{};
-                    staged_targets = torch::Tensor{};
-                    loss = torch::Tensor{};
-
-                    return current_batch;
                 };
 
+
+                StreamingOptions streaming_options{};
+                streaming_options.batch_size = static_cast<std::size_t>(batch_size);
+
                 if constexpr (BufferVRAM) {
-                    std::deque<std::pair<torch::Tensor, torch::Tensor>> buffered_batches;
-                    std::size_t next_batch_to_load = 0;
                     const std::size_t max_batches = total_batches == 0 ? 1 : total_batches;
-                    const std::size_t buffer_limit = std::max<std::size_t>(std::size_t{1},
-                        std::min<std::size_t>(buffer_vram + 1, max_batches));
-
-                    auto maintain_buffer = [&](std::size_t current_index) {
-                        const std::size_t desired_size = std::min(buffer_limit, total_batches - current_index);
-                        while (buffered_batches.size() < desired_size && next_batch_to_load < total_batches) {
-                            buffered_batches.push_back(fetch_batch(next_batch_to_load));
-                            ++next_batch_to_load;
-                        }
-                    };
-
-                    for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
-                        maintain_buffer(batch_index);
-                        if (buffered_batches.empty()) {
-                            break;
-                        }
-
-                        auto batch_pair = std::move(buffered_batches.front());
-                        buffered_batches.pop_front();
-
-                        process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
-
-                        maintain_buffer(batch_index + 1);
-                    }
-                } else {
-                    for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
-                        auto batch_pair = fetch_batch(batch_index);
-                        process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
-                    }
+                    streaming_options.buffer_batches = std::max<std::size_t>(std::size_t{1}, std::min<std::size_t>(buffer_vram + 1, max_batches));
                 }
+                stream_forward(std::move(dataset_inputs),
+                               std::move(dataset_targets),
+                               streaming_options,
+                               prepare_batch,
+                               consume_batch);
                 if (was_training) {
                     model.train();
                 } else {
