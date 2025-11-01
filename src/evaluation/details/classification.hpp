@@ -614,7 +614,7 @@ namespace Thot::Evaluation::Details::Classification {
                                         ? std::size_t{0}
                                         : (total_samples + batch_size - 1) / batch_size;
 
-        Model::StreamingOptions streaming_options{};
+        typename Model::StreamingOptions streaming_options{};
         if (batch_size > 0) {
             streaming_options.batch_size = batch_size;
         }
@@ -879,7 +879,7 @@ namespace Thot::Evaluation::Details::Classification {
             logits = torch::Tensor{};
             probabilities = torch::Tensor{};
             predicted = torch::Tensor{};
-            batch.target = torch::Tensor{};
+            batch.targets = torch::Tensor{};
         };
 
         model.stream_forward(inputs, targets, streaming_options, prepare_batch, process_batch);

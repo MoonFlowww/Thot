@@ -663,6 +663,112 @@ namespace Thot {
             }
         };
 
+        struct StreamingOptions {
+            std::size_t batch_size{0};
+            std::size_t buffer_batches{0};
+            std::optional<std::size_t> forward_chunk_size{};
+        };
+
+        struct StreamingBatch {
+            torch::Tensor inputs{};
+            torch::Tensor targets{};
+            torch::Tensor reference_targets{};
+        };
+
+        template <class PrepareBatch, class ConsumeBatch>
+        bool stream_forward(torch::Tensor dataset_inputs,
+                            torch::Tensor dataset_targets,
+                            const StreamingOptions& options,
+                            PrepareBatch&& prepare_batch,
+                            ConsumeBatch&& consume_batch)
+        {
+            if (!dataset_inputs.defined()) {
+                return false;
+            }
+
+            if (dataset_inputs.dim() == 0) {
+                auto prepared_batch = prepare_batch(std::move(dataset_inputs), std::move(dataset_targets));
+                if (!prepared_batch.has_value()) {
+                    return false;
+                }
+
+                auto batch = std::move(*prepared_batch);
+                if (!batch.inputs.defined()) {
+                    return false;
+                }
+
+                ForwardOptions forward_options{};
+                if (options.forward_chunk_size.has_value()) {
+                    forward_options.max_chunk_size = options.forward_chunk_size;
+                }
+
+                auto outputs = forward(batch.inputs, std::move(forward_options));
+                consume_batch(std::move(outputs), std::move(batch));
+                return true;
+            }
+
+            const auto total_samples = dataset_inputs.size(0);
+            if (total_samples <= 0) {
+                return false;
+            }
+
+            std::size_t effective_batch_size = options.batch_size;
+            if (effective_batch_size == 0) {
+                effective_batch_size = static_cast<std::size_t>(total_samples);
+            }
+
+            if (effective_batch_size == 0) {
+                throw std::invalid_argument("Streaming batch size must be greater than zero.");
+            }
+
+            const auto step = static_cast<std::int64_t>(effective_batch_size);
+            const bool targets_match_leading = dataset_targets.defined()
+                                               && dataset_targets.dim() > 0
+                                               && dataset_targets.size(0) == total_samples;
+
+            bool processed_any = false;
+
+            for (std::int64_t offset = 0; offset < total_samples; offset += step) {
+                const auto remaining = total_samples - offset;
+                const auto current_batch = std::min<std::int64_t>(step, remaining);
+                if (current_batch <= 0) {
+                    break;
+                }
+
+                auto input_slice = dataset_inputs.narrow(0, offset, current_batch);
+
+                torch::Tensor target_slice;
+                if (dataset_targets.defined()) {
+                    if (targets_match_leading) {
+                        target_slice = dataset_targets.narrow(0, offset, current_batch);
+                    } else {
+                        target_slice = dataset_targets;
+                    }
+                }
+
+                auto prepared_batch = prepare_batch(std::move(input_slice), std::move(target_slice));
+                if (!prepared_batch.has_value()) {
+                    continue;
+                }
+
+                auto batch = std::move(*prepared_batch);
+                if (!batch.inputs.defined()) {
+                    continue;
+                }
+
+                ForwardOptions forward_options{};
+                if (options.forward_chunk_size.has_value()) {
+                    forward_options.max_chunk_size = options.forward_chunk_size;
+                }
+
+                auto outputs = forward(batch.inputs, std::move(forward_options));
+                consume_batch(std::move(outputs), std::move(batch));
+                processed_any = true;
+            }
+
+            return processed_any;
+        }
+
 
 
 
