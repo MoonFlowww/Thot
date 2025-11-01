@@ -186,6 +186,7 @@ int main() {
         train_options.restore_best_state = true;
         train_options.enable_amp=true;
         train_options.memory_format = torch::MemoryFormat::ChannelsLast;
+        train_options.epoch_epsilon=true;
         train_options.test = std::make_pair(validation_images, validation_labels);
 
 

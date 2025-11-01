@@ -49,7 +49,6 @@ add_library(Thot SHARED
         src/activation/activation.hpp
         src/layer/details/fc.hpp
         src/layer/details/conv.hpp
-        src/layer/details/statespace.hpp
         src/layer/details/batchnorm.hpp
         src/layer/details/recurrent.hpp
         src/layer/details/flatten.hpp
@@ -96,7 +95,7 @@ target_link_libraries(Thot "${TORCH_LIBRARIES}" Boost::filesystem)
 target_include_directories(Thot PUBLIC ${CMAKE_SOURCE_DIR}/include ${TORCH_INCLUDE_DIRS})
 
 #Test---------------
-add_executable(test_Thot test/main.cpp
+add_executable(test_Thot test/cifar.cpp
         test/semi_lazy.cpp
         src/block/details/blocks/residual.hpp
         src/block/details/blocks/sequential.hpp
@@ -139,8 +138,8 @@ add_executable(test_Thot test/main.cpp
         src/regularization/details/vat.hpp
         src/regularization/details/wgangp.hpp
         src/regularization/details/common.hpp
-        test/graphtest.cpp
         src/common/graph.hpp
         src/common/streaming.hpp
+        test/ecg.cpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)
