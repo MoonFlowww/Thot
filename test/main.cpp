@@ -56,7 +56,7 @@ int main() {
             )
         }), "S1");
 
-        model.add(Thot::Block::Residual({
+        model.add(Thot::Block::Sequential({
             Thot::Layer::Conv2d(
                 {128, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
                 Thot::Activation::Identity,
@@ -84,6 +84,27 @@ int main() {
                 Thot::Activation::Identity,
                 Thot::Initialization::HeNormal
             ),
+            Thot::Layer::Conv2d(
+                {8, 8, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
+                Thot::Activation::GeLU,
+                Thot::Initialization::HeNormal
+            ),
+                Thot::Layer::Conv2d(
+                {8, 8, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
+                Thot::Activation::GeLU,
+                Thot::Initialization::HeNormal
+            ),
+                Thot::Layer::Conv2d(
+                {8, 8, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
+                Thot::Activation::GeLU,
+                Thot::Initialization::HeNormal
+            ),
+            Thot::Layer::Conv2d(
+                {8, 8, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
+                Thot::Activation::GeLU,
+                Thot::Initialization::HeNormal
+            ),
+
         }), "Send");
 
 
@@ -147,7 +168,7 @@ int main() {
     Thot::Data::Check::Size(train_images, "Input train size raw");
 
 
-    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Cutout(train_images, train_labels, {-1, -1}, {12, 12}, -1, 1.f, true, false);
+    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Cutout(train_images, train_labels, {-1, -1}, {8, 8}, -1, 1.f, true, false);
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Shuffle(train_images, train_labels);
 
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {"x"}, 1.f, true, false);
@@ -159,7 +180,7 @@ int main() {
         Thot::TrainOptions train_options{};
         train_options.epoch = static_cast<std::size_t>(epochs);
         train_options.batch_size = static_cast<std::size_t>(B);
-        train_options.shuffle = false;
+        train_options.shuffle = true;
         train_options.buffer_vram = 0;
         train_options.graph_mode = Thot::GraphMode::Capture;
         train_options.restore_best_state = true;
@@ -185,7 +206,7 @@ int main() {
         Thot::Metric::Classification::CohensKappa,
         Thot::Metric::Classification::LogLoss,
         Thot::Metric::Classification::BrierScore,
-    }, {.batch_size = 64});
+    }, {.batch_size = 0});
 
 
     try {

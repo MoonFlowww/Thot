@@ -73,6 +73,7 @@
 #include "initialization/apply.hpp"
 #include "layer/layer.hpp"
 #include "block/details/blocks/residual.hpp"
+#include "block/details/blocks/sequential.hpp"
 #include "evaluation/evaluation.hpp"
 #include "loss/loss.hpp"
 #include "loss/details/mse.hpp"
@@ -382,37 +383,6 @@ namespace Thot {
         using DefaultTrainingConfig = TrainingConfig<10, 32, true, 0>;
         inline constexpr auto kDefaultTrainingConfig = DefaultTrainingConfig{};
     }
-
-    namespace ModelDetails {
-        class SequentialBlockModuleImpl : public torch::nn::Module {
-        public:
-            explicit SequentialBlockModuleImpl(std::vector<Layer::Descriptor> layers)
-            {
-                std::size_t index{0};
-                block_layers_.reserve(layers.size());
-                for (auto& descriptor : layers) {
-                    auto registered_layer = Layer::Details::build_registered_layer(*this, descriptor, index++);
-                    block_layers_.push_back(std::move(registered_layer));
-                }
-            }
-
-            torch::Tensor forward(torch::Tensor input)
-            {
-                auto output = std::move(input);
-                for (auto& layer : block_layers_) {
-                    output = layer.forward(std::move(output));
-                    output = Activation::Details::apply(layer.activation, std::move(output));
-                }
-                return output;
-            }
-
-        private:
-            std::vector<Layer::Details::RegisteredLayer> block_layers_{};
-        };
-
-        TORCH_MODULE(SequentialBlockModule);
-    }
-
 
     // Execution mode for CUDA graph optimisation.
     enum class GraphMode {
@@ -1034,7 +1004,7 @@ namespace Thot {
                     const auto index = next_module_index();
                     auto module = register_module(
                         "sequential_block_" + std::to_string(index),
-                        ModelDetails::SequentialBlockModule(std::move(sequential.layers)));
+                        Block::Details::SequentialBlockModule(std::move(sequential.layers)));
 
                     Layer::Details::RegisteredLayer registered_layer{};
                     registered_layer.activation = Activation::Type::Identity;
