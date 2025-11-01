@@ -3771,19 +3771,23 @@ namespace Thot {
                         return tensor;
                     }
                     auto options = tensor.options().device(device);
-                    if (apply_channels_last && tensor.dim() >= 4) {
-                        return tensor.to(options, /*non_blocking*/false, /*copy*/false,
-                                         torch::MemoryFormat::ChannelsLast);
-                    }
 
                     const bool non_blocking = tensor.is_pinned();
+
+                    const bool requires_channels_last = apply_channels_last && tensor.dim() >= 4;
 
                     if (!buffer.defined()
                         || buffer.device() != device
                         || buffer.scalar_type() != tensor.scalar_type()
-                        || !buffer.sizes().equals(tensor.sizes())) {
-                        buffer = torch::empty(tensor.sizes(), options, torch::MemoryFormat::Contiguous);
-                        }
+                        || !buffer.sizes().equals(tensor.sizes())
+                        || (requires_channels_last
+                            ? !buffer.is_contiguous(torch::MemoryFormat::ChannelsLast)
+                            : !buffer.is_contiguous())) {
+                        const auto memory_format = requires_channels_last
+                            ? torch::MemoryFormat::ChannelsLast
+                            : torch::MemoryFormat::Contiguous;
+                        buffer = torch::empty(tensor.sizes(), options, memory_format);
+                            }
 
                     buffer.copy_(tensor, non_blocking);
                     return buffer;
@@ -4247,18 +4251,21 @@ namespace Thot {
                     }
 
                     auto options = tensor.options().device(device);
-                    if (apply_channels_last && tensor.dim() >= 4) {
-                        return tensor.to(options, /*non_blocking*/false, /*copy*/false,
-                                         torch::MemoryFormat::ChannelsLast);
-                    }
                     const bool non_blocking = tensor.is_pinned();
+                    const bool requires_channels_last = apply_channels_last && tensor.dim() >= 4;
 
                     if (!buffer.defined()
                         || buffer.device() != device
                         || buffer.scalar_type() != tensor.scalar_type()
-                        || !buffer.sizes().equals(tensor.sizes())) {
-                        buffer = torch::empty(tensor.sizes(), options, torch::MemoryFormat::Contiguous);
-                        }
+                        || !buffer.sizes().equals(tensor.sizes())
+                                                || (requires_channels_last
+                                                    ? !buffer.is_contiguous(torch::MemoryFormat::ChannelsLast)
+                                                    : !buffer.is_contiguous())) {
+                        const auto memory_format = requires_channels_last
+                            ? torch::MemoryFormat::ChannelsLast
+                            : torch::MemoryFormat::Contiguous;
+                        buffer = torch::empty(tensor.sizes(), options, memory_format);
+                                                    }
 
                     buffer.copy_(tensor, non_blocking);
                     return buffer;
