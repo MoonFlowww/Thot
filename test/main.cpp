@@ -42,47 +42,6 @@ int main() {
             Thot::Layer::MaxPool2d({{2, 2}, {2, 2}})
         }), "stem");
 
-        model.add(Thot::Block::Residual({
-            Thot::Layer::HardDropout({ .probability = 0.3 }),
-            Thot::Layer::Conv2d(
-                {64, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
-                Thot::Activation::Identity,
-                Thot::Initialization::HeNormal
-            ),
-            Thot::Layer::BatchNorm2d(
-                {64, 1e-5, 0.1, true, true},
-                Thot::Activation::SiLU
-            ),
-            Thot::Layer::Conv2d(
-                {64, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
-                Thot::Activation::Identity,
-                Thot::Initialization::HeNormal
-            )
-        }, 3, {}, { .final_activation = Thot::Activation::SiLU }), "R1");
-
-        model.add(Thot::Block::Residual({
-            Thot::Layer::HardDropout({ .probability = 0.3 }),
-            Thot::Layer::Conv2d(
-                {64, 128, {3, 3}, {2, 2}, {1, 1}, {1, 1}, 1, false},
-                Thot::Activation::Identity,
-                Thot::Initialization::HeNormal
-            ),
-            Thot::Layer::BatchNorm2d(
-                {128, 1e-5, 0.1, true, true},
-                Thot::Activation::SiLU
-            ),
-            Thot::Layer::Conv2d(
-                {128, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
-                Thot::Activation::Identity,
-                Thot::Initialization::HeNormal
-            )
-        }, 1,
-        {.use_projection = true, .projection = Thot::Layer::Conv2d(
-                    {64, 128, {1, 1}, {2, 2}, {0, 0}, {1, 1}, 1, false},
-                    Thot::Activation::Identity,
-                    Thot::Initialization::HeNormal)
-            },
-            { .final_activation = Thot::Activation::SiLU }), "R2");
 
 
         model.add(Thot::Block::Sequential({
@@ -109,9 +68,10 @@ int main() {
             )
         }), "S2");
 
+
         model.add(Thot::Block::Sequential({
             Thot::Layer::Conv2d(
-                {256, 32, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
+                {128, 32, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
                 Thot::Activation::Identity,
                 Thot::Initialization::HeNormal
             ),
@@ -138,13 +98,17 @@ int main() {
         model.links({
             Thot::LinkSpec{Thot::Port::parse("@input"), Thot::Port::parse("stem")},
 
-            Thot::LinkSpec{Thot::Port::parse("stem"), Thot::Port::parse("R1")}, // path #¹
-            Thot::LinkSpec{Thot::Port::parse("R1"), Thot::Port::parse("R2")},
+            Thot::LinkSpec{Thot::Port::parse("stem"), Thot::Port::parse("S1")}, // path #¹
+            //Thot::LinkSpec{Thot::Port::parse("R1"), Thot::Port::parse("R2")},
 
-            Thot::LinkSpec{Thot::Port::parse("stem"), Thot::Port::parse("S1")}, // path #2
+            //Thot::LinkSpec{Thot::Port::parse("stem"), Thot::Port::parse("S1")}, // path #2
+            //Thot::LinkSpec{Thot::Port::parse("S1"), Thot::Port::parse("S2")},
+
+            //Thot::LinkSpec{Thot::Port::join({"R2", "S2"}, Thot::MergePolicyKind::Concat), Thot::Port::parse("Send")}, // join
+            //Thot::LinkSpec{Thot::Port::parse("R2"), Thot::Port::parse("S1")},
             Thot::LinkSpec{Thot::Port::parse("S1"), Thot::Port::parse("S2")},
 
-            Thot::LinkSpec{Thot::Port::join({"R2", "S2"}, Thot::MergePolicyKind::Concat), Thot::Port::parse("Send")}, // join
+            Thot::LinkSpec{Thot::Port::parse("S2"), Thot::Port::parse("Send")},
 
             Thot::LinkSpec{Thot::Port::parse("Send"), Thot::Port::parse("flat")},
             Thot::LinkSpec{Thot::Port::parse("flat"), Thot::Port::parse("FC1")},
@@ -152,6 +116,7 @@ int main() {
             Thot::LinkSpec{Thot::Port::parse("HDFin"), Thot::Port::parse("FC2")},
             Thot::LinkSpec{Thot::Port::parse("FC2"), Thot::Port::parse("@output")}
         }, true);
+
 
 
 
@@ -177,15 +142,15 @@ int main() {
 
     }
 
-    auto [train_images, train_labels, test_images, test_labels] = Thot::Data::Load::M("/home/moonfloww/Projects/DATASETS/CIFAR10", 1.f, 1.f, true);
+    auto [train_images, train_labels, test_images, test_labels] = Thot::Data::Load::CIFAR10("/home/moonfloww/Projects/DATASETS/CIFAR10", 1.f, 1.f, true);
     auto [validation_images, validation_labels] = Thot::Data::Manipulation::Fraction(test_images, test_labels, 0.1f);
     Thot::Data::Check::Size(train_images, "Input train size raw");
 
 
-    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Cutout(train_images, train_labels, {-1, -1}, {12, 12}, -1, 1.f, false, false);
+    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Cutout(train_images, train_labels, {-1, -1}, {12, 12}, -1, 1.f, true, false);
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Shuffle(train_images, train_labels);
 
-    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {"x"}, 1.f, false, false);
+    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {"x"}, 1.f, true, false);
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Shuffle(train_images, train_labels);
 
     Thot::Data::Check::Size(train_images, "Input train size after augment");
@@ -194,10 +159,10 @@ int main() {
         Thot::TrainOptions train_options{};
         train_options.epoch = static_cast<std::size_t>(epochs);
         train_options.batch_size = static_cast<std::size_t>(B);
-        train_options.shuffle = true;
+        train_options.shuffle = false;
         train_options.buffer_vram = 0;
         train_options.graph_mode = Thot::GraphMode::Capture;
-        train_options.restore_best_state = false;
+        train_options.restore_best_state = true;
         train_options.enable_amp=true;
         train_options.test = std::make_pair(validation_images, validation_labels);
 

@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <cstring>
 #include <fstream>
 #include <stdexcept>
 #include <string>
@@ -130,6 +131,120 @@ namespace Thot::Data::Load {
             }
             return tensor.to(torch::kFloat32) / 255.0f;
         }
+        inline fs::path resolve_mnist_root(const std::string& root) {
+            const std::array<fs::path, 3> candidates = {
+                fs::path(root),
+                fs::path(root) / "MNIST",
+                fs::path(root) / "MNIST" / "raw"
+            };
+
+            const std::array<const char*, 4> required_files = {
+                "train-images-idx3-ubyte",
+                "train-labels-idx1-ubyte",
+                "t10k-images-idx3-ubyte",
+                "t10k-labels-idx1-ubyte"
+            };
+
+            for (const auto& candidate : candidates) {
+                if (!fs::exists(candidate)) {
+                    continue;
+                }
+
+                const bool has_all_files = std::all_of(required_files.begin(), required_files.end(), [&](const char* file) {
+                    return fs::exists(candidate / file);
+                });
+
+                if (has_all_files) {
+                    return candidate;
+                }
+            }
+
+            throw std::runtime_error("Unable to locate MNIST dataset in the provided root: " + root);
+        }
+
+        inline std::uint32_t read_big_endian_u32(std::ifstream& file, const fs::path& file_path, const char* context) {
+            std::array<std::uint8_t, 4> buffer{};
+            if (!file.read(reinterpret_cast<char*>(buffer.data()), 4)) {
+                throw std::runtime_error("Failed to read " + std::string(context) + " from " + file_path.string());
+            }
+
+            return (static_cast<std::uint32_t>(buffer[0]) << 24U) |
+                   (static_cast<std::uint32_t>(buffer[1]) << 16U) |
+                   (static_cast<std::uint32_t>(buffer[2]) << 8U) |
+                   static_cast<std::uint32_t>(buffer[3]);
+        }
+
+        inline torch::Tensor read_idx_images(const fs::path& file_path) {
+            std::ifstream file(file_path, std::ios::binary);
+            if (!file) {
+                throw std::runtime_error("Failed to open MNIST image file: " + file_path.string());
+            }
+
+            const auto magic = read_big_endian_u32(file, file_path, "magic number");
+            if (magic != 2051) {
+                throw std::runtime_error("Unexpected MNIST image file magic number in " + file_path.string());
+            }
+
+            const auto count = static_cast<int64_t>(read_big_endian_u32(file, file_path, "image count"));
+            const auto rows = static_cast<int64_t>(read_big_endian_u32(file, file_path, "rows"));
+            const auto cols = static_cast<int64_t>(read_big_endian_u32(file, file_path, "columns"));
+
+            if (rows != 28 || cols != 28) {
+                throw std::runtime_error("MNIST image dimensions must be 28x28 in file: " + file_path.string());
+            }
+
+            if (count < 0) {
+                throw std::runtime_error("Negative image count encountered in file: " + file_path.string());
+            }
+
+            const auto expected_size = static_cast<std::size_t>(count * rows * cols);
+            std::vector<std::uint8_t> buffer(expected_size);
+            if (!file.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(buffer.size()))) {
+                throw std::runtime_error("Failed to read MNIST image payload from: " + file_path.string());
+            }
+
+            if (static_cast<std::size_t>(file.gcount()) != expected_size) {
+                throw std::runtime_error("MNIST image file truncated: " + file_path.string());
+            }
+
+            auto tensor = torch::empty({count, 1, rows, cols}, torch::kUInt8);
+            std::memcpy(tensor.data_ptr<std::uint8_t>(), buffer.data(), buffer.size());
+            return tensor;
+        }
+
+        inline torch::Tensor read_idx_labels(const fs::path& file_path) {
+            std::ifstream file(file_path, std::ios::binary);
+            if (!file) {
+                throw std::runtime_error("Failed to open MNIST label file: " + file_path.string());
+            }
+
+            const auto magic = read_big_endian_u32(file, file_path, "magic number");
+            if (magic != 2049) {
+                throw std::runtime_error("Unexpected MNIST label file magic number in " + file_path.string());
+            }
+
+            const auto count = static_cast<int64_t>(read_big_endian_u32(file, file_path, "label count"));
+            if (count < 0) {
+                throw std::runtime_error("Negative label count encountered in file: " + file_path.string());
+            }
+
+            std::vector<std::uint8_t> buffer(static_cast<std::size_t>(count));
+            if (!file.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(buffer.size()))) {
+                throw std::runtime_error("Failed to read MNIST label payload from: " + file_path.string());
+            }
+
+            if (static_cast<std::size_t>(file.gcount()) != buffer.size()) {
+                throw std::runtime_error("MNIST label file truncated: " + file_path.string());
+            }
+
+            auto tensor = torch::empty({count}, torch::kInt64);
+            auto accessor = tensor.accessor<int64_t, 1>();
+            for (int64_t index = 0; index < count; ++index) {
+                accessor[index] = static_cast<int64_t>(buffer[static_cast<std::size_t>(index)]);
+            }
+
+            return tensor;
+        }
     }
 
     template <bool BufferVRAM = false, class DevicePolicyT = Core::DevicePolicy<BufferVRAM>>
@@ -177,6 +292,59 @@ namespace Thot::Data::Load {
         if (normalise) {
             train_inputs = Details::normalise_inputs(train_inputs);
             test_inputs = Details::normalise_inputs(test_inputs);
+        } else {
+            train_inputs = train_inputs.to(torch::kFloat32);
+            test_inputs = test_inputs.to(torch::kFloat32);
+        }
+
+        if constexpr (BufferVRAM) {
+            const auto device = DevicePolicyT::select();
+            train_inputs = train_inputs.to(device);
+            train_targets = train_targets.to(device);
+            test_inputs = test_inputs.to(device);
+            test_targets = test_targets.to(device);
+        }
+
+        return {train_inputs, train_targets, test_inputs, test_targets};
+    }
+
+    template <bool BufferVRAM = false, class DevicePolicyT = Core::DevicePolicy<BufferVRAM>>
+    [[nodiscard]] inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+    MNIST(const std::string& root,
+          float train_fraction = 1.0f,
+          float test_fraction = 1.0f,
+          bool normalise = true) {
+        const auto dataset_root = Details::resolve_mnist_root(root);
+
+        auto train_inputs = Details::read_idx_images(dataset_root / "train-images-idx3-ubyte");
+        auto train_targets = Details::read_idx_labels(dataset_root / "train-labels-idx1-ubyte");
+        auto test_inputs = Details::read_idx_images(dataset_root / "t10k-images-idx3-ubyte");
+        auto test_targets = Details::read_idx_labels(dataset_root / "t10k-labels-idx1-ubyte");
+
+        if (train_inputs.size(0) != train_targets.size(0)) {
+            throw std::runtime_error("MNIST training images and labels count mismatch");
+        }
+
+        if (test_inputs.size(0) != test_targets.size(0)) {
+            throw std::runtime_error("MNIST test images and labels count mismatch");
+        }
+
+        const auto total_train = static_cast<std::size_t>(train_inputs.size(0));
+        const auto total_test = static_cast<std::size_t>(test_inputs.size(0));
+
+        const auto effective_train = std::clamp<std::size_t>(
+            static_cast<std::size_t>(std::round(train_fraction * static_cast<float>(total_train))), 0, total_train);
+        const auto effective_test = std::clamp<std::size_t>(
+            static_cast<std::size_t>(std::round(test_fraction * static_cast<float>(total_test))), 0, total_test);
+
+        train_inputs = Details::apply_fraction(std::move(train_inputs), effective_train);
+        train_targets = Details::apply_fraction(std::move(train_targets), effective_train);
+        test_inputs = Details::apply_fraction(std::move(test_inputs), effective_test);
+        test_targets = Details::apply_fraction(std::move(test_targets), effective_test);
+
+        if (normalise) {
+            train_inputs = train_inputs.to(torch::kFloat32) / 255.0f;
+            test_inputs = test_inputs.to(torch::kFloat32) / 255.0f;
         } else {
             train_inputs = train_inputs.to(torch::kFloat32);
             test_inputs = test_inputs.to(torch::kFloat32);
