@@ -190,8 +190,6 @@ int main() {
 
 
         model.train(train_images, train_labels, train_options);
-
-
     }
 
     model.evaluate(test_images, test_labels, Thot::Evaluation::Classification,{
