@@ -206,7 +206,7 @@ int main() {
         Thot::Metric::Classification::CohensKappa,
         Thot::Metric::Classification::LogLoss,
         Thot::Metric::Classification::BrierScore,
-    }, {.batch_size = 0});
+    }, {.batch_size = 64});
 
 
     try {

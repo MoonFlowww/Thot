@@ -22,6 +22,7 @@
  */
 
 #include <algorithm>
+#include <array>
 #include <functional>
 #include <chrono>
 #include <cassert>
@@ -3751,6 +3752,27 @@ namespace Thot {
 
                 TrainingTelemetry::DeferredScalar last_train_loss_scalar;
 
+#ifdef TORCH_CUDA_AVAILABLE
+                struct PrefetchState {
+                    explicit PrefetchState(int device_index)
+                        : stream(torch::cuda::getStreamFromPool(/*isHighPriority=*/false, device_index))
+                    {
+                    }
+
+                    torch::cuda::CUDAStream stream;
+                    std::array<torch::Tensor, 2> inputs{};
+                    std::array<torch::Tensor, 2> targets{};
+                    std::array<at::cuda::CUDAEvent, 2> events{at::cuda::CUDAEvent{}, at::cuda::CUDAEvent{}};
+                    std::array<bool, 2> pending{false, false};
+                };
+
+                std::optional<PrefetchState> prefetch_state{};
+                if (device.is_cuda()) {
+                    prefetch_state.emplace(device.index());
+                }
+#endif
+
+
                 auto ensure_layout = [&](torch::Tensor tensor, bool apply_channels_last) {
                     if (!tensor.defined()) {
                         return tensor;
@@ -3765,33 +3787,83 @@ namespace Thot {
                     return tensor;
                 };
 
-                auto stage_to_device = [&](torch::Tensor tensor, torch::Tensor& buffer, bool apply_channels_last) {
+                auto stage_to_device = [&](torch::Tensor tensor,
+                           torch::Tensor& buffer,
+                           bool apply_channels_last,
+                           bool force_non_blocking = false,
+                           bool use_prefetch_stream = false) {
                     tensor = ensure_layout(std::move(tensor), apply_channels_last);
                     if (!tensor.defined() || tensor.device() == device) {
                         return tensor;
                     }
                     auto options = tensor.options().device(device);
 
-                    const bool non_blocking = tensor.is_pinned();
+                    const bool non_blocking = force_non_blocking || tensor.is_pinned();
 
                     const bool requires_channels_last = apply_channels_last && tensor.dim() >= 4;
 
-                    if (!buffer.defined()
-                        || buffer.device() != device
-                        || buffer.scalar_type() != tensor.scalar_type()
-                        || !buffer.sizes().equals(tensor.sizes())
-                        || (requires_channels_last
-                            ? !buffer.is_contiguous(torch::MemoryFormat::ChannelsLast)
-                            : !buffer.is_contiguous())) {
-                        const auto memory_format = requires_channels_last
-                            ? torch::MemoryFormat::ChannelsLast
-                            : torch::MemoryFormat::Contiguous;
+                    if (!buffer.defined() || buffer.device() != device || buffer.scalar_type() != tensor.scalar_type() || !buffer.sizes().equals(tensor.sizes())
+                            || (requires_channels_last ? !buffer.is_contiguous(torch::MemoryFormat::ChannelsLast) : !buffer.is_contiguous())) {
+                        const auto memory_format = requires_channels_last ? torch::MemoryFormat::ChannelsLast : torch::MemoryFormat::Contiguous;
                         buffer = torch::empty(tensor.sizes(), options, memory_format);
-                            }
+                    }
 
+                    (void)use_prefetch_stream;
+#ifdef TORCH_CUDA_AVAILABLE
+                    if (use_prefetch_stream && prefetch_state) {
+                        torch::cuda::CUDAStreamGuard guard(prefetch_state->stream);
+                        buffer.copy_(tensor, non_blocking);
+                    } else {
+                        buffer.copy_(tensor, non_blocking);
+                    }
+#else
                     buffer.copy_(tensor, non_blocking);
+#endif
                     return buffer;
                 };
+
+                #ifdef TORCH_CUDA_AVAILABLE
+                auto wait_for_prefetch_slot = [&](std::size_t slot) {
+                    if (!prefetch_state || !prefetch_state->pending[slot]) {
+                        return;
+                    }
+                    auto current_stream = at::cuda::getCurrentCUDAStream(device.index());
+                    current_stream.wait(prefetch_state->events[slot]);
+                    prefetch_state->pending[slot] = false;
+                };
+
+                auto schedule_prefetch_from_provider = [&](auto&& provider, std::size_t slot) -> bool {
+                    if (!prefetch_state) {
+                        return false;
+                    }
+
+                    prefetch_state->pending[slot] = false;
+
+                    auto batch = provider();
+                    if (!batch.first.defined() || !batch.second.defined()) {
+                        return false;
+                    }
+
+                    prefetch_state->inputs[slot] = stage_to_device(std::move(batch.first),
+                                                                    prefetch_state->inputs[slot],
+                                                                    channels_last_inputs,
+                                                                    /*force_non_blocking=*/true,
+                                                                    /*use_prefetch_stream=*/true);
+                    prefetch_state->targets[slot] = stage_to_device(std::move(batch.second),
+                                                                     prefetch_state->targets[slot],
+                                                                     /*apply_channels_last=*/false,
+                                                                     /*force_non_blocking=*/true,
+                                                                     /*use_prefetch_stream=*/true);
+
+                    {
+                        torch::cuda::CUDAStreamGuard guard(prefetch_state->stream);
+                        prefetch_state->events[slot].record(prefetch_state->stream);
+                    }
+                    prefetch_state->pending[slot] = true;
+                    return true;
+                };
+
+#endif
 
 
                 for (std::size_t epoch = 0; epoch < options.epoch; ++epoch) {
@@ -3808,6 +3880,28 @@ namespace Thot {
 
                     auto accumulation = torch::zeros({}, torch::TensorOptions().dtype(torch::kFloat64).device(device));
                     std::int64_t weight = 0;
+
+#ifdef TORCH_CUDA_AVAILABLE
+                    auto process_with_prefetch = [&](auto&& provider, std::size_t max_batches) {
+                        if (!prefetch_state) {
+                            return;
+                        }
+
+                        std::size_t current_slot = 0;
+                        bool has_batch = schedule_prefetch_from_provider(provider, current_slot);
+                        for (std::size_t batch_index = 0; batch_index < max_batches && has_batch; ++batch_index) {
+                            wait_for_prefetch_slot(current_slot);
+                            const auto processed = process_batch(prefetch_state->inputs[current_slot],
+                                                                 prefetch_state->targets[current_slot]);
+                            weight += processed;
+
+                            const std::size_t next_slot = current_slot ^ 1U;
+                            has_batch = schedule_prefetch_from_provider(provider, next_slot);
+                            current_slot = next_slot;
+                        }
+                    };
+#endif
+
 
                     const std::size_t total_batches = total_samples > 0
                         ? static_cast<std::size_t>((total_samples + batch_size - 1) / batch_size)
@@ -4002,10 +4096,26 @@ namespace Thot {
 
                     if constexpr (BufferVRAM) {
                         if (graph_mode_enabled) {
-                            for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
-                                auto batch_pair = fetch_batch(batch_index);
-                                const auto processed = process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
-                                weight += processed;
+#ifdef TORCH_CUDA_AVAILABLE
+                            if (prefetch_state) {
+                                std::size_t next_batch_index = 0;
+                                auto provider = [&]() -> std::pair<torch::Tensor, torch::Tensor> {
+                                    if (next_batch_index >= total_batches) {
+                                        return {};
+                                    }
+                                    auto batch = fetch_batch(next_batch_index);
+                                    ++next_batch_index;
+                                    return batch;
+                                };
+                                process_with_prefetch(provider, total_batches);
+                            } else
+#endif
+                            {
+                                for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
+                                    auto batch_pair = fetch_batch(batch_index);
+                                    const auto processed = process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
+                                    weight += processed;
+                                }
                             }
                         } else {
                             std::deque<std::pair<torch::Tensor, torch::Tensor>> buffered_batches;
@@ -4023,28 +4133,62 @@ namespace Thot {
                                 }
                             };
 
-                            for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
-                                maintain_buffer(batch_index);
-                                if (buffered_batches.empty()) {
-                                    break;
+#ifdef TORCH_CUDA_AVAILABLE
+                            if (prefetch_state) {
+                                std::size_t processed_batches = 0;
+                                auto provider = [&]() -> std::pair<torch::Tensor, torch::Tensor> {
+                                    maintain_buffer(processed_batches);
+                                    if (buffered_batches.empty()) {
+                                        return {};
+                                    }
+                                    auto batch_pair = std::move(buffered_batches.front());
+                                    buffered_batches.pop_front();
+                                    ++processed_batches;
+                                    maintain_buffer(processed_batches);
+                                    return batch_pair;
+                                };
+                                process_with_prefetch(provider, total_batches);
+                            } else
+#endif
+                            {
+                                for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
+                                    maintain_buffer(batch_index);
+                                    if (buffered_batches.empty()) {
+                                        break;
+                                    }
+
+                                    auto batch_pair = std::move(buffered_batches.front());
+                                    buffered_batches.pop_front();
+
+                                    const auto processed = process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
+                                    weight += processed;
+
+
+                                    maintain_buffer(batch_index + 1);
                                 }
-
-
-                                auto batch_pair = std::move(buffered_batches.front());
-                                buffered_batches.pop_front();
-
-                                const auto processed = process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
-                                weight += processed;
-
-
-                                maintain_buffer(batch_index + 1);
                             }
                         }
                     } else {
-                        for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
-                            auto batch_pair = fetch_batch(batch_index);
-                            const auto processed = process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
-                            weight += processed;
+#ifdef TORCH_CUDA_AVAILABLE
+                        if (prefetch_state) {
+                            std::size_t next_batch_index = 0;
+                            auto provider = [&]() -> std::pair<torch::Tensor, torch::Tensor> {
+                                if (next_batch_index >= total_batches) {
+                                    return {};
+                                }
+                                auto batch = fetch_batch(next_batch_index);
+                                ++next_batch_index;
+                                return batch;
+                            };
+                            process_with_prefetch(provider, total_batches);
+                        } else
+#endif
+                        {
+                            for (std::size_t batch_index = 0; batch_index < total_batches; ++batch_index) {
+                                auto batch_pair = fetch_batch(batch_index);
+                                const auto processed = process_batch(std::move(batch_pair.first), std::move(batch_pair.second));
+                                weight += processed;
+                            }
                         }
                     }
 
