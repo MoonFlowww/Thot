@@ -380,14 +380,11 @@ namespace Thot::Block::Details::Transformer::EBT {
 
                     while (!pending_improvements.empty()) {
                         auto& front = pending_improvements.front();
-                        if (!synchronise_all && !front.event.query()) {
-                            return false;
-                        }
-                        if (synchronise_all && !front.event.query()) {
-                            front.event.synchronize();
-                        }
                         if (!front.event.query()) {
-                            return false;
+                            if (!synchronise_all) {
+                                return false;
+                            }
+                            break;
                         }
                         auto improvement_value = front.value.item<double>();
                         pending_improvements.pop_front();

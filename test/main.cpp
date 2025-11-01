@@ -13,7 +13,7 @@ int main() {
     }
     std::cout << "Cuda: " << torch::cuda::is_available() << std::endl;
     model.to_device(torch::cuda::is_available());
-    const int64_t N = 200000;
+    const int64_t N = 50000;
     const int64_t B = std::pow(2,7);
     const int64_t epochs = 20;
 
@@ -177,15 +177,15 @@ int main() {
 
     }
 
-    auto [train_images, train_labels, test_images, test_labels] = Thot::Data::Load::CIFAR10("/home/moonfloww/Projects/DATASETS/CIFAR10", 1.f, 1.f, true);
+    auto [train_images, train_labels, test_images, test_labels] = Thot::Data::Load::M("/home/moonfloww/Projects/DATASETS/CIFAR10", 1.f, 1.f, true);
     auto [validation_images, validation_labels] = Thot::Data::Manipulation::Fraction(test_images, test_labels, 0.1f);
     Thot::Data::Check::Size(train_images, "Input train size raw");
 
 
-    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Cutout(train_images, train_labels, {-1, -1}, {12, 12}, -1, 1.f, true, false);
+    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Cutout(train_images, train_labels, {-1, -1}, {12, 12}, -1, 1.f, false, false);
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Shuffle(train_images, train_labels);
 
-    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {"x"}, 1.f, true, false);
+    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {"x"}, 1.f, false, false);
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Shuffle(train_images, train_labels);
 
     Thot::Data::Check::Size(train_images, "Input train size after augment");
@@ -220,7 +220,7 @@ int main() {
         Thot::Metric::Classification::CohensKappa,
         Thot::Metric::Classification::LogLoss,
         Thot::Metric::Classification::BrierScore,
-    });
+    }, {.batch_size = 64});
 
 
     try {

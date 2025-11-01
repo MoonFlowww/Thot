@@ -547,6 +547,29 @@ namespace Thot {
 
                 [[nodiscard]] bool defined() const noexcept { return host_tensor.defined(); }
 
+                [[nodiscard]] bool is_ready() const
+                {
+                    if (!host_tensor.defined()) {
+                        return false;
+                    }
+
+#ifdef TORCH_CUDA_AVAILABLE
+                    if (ready_event) {
+                        if (!ready_event->query()) {
+                            return false;
+                        }
+                        ready_event.reset();
+                    }
+#endif
+
+                    if (!cached_value) {
+                        cached_value = host_tensor.item<double>();
+                    }
+
+                    return true;
+                }
+
+
                 double materialize() const
                 {
                     if (!host_tensor.defined()) {
@@ -555,9 +578,9 @@ namespace Thot {
 
 #ifdef TORCH_CUDA_AVAILABLE
                     if (ready_event) {
-                        auto wait_stream = at::cuda::getCurrentCUDAStream(device_index);
-                        ready_event->block(wait_stream);
-                        wait_stream.synchronize();
+                        if (!ready_event->query()) {
+                            ready_event->synchronize();
+                        }
                         ready_event.reset();
                     }
 #endif
@@ -4121,6 +4144,45 @@ namespace Thot {
                 std::unordered_map<std::string, bool> graph_capture_ready{};
                 std::optional<std::string> active_graph_signature{};
 
+                struct PendingEpochLog {
+                    std::size_t epoch_index{};
+                    std::size_t total_epochs{};
+                    TrainingTelemetry::DeferredScalar train_loss{};
+                    std::optional<double> test_loss{};
+                    std::optional<double> delta{};
+                    bool improved{false};
+                    double duration_seconds{0.0};
+                };
+
+                std::deque<PendingEpochLog> pending_epoch_logs{};
+
+                auto flush_pending_epoch_logs = [&](bool drain) {
+                    if (!options.monitor || options.stream == nullptr) {
+                        return;
+                    }
+
+                    while (!pending_epoch_logs.empty()) {
+                        auto& front = pending_epoch_logs.front();
+                        if (!front.train_loss.is_ready()) {
+                            if (!drain) {
+                                break;
+                            }
+                            (void)front.train_loss.materialize();
+                        }
+
+                        const auto train_loss_value = front.train_loss.materialize();
+                        log_epoch(*options.stream,
+                                  front.epoch_index,
+                                  front.total_epochs,
+                                  train_loss_value,
+                                  front.test_loss,
+                                  front.delta,
+                                  front.improved,
+                                  front.duration_seconds);
+                        pending_epoch_logs.pop_front();
+                    }
+                };
+
 
                 torch::Tensor device_batch_inputs_buffer;
                 torch::Tensor device_batch_targets_buffer;
@@ -4500,17 +4562,18 @@ namespace Thot {
                     });
 
                     if (options.monitor && options.stream) {
-                        const auto train_loss_value = train_loss_scalar.materialize();
-                        log_epoch(*options.stream,
-                                  epoch + 1,
-                                  options.epoch,
-                                  train_loss_value,
-                                  test_loss,
-                                  delta,
-                                  improved,
-                                  duration_seconds);
+                        pending_epoch_logs.push_back({
+                            epoch + 1,
+                            options.epoch,
+                            train_loss_scalar,
+                            test_loss,
+                            delta,
+                            improved,
+                            duration_seconds});
+                        flush_pending_epoch_logs(false);
                     }
                 }
+                flush_pending_epoch_logs(true);
                 if (options.restore_best_state && best_state_captured) {
                     [[maybe_unused]] const auto train_loss = last_train_loss_scalar.materialize();
                     std::cout << "[Thot] Reloading best state of the network..." << std::endl;
@@ -4718,7 +4781,7 @@ namespace Thot {
                     const std::size_t max_batches = total_batches == 0 ? 1 : total_batches;
                     streaming_options.buffer_batches = std::max<std::size_t>(std::size_t{1}, std::min<std::size_t>(buffer_vram + 1, max_batches));
                 }
-                stream_forward(std::move(dataset_inputs),
+                model.stream_forward(std::move(dataset_inputs),
                                std::move(dataset_targets),
                                streaming_options,
                                prepare_batch,
