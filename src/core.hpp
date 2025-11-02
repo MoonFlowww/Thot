@@ -1260,52 +1260,29 @@ namespace Thot {
                         OptimizerBinding binding{};
                         if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::SGDDescriptor>) {
                             auto options = Optimizer::Details::to_torch_options(concrete_descriptor.options);
-                            binding.instance = std::make_unique<torch::optim::SGD>(std::move(parameters), options);
+                            binding.instance = std::make_unique<Optimizer::Details::SGD>(std::move(parameters), options, warmup_buckets);
                             binding.capture_safe = true;
-                            auto buckets = warmup_buckets;
-                            binding.warmup = [buckets = std::move(buckets)](torch::optim::Optimizer& optimizer) {
-                                if (auto* sgd = dynamic_cast<torch::optim::SGD*>(&optimizer)) {
-                                    const bool momentum_enabled = std::any_of(
-                                            sgd->param_groups().begin(),
-                                            sgd->param_groups().end(),
-                                            [](const auto& group) {
-                                                const auto& opts = static_cast<const torch::optim::SGDOptions&>(group.options());
-                                                return opts.momentum() != 0.0;
-                                            });
-                                        if (!momentum_enabled) {
-                                            return;
-                                        }
-
-                                        auto& state_map = sgd->state();
-                                        for (const auto& bucket : buckets) {
-                                            for (const auto& param : bucket) {
-                                                if (!param.requires_grad()) {
-                                                    continue;
-                                                }
-
-                                                auto* key = param.unsafeGetTensorImpl();
-                                                auto it = state_map.find(key);
-
-                                            if (it == state_map.end()) {
-                                                auto state = std::make_unique<torch::optim::SGDParamState>();
-                                                state->momentum_buffer(torch::zeros_like(param, torch::MemoryFormat::Preserve));
-                                                state_map.insert({key, std::move(state)});
-                                            } else {
-                                                auto& state = static_cast<torch::optim::SGDParamState&>(*it->second);
-                                                if (!state.momentum_buffer().defined()) {
-                                                    state.momentum_buffer(torch::zeros_like(param, torch::MemoryFormat::Preserve));
-                                                }
-                                            }
-                                        }
-                                    }
+                            binding.warmup = [](torch::optim::Optimizer& optimizer) {
+                                if (auto* sgd = dynamic_cast<Optimizer::Details::SGD*>(&optimizer)) {
+                                    sgd->ensure_state_initialized();
+                                }
+                            };
+                        } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::AdamDescriptor>) {
+                            auto options = Optimizer::Details::to_torch_options(concrete_descriptor.options);
+                            binding.instance = std::make_unique<Optimizer::Details::Adam>(std::move(parameters), options, warmup_buckets);
+                            binding.capture_safe = true;
+                            binding.warmup = [](torch::optim::Optimizer& optimizer) {
+                                if (auto* a = dynamic_cast<Optimizer::Details::Adam*>(&optimizer)) {
+                                    a->ensure_state_initialized();
                                 }
                             };
                         } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::AdamWDescriptor>) {
-                            binding.instance = std::make_unique<Optimizer::Details::AdamW>(std::move(parameters), concrete_descriptor.options);
+                            auto options = Optimizer::Details::to_torch_options(concrete_descriptor.options);
+                            binding.instance = std::make_unique<Optimizer::Details::AdamW>(std::move(parameters), options, warmup_buckets);
                             binding.capture_safe = true;
                             binding.warmup = [](torch::optim::Optimizer& optimizer) {
-                                if (auto* adamw = dynamic_cast<Optimizer::Details::AdamW*>(&optimizer)) {
-                                    adamw->ensure_state_initialized();
+                                if (auto* aw = dynamic_cast<Optimizer::Details::AdamW*>(&optimizer)) {
+                                    aw->ensure_state_initialized();
                                 }
                             };
                         } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::SophiaGDescriptor>) {
@@ -1352,16 +1329,42 @@ namespace Thot {
                             binding.instance = std::make_unique<Optimizer::Details::Adafactor>(std::move(parameters), concrete_descriptor.options);
                             binding.capture_safe = true;
                             binding.warmup = [](torch::optim::Optimizer& optimizer) {
-                                if (auto* muon = dynamic_cast<Optimizer::Details::Adafactor*>(&optimizer)) {
-                                    muon->ensure_state_initialized();
+                                if (auto* adafactor = dynamic_cast<Optimizer::Details::Adafactor*>(&optimizer)) {
+                                    adafactor->ensure_state_initialized();
                                 }
                             };
                         } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::AdagradDescriptor>) {
-                            binding.instance = std::make_unique<Optimizer::Details::AdagradDescriptor>(std::move(parameters), concrete_descriptor.options);
+                            auto options = Optimizer::Details::to_torch_options(concrete_descriptor.options);
+                            binding.instance = std::make_unique<Optimizer::Details::Adagrad>(std::move(parameters), options, warmup_buckets);
                             binding.capture_safe = true;
                             binding.warmup = [](torch::optim::Optimizer& optimizer) {
-                                if (auto* AdaGrad = dynamic_cast<Optimizer::Details::AdagradDescriptor*>(&optimizer)) {
-                                    AdaGrad->ensure_state_initialized();
+                                if (auto* ada = dynamic_cast<Optimizer::Details::Adagrad*>(&optimizer)) {
+                                    ada->ensure_state_initialized();
+                                }
+                            };
+                        } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::LAMBDescriptor>) {
+                            binding.instance = std::make_unique<Optimizer::Details::LAMB>(std::move(parameters), concrete_descriptor.options);
+                            binding.capture_safe = true;
+                            binding.warmup = [](torch::optim::Optimizer& optimizer) {
+                                if (auto* lamb = dynamic_cast<Optimizer::Details::LAMB*>(&optimizer)) {
+                                    lamb->ensure_state_initialized();
+                                }
+                            };
+                        } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::LionDescriptor>) {
+                            binding.instance = std::make_unique<Optimizer::Details::Lion>(std::move(parameters), concrete_descriptor.options);
+                            binding.capture_safe = true;
+                            binding.warmup = [](torch::optim::Optimizer& optimizer) {
+                                if (auto* lion = dynamic_cast<Optimizer::Details::Lion*>(&optimizer)) {
+                                    lion->ensure_state_initialized();
+                                }
+                            };
+                        } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::RMSpropDescriptor>) {
+                            auto options = Optimizer::Details::to_torch_options(concrete_descriptor.options);
+                            binding.instance = std::make_unique<Optimizer::Details::RMSProp>(std::move(parameters), options, warmup_buckets);
+                            binding.capture_safe = true;
+                            binding.warmup = [](torch::optim::Optimizer& optimizer) {
+                                if (auto* rmsp = dynamic_cast<Optimizer::Details::RMSProp*>(&optimizer)) {
+                                    rmsp->ensure_state_initialized();
                                 }
                             };
                         } else {

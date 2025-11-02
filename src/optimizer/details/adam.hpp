@@ -1,8 +1,9 @@
 #ifndef THOT_ADAM_HPP
 #define THOT_ADAM_HPP
-// Adam / AdamW wrapper for Thot
-// Provides explicit constructors (params / param_groups) like SophiaImpl,
-// plus a guarded forwarding constructor so templated factories resolve correctly.
+// Adam: https://arxiv.org/pdf/1412.6980
+// AdamW: https://arxiv.org/pdf/1711.05101
+// Adan: https://arxiv.org/pdf/2208.06677
+
 
 #include <tuple>
 #include <functional>
@@ -58,10 +59,106 @@ namespace Thot::Optimizer::Details {
         return torch_options;
     }
 
-    // --- AdamW wrapper (explicit overloads + SFINAE-forwarding ctor) ---
+    // --- Adam wrapper ---
+    class Adam : public torch::optim::Adam {
+    public:
+        // 1) ctor for simple param list (vector<at::Tensor>)
+        Adam(std::vector<at::Tensor> params,
+             const torch::optim::AdamOptions& options,
+             std::vector<std::vector<at::Tensor>> warmup_buckets = {})
+            : torch::optim::Adam(std::move(params), options),
+              warmup_buckets_(std::move(warmup_buckets)) {}
+
+        // 2) ctor for param groups (const lvalue ref)
+        Adam(const std::vector<torch::optim::OptimizerParamGroup>& param_groups,
+             const torch::optim::AdamOptions& options,
+             std::vector<std::vector<at::Tensor>> warmup_buckets = {})
+            : torch::optim::Adam(param_groups, options),
+              warmup_buckets_(std::move(warmup_buckets)) {}
+
+        // 3) ctor for param groups (rvalue)
+        Adam(std::vector<torch::optim::OptimizerParamGroup>&& param_groups,
+             const torch::optim::AdamOptions& options,
+             std::vector<std::vector<at::Tensor>> warmup_buckets = {})
+            : torch::optim::Adam(std::move(param_groups), options),
+              warmup_buckets_(std::move(warmup_buckets)) {}
+
+        // 4) Generic forwarding ctor — only enabled if torch::optim::Adam is constructible
+        template <typename ParamsT,
+                  typename = std::enable_if_t<
+                      std::is_constructible_v<torch::optim::Adam, ParamsT, torch::optim::AdamOptions>
+                  >>
+        Adam(ParamsT&& params,
+             const torch::optim::AdamOptions& options,
+             std::vector<std::vector<at::Tensor>> warmup_buckets = {})
+            : torch::optim::Adam(std::forward<ParamsT>(params), options),
+              warmup_buckets_(std::move(warmup_buckets)) {}
+
+        // Initialize internal state (exp_avg, exp_avg_sq, max_exp_avg_sq) for all params.
+        void ensure_state_initialized() {
+            std::vector<std::vector<at::Tensor>> buckets = warmup_buckets_;
+            if (buckets.empty()) {
+                for (const auto& group : this->param_groups()) {
+                    std::vector<at::Tensor> g;
+                    for (const auto& p : group.params()) g.push_back(p);
+                    if (!g.empty()) buckets.push_back(std::move(g));
+                }
+            }
+
+            const bool any_amsgrad = std::any_of(
+                this->param_groups().begin(),
+                this->param_groups().end(),
+                [](const auto& group) {
+                    return static_cast<const torch::optim::AdamOptions&>(group.options()).amsgrad();
+                });
+
+            torch::NoGradGuard no_grad{};
+            at::OptionalDeviceGuard device_guard;
+            auto& state_map = this->state();
+
+            for (const auto& bucket : buckets) {
+                for (const auto& param : bucket) {
+                    if (!param.defined() || !param.requires_grad()) continue;
+
+                    device_guard.reset_device(param.device());
+
+                    auto* key = param.unsafeGetTensorImpl();
+                    auto it = state_map.find(key);
+                    if (it == state_map.end()) {
+                        auto state = std::make_unique<torch::optim::AdamParamState>();
+                        state->step(0);
+                        state->exp_avg(torch::zeros_like(param, torch::MemoryFormat::Preserve));
+                        state->exp_avg_sq(torch::zeros_like(param, torch::MemoryFormat::Preserve));
+                        if (any_amsgrad) {
+                            state->max_exp_avg_sq(torch::zeros_like(param, torch::MemoryFormat::Preserve));
+                        }
+                        state_map.insert({key, std::move(state)});
+                    } else {
+                        auto& state = static_cast<torch::optim::AdamParamState&>(*it->second);
+                        if (!state.exp_avg().defined()) {
+                            state.exp_avg(torch::zeros_like(param, torch::MemoryFormat::Preserve));
+                        }
+                        if (!state.exp_avg_sq().defined()) {
+                            state.exp_avg_sq(torch::zeros_like(param, torch::MemoryFormat::Preserve));
+                        }
+                        if (any_amsgrad && !state.max_exp_avg_sq().defined()) {
+                            state.max_exp_avg_sq(torch::zeros_like(param, torch::MemoryFormat::Preserve));
+                        }
+                    }
+                }
+            }
+        }
+
+    private:
+        std::vector<std::vector<at::Tensor>> warmup_buckets_;
+    };
+
+    using AdamOptimizer = Adam;
+
+    // --- AdamW wrapper ---
     class AdamW : public torch::optim::AdamW {
     public:
-        // 1) ctor for simple param list (vector<at::Tensor>) - common
+        // 1) ctor for simple param list (vector<at::Tensor>)
         AdamW(std::vector<at::Tensor> params,
               const torch::optim::AdamWOptions& options,
               std::vector<std::vector<at::Tensor>> warmup_buckets = {})
@@ -83,7 +180,6 @@ namespace Thot::Optimizer::Details {
               warmup_buckets_(std::move(warmup_buckets)) {}
 
         // 4) Generic forwarding ctor — only enabled if torch::optim::AdamW is constructible
-        //    from (ParamsT, torch::optim::AdamWOptions).
         template <typename ParamsT,
                   typename = std::enable_if_t<
                       std::is_constructible_v<torch::optim::AdamW, ParamsT, torch::optim::AdamWOptions>
@@ -94,9 +190,7 @@ namespace Thot::Optimizer::Details {
             : torch::optim::AdamW(std::forward<ParamsT>(params), options),
               warmup_buckets_(std::move(warmup_buckets)) {}
 
-        // Keep it simple: don't add another variadic template that confuses overload resolution.
-
-        // Public helper (mirrors Sophia's API): initialize internal state for all params.
+        // Initialize internal state (exp_avg, exp_avg_sq, max_exp_avg_sq) for all params.
         void ensure_state_initialized() {
             std::vector<std::vector<at::Tensor>> buckets = warmup_buckets_;
             if (buckets.empty()) {
@@ -155,9 +249,8 @@ namespace Thot::Optimizer::Details {
         std::vector<std::vector<at::Tensor>> warmup_buckets_;
     };
 
-    // alias (optional)
     using AdamWOptimizer = AdamW;
 
-}
+} // namespace Thot::Optimizer::Details
 
 #endif // THOT_ADAM_HPP
