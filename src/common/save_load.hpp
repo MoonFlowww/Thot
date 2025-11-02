@@ -129,6 +129,8 @@ namespace Thot::Common::SaveLoad {
 
         namespace Mamba = Block::Details::Transformer::Mamba;
         namespace PlusPlus = Block::Details::Transformer::PlusPlus;
+        inline Activation::Descriptor deserialize_activation_descriptor(const PropertyTree& tree, const std::string& context);
+
 
         inline PropertyTree serialize_mamba_rms_norm_options(const Mamba::RMSNormOptions& options)
         {
@@ -188,6 +190,15 @@ namespace Thot::Common::SaveLoad {
                 case Attention::Variant::Causal: return "causal";
             }
             throw std::runtime_error("Unsupported attention variant during serialisation.");
+        }
+        inline Attention::Variant attention_variant_from_string(const std::string& value)
+        {
+            const auto lowered = to_lower(value);
+            if (lowered == "full") return Attention::Variant::Full;
+            if (lowered == "causal") return Attention::Variant::Causal;
+            std::ostringstream message;
+            message << "Unknown attention variant '" << value << "'.";
+            throw std::runtime_error(message.str());
         }
         inline Mamba::FeedForwardOptions deserialize_mamba_feed_forward_options(const PropertyTree& tree,
                                                                                 const std::string& context)
@@ -332,14 +343,15 @@ namespace Thot::Common::SaveLoad {
         }
 
 
-        inline Attention::Variant attention_variant_from_string(const std::string& value)
-        {
-            const auto lowered = to_lower(value);
-            if (lowered == "full") return Attention::Variant::Full;
-            if (lowered == "causal") return Attention::Variant::Causal;
-            std::ostringstream message;
-            message << "Unknown attention variant '" << value << "'.";
-            throw std::runtime_error(message.str());
+        inline ::Thot::Block::Details::Transformer::Bert::AttentionOptions deserialize_bert_attention_options(const PropertyTree& tree, const std::string& context) {
+            ::Thot::Block::Details::Transformer::Bert::AttentionOptions options;
+            options.embed_dim = get_numeric<std::int64_t>(tree, "embed_dim", context);
+            options.num_heads = get_numeric<std::int64_t>(tree, "num_heads", context);
+            options.dropout = get_numeric<double>(tree, "dropout", context);
+            options.bias = get_boolean(tree, "bias", context);
+            options.batch_first = get_boolean(tree, "batch_first", context);
+            options.variant = attention_variant_from_string(get_string(tree, "variant", context));
+            return options;
         }
         inline ::Thot::Block::Details::Transformer::Bert::FeedForwardOptions deserialize_bert_feed_forward_options(
         const PropertyTree& tree, const std::string& context)
@@ -362,7 +374,7 @@ namespace Thot::Common::SaveLoad {
         deserialize_bert_encoder_layer_descriptor(const PropertyTree& tree, const std::string& context)
         {
             ::Thot::Block::Details::Transformer::Bert::EncoderLayerDescriptor descriptor;
-            descriptor.attention = attention_variant_from_string(tree.get_child("attention"), context + " attention");
+            descriptor.attention = deserialize_bert_attention_options(tree.get_child("attention"), context + " attention");
             descriptor.feed_forward =
                 deserialize_bert_feed_forward_options(tree.get_child("feed_forward"), context + " feed_forward");
             return descriptor;
@@ -374,9 +386,8 @@ namespace Thot::Common::SaveLoad {
             ::Thot::Block::Details::Transformer::Bert::EncoderOptions options;
             options.layers = static_cast<std::size_t>(get_numeric<std::uint64_t>(tree, "layers", context));
             options.embed_dim = get_numeric<std::int64_t>(tree, "embed_dim", context);
-            options.attention = attention_variant_from_string(tree.get_child("attention"), context + " attention");
-            options.feed_forward =
-                deserialize_bert_feed_forward_options(tree.get_child("feed_forward"), context + " feed_forward");
+            options.attention = deserialize_bert_attention_options(tree.get_child("attention"), context + " attention");
+            options.feed_forward = deserialize_bert_feed_forward_options(tree.get_child("feed_forward"), context + " feed_forward");
             options.layer_norm = deserialize_bert_layer_norm_options(tree.get_child("layer_norm"), context + " layer_norm");
             options.embedding = deserialize_bert_embedding_options(tree.get_child("embedding"), context + " embedding");
             options.residual_dropout = get_numeric<double>(tree, "residual_dropout", context);
@@ -408,12 +419,7 @@ namespace Thot::Common::SaveLoad {
             }
             throw std::runtime_error("Unsupported activation type during serialisation.");
         }
-        inline Activation::Descriptor deserialize_activation_descriptor(const PropertyTree& tree, const std::string& context)
-        {
-            Activation::Descriptor descriptor;
-            descriptor.type = activation_type_from_string(get_string(tree, "type", context));
-            return descriptor;
-        }
+
         inline Activation::Type activation_type_from_string(const std::string& value)
         {
             const auto lowered = to_lower(value);
@@ -434,6 +440,12 @@ namespace Thot::Common::SaveLoad {
             std::ostringstream message;
             message << "Unknown activation type '" << value << "'.";
             throw std::runtime_error(message.str());
+        }
+        inline Activation::Descriptor deserialize_activation_descriptor(const PropertyTree& tree, const std::string& context)
+        {
+            Activation::Descriptor descriptor;
+            descriptor.type = activation_type_from_string(get_string(tree, "type", context));
+            return descriptor;
         }
 
         inline std::string initialization_type_to_string(Initialization::Type type)
