@@ -328,7 +328,7 @@ ECGDatasetSplit load_ptbxl_dataset(const std::string& root, bool low_res, float 
             {std::move(validation_signals), std::move(validation_labels)}};
 }
 
-int xmain()
+int main()
 {
     Thot::Model model("PTBXL_ECG");
     constexpr bool load_existing_model = false;
@@ -336,14 +336,14 @@ int xmain()
     std::cout << "Cuda: " << use_cuda << std::endl;
     model.to_device(use_cuda);
 
-    const auto dataset_root_env = std::getenv("PTBXL_DATASET_ROOT");
-    const std::string dataset_root = dataset_root_env ? dataset_root_env : "./data/PTBXL";
+    const std::string dataset_root = "/home/moonfloww/Projects/DATASETS/physionet.org/files/ptb-xl/1.0.3";
     const auto dataset = load_ptbxl_dataset(dataset_root, true, 0.8f);
 
     const std::int64_t batch_size = 64;
     const std::int64_t epochs = 40;
     const std::int64_t num_classes = 5;
     const std::int64_t steps_per_epoch = std::max<std::int64_t>(1, (dataset.train.signals.size(0) + batch_size - 1) / batch_size);
+
     if (!load_existing_model) {
         model.add(Thot::Block::Sequential({
             Thot::Layer::Conv1d({12, 64, {7}, {2}, {3}}, Thot::Activation::SiLU, Thot::Initialization::HeNormal),
@@ -376,17 +376,16 @@ int xmain()
         model.add(Thot::Layer::FC({128, num_classes, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal), "classifier");
 
         model.links({
-                        Thot::LinkSpec{Thot::Port::parse("@input"), Thot::Port::parse("stem")},
-                        Thot::LinkSpec{Thot::Port::parse("stem"), Thot::Port::parse("features1")},
-                        Thot::LinkSpec{Thot::Port::parse("features1"), Thot::Port::parse("features2")},
-                        Thot::LinkSpec{Thot::Port::parse("features2"), Thot::Port::parse("head")},
-                        Thot::LinkSpec{Thot::Port::parse("head"), Thot::Port::parse("flatten")},
-                        Thot::LinkSpec{Thot::Port::parse("flatten"), Thot::Port::parse("fc1")},
-                        Thot::LinkSpec{Thot::Port::parse("fc1"), Thot::Port::parse("dropout")},
-                        Thot::LinkSpec{Thot::Port::parse("dropout"), Thot::Port::parse("classifier")},
-                        Thot::LinkSpec{Thot::Port::parse("classifier"), Thot::Port::parse("@output")}
-                    },
-                    true);
+            Thot::LinkSpec{Thot::Port::parse("@input"), Thot::Port::parse("stem")},
+            Thot::LinkSpec{Thot::Port::parse("stem"), Thot::Port::parse("features1")},
+            Thot::LinkSpec{Thot::Port::parse("features1"), Thot::Port::parse("features2")},
+            Thot::LinkSpec{Thot::Port::parse("features2"), Thot::Port::parse("head")},
+            Thot::LinkSpec{Thot::Port::parse("head"), Thot::Port::parse("flatten")},
+            Thot::LinkSpec{Thot::Port::parse("flatten"), Thot::Port::parse("fc1")},
+            Thot::LinkSpec{Thot::Port::parse("fc1"), Thot::Port::parse("dropout")},
+            Thot::LinkSpec{Thot::Port::parse("dropout"), Thot::Port::parse("classifier")},
+            Thot::LinkSpec{Thot::Port::parse("classifier"), Thot::Port::parse("@output")}
+        }, true);
 
         model.set_optimizer(
         Thot::Optimizer::AdamW({.learning_rate = 2e-4, .weight_decay = 1e-4}),

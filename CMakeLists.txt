@@ -95,7 +95,7 @@ target_link_libraries(Thot "${TORCH_LIBRARIES}" Boost::filesystem)
 target_include_directories(Thot PUBLIC ${CMAKE_SOURCE_DIR}/include ${TORCH_INCLUDE_DIRS})
 
 #Test---------------
-add_executable(test_Thot test/cifar.cpp
+add_executable(test_Thot test/ecg.cpp
         test/semi_lazy.cpp
         src/block/details/blocks/residual.hpp
         src/block/details/blocks/sequential.hpp

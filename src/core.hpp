@@ -148,7 +148,6 @@ namespace Thot {
         std::size_t buffer_vram{Core::kDefaultTrainingConfig.buffer_vram};
         bool monitor{true};
         bool restore_best_state{false};
-        bool epoch_epsilon{false};
         std::optional<std::pair<torch::Tensor, torch::Tensor>> validation{};
         std::optional<std::pair<torch::Tensor, torch::Tensor>> test{};
         std::ostream* stream{&std::cout};
@@ -2929,6 +2928,7 @@ namespace Thot {
                 if (!parameter.defined()) {
                     return;
                 }
+
                 auto memory_format = tensor_memory_format_;
                 if (tensor_memory_format_ == torch::MemoryFormat::ChannelsLast && parameter.dim() < 4) {
                     memory_format = torch::MemoryFormat::Contiguous;
@@ -2936,7 +2936,8 @@ namespace Thot {
                     tensor_memory_format_ == torch::MemoryFormat::ChannelsLast3d && parameter.dim() < 5) {
                     memory_format = torch::MemoryFormat::Contiguous;
                     }
-                parameter = parameter.to(parameter.options(), /*non_blocking*/false, /*copy*/false, memory_format);
+                parameter = parameter.to(
+                parameter.options(), /*non_blocking*/false, /*copy*/false, memory_format);
             };
 
             apply_to_parameter(convolution->weight);
@@ -3759,64 +3760,6 @@ namespace Thot {
 
                 TrainingTelemetry::DeferredScalar last_train_loss_scalar;
 
-                auto capture_current_state_as_best = [&]() {
-                    best_parameters.clear();
-                    best_buffers.clear();
-                    best_parameters.reserve(model.parameters().size());
-                    best_buffers.reserve(model.buffers().size());
-
-                    for (auto& parameter : model.parameters()) {
-                        if (parameter.defined()) {
-                            best_parameters.push_back(parameter.detach().clone(torch::MemoryFormat::Preserve));
-                        } else {
-                            best_parameters.push_back({});
-                        }
-                    }
-
-                    for (auto& buffer : model.buffers()) {
-                        if (buffer.defined()) {
-                            best_buffers.push_back(buffer.detach().clone(torch::MemoryFormat::Preserve));
-                        } else {
-                            best_buffers.push_back({});
-                        }
-                    }
-
-                    best_state_captured = true;
-                };
-
-                auto record_epoch_results = [&](std::size_t epoch_index,
-                                                TrainingTelemetry::DeferredScalar train_loss_scalar,
-                                                std::optional<TrainingTelemetry::DeferredScalar> test_loss_scalar,
-                                                std::optional<double> test_loss,
-                                                std::optional<double> delta,
-                                                bool improved,
-                                                double duration_seconds) {
-                    auto log_train_loss = train_loss_scalar;
-                    const auto epoch_timestamp = std::chrono::system_clock::now();
-                    auto learning_rates = model.collect_learning_rates();
-                    model.record_epoch_telemetry({
-                        epoch_index,
-                        std::move(train_loss_scalar),
-                        std::move(test_loss_scalar),
-                        delta,
-                        std::move(learning_rates),
-                        epoch_timestamp,
-                        duration_seconds
-                    });
-
-                    if (options.monitor && options.stream) {
-                        pending_epoch_logs.push_back({
-                            epoch_index,
-                            options.epoch,
-                            std::move(log_train_loss),
-                            test_loss,
-                            delta,
-                            improved,
-                            duration_seconds});
-                        flush_pending_epoch_logs(false);
-                    }
-                };
-
 #ifdef TORCH_CUDA_AVAILABLE
                 struct PrefetchState {
                     explicit PrefetchState(int device_index)
@@ -3836,61 +3779,6 @@ namespace Thot {
                     prefetch_state.emplace(device.index());
                 }
 #endif
-
-                if (options.epoch_epsilon) {
-                    const auto evaluation_start = std::chrono::steady_clock::now();
-                    auto train_loss_scalar_optional = compute_dataset_loss<BufferVRAM>(model,
-                                                                                       train_dataset,
-                                                                                       options.batch_size,
-                                                                                       options.buffer_vram);
-                    if (train_loss_scalar_optional) {
-                        auto train_loss_scalar = std::move(*train_loss_scalar_optional);
-                        last_train_loss_scalar = train_loss_scalar;
-
-                        std::optional<TrainingTelemetry::DeferredScalar> test_loss_scalar{};
-                        std::optional<double> test_loss{};
-                        if (test_dataset) {
-                            test_loss_scalar = compute_dataset_loss<BufferVRAM>(model,
-                                                                               *test_dataset,
-                                                                               options.batch_size,
-                                                                               options.buffer_vram);
-                            if (test_loss_scalar) {
-                                test_loss = test_loss_scalar->materialize();
-                            }
-                        }
-
-                        bool improved = false;
-                        std::optional<double> delta{};
-                        if (test_loss) {
-                            if (!best_test) {
-                                improved = true;
-                                best_test = test_loss;
-                            } else {
-                                const auto previous_best = *best_test;
-                                delta = *test_loss - previous_best;
-                                if (*test_loss < previous_best) {
-                                    improved = true;
-                                    best_test = test_loss;
-                                }
-                            }
-                        }
-
-                        if (improved && options.restore_best_state) {
-                            capture_current_state_as_best();
-                        }
-
-                        const auto duration_seconds = std::chrono::duration<double>(
-                            std::chrono::steady_clock::now() - evaluation_start).count();
-
-                        record_epoch_results(0,
-                                             std::move(train_loss_scalar),
-                                             std::move(test_loss_scalar),
-                                             test_loss,
-                                             delta,
-                                             improved,
-                                             duration_seconds);
-                    }
-                }
 
 
                 auto ensure_layout = [&](torch::Tensor tensor, bool apply_channels_last) {
@@ -4351,13 +4239,56 @@ namespace Thot {
                     }
 
                     if (improved && options.restore_best_state) {
-                        capture_current_state_as_best();
+                        best_parameters.clear();
+                        best_buffers.clear();
+                        best_parameters.reserve(model.parameters().size());
+                        best_buffers.reserve(model.buffers().size());
+
+                        for (auto& parameter : model.parameters()) {
+                            if (parameter.defined()) {
+                                best_parameters.push_back(parameter.detach().clone(torch::MemoryFormat::Preserve));
+                            } else {
+                                best_parameters.push_back({});
+                            }
+                        }
+
+                        for (auto& buffer : model.buffers()) {
+                            if (buffer.defined()) {
+                                best_buffers.push_back(buffer.detach().clone(torch::MemoryFormat::Preserve));
+                            } else {
+                                best_buffers.push_back({});
+                            }
+                        }
+
+                        best_state_captured = true;
                     }
 
 
                     const auto duration_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - epoch_start).count();
 
-                    record_epoch_results(epoch + 1, std::move(train_loss_scalar), std::move(test_loss_scalar), test_loss, delta, improved, duration_seconds);
+                    const auto epoch_timestamp = std::chrono::system_clock::now();
+                    auto learning_rates = model.collect_learning_rates();
+                    model.record_epoch_telemetry({
+                        epoch + 1,
+                        train_loss_scalar,
+                        test_loss_scalar,
+                        delta,
+                        std::move(learning_rates),
+                        epoch_timestamp,
+                        duration_seconds
+                    });
+
+                    if (options.monitor && options.stream) {
+                        pending_epoch_logs.push_back({
+                            epoch + 1,
+                            options.epoch,
+                            train_loss_scalar,
+                            test_loss,
+                            delta,
+                            improved,
+                            duration_seconds});
+                        flush_pending_epoch_logs(false);
+                    }
                 }
                 flush_pending_epoch_logs(true);
                 if (options.restore_best_state && best_state_captured) {
@@ -4616,8 +4547,7 @@ namespace Thot {
                 using Utils::Terminal::Colors::kReset;
 
                 std::ostringstream line;
-                const std::string epoch_label = epoch_index == 0 ? std::string{"ε"} : std::to_string(epoch_index);
-                line << "Epoch [" << epoch_label << "/" << total_epochs << "] | ";
+                line << "Epoch [" << epoch_index << "/" << total_epochs << "] | ";
                 line << ApplyColor("Train", kBrightYellow) << " loss: "
                      << std::fixed << std::setprecision(6) << train_loss << " | ";
                 line << ApplyColor("Test", kBrightBlue) << " loss: ";
