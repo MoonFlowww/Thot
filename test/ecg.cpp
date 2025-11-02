@@ -328,7 +328,7 @@ ECGDatasetSplit load_ptbxl_dataset(const std::string& root, bool low_res, float 
             {std::move(validation_signals), std::move(validation_labels)}};
 }
 
-int main()
+int xmain()
 {
     Thot::Model model("PTBXL_ECG");
     constexpr bool load_existing_model = false;

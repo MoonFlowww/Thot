@@ -5,7 +5,7 @@
 #include <utility>
 #include "../include/Thot.h"
 
-int xmain() {
+int main() {
     Thot::Model model("Debug_CIFAR");
     bool IsLoading=false;
     if (IsLoading) {
