@@ -2,7 +2,9 @@ cmake_minimum_required(VERSION 3.18)
 project(Thot)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+set(CMAKE_CUDA_STANDARD 20)
 
 set(_libtorch_root "/opt/libtorch")
 if (EXISTS "${_libtorch_root}/share/cmake/Torch/TorchConfig.cmake")

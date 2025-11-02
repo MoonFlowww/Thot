@@ -7,12 +7,14 @@
 
 int main() {
     Thot::Model model("Debug_CIFAR");
+    model.to_device(torch::cuda::is_available());
+
+    /*
     bool IsLoading=false;
     if (IsLoading) {
         model.save("/home/moonfloww/Projects/NNs/CIFAR_DEBUG");
     }
     std::cout << "Cuda: " << torch::cuda::is_available() << std::endl;
-    model.to_device(torch::cuda::is_available());
     const int64_t N = 200000;
     const int64_t B = std::pow(2,7);
     const int64_t epochs = 20;
@@ -175,7 +177,34 @@ int main() {
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Shuffle(train_images, train_labels);
 
     Thot::Data::Check::Size(train_images, "Input train size after augment");
+    */
 
+    model.add(Thot::Layer::Conv2d({.in_channels = 3,  .out_channels = 32,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Thot::Activation::ReLU, Thot::Initialization::HeNormal));
+    model.add(Thot::Layer::Conv2d({.in_channels = 32, .out_channels = 32,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Thot::Activation::ReLU, Thot::Initialization::HeNormal));
+    model.add(Thot::Layer::MaxPool2d({.kernel_size={2,2}, .stride={2,2}, .padding={0,0}}));
+
+    model.add(Thot::Layer::Conv2d({.in_channels = 32, .out_channels = 64,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Thot::Activation::ReLU, Thot::Initialization::HeNormal));
+    model.add(Thot::Layer::Conv2d({.in_channels = 64, .out_channels = 64,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Thot::Activation::ReLU, Thot::Initialization::HeNormal));
+    model.add(Thot::Layer::MaxPool2d({.kernel_size={2,2}, .stride={2,2}, .padding={0,0}}));
+
+    model.add(Thot::Layer::Conv2d({.in_channels = 64, .out_channels = 128, .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Thot::Activation::ReLU, Thot::Initialization::HeNormal));
+    model.add(Thot::Layer::MaxPool2d({.kernel_size={2,2}, .stride={2,2}, .padding={0,0}}));
+
+    model.add(Thot::Layer::Flatten());
+    model.add(Thot::Layer::HardDropout({0.1f}));
+    model.add(Thot::Layer::FC({2048, 524}, Thot::Activation::ReLU,  Thot::Initialization::HeNormal));
+    model.add(Thot::Layer::FC({524, 126},  Thot::Activation::ReLU,  Thot::Initialization::HeNormal));
+    model.add(Thot::Layer::FC({126, 10},   Thot::Activation::Identity, Thot::Initialization::HeNormal));
+
+
+    model.set_loss(Thot::Loss::CrossEntropy());
+    model.set_optimizer(Thot::Optimizer::SGD({3e-5f}));
+
+    auto [train_images, train_labels, test_images, test_labels] = Thot::Data::Load::CIFAR10("/home/moonfloww/Projects/DATASETS/CIFAR10", .05f, 1.f, true);
+
+    model.train(train_images, train_labels, {.epoch = 10, .batch_size = 64});
+
+    /*
     if (!IsLoading) {
         Thot::TrainOptions train_options{};
         train_options.epoch = static_cast<std::size_t>(epochs);
@@ -245,7 +274,7 @@ int main() {
     }
     model.save("/home/moonfloww/Projects/NNs/CIFAR_DEBUG");
 
-
+    */
 
 
     return 0;
