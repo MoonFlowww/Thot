@@ -825,6 +825,15 @@ namespace Thot::Common::SaveLoad {
                     tree.put("options.weight_decay", options.weight_decay);
                     tree.put("options.nesterov", options.nesterov);
                     tree.put("options.maximize", options.maximize);
+                } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::AdamDescriptor>) {
+                    const auto& options = concrete.options;
+                    tree.put("type", "adam");
+                    tree.put("options.learning_rate", options.learning_rate);
+                    tree.put("options.beta1", options.beta1);
+                    tree.put("options.beta2", options.beta2);
+                    tree.put("options.eps", options.eps);
+                    tree.put("options.weight_decay", options.weight_decay);
+                    tree.put("options.amsgrad", options.amsgrad);
                 } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::AdamWDescriptor>) {
                     const auto& options = concrete.options;
                     tree.put("type", "adamw");
@@ -856,7 +865,6 @@ namespace Thot::Common::SaveLoad {
                     tree.put("options.weight_decay", options.weight_decay());
                     tree.put("options.clip", options.clip());
                     tree.put("options.hessian_update_interval", options.hessian_update_interval());
-
                 } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::MuonDescriptor>) {
                     const auto& options = concrete.options;
                     tree.put("type", "muon");
@@ -886,7 +894,53 @@ namespace Thot::Common::SaveLoad {
                     tree.put("options.retraction_epsilon", options.retraction_epsilon());
                     tree.put("options.renormalize", options.renormalize());
                     tree.put("options.manifold", Detail::manifold_kind_to_string(options.manifold()));
-
+                } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::AdafactorDescriptor>) {
+                    const auto& options = concrete.options;
+                    tree.put("type", "adafactor");
+                    tree.put("options.learning_rate", options.lr());
+                    tree.put("options.eps1", options.eps1());
+                    tree.put("options.eps2", options.eps2());
+                    tree.put("options.clip_threshold", options.clip_threshold());
+                    tree.put("options.decay_rate", options.decay_rate());
+                    tree.put("options.beta1", options.beta1());
+                    tree.put("options.use_first_moment", options.use_first_moment());
+                    tree.put("options.weight_decay", options.weight_decay());
+                    tree.put("options.scale_parameter", options.scale_parameter());
+                    tree.put("options.relative_step", options.relative_step());
+                    tree.put("options.warmup_init", options.warmup_init());
+                } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::AdagradDescriptor>) {
+                    const auto& options = concrete.options;
+                    tree.put("type", "adagrad");
+                    tree.put("options.learning_rate", options.learning_rate);
+                    tree.put("options.lr_decay", options.lr_decay);
+                    tree.put("options.weight_decay", options.weight_decay);
+                    tree.put("options.initial_accumulator_value", options.initial_accumulator_value);
+                    tree.put("options.eps", options.eps);
+                } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::LAMBDescriptor>) {
+                    const auto& options = concrete.options;
+                    tree.put("type", "lamb");
+                    tree.put("options.learning_rate", options.lr());
+                    tree.put("options.beta1", options.beta1());
+                    tree.put("options.beta2", options.beta2());
+                    tree.put("options.eps", options.eps());
+                    tree.put("options.weight_decay", options.weight_decay());
+                    tree.put("options.adam", options.adam());
+                } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::LionDescriptor>) {
+                    const auto& options = concrete.options;
+                    tree.put("type", "lion");
+                    tree.put("options.learning_rate", options.lr());
+                    tree.put("options.beta1", options.beta1());
+                    tree.put("options.beta2", options.beta2());
+                    tree.put("options.weight_decay", options.weight_decay());
+                } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::RMSpropDescriptor>) {
+                    const auto& options = concrete.options;
+                    tree.put("type", "rmsprop");
+                    tree.put("options.learning_rate", options.learning_rate);
+                    tree.put("options.alpha", options.alpha);
+                    tree.put("options.eps", options.eps);
+                    tree.put("options.weight_decay", options.weight_decay);
+                    tree.put("options.momentum", options.momentum);
+                    tree.put("options.centered", options.centered);
                 } else {
                     static_assert(sizeof(DescriptorType) == 0, "Unsupported optimizer descriptor supplied.");
                 }
@@ -907,8 +961,16 @@ namespace Thot::Common::SaveLoad {
             options.nesterov = Detail::get_boolean(tree, "options.nesterov", context);
             options.maximize = Detail::get_boolean(tree, "options.maximize", context);
             return Optimizer::Descriptor{Optimizer::Details::SGDDescriptor{options}};
-        }
-        if (type == "adamw") {
+        } if (type == "adam") {
+            Optimizer::Details::AdamOptions options;
+            options.learning_rate = Detail::get_numeric<double>(tree, "options.learning_rate", context);
+            options.beta1 = Detail::get_numeric<double>(tree, "options.beta1", context);
+            options.beta2 = Detail::get_numeric<double>(tree, "options.beta2", context);
+            options.eps = Detail::get_numeric<double>(tree, "options.eps", context);
+            options.weight_decay = Detail::get_numeric<double>(tree, "options.weight_decay", context);
+            options.amsgrad = Detail::get_boolean(tree, "options.amsgrad", context);
+            return Optimizer::Descriptor{Optimizer::Details::AdamDescriptor{options}};
+        } if (type == "adamw") {
             Optimizer::Details::AdamWOptions options;
             options.learning_rate = Detail::get_numeric<double>(tree, "options.learning_rate", context);
             options.beta1 = Detail::get_numeric<double>(tree, "options.beta1", context);
@@ -917,8 +979,7 @@ namespace Thot::Common::SaveLoad {
             options.weight_decay = Detail::get_numeric<double>(tree, "options.weight_decay", context);
             options.amsgrad = Detail::get_boolean(tree, "options.amsgrad", context);
             return Optimizer::Descriptor{Optimizer::Details::AdamWDescriptor{options}};
-        }
-        if (type == "sophia_g") {
+        } if (type == "sophia_g") {
             Optimizer::Details::SophiaGOptions options;
             options.lr(Detail::get_numeric<double>(tree, "options.learning_rate", context));
             options.beta1(Detail::get_numeric<double>(tree, "options.beta1", context));
@@ -929,8 +990,7 @@ namespace Thot::Common::SaveLoad {
             options.clip(Detail::get_numeric<double>(tree, "options.clip", context));
             options.hessian_update_interval(Detail::get_numeric<int64_t>(tree, "options.hessian_update_interval", context));
             return Optimizer::Descriptor{Optimizer::Details::SophiaGDescriptor{options}};
-        }
-        if (type == "sophia_h") {
+        } if (type == "sophia_h") {
             Optimizer::Details::SophiaHOptions options;
             options.lr(Detail::get_numeric<double>(tree, "options.learning_rate", context));
             options.beta1(Detail::get_numeric<double>(tree, "options.beta1", context));
@@ -941,8 +1001,7 @@ namespace Thot::Common::SaveLoad {
             options.clip(Detail::get_numeric<double>(tree, "options.clip", context));
             options.hessian_update_interval(Detail::get_numeric<int64_t>(tree, "options.hessian_update_interval", context));
             return Optimizer::Descriptor{Optimizer::Details::SophiaHDescriptor{options}};
-        }
-        if (type == "muon") {
+        } if (type == "muon") {
             Optimizer::Details::MuonOptions options;
             options.lr(Detail::get_numeric<double>(tree, "options.learning_rate", context));
             options.beta(Detail::get_numeric<double>(tree, "options.beta", context));
@@ -950,8 +1009,7 @@ namespace Thot::Common::SaveLoad {
             options.eps(Detail::get_numeric<double>(tree, "options.eps", context));
             options.max_update_norm(Detail::get_numeric<double>(tree, "options.max_update_norm", context));
             return Optimizer::Descriptor{Optimizer::Details::MuonDescriptor{options}};
-        }
-        if (type == "ada_muon") {
+        } if (type == "ada_muon") {
             Optimizer::Details::AdaMuonOptions options;
             options.lr(Detail::get_numeric<double>(tree, "options.learning_rate", context));
             options.beta(Detail::get_numeric<double>(tree, "options.beta", context));
@@ -960,8 +1018,7 @@ namespace Thot::Common::SaveLoad {
             options.eps(Detail::get_numeric<double>(tree, "options.eps", context));
             options.max_update_norm(Detail::get_numeric<double>(tree, "options.max_update_norm", context));
             return Optimizer::Descriptor{Optimizer::Details::AdaMuonDescriptor{options}};
-        }
-        if (type == "muon_manifold") {
+        } if (type == "muon_manifold") {
             Optimizer::Details::MuonManifoldOptions options;
             options.lr(Detail::get_numeric<double>(tree, "options.learning_rate", context));
             options.beta(Detail::get_numeric<double>(tree, "options.beta", context));
@@ -974,14 +1031,60 @@ namespace Thot::Common::SaveLoad {
             const auto manifold = Detail::get_string(tree, "options.manifold", context);
             options.manifold(Detail::manifold_kind_from_string(manifold, context));
             return Optimizer::Descriptor{Optimizer::Details::MuonManifoldDescriptor{options}};
+        } if (type == "adafactor") {
+            Optimizer::Details::AdafactorOptions options;
+            options.lr(Detail::get_numeric<double>(tree, "options.learning_rate", context));
+            options.eps1(Detail::get_numeric<double>(tree, "options.eps1", context));
+            options.eps2(Detail::get_numeric<double>(tree, "options.eps2", context));
+            options.clip_threshold(Detail::get_numeric<double>(tree, "options.clip_threshold", context));
+            options.decay_rate(Detail::get_numeric<double>(tree, "options.decay_rate", context));
+            options.beta1(Detail::get_numeric<double>(tree, "options.beta1", context));
+            options.use_first_moment(Detail::get_numeric<double>(tree, "options.use_first_moment", context));
+            options.weight_decay(Detail::get_boolean(tree, "options.weight_decay", context));
+            options.scale_parameter(Detail::get_boolean(tree, "options.scale_parameter", context));
+            options.relative_step(Detail::get_boolean(tree, "options.relative_step", context));
+            options.warmup_init(Detail::get_boolean(tree, "options.warmup_init", context));
+            return Optimizer::Descriptor{Optimizer::Details::AdafactorDescriptor{options}};
+        } if (type == "adagrad") {
+            Optimizer::Details::AdagradOptions options;
+            options.learning_rate = Detail::get_numeric<double>(tree, "options.learning_rate", context);
+            options.lr_decay = Detail::get_numeric<double>(tree, "options.lr_decay", context);
+            options.weight_decay = Detail::get_numeric<double>(tree, "options.weight_decay", context);
+            options.initial_accumulator_value = Detail::get_numeric<double>(tree, "options.initial_accumulator_value", context);
+            options.eps = Detail::get_numeric<double>(tree, "options.eps", context);
+            return Optimizer::Descriptor{Optimizer::Details::AdagradDescriptor{options}};
+        } if (type == "lamb") {
+            Optimizer::Details::LAMBOptions options;
+            options.lr(Detail::get_numeric<double>(tree, "options.lr", context));
+            options.beta1(Detail::get_numeric<double>(tree, "options.beta1", context));
+            options.beta2(Detail::get_numeric<double>(tree, "options.beta2", context));
+            options.eps(Detail::get_numeric<double>(tree, "options.eps", context));
+            options.weight_decay(Detail::get_numeric<double>(tree, "options.weight_decay", context));
+            options.adam(Detail::get_boolean(tree, "options.adam", context));
+            return Optimizer::Descriptor{Optimizer::Details::LAMBDescriptor{options}};
+        } if (type == "lion") {
+            Optimizer::Details::LionOptions options;
+            options.lr(Detail::get_numeric<double>(tree, "options.lr", context));
+            options.beta1(Detail::get_numeric<double>(tree, "options.beta1", context));
+            options.beta2(Detail::get_numeric<double>(tree, "options.beta2", context));
+            options.weight_decay(Detail::get_numeric<double>(tree, "options.weight_decay", context));
+            return Optimizer::Descriptor{Optimizer::Details::LionDescriptor{options}};
+        } if (type == "rmsprop") {
+            Optimizer::Details::RMSpropOptions options;
+            options.learning_rate = Detail::get_numeric<double>(tree, "options.learning_rate", context);
+            options.alpha = Detail::get_numeric<double>(tree, "options.alpha", context);
+            options.eps = Detail::get_numeric<double>(tree, "options.eps", context);
+            options.weight_decay = Detail::get_numeric<double>(tree, "options.weight_decay", context);
+            options.momentum = Detail::get_numeric<double>(tree, "options.momentum", context);
+            options.centered = Detail::get_boolean(tree, "options.centered", context);
+            return Optimizer::Descriptor{Optimizer::Details::RMSpropDescriptor{options}};
         }
         std::ostringstream message;
         message << "Unknown optimizer descriptor '" << type << "' in " << context;
         throw std::runtime_error(message.str());
     }
 
-    inline PropertyTree serialize_regularization(const Regularization::Descriptor& descriptor)
-    {
+    inline PropertyTree serialize_regularization(const Regularization::Descriptor& descriptor) {
         PropertyTree tree;
         std::visit(
             [&](const auto& concrete) {
@@ -1088,8 +1191,7 @@ namespace Thot::Common::SaveLoad {
                 } else {
                     static_assert(sizeof(DescriptorType) == 0, "Unsupported regularisation descriptor supplied.");
                 }
-            },
-            descriptor);
+            }, descriptor);
         return tree;
     }
 

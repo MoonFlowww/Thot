@@ -143,5 +143,18 @@ add_executable(test_Thot test/cifar.cpp
         src/common/graph.hpp
         src/common/streaming.hpp
         test/ecg.cpp
+        src/loss/details/bce.hpp
+        src/loss/details/cosine_embedding.hpp
+        src/loss/details/kl.hpp
+        src/loss/details/mae.hpp
+        src/loss/details/margin_ranking.hpp
+        src/loss/details/nll.hpp
+        src/loss/details/smooth_l1.hpp
+        src/loss/details/helper.hpp
+        src/optimizer/details/adafactor.hpp
+        src/optimizer/details/adagrad.hpp
+        src/optimizer/details/lamb.hpp
+        src/optimizer/details/lion.hpp
+        src/optimizer/details/rmsprop.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)

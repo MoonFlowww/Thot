@@ -11,6 +11,11 @@
 #include "details/sgd.hpp"
 #include "details/sophia.hpp"
 #include "details/muon.hpp"
+#include "details/adagrad.hpp"
+#include "details/adafactor.hpp"
+#include "details/lamb.hpp"
+#include "details/lion.hpp"
+#include "details/rmsprop.hpp"
 
 namespace Thot::Optimizer::Details {
     template <class Owner, class Descriptor>
@@ -26,9 +31,42 @@ namespace Thot::Optimizer::Details {
     }
 
     template <class Owner>
+    std::unique_ptr<torch::optim::Optimizer> build_optimizer(Owner& owner, const RMSpropDescriptor& descriptor) {
+        auto options = to_torch_options(descriptor.options);
+        return std::make_unique<torch::optim::RMSprop>(owner.parameters(), options);
+    }
+
+    template <class Owner>
+    std::unique_ptr<torch::optim::Optimizer> build_optimizer(Owner& owner, const AdagradDescriptor& descriptor) {
+        auto options = to_torch_options(descriptor.options);
+        return std::make_unique<torch::optim::Adagrad>(owner.parameters(), options);
+    }
+
+    template <class Owner>
     std::unique_ptr<torch::optim::Optimizer> build_optimizer(Owner& owner, const AdamWDescriptor& descriptor) {
         auto options = to_torch_options(descriptor.options);
         return std::make_unique<torch::optim::AdamW>(owner.parameters(), options);
+    }
+
+    template <class Owner>
+    std::unique_ptr<torch::optim::Optimizer> build_optimizer(Owner& owner, const AdamDescriptor& descriptor) {
+        auto options = to_torch_options(descriptor.options);
+        return std::make_unique<torch::optim::Adam>(owner.parameters(), options);
+    }
+
+    template <class Owner>
+    std::unique_ptr<torch::optim::Optimizer> build_optimizer(Owner& owner, const LionDescriptor& descriptor) {
+        return std::make_unique<Lion>(owner.parameters(), descriptor.options);
+    }
+
+    template <class Owner>
+    std::unique_ptr<torch::optim::Optimizer> build_optimizer(Owner& owner, const LAMBDescriptor& descriptor) {
+        return std::make_unique<LAMB>(owner.parameters(), descriptor.options);
+    }
+
+    template <class Owner>
+    std::unique_ptr<torch::optim::Optimizer> build_optimizer(Owner& owner, const AdafactorDescriptor& descriptor) {
+        return std::make_unique<Adafactor>(owner.parameters(), descriptor.options);
     }
 
     template <class Owner>

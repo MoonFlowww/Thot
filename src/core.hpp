@@ -1301,62 +1301,15 @@ namespace Thot {
                                 }
                             };
                         } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::AdamWDescriptor>) {
-                            auto options = Optimizer::Details::to_torch_options(concrete_descriptor.options);
-                            binding.instance = std::make_unique<torch::optim::AdamW>(std::move(parameters), options);
+                            binding.instance = std::make_unique<Optimizer::Details::AdamW>(std::move(parameters), concrete_descriptor.options);
                             binding.capture_safe = true;
-                            auto buckets = warmup_buckets;
-                            binding.warmup = [buckets = std::move(buckets)](torch::optim::Optimizer& optimizer) {
-                                if (auto* adamw = dynamic_cast<torch::optim::AdamW*>(&optimizer)) {
-                                    const bool any_amsgrad = std::any_of(
-                                        adamw->param_groups().begin(),
-                                        adamw->param_groups().end(),
-                                        [](const auto& group) {
-                                            return static_cast<const torch::optim::AdamWOptions&>(group.options()).amsgrad();
-                                        });
-
-                                    torch::NoGradGuard no_grad{};
-                                    at::OptionalDeviceGuard device_guard;
-
-                                    auto& state_map = adamw->state();
-                                    for (const auto& bucket : buckets) {
-                                        for (const auto& param : bucket) {
-                                            if (!param.defined() || !param.requires_grad()) {
-                                                continue;
-                                            }
-
-
-                                            device_guard.reset_device(param.device());
-
-
-                                            auto* key = param.unsafeGetTensorImpl();
-                                            auto it = state_map.find(key);
-                                            if (it == state_map.end()) {
-                                                auto state = std::make_unique<torch::optim::AdamWParamState>();
-                                                state->step(0);
-                                                state->exp_avg(torch::zeros_like(param, torch::MemoryFormat::Preserve));
-                                                state->exp_avg_sq(torch::zeros_like(param, torch::MemoryFormat::Preserve));
-                                                if (any_amsgrad) {
-                                                    state->max_exp_avg_sq(torch::zeros_like(param, torch::MemoryFormat::Preserve));
-                                                }
-                                                state_map.insert({key, std::move(state)});
-                                            } else {
-                                                auto& state = static_cast<torch::optim::AdamWParamState&>(*it->second);
-                                                if (!state.exp_avg().defined()) {
-                                                    state.exp_avg(torch::zeros_like(param, torch::MemoryFormat::Preserve));
-                                                }
-                                                if (!state.exp_avg_sq().defined()) {
-                                                    state.exp_avg_sq(torch::zeros_like(param, torch::MemoryFormat::Preserve));
-                                                }
-                                                if (any_amsgrad && !state.max_exp_avg_sq().defined()) {
-                                                    state.max_exp_avg_sq(torch::zeros_like(param, torch::MemoryFormat::Preserve));
-                                                }
-                                            }
-                                        }
-                                    }
+                            binding.warmup = [](torch::optim::Optimizer& optimizer) {
+                                if (auto* adamw = dynamic_cast<Optimizer::Details::AdamW*>(&optimizer)) {
+                                    adamw->ensure_state_initialized();
                                 }
                             };
                         } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::SophiaGDescriptor>) {
-                                                        binding.instance = std::make_unique<Optimizer::Details::SophiaG>(std::move(parameters), concrete_descriptor.options);
+                            binding.instance = std::make_unique<Optimizer::Details::SophiaG>(std::move(parameters), concrete_descriptor.options);
                             binding.capture_safe = true;
                             binding.warmup = [](torch::optim::Optimizer& optimizer) {
                                 if (auto* sophia = dynamic_cast<Optimizer::Details::SophiaG*>(&optimizer)) {
@@ -1383,16 +1336,32 @@ namespace Thot {
                             binding.instance = std::make_unique<Optimizer::Details::AdaMuon>(std::move(parameters), concrete_descriptor.options);
                             binding.capture_safe = true;
                             binding.warmup = [](torch::optim::Optimizer& optimizer) {
-                                if (auto* muon = dynamic_cast<Optimizer::Details::AdaMuon*>(&optimizer)) {
-                                    muon->ensure_state_initialized();
+                                if (auto* AdaMuon = dynamic_cast<Optimizer::Details::AdaMuon*>(&optimizer)) {
+                                    AdaMuon->ensure_state_initialized();
                                 }
                             };
                         } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::MuonManifoldDescriptor>) {
                             binding.instance = std::make_unique<Optimizer::Details::MuonManifold>(std::move(parameters), concrete_descriptor.options);
                             binding.capture_safe = true;
                             binding.warmup = [](torch::optim::Optimizer& optimizer) {
-                                if (auto* muon = dynamic_cast<Optimizer::Details::MuonManifold*>(&optimizer)) {
+                                if (auto* MuonManifold = dynamic_cast<Optimizer::Details::MuonManifold*>(&optimizer)) {
+                                    MuonManifold->ensure_state_initialized();
+                                }
+                            };
+                        } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::AdafactorDescriptor>) {
+                            binding.instance = std::make_unique<Optimizer::Details::Adafactor>(std::move(parameters), concrete_descriptor.options);
+                            binding.capture_safe = true;
+                            binding.warmup = [](torch::optim::Optimizer& optimizer) {
+                                if (auto* muon = dynamic_cast<Optimizer::Details::Adafactor*>(&optimizer)) {
                                     muon->ensure_state_initialized();
+                                }
+                            };
+                        } else if constexpr (std::is_same_v<DescriptorType, Optimizer::Details::AdagradDescriptor>) {
+                            binding.instance = std::make_unique<Optimizer::Details::AdagradDescriptor>(std::move(parameters), concrete_descriptor.options);
+                            binding.capture_safe = true;
+                            binding.warmup = [](torch::optim::Optimizer& optimizer) {
+                                if (auto* AdaGrad = dynamic_cast<Optimizer::Details::AdagradDescriptor*>(&optimizer)) {
+                                    AdaGrad->ensure_state_initialized();
                                 }
                             };
                         } else {

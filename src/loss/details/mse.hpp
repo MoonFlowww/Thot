@@ -4,7 +4,7 @@
 #include <optional>
 #include <stdexcept>
 #include <torch/torch.h>
-#include "reduction.hpp"
+#include "helper.hpp"
 
 namespace Thot::Loss::Details {
 
@@ -19,36 +19,6 @@ namespace Thot::Loss::Details {
         MSEOptions options{};
     };
 
-    // Map to the *MSE* functional reduction enum (unique name to avoid collisions)
-    inline F::MSELossFuncOptions::reduction_t mse_reduction(Reduction r) {
-        switch (r) {
-            case Reduction::Sum:  return torch::kSum;
-            case Reduction::None: return torch::kNone;
-            case Reduction::Mean:
-            default:              return torch::kMean;
-        }
-    }
-
-    // Weighted reduction (proper weighted-mean)
-    inline torch::Tensor apply_reduction_weighted(torch::Tensor loss,
-                                                  const torch::Tensor& weight,
-                                                  Reduction reduction) {
-        // Make weight match loss device/dtype and broadcast if needed
-        auto w = weight.to(loss.options()).expand_as(loss);
-
-        switch (reduction) {
-            case Reduction::None:
-                return loss * w;
-            case Reduction::Sum:
-                return (loss * w).sum();
-            case Reduction::Mean:
-            default: {
-                auto num = (loss * w).sum();
-                auto den = w.sum().clamp_min(1e-12);
-                return num / den;
-            }
-        }
-    }
 
     inline torch::Tensor compute(const MSEDescriptor& descriptor,
                                  const torch::Tensor& prediction,
@@ -60,7 +30,7 @@ namespace Thot::Loss::Details {
             return F::mse_loss(
                 prediction,
                 target,
-                F::MSELossFuncOptions().reduction(mse_reduction(descriptor.options.reduction))
+                torch::nn::functional::MSELossFuncOptions().reduction(to_torch_reduction<torch::nn::functional::MSELossFuncOptions>(descriptor.options.reduction))
             );
         }
 

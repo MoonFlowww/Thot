@@ -22,7 +22,7 @@ namespace Thot::Loss::Details {
                                  const torch::Tensor& target,
                                  const std::optional<torch::Tensor>& weight = std::nullopt) {
         auto opts = torch::nn::functional::CrossEntropyFuncOptions{};
-        opts = opts.reduction(to_torch_reduction(descriptor.options.reduction));
+        opts = opts.reduction(to_torch_reduction<torch::nn::functional::CrossEntropyFuncOptions>(descriptor.options.reduction));
         opts = opts.label_smoothing(descriptor.options.label_smoothing);
         if (descriptor.options.use_weight) {
             if (!weight.has_value() || !weight->defined()) {
