@@ -202,8 +202,9 @@ namespace Thot::Block::Details::Transformer::Perceiver {
                         torch::nn::Dropout(torch::nn::DropoutOptions(options_.attention_dropout)));
                 }
 
-                latents_ = register_parameter(
-                    "latents", torch::nn::functional::normalize(torch::randn({options_.latent_slots, options_.latent_dim})));
+                latents_ = register_parameter("latents",torch::nn::functional::normalize(torch::randn({ static_cast<int64_t>(options_.latent_slots), options_.latent_dim}))
+                );
+
             }
 
             torch::Tensor forward(torch::Tensor input)
