@@ -181,6 +181,14 @@ namespace Thot::Common::SaveLoad {
             return tree;
         }
 
+        inline std::string attention_variant_to_string(Attention::Variant variant)
+        {
+            switch (variant) {
+                case Attention::Variant::Full: return "full";
+                case Attention::Variant::Causal: return "causal";
+            }
+            throw std::runtime_error("Unsupported attention variant during serialisation.");
+        }
         inline Mamba::FeedForwardOptions deserialize_mamba_feed_forward_options(const PropertyTree& tree,
                                                                                 const std::string& context)
         {
@@ -211,14 +219,6 @@ namespace Thot::Common::SaveLoad {
             message << "Unknown normalization order '" << value << "' in " << context;
             throw std::runtime_error(message.str());
         }
-        inline std::string serialize_bert_attention_variant(::Thot::Attention::Variant v) {
-            switch (v) {
-                case ::Thot::Attention::Variant::Full:   return "full";
-                case ::Thot::Attention::Variant::Sparse: return "sparse";
-                case ::Thot::Attention::Variant::Local:  return "local";
-                default: return "unknown";
-            }
-        }
 
         inline PropertyTree serialize_bert_attention_options(const ::Thot::Block::Details::Transformer::Bert::AttentionOptions &o) {
             PropertyTree t;
@@ -227,7 +227,7 @@ namespace Thot::Common::SaveLoad {
             t.put("dropout", o.dropout);
             t.put("bias", o.bias);
             t.put("batch_first", o.batch_first);
-            t.put("variant", serialize_bert_attention_variant(o.variant));
+            t.put("variant", attention_variant_to_string(o.variant));
             return t;
         }
 
@@ -284,6 +284,110 @@ namespace Thot::Common::SaveLoad {
             return t;
         }
 
+        inline Activation::Type activation_type_from_index(std::uint64_t value, const std::string& context)
+        {
+            switch (value) {
+                case static_cast<std::uint64_t>(Activation::Type::Identity): return Activation::Type::Identity;
+                case static_cast<std::uint64_t>(Activation::Type::ReLU): return Activation::Type::ReLU;
+                case static_cast<std::uint64_t>(Activation::Type::Sigmoid): return Activation::Type::Sigmoid;
+                case static_cast<std::uint64_t>(Activation::Type::Tanh): return Activation::Type::Tanh;
+                case static_cast<std::uint64_t>(Activation::Type::LeakyReLU): return Activation::Type::LeakyReLU;
+                case static_cast<std::uint64_t>(Activation::Type::Softmax): return Activation::Type::Softmax;
+                case static_cast<std::uint64_t>(Activation::Type::SiLU): return Activation::Type::SiLU;
+                case static_cast<std::uint64_t>(Activation::Type::GeLU): return Activation::Type::GeLU;
+                case static_cast<std::uint64_t>(Activation::Type::GLU): return Activation::Type::GLU;
+                case static_cast<std::uint64_t>(Activation::Type::SwiGLU): return Activation::Type::SwiGLU;
+                case static_cast<std::uint64_t>(Activation::Type::dSiLU): return Activation::Type::dSiLU;
+                case static_cast<std::uint64_t>(Activation::Type::PSiLU): return Activation::Type::PSiLU;
+                case static_cast<std::uint64_t>(Activation::Type::Mish): return Activation::Type::Mish;
+                case static_cast<std::uint64_t>(Activation::Type::Swish): return Activation::Type::Swish;
+            }
+            std::ostringstream message;
+            message << "Unknown activation type index '" << value << "' in " << context;
+            throw std::runtime_error(message.str());
+        }
+
+
+
+        inline ::Thot::Block::Details::Transformer::Bert::LayerNormOptions deserialize_bert_layer_norm_options(
+            const PropertyTree& tree, const std::string& context)
+        {
+            ::Thot::Block::Details::Transformer::Bert::LayerNormOptions options;
+            options.eps = get_numeric<double>(tree, "eps", context);
+            options.elementwise_affine = get_boolean(tree, "elementwise_affine", context);
+            return options;
+        }
+
+        inline ::Thot::Block::Details::Transformer::Bert::EmbeddingOptions deserialize_bert_embedding_options(
+            const PropertyTree& tree, const std::string& context)
+        {
+            ::Thot::Block::Details::Transformer::Bert::EmbeddingOptions options;
+            options.vocab_size = get_numeric<std::int64_t>(tree, "vocab_size", context);
+            options.type_vocab_size = get_numeric<std::int64_t>(tree, "type_vocab_size", context);
+            options.max_position_embeddings = get_numeric<std::int64_t>(tree, "max_position_embeddings", context);
+            options.dropout = get_numeric<double>(tree, "dropout", context);
+            options.use_token_type = get_boolean(tree, "use_token_type", context);
+            options.use_position_embeddings = get_boolean(tree, "use_position_embeddings", context);
+            return options;
+        }
+
+
+        inline Attention::Variant attention_variant_from_string(const std::string& value)
+        {
+            const auto lowered = to_lower(value);
+            if (lowered == "full") return Attention::Variant::Full;
+            if (lowered == "causal") return Attention::Variant::Causal;
+            std::ostringstream message;
+            message << "Unknown attention variant '" << value << "'.";
+            throw std::runtime_error(message.str());
+        }
+        inline ::Thot::Block::Details::Transformer::Bert::FeedForwardOptions deserialize_bert_feed_forward_options(
+        const PropertyTree& tree, const std::string& context)
+        {
+            ::Thot::Block::Details::Transformer::Bert::FeedForwardOptions options;
+            options.embed_dim = get_numeric<std::int64_t>(tree, "embed_dim", context);
+            options.mlp_ratio = get_numeric<double>(tree, "mlp_ratio", context);
+            if (const auto activation_node = tree.get_child_optional("activation")) {
+                options.activation = deserialize_activation_descriptor(*activation_node, context + " activation");
+            } else {
+                const auto activation_index =
+                    get_numeric<std::uint64_t>(tree, "activation.type", context + " activation");
+                options.activation.type = activation_type_from_index(activation_index, context + " activation");
+            }
+            options.bias = get_boolean(tree, "bias", context);
+            return options;
+        }
+
+        inline ::Thot::Block::Details::Transformer::Bert::EncoderLayerDescriptor
+        deserialize_bert_encoder_layer_descriptor(const PropertyTree& tree, const std::string& context)
+        {
+            ::Thot::Block::Details::Transformer::Bert::EncoderLayerDescriptor descriptor;
+            descriptor.attention = attention_variant_from_string(tree.get_child("attention"), context + " attention");
+            descriptor.feed_forward =
+                deserialize_bert_feed_forward_options(tree.get_child("feed_forward"), context + " feed_forward");
+            return descriptor;
+        }
+
+        inline ::Thot::Block::Details::Transformer::Bert::EncoderOptions deserialize_bert_encoder_options(
+            const PropertyTree& tree, const std::string& context)
+        {
+            ::Thot::Block::Details::Transformer::Bert::EncoderOptions options;
+            options.layers = static_cast<std::size_t>(get_numeric<std::uint64_t>(tree, "layers", context));
+            options.embed_dim = get_numeric<std::int64_t>(tree, "embed_dim", context);
+            options.attention = attention_variant_from_string(tree.get_child("attention"), context + " attention");
+            options.feed_forward =
+                deserialize_bert_feed_forward_options(tree.get_child("feed_forward"), context + " feed_forward");
+            options.layer_norm = deserialize_bert_layer_norm_options(tree.get_child("layer_norm"), context + " layer_norm");
+            options.embedding = deserialize_bert_embedding_options(tree.get_child("embedding"), context + " embedding");
+            options.residual_dropout = get_numeric<double>(tree, "residual_dropout", context);
+            options.attention_dropout = get_numeric<double>(tree, "attention_dropout", context);
+            options.feed_forward_dropout = get_numeric<double>(tree, "feed_forward_dropout", context);
+            options.pre_norm = get_boolean(tree, "pre_norm", context);
+            options.final_layer_norm = get_boolean(tree, "final_layer_norm", context);
+            return options;
+        }
+
+
         inline std::string activation_type_to_string(Activation::Type type)
         {
             switch (type) {
@@ -304,7 +408,12 @@ namespace Thot::Common::SaveLoad {
             }
             throw std::runtime_error("Unsupported activation type during serialisation.");
         }
-
+        inline Activation::Descriptor deserialize_activation_descriptor(const PropertyTree& tree, const std::string& context)
+        {
+            Activation::Descriptor descriptor;
+            descriptor.type = activation_type_from_string(get_string(tree, "type", context));
+            return descriptor;
+        }
         inline Activation::Type activation_type_from_string(const std::string& value)
         {
             const auto lowered = to_lower(value);
@@ -377,24 +486,8 @@ namespace Thot::Common::SaveLoad {
             throw std::runtime_error(message.str());
         }
 
-        inline std::string attention_variant_to_string(Attention::Variant variant)
-        {
-            switch (variant) {
-                case Attention::Variant::Full: return "full";
-                case Attention::Variant::Causal: return "causal";
-            }
-            throw std::runtime_error("Unsupported attention variant during serialisation.");
-        }
 
-        inline Attention::Variant attention_variant_from_string(const std::string& value)
-        {
-            const auto lowered = to_lower(value);
-            if (lowered == "full") return Attention::Variant::Full;
-            if (lowered == "causal") return Attention::Variant::Causal;
-            std::ostringstream message;
-            message << "Unknown attention variant '" << value << "'.";
-            throw std::runtime_error(message.str());
-        }
+
 
         namespace Classic = Block::Details::Transformer::Classic;
         namespace EBT = Block::Details::Transformer::EBT;
@@ -427,12 +520,6 @@ namespace Thot::Common::SaveLoad {
             return tree;
         }
 
-        inline Activation::Descriptor deserialize_activation_descriptor(const PropertyTree& tree, const std::string& context)
-        {
-            Activation::Descriptor descriptor;
-            descriptor.type = activation_type_from_string(get_string(tree, "type", context));
-            return descriptor;
-        }
 
         inline PropertyTree serialize_initialization_descriptor(const Initialization::Descriptor& descriptor)
         {
@@ -881,7 +968,7 @@ namespace Thot::Common::SaveLoad {
             t.put("dropout", o.dropout);
             t.put("bias", o.bias);
             t.put("batch_first", o.batch_first);
-            t.put("variant", Detail::serialize_attention_variant(o.variant)); // reuse if you have serialize_attention_variant; else change
+            t.put("variant", Detail::attention_variant_to_string(o.variant));
             return t;
         }
 
@@ -1722,8 +1809,7 @@ namespace Thot::Common::SaveLoad {
         return tree;
     }
 
-    inline Attention::Descriptor deserialize_attention(const PropertyTree& tree, const std::string& context)
-    {
+    inline Attention::Descriptor deserialize_attention(const PropertyTree& tree, const std::string& context) {
         const auto type = Detail::to_lower(Detail::get_string(tree, "type", context));
         if (type != "multi_head") {
             std::ostringstream message;
@@ -2556,6 +2642,16 @@ namespace Thot::Common::SaveLoad {
                 layer.selective_state = Detail::deserialize_mamba_selective_state_options(node.second.get_child("selective_state"), context);
                 layer.feed_forward = Detail::deserialize_mamba_feed_forward_options(node.second.get_child("feed_forward"), context);
                 descriptor.layers.push_back(std::move(layer));
+            }
+            return Block::Descriptor{descriptor};
+        }
+        if (type == "bert_encoder") {
+            ::Thot::Block::Details::Transformer::Bert::EncoderDescriptor descriptor;
+            const auto& options_tree = tree.get_child("options");
+            descriptor.options = Detail::deserialize_bert_encoder_options(options_tree, context + " bert encoder options");
+            for (const auto& node : tree.get_child("layers")) {
+                descriptor.layers.push_back(Detail::deserialize_bert_encoder_layer_descriptor(
+                    node.second, context + " bert encoder layer"));
             }
             return Block::Descriptor{descriptor};
         }
