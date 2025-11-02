@@ -667,6 +667,47 @@ namespace Thot {
                     registered_layer.module = Layer::Details::to_shared_module_ptr(module);
                     registered_layer.bind_module_forward(module.get());
 
+
+                    store_layer(std::move(registered_layer));
+                },
+                [&](Block::Transformer::Vision::EncoderDescriptor encoder_descriptor) {
+                    const auto index = next_module_index();
+                    auto module = register_module(
+                        "vision_transformer_" + std::to_string(index),
+                        Block::Transformer::Vision::VisionEncoder(std::move(encoder_descriptor)));
+
+                    Layer::Details::RegisteredLayer registered_layer{};
+                    registered_layer.activation = Activation::Type::Identity;
+                    registered_layer.module = Layer::Details::to_shared_module_ptr(module);
+                    registered_layer.bind_module_forward(module.get());
+
+                    store_layer(std::move(registered_layer));
+                },
+                [&](Block::Transformer::Perceiver::EncoderDescriptor encoder_descriptor) {
+                    const auto index = next_module_index();
+                    auto module = register_module(
+                        "perceiver_encoder_" + std::to_string(index),
+                        Block::Transformer::Perceiver::PerceiverEncoder(std::move(encoder_descriptor)));
+
+                    Layer::Details::RegisteredLayer registered_layer{};
+                    registered_layer.activation = Activation::Type::Identity;
+                    registered_layer.module = Layer::Details::to_shared_module_ptr(module);
+                    registered_layer.bind_module_forward(module.get());
+
+                    store_layer(std::move(registered_layer));
+                },
+                [&](Block::Transformer::LongformerXL::EncoderDescriptor encoder_descriptor) {
+                    const auto index = next_module_index();
+                    auto module = register_module(
+                        "longformer_xl_encoder_" + std::to_string(index),
+                        Block::Transformer::LongformerXL::LongformerEncoder(std::move(encoder_descriptor)));
+
+                    Layer::Details::RegisteredLayer registered_layer{};
+                    registered_layer.activation = Activation::Type::Identity;
+                    registered_layer.module = Layer::Details::to_shared_module_ptr(module);
+                    registered_layer.bind_module_forward(module.get());
+
+
                     store_layer(std::move(registered_layer));
                 }
             };
@@ -697,6 +738,15 @@ namespace Thot {
                     transformer_block_handler(std::move(decoder_descriptor));
                 },
                 [&](Block::Transformer::Mamba::EncoderDescriptor encoder_descriptor) {
+                    transformer_block_handler(std::move(encoder_descriptor));
+                },
+                [&](Block::Transformer::Vision::EncoderDescriptor encoder_descriptor) {
+                    transformer_block_handler(std::move(encoder_descriptor));
+                },
+                [&](Block::Transformer::Perceiver::EncoderDescriptor encoder_descriptor) {
+                    transformer_block_handler(std::move(encoder_descriptor));
+                },
+                [&](Block::Transformer::LongformerXL::EncoderDescriptor encoder_descriptor) {
                     transformer_block_handler(std::move(encoder_descriptor));
                 }
             };

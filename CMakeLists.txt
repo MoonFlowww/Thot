@@ -156,5 +156,9 @@ add_executable(test_Thot test/cifar.cpp
         src/optimizer/details/lamb.hpp
         src/optimizer/details/lion.hpp
         src/optimizer/details/rmsprop.hpp
+        src/block/details/transformers/longformer_xl.hpp
+        src/block/details/transformers/perceiver.hpp
+        src/block/details/transformers/bert.hpp
+        src/block/details/transformers/vision.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)

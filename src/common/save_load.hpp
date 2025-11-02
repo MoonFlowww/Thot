@@ -51,7 +51,6 @@ namespace Thot::Common::SaveLoad {
     Layer::Descriptor deserialize_layer_descriptor(const PropertyTree& tree, const std::string& context);
 
     namespace Detail {
-
         inline std::string to_lower(std::string value)
         {
             std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
@@ -211,6 +210,78 @@ namespace Thot::Common::SaveLoad {
             std::ostringstream message;
             message << "Unknown normalization order '" << value << "' in " << context;
             throw std::runtime_error(message.str());
+        }
+        inline std::string serialize_bert_attention_variant(::Thot::Attention::Variant v) {
+            switch (v) {
+                case ::Thot::Attention::Variant::Full:   return "full";
+                case ::Thot::Attention::Variant::Sparse: return "sparse";
+                case ::Thot::Attention::Variant::Local:  return "local";
+                default: return "unknown";
+            }
+        }
+
+        inline PropertyTree serialize_bert_attention_options(const ::Thot::Block::Details::Transformer::Bert::AttentionOptions &o) {
+            PropertyTree t;
+            t.put("embed_dim", o.embed_dim);
+            t.put("num_heads", o.num_heads);
+            t.put("dropout", o.dropout);
+            t.put("bias", o.bias);
+            t.put("batch_first", o.batch_first);
+            t.put("variant", serialize_bert_attention_variant(o.variant));
+            return t;
+        }
+
+        inline PropertyTree serialize_bert_feed_forward_options(const ::Thot::Block::Details::Transformer::Bert::FeedForwardOptions &o) {
+            PropertyTree t;
+            t.put("embed_dim", o.embed_dim);
+            t.put("mlp_ratio", o.mlp_ratio);
+
+            // If you have a project-level activation serializer, replace the next line with that call.
+            // I serialize the activation descriptor by its 'type' enum value (as integer).
+            t.put("activation.type", static_cast<std::uint64_t>(o.activation.type));
+            t.put("bias", o.bias);
+            return t;
+        }
+
+        inline PropertyTree serialize_bert_layer_norm_options(const ::Thot::Block::Details::Transformer::Bert::LayerNormOptions &o) {
+            PropertyTree t;
+            t.put("eps", o.eps);
+            t.put("elementwise_affine", o.elementwise_affine);
+            return t;
+        }
+
+        inline PropertyTree serialize_bert_embedding_options(const ::Thot::Block::Details::Transformer::Bert::EmbeddingOptions &o) {
+            PropertyTree t;
+            t.put("vocab_size", o.vocab_size);
+            t.put("type_vocab_size", o.type_vocab_size);
+            t.put("max_position_embeddings", o.max_position_embeddings);
+            t.put("dropout", o.dropout);
+            t.put("use_token_type", o.use_token_type);
+            t.put("use_position_embeddings", o.use_position_embeddings);
+            return t;
+        }
+
+        inline PropertyTree serialize_bert_encoder_layer_descriptor(const ::Thot::Block::Details::Transformer::Bert::EncoderLayerDescriptor &d) {
+            PropertyTree t;
+            t.add_child("attention", serialize_bert_attention_options(d.attention));
+            t.add_child("feed_forward", serialize_bert_feed_forward_options(d.feed_forward));
+            return t;
+        }
+
+        inline PropertyTree serialize_bert_encoder_options(const ::Thot::Block::Details::Transformer::Bert::EncoderOptions &o) {
+            PropertyTree t;
+            t.put("layers", static_cast<std::uint64_t>(o.layers));
+            t.put("embed_dim", o.embed_dim);
+            t.add_child("attention", serialize_bert_attention_options(o.attention));
+            t.add_child("feed_forward", serialize_bert_feed_forward_options(o.feed_forward));
+            t.add_child("layer_norm", serialize_bert_layer_norm_options(o.layer_norm));
+            t.add_child("embedding", serialize_bert_embedding_options(o.embedding));
+            t.put("residual_dropout", o.residual_dropout);
+            t.put("attention_dropout", o.attention_dropout);
+            t.put("feed_forward_dropout", o.feed_forward_dropout);
+            t.put("pre_norm", o.pre_norm);
+            t.put("final_layer_norm", o.final_layer_norm);
+            return t;
         }
 
         inline std::string activation_type_to_string(Activation::Type type)
@@ -381,8 +452,8 @@ namespace Thot::Common::SaveLoad {
         inline std::string ebt_modality_type_to_string(EBT::ModalityType type)
         {
             switch (type) {
-            case EBT::ModalityType::Discrete: return "discrete";
-            case EBT::ModalityType::Continuous: return "continuous";
+                case EBT::ModalityType::Discrete: return "discrete";
+                case EBT::ModalityType::Continuous: return "continuous";
             }
             throw std::runtime_error("Unsupported EBT modality type during serialisation.");
         }
@@ -737,6 +808,249 @@ namespace Thot::Common::SaveLoad {
             layer.feed_forward_dropout = deserialize_layer_descriptor(tree.get_child("feed_forward_dropout"), context);
             return layer;
         }
+
+        inline PropertyTree serialize_perceiver_attention_options(
+        const ::Thot::Block::Details::Transformer::Perceiver::AttentionOptions &o)
+        {
+            PropertyTree t;
+            t.put("query_dim", o.query_dim);
+            t.put("key_dim", o.key_dim);
+            t.put("num_heads", o.num_heads);
+            t.put("dropout", o.dropout);
+            t.put("bias", o.bias);
+            t.put("batch_first", o.batch_first);
+            return t;
+        }
+
+        inline PropertyTree serialize_perceiver_feed_forward_options(
+            const ::Thot::Block::Details::Transformer::Perceiver::FeedForwardOptions &o)
+        {
+            PropertyTree t;
+            t.put("embed_dim", o.embed_dim);
+            t.put("mlp_ratio", o.mlp_ratio);
+
+            // If you have a project-level activation serializer, prefer that:
+            // t.add_child("activation", serialize_activation_descriptor(o.activation));
+            t.put("activation.type", static_cast<std::uint64_t>(o.activation.type));
+
+            t.put("bias", o.bias);
+            t.put("dropout", o.dropout);
+            return t;
+        }
+
+        inline PropertyTree serialize_perceiver_encoder_layer_descriptor(
+            const ::Thot::Block::Details::Transformer::Perceiver::EncoderLayerDescriptor &d)
+        {
+            PropertyTree t;
+            t.add_child("feed_forward", serialize_perceiver_feed_forward_options(d.feed_forward));
+            return t;
+        }
+
+        inline PropertyTree serialize_perceiver_encoder_options(
+            const ::Thot::Block::Details::Transformer::Perceiver::EncoderOptions &o)
+        {
+            PropertyTree t;
+            t.put("layers", static_cast<std::uint64_t>(o.layers));
+            t.put("self_layers", static_cast<std::uint64_t>(o.self_layers));
+            t.put("repeats", static_cast<std::uint64_t>(o.repeats));
+            t.put("latent_dim", o.latent_dim);
+            t.put("input_dim", o.input_dim);
+            t.put("latent_slots", static_cast<std::uint64_t>(o.latent_slots));
+            t.add_child("cross_attention", serialize_perceiver_attention_options(o.cross_attention));
+            t.add_child("self_attention", serialize_perceiver_attention_options(o.self_attention));
+            t.add_child("feed_forward", serialize_perceiver_feed_forward_options(o.feed_forward));
+            t.put("residual_dropout", o.residual_dropout);
+            t.put("attention_dropout", o.attention_dropout);
+            return t;
+        }
+
+        inline std::string serialize_vision_variant(::Thot::Block::Details::Transformer::Vision::Variant v) {
+            switch (v) {
+                case ::Thot::Block::Details::Transformer::Vision::Variant::ViT:  return "vit";
+                case ::Thot::Block::Details::Transformer::Vision::Variant::Swin: return "swin";
+                default: return "unknown";
+            }
+        }
+
+        inline PropertyTree serialize_vision_attention_options(
+            const ::Thot::Block::Details::Transformer::Vision::AttentionOptions &o)
+        {
+            PropertyTree t;
+            t.put("embed_dim", o.embed_dim);
+            t.put("num_heads", o.num_heads);
+            t.put("dropout", o.dropout);
+            t.put("bias", o.bias);
+            t.put("batch_first", o.batch_first);
+            t.put("variant", Detail::serialize_attention_variant(o.variant)); // reuse if you have serialize_attention_variant; else change
+            return t;
+        }
+
+        inline PropertyTree serialize_vision_feed_forward_options(
+            const ::Thot::Block::Details::Transformer::Vision::FeedForwardOptions &o)
+        {
+            PropertyTree t;
+            t.put("embed_dim", o.embed_dim);
+            t.put("mlp_ratio", o.mlp_ratio);
+
+            // Prefer calling your project-level activation serializer if present:
+            // t.add_child("activation", Detail::serialize_activation_descriptor(o.activation));
+            t.put("activation.type", static_cast<std::uint64_t>(o.activation.type));
+            t.put("bias", o.bias);
+            return t;
+        }
+
+        inline PropertyTree serialize_vision_layer_norm_options(
+            const ::Thot::Block::Details::Transformer::Vision::LayerNormOptions &o)
+        {
+            PropertyTree t;
+            t.put("eps", o.eps);
+            t.put("elementwise_affine", o.elementwise_affine);
+            return t;
+        }
+
+        inline PropertyTree serialize_vision_patch_embedding_options(
+            const ::Thot::Block::Details::Transformer::Vision::PatchEmbeddingOptions &o)
+        {
+            PropertyTree t;
+            t.put("in_channels", o.in_channels);
+            t.put("embed_dim", o.embed_dim);
+            t.put("patch_size", o.patch_size);
+            t.put("add_class_token", o.add_class_token);
+            t.put("normalize", o.normalize);
+            t.put("dropout", o.dropout);
+            return t;
+        }
+
+        inline PropertyTree serialize_vision_window_options(
+            const ::Thot::Block::Details::Transformer::Vision::WindowOptions &o)
+        {
+            PropertyTree t;
+            t.put("size", o.size);
+            t.put("shift", o.shift);
+            return t;
+        }
+
+        // positional encoding serializer — simple mapping, safe fallback if you don't already have one.
+        inline std::string serialize_positional_encoding_type(::Thot::Layer::Details::PositionalEncodingType t) {
+            switch (t) {
+                case ::Thot::Layer::Details::PositionalEncodingType::None: return "none";
+                case ::Thot::Layer::Details::PositionalEncodingType::Sinusoidal: return "sinusoidal";
+                case ::Thot::Layer::Details::PositionalEncodingType::Learned: return "learned";
+                default: return "unknown";
+            }
+        }
+
+        inline PropertyTree serialize_positional_encoding_options(
+            const ::Thot::Layer::Details::PositionalEncodingOptions &o)
+        {
+            PropertyTree t;
+            t.put("type", serialize_positional_encoding_type(o.type));
+            t.put("dropout", o.dropout);
+            // if PositionalEncodingOptions contains extra fields, add them here
+            return t;
+        }
+
+        inline PropertyTree serialize_vision_encoder_layer_descriptor(
+            const ::Thot::Block::Details::Transformer::Vision::EncoderLayerDescriptor &d)
+        {
+            PropertyTree t;
+            t.add_child("attention", serialize_vision_attention_options(d.attention));
+            t.add_child("feed_forward", serialize_vision_feed_forward_options(d.feed_forward));
+            t.add_child("window", serialize_vision_window_options(d.window));
+            return t;
+        }
+
+        inline PropertyTree serialize_vision_encoder_options(
+            const ::Thot::Block::Details::Transformer::Vision::EncoderOptions &o)
+        {
+            PropertyTree t;
+            t.put("layers", static_cast<std::uint64_t>(o.layers));
+            t.put("embed_dim", o.embed_dim);
+            t.put("variant", serialize_vision_variant(o.variant));
+            t.add_child("attention", serialize_vision_attention_options(o.attention));
+            t.add_child("feed_forward", serialize_vision_feed_forward_options(o.feed_forward));
+            t.add_child("layer_norm", serialize_vision_layer_norm_options(o.layer_norm));
+            t.add_child("patch_embedding", serialize_vision_patch_embedding_options(o.patch_embedding));
+            t.add_child("window", serialize_vision_window_options(o.window));
+            t.add_child("positional_encoding", serialize_positional_encoding_options(o.positional_encoding));
+            t.put("residual_dropout", o.residual_dropout);
+            t.put("attention_dropout", o.attention_dropout);
+            t.put("feed_forward_dropout", o.feed_forward_dropout);
+            t.put("pre_norm", o.pre_norm);
+            t.put("final_layer_norm", o.final_layer_norm);
+            return t;
+        }
+
+        inline PropertyTree serialize_longformer_attention_options(
+    const ::Thot::Block::Details::Transformer::LongformerXL::AttentionOptions &o)
+        {
+            PropertyTree t;
+            t.put("embed_dim", o.embed_dim);
+            t.put("num_heads", o.num_heads);
+            t.put("dropout", o.dropout);
+            t.put("bias", o.bias);
+            t.put("batch_first", o.batch_first);
+            return t;
+        }
+
+        inline PropertyTree serialize_longformer_feed_forward_options(
+            const ::Thot::Block::Details::Transformer::LongformerXL::FeedForwardOptions &o)
+        {
+            PropertyTree t;
+            t.put("embed_dim", o.embed_dim);
+            t.put("mlp_ratio", o.mlp_ratio);
+
+            // Prefer your project-level activation serializer if present:
+            // t.add_child("activation", serialize_activation_descriptor(o.activation));
+            t.put("activation.type", static_cast<std::uint64_t>(o.activation.type));
+
+            t.put("bias", o.bias);
+            t.put("dropout", o.dropout);
+            return t;
+        }
+
+        inline PropertyTree serialize_longformer_layer_norm_options(
+            const ::Thot::Block::Details::Transformer::LongformerXL::LayerNormOptions &o)
+        {
+            PropertyTree t;
+            t.put("eps", o.eps);
+            t.put("elementwise_affine", o.elementwise_affine);
+            return t;
+        }
+
+        inline PropertyTree serialize_longformer_encoder_layer_descriptor(
+            const ::Thot::Block::Details::Transformer::LongformerXL::EncoderLayerDescriptor &d)
+        {
+            PropertyTree t;
+            t.add_child("attention", serialize_longformer_attention_options(d.attention));
+            t.add_child("feed_forward", serialize_longformer_feed_forward_options(d.feed_forward));
+            return t;
+        }
+
+        inline PropertyTree serialize_longformer_encoder_options(
+            const ::Thot::Block::Details::Transformer::LongformerXL::EncoderOptions &o)
+        {
+            PropertyTree t;
+            t.put("layers", static_cast<std::uint64_t>(o.layers));
+            t.put("embed_dim", o.embed_dim);
+            t.add_child("attention", serialize_longformer_attention_options(o.attention));
+            t.add_child("feed_forward", serialize_longformer_feed_forward_options(o.feed_forward));
+            t.add_child("layer_norm", serialize_longformer_layer_norm_options(o.layer_norm));
+            t.put("window_size", o.window_size);
+            t.put("global_tokens", static_cast<std::uint64_t>(o.global_tokens));
+            t.put("causal", o.causal);
+            t.put("use_memory", o.use_memory);
+            t.put("memory_size", static_cast<std::uint64_t>(o.memory_size));
+            t.put("residual_dropout", o.residual_dropout);
+            t.put("attention_dropout", o.attention_dropout);
+            t.put("feed_forward_dropout", o.feed_forward_dropout);
+            t.put("pre_norm", o.pre_norm);
+            t.put("final_layer_norm", o.final_layer_norm);
+            return t;
+        }
+
+
+
 
         inline std::string pooling_variant_to_string(const Layer::Details::PoolingOptions& options)
         {
@@ -1795,38 +2109,38 @@ namespace Thot::Common::SaveLoad {
             [&](const auto& concrete) {
                 using DescriptorType = std::decay_t<decltype(concrete)>;
                 if constexpr (std::is_same_v<DescriptorType, Block::Details::SequentialDescriptor>) {
+
                     tree.put("type", "sequential");
                     PropertyTree layers;
-                    for (const auto& layer : concrete.layers) {
+                    for (const auto& layer : concrete.layers)
                         layers.push_back({"", serialize_layer_descriptor(layer)});
-                    }
+
                     tree.add_child("layers", layers);
                     tree.add_child("local", serialize_local_config(concrete.local));
+
                 } else if constexpr (std::is_same_v<DescriptorType, Block::Details::ResidualDescriptor>) {
                     tree.put("type", "residual");
                     PropertyTree layers;
-                    for (const auto& layer : concrete.layers) {
+                    for (const auto& layer : concrete.layers)
                         layers.push_back({"", serialize_layer_descriptor(layer)});
-                    }
+
                     tree.add_child("layers", layers);
                     tree.put("repeats", static_cast<std::uint64_t>(concrete.repeats));
                     tree.put("skip.use_projection", concrete.skip.use_projection);
-                    if (concrete.skip.projection) {
+
+                    if (concrete.skip.projection)
                         tree.add_child("skip.projection", serialize_layer_descriptor(*concrete.skip.projection));
-                    }
-                    tree.add_child("output.final_activation",
-                                   Detail::serialize_activation_descriptor(concrete.output.final_activation));
+
+                    tree.add_child("output.final_activation",Detail::serialize_activation_descriptor(concrete.output.final_activation));
                     tree.put("output.dropout", concrete.output.dropout);
                     tree.add_child("local", serialize_local_config(concrete.local));
+
                 } else if constexpr (std::is_same_v<DescriptorType, Detail::Classic::EncoderDescriptor>) {
                     tree.put("type", "transformer_encoder");
                     tree.add_child("options.attention", Detail::serialize_classic_attention_options(concrete.options.attention));
-                    tree.add_child("options.feed_forward",
-                                   Detail::serialize_classic_feed_forward_options(concrete.options.feed_forward));
-                    tree.add_child("options.layer_norm",
-                                   Detail::serialize_classic_layer_norm_options(concrete.options.layer_norm));
-                    tree.add_child("options.positional_encoding", Detail::serialize_classic_positional_encoding_options(
-                                                                      concrete.options.positional_encoding));
+                    tree.add_child("options.feed_forward",Detail::serialize_classic_feed_forward_options(concrete.options.feed_forward));
+                    tree.add_child("options.layer_norm",Detail::serialize_classic_layer_norm_options(concrete.options.layer_norm));
+                    tree.add_child("options.positional_encoding", Detail::serialize_classic_positional_encoding_options(concrete.options.positional_encoding));
                     tree.put("options.layers", static_cast<std::uint64_t>(concrete.options.layers));
                     tree.put("options.embed_dim", concrete.options.embed_dim);
                     tree.put("options.dropout", concrete.options.dropout);
@@ -1836,30 +2150,29 @@ namespace Thot::Common::SaveLoad {
                         entry.add_child("attention", serialize_attention(layer.attention));
                         entry.add_child("attention_dropout", serialize_layer_descriptor(layer.attention_dropout));
                         PropertyTree feed_forward_layers;
-                        for (const auto& ff : layer.feed_forward) {
+
+                        for (const auto& ff : layer.feed_forward)
                             feed_forward_layers.push_back({"", serialize_layer_descriptor(ff)});
-                        }
+
                         entry.add_child("feed_forward", feed_forward_layers);
                         entry.add_child("feed_forward_dropout", serialize_layer_descriptor(layer.feed_forward_dropout));
                         layers.push_back({"", entry});
                     }
                     tree.add_child("layers", layers);
+
                 } else if constexpr (std::is_same_v<DescriptorType, Detail::Classic::DecoderDescriptor>) {
                     tree.put("type", "transformer_decoder");
-                    tree.add_child("options.self_attention",
-                                   Detail::serialize_classic_attention_options(concrete.options.self_attention));
-                    tree.add_child("options.cross_attention",
-                                   Detail::serialize_classic_attention_options(concrete.options.cross_attention));
-                    tree.add_child("options.feed_forward",
-                                   Detail::serialize_classic_feed_forward_options(concrete.options.feed_forward));
-                    tree.add_child("options.layer_norm",
-                                   Detail::serialize_classic_layer_norm_options(concrete.options.layer_norm));
-                    tree.add_child("options.positional_encoding", Detail::serialize_classic_positional_encoding_options(
-                                                                      concrete.options.positional_encoding));
+                    tree.add_child("options.self_attention",Detail::serialize_classic_attention_options(concrete.options.self_attention));
+                    tree.add_child("options.cross_attention",Detail::serialize_classic_attention_options(concrete.options.cross_attention));
+                    tree.add_child("options.feed_forward",Detail::serialize_classic_feed_forward_options(concrete.options.feed_forward));
+                    tree.add_child("options.layer_norm",Detail::serialize_classic_layer_norm_options(concrete.options.layer_norm));
+                    tree.add_child("options.positional_encoding", Detail::serialize_classic_positional_encoding_options(concrete.options.positional_encoding));
                     tree.put("options.layers", static_cast<std::uint64_t>(concrete.options.layers));
                     tree.put("options.embed_dim", concrete.options.embed_dim);
                     tree.put("options.dropout", concrete.options.dropout);
+
                     PropertyTree layers;
+
                     for (const auto& layer : concrete.layers) {
                         PropertyTree entry;
                         entry.add_child("self_attention", serialize_attention(layer.self_attention));
@@ -1867,79 +2180,67 @@ namespace Thot::Common::SaveLoad {
                         entry.add_child("cross_attention", serialize_attention(layer.cross_attention));
                         entry.add_child("cross_attention_dropout", serialize_layer_descriptor(layer.cross_attention_dropout));
                         PropertyTree feed_forward_layers;
-                        for (const auto& ff : layer.feed_forward) {
+
+                        for (const auto& ff : layer.feed_forward)
                             feed_forward_layers.push_back({"", serialize_layer_descriptor(ff)});
-                        }
+
                         entry.add_child("feed_forward", feed_forward_layers);
                         entry.add_child("feed_forward_dropout", serialize_layer_descriptor(layer.feed_forward_dropout));
                         layers.push_back({"", entry});
                     }
                     tree.add_child("layers", layers);
-                    } else if constexpr (std::is_same_v<DescriptorType, Detail::PlusPlus::EncoderDescriptor>) {
+
+                } else if constexpr (std::is_same_v<DescriptorType, Detail::PlusPlus::EncoderDescriptor>) {
                     tree.put("type", "transformer_pp_encoder");
                     tree.put("options.layers", static_cast<std::uint64_t>(concrete.options.layers));
                     tree.put("options.embed_dim", concrete.options.embed_dim);
-                    tree.add_child("options.hybrid_attention",
-                                   Detail::serialize_transformer_pp_hybrid_attention_options(
-                                       concrete.options.hybrid_attention));
-                    tree.add_child("options.feed_forward",
-                                   Detail::serialize_transformer_pp_feed_forward_options(concrete.options.feed_forward));
-                    tree.add_child("options.layer_norm",
-                                   Detail::serialize_transformer_pp_layer_norm_options(concrete.options.layer_norm));
-                    tree.add_child("options.positional_encoding", Detail::serialize_classic_positional_encoding_options(
-                                                                      concrete.options.positional_encoding));
+                    tree.add_child("options.hybrid_attention",Detail::serialize_transformer_pp_hybrid_attention_options(concrete.options.hybrid_attention));
+                    tree.add_child("options.feed_forward",Detail::serialize_transformer_pp_feed_forward_options(concrete.options.feed_forward));
+                    tree.add_child("options.layer_norm",Detail::serialize_transformer_pp_layer_norm_options(concrete.options.layer_norm));
+                    tree.add_child("options.positional_encoding", Detail::serialize_classic_positional_encoding_options(concrete.options.positional_encoding));
                     tree.put("options.dropout", concrete.options.dropout);
-                    tree.add_child("options.pos_head",
-                                   Detail::serialize_transformer_pp_auxiliary_head_options(concrete.options.pos_head));
-                    tree.add_child("options.ner_head",
-                                   Detail::serialize_transformer_pp_auxiliary_head_options(concrete.options.ner_head));
+                    tree.add_child("options.pos_head",Detail::serialize_transformer_pp_auxiliary_head_options(concrete.options.pos_head));
+                    tree.add_child("options.ner_head",Detail::serialize_transformer_pp_auxiliary_head_options(concrete.options.ner_head));
                     PropertyTree layers;
-                    for (const auto& layer : concrete.layers) {
+
+                    for (const auto& layer : concrete.layers)
                         layers.push_back({"", Detail::serialize_transformer_pp_encoder_layer_descriptor(layer)});
-                    }
+
                     tree.add_child("layers", layers);
+
                 } else if constexpr (std::is_same_v<DescriptorType, Detail::PlusPlus::DecoderDescriptor>) {
                     tree.put("type", "transformer_pp_decoder");
                     tree.put("options.layers", static_cast<std::uint64_t>(concrete.options.layers));
                     tree.put("options.embed_dim", concrete.options.embed_dim);
-                    tree.add_child("options.self_attention",
-                                   Detail::serialize_transformer_pp_hybrid_attention_options(
-                                       concrete.options.self_attention));
-                    tree.add_child("options.cross_attention",
-                                   Detail::serialize_transformer_pp_hybrid_attention_options(
-                                       concrete.options.cross_attention));
-                    tree.add_child("options.feed_forward",
-                                   Detail::serialize_transformer_pp_feed_forward_options(concrete.options.feed_forward));
-                    tree.add_child("options.layer_norm",
-                                   Detail::serialize_transformer_pp_layer_norm_options(concrete.options.layer_norm));
-                    tree.add_child("options.positional_encoding", Detail::serialize_classic_positional_encoding_options(
-                                                                      concrete.options.positional_encoding));
+                    tree.add_child("options.self_attention",Detail::serialize_transformer_pp_hybrid_attention_options(concrete.options.self_attention));
+                    tree.add_child("options.cross_attention",Detail::serialize_transformer_pp_hybrid_attention_options(concrete.options.cross_attention));
+                    tree.add_child("options.feed_forward",Detail::serialize_transformer_pp_feed_forward_options(concrete.options.feed_forward));
+                    tree.add_child("options.layer_norm",Detail::serialize_transformer_pp_layer_norm_options(concrete.options.layer_norm));
+                    tree.add_child("options.positional_encoding", Detail::serialize_classic_positional_encoding_options(concrete.options.positional_encoding));
                     tree.put("options.dropout", concrete.options.dropout);
-                    tree.add_child("options.pos_head",
-                                   Detail::serialize_transformer_pp_auxiliary_head_options(concrete.options.pos_head));
-                    tree.add_child("options.ner_head",
-                                   Detail::serialize_transformer_pp_auxiliary_head_options(concrete.options.ner_head));
+                    tree.add_child("options.pos_head",Detail::serialize_transformer_pp_auxiliary_head_options(concrete.options.pos_head));
+                    tree.add_child("options.ner_head",Detail::serialize_transformer_pp_auxiliary_head_options(concrete.options.ner_head));
                     PropertyTree layers;
-                    for (const auto& layer : concrete.layers) {
+
+                    for (const auto& layer : concrete.layers)
                         layers.push_back({"", Detail::serialize_transformer_pp_decoder_layer_descriptor(layer)});
-                    }
+
                     tree.add_child("layers", layers);
+
                 } else if constexpr (std::is_same_v<DescriptorType, Detail::EBT::EncoderDescriptor>) {
                     tree.put("type", "ebt_encoder");
-                    tree.add_child("options.modality",
-                                   Detail::serialize_ebt_modality_options(concrete.options.modality));
+                    tree.add_child("options.modality",Detail::serialize_ebt_modality_options(concrete.options.modality));
                     tree.add_child("options.energy", Detail::serialize_ebt_energy_options(concrete.options.energy));
-                    tree.add_child("options.optimizer",
-                                   Detail::serialize_ebt_optimizer_options(concrete.options.optimizer));
-                    tree.add_child("options.refinement",
-                                   Detail::serialize_ebt_refinement_options(concrete.options.refinement));
+                    tree.add_child("options.optimizer",Detail::serialize_ebt_optimizer_options(concrete.options.optimizer));
+                    tree.add_child("options.refinement",Detail::serialize_ebt_refinement_options(concrete.options.refinement));
+
                 } else if constexpr (std::is_same_v<DescriptorType, Detail::EBT::DecoderDescriptor>) {
                     tree.put("type", "ebt_decoder");
-                    tree.add_child("options.target",
-                                   Detail::serialize_ebt_modality_options(concrete.options.target));
-                    if (concrete.options.context.has_value()) {
+                    tree.add_child("options.target",Detail::serialize_ebt_modality_options(concrete.options.target));
+
+                    if (concrete.options.context.has_value())
                         tree.add_child("options.context", Detail::serialize_ebt_modality_options(*concrete.options.context));
-                    }
+
                     tree.add_child("options.energy", Detail::serialize_ebt_energy_options(concrete.options.energy));
                     tree.add_child("options.optimizer", Detail::serialize_ebt_optimizer_options(concrete.options.optimizer));
                     tree.add_child("options.refinement", Detail::serialize_ebt_refinement_options(concrete.options.refinement));
@@ -1960,13 +2261,130 @@ namespace Thot::Common::SaveLoad {
                     tree.add_child("options.feed_forward", Detail::serialize_mamba_feed_forward_options(concrete.options.feed_forward));
 
                     PropertyTree layers;
-                for (const auto& layer : concrete.layers) {
-                    PropertyTree entry;
-                    entry.add_child("selective_state", Detail::serialize_mamba_selective_state_options(layer.selective_state));
-                    entry.add_child("feed_forward", Detail::serialize_mamba_feed_forward_options(layer.feed_forward));
-                    layers.push_back({"", entry});
-                }
-                tree.add_child("layers", layers);
+                    for (const auto& layer : concrete.layers) {
+                        PropertyTree entry;
+                        entry.add_child("selective_state", Detail::serialize_mamba_selective_state_options(layer.selective_state));
+                        entry.add_child("feed_forward", Detail::serialize_mamba_feed_forward_options(layer.feed_forward));
+                        layers.push_back({"", entry});
+                    }
+
+                    tree.add_child("layers", layers);
+                } else if constexpr (std::is_same_v<
+                    DescriptorType,
+                    ::Thot::Block::Details::Transformer::Perceiver::EncoderDescriptor>) {
+
+                    tree.put("type", "perceiver_encoder");
+
+                    tree.put("options.layers", static_cast<std::uint64_t>(concrete.options.layers));
+                    tree.put("options.self_layers", static_cast<std::uint64_t>(concrete.options.self_layers));
+                    tree.put("options.repeats", static_cast<std::uint64_t>(concrete.options.repeats));
+                    tree.put("options.latent_dim", concrete.options.latent_dim);
+                    tree.put("options.input_dim", concrete.options.input_dim);
+                    tree.put("options.latent_slots", static_cast<std::uint64_t>(concrete.options.latent_slots));
+                    tree.add_child("options.cross_attention", Detail::serialize_perceiver_attention_options(concrete.options.cross_attention));
+                    tree.add_child("options.self_attention", Detail::serialize_perceiver_attention_options(concrete.options.self_attention));
+                    tree.add_child("options.feed_forward", Detail::serialize_perceiver_feed_forward_options(concrete.options.feed_forward));
+                    tree.put("options.residual_dropout", concrete.options.residual_dropout);
+                    tree.put("options.attention_dropout", concrete.options.attention_dropout);
+
+                    PropertyTree layers;
+                    for (const auto &layer : concrete.layers) {
+                        PropertyTree entry;
+                        entry.add_child("feed_forward", Detail::serialize_perceiver_feed_forward_options(layer.feed_forward));
+                        layers.push_back({"", entry});
+                    }
+                    tree.add_child("layers", layers);
+
+                } else if constexpr (std::is_same_v<DescriptorType, ::Thot::Block::Details::Transformer::Bert::EncoderDescriptor>) {
+                    tree.put("type", "bert_encoder");
+                    tree.put("options.layers", static_cast<std::uint64_t>(concrete.options.layers));
+                    tree.put("options.embed_dim", concrete.options.embed_dim);
+
+                    tree.add_child("options.attention", Detail::serialize_bert_attention_options(concrete.options.attention));
+                    tree.add_child("options.feed_forward", Detail::serialize_bert_feed_forward_options(concrete.options.feed_forward));
+                    tree.add_child("options.layer_norm", Detail::serialize_bert_layer_norm_options(concrete.options.layer_norm));
+                    tree.add_child("options.embedding", Detail::serialize_bert_embedding_options(concrete.options.embedding));
+                    tree.put("options.residual_dropout", concrete.options.residual_dropout);
+                    tree.put("options.attention_dropout", concrete.options.attention_dropout);
+                    tree.put("options.feed_forward_dropout", concrete.options.feed_forward_dropout);
+                    tree.put("options.pre_norm", concrete.options.pre_norm);
+                    tree.put("options.final_layer_norm", concrete.options.final_layer_norm);
+
+                    // layers vector
+                    PropertyTree layers;
+                    for (const auto &layer : concrete.layers) {
+                        PropertyTree entry;
+                        entry.add_child("attention", Detail::serialize_bert_attention_options(layer.attention));
+                        entry.add_child("feed_forward", Detail::serialize_bert_feed_forward_options(layer.feed_forward));
+                        layers.push_back({"", entry});
+                    }
+                    tree.add_child("layers", layers);
+
+                    } else if constexpr (std::is_same_v<DescriptorType, ::Thot::Block::Details::Transformer::Vision::EncoderDescriptor>) {
+
+                        tree.put("type", "vision_encoder");
+
+                        // top-level options
+                        tree.put("options.layers", static_cast<std::uint64_t>(concrete.options.layers));
+                        tree.put("options.embed_dim", concrete.options.embed_dim);
+                        tree.put("options.variant", Detail::serialize_vision_variant(concrete.options.variant));
+                        tree.add_child("options.attention", Detail::serialize_vision_attention_options(concrete.options.attention));
+                        tree.add_child("options.feed_forward", Detail::serialize_vision_feed_forward_options(concrete.options.feed_forward));
+                        tree.add_child("options.layer_norm", Detail::serialize_vision_layer_norm_options(concrete.options.layer_norm));
+                        tree.add_child("options.patch_embedding", Detail::serialize_vision_patch_embedding_options(concrete.options.patch_embedding));
+                        tree.add_child("options.window", Detail::serialize_vision_window_options(concrete.options.window));
+                        tree.add_child("options.positional_encoding", Detail::serialize_positional_encoding_options(concrete.options.positional_encoding));
+                        tree.put("options.residual_dropout", concrete.options.residual_dropout);
+                        tree.put("options.attention_dropout", concrete.options.attention_dropout);
+                        tree.put("options.feed_forward_dropout", concrete.options.feed_forward_dropout);
+                        tree.put("options.pre_norm", concrete.options.pre_norm);
+                        tree.put("options.final_layer_norm", concrete.options.final_layer_norm);
+
+                        // layers vector
+                        PropertyTree layers;
+                        for (const auto &layer : concrete.layers) {
+                            PropertyTree entry;
+                            entry.add_child("attention", Detail::serialize_vision_attention_options(layer.attention));
+                            entry.add_child("feed_forward", Detail::serialize_vision_feed_forward_options(layer.feed_forward));
+                            entry.add_child("window", Detail::serialize_vision_window_options(layer.window));
+                            layers.push_back({"", entry});
+                        }
+                        tree.add_child("layers", layers);
+
+
+                    } else if constexpr (std::is_same_v<
+                        DescriptorType,
+                        ::Thot::Block::Details::Transformer::LongformerXL::EncoderDescriptor>) {
+
+                        tree.put("type", "longformer_xl_encoder");
+
+                        // top-level options
+                        tree.put("options.layers", static_cast<std::uint64_t>(concrete.options.layers));
+                        tree.put("options.embed_dim", concrete.options.embed_dim);
+                        tree.add_child("options.attention", Detail::serialize_longformer_attention_options(concrete.options.attention));
+                        tree.add_child("options.feed_forward", Detail::serialize_longformer_feed_forward_options(concrete.options.feed_forward));
+                        tree.add_child("options.layer_norm", Detail::serialize_longformer_layer_norm_options(concrete.options.layer_norm));
+                        tree.put("options.window_size", concrete.options.window_size);
+                        tree.put("options.global_tokens", static_cast<std::uint64_t>(concrete.options.global_tokens));
+                        tree.put("options.causal", concrete.options.causal);
+                        tree.put("options.use_memory", concrete.options.use_memory);
+                        tree.put("options.memory_size", static_cast<std::uint64_t>(concrete.options.memory_size));
+                        tree.put("options.residual_dropout", concrete.options.residual_dropout);
+                        tree.put("options.attention_dropout", concrete.options.attention_dropout);
+                        tree.put("options.feed_forward_dropout", concrete.options.feed_forward_dropout);
+                        tree.put("options.pre_norm", concrete.options.pre_norm);
+                        tree.put("options.final_layer_norm", concrete.options.final_layer_norm);
+
+                        // per-layer descriptors
+                        PropertyTree layers;
+                        for (const auto &layer : concrete.layers) {
+                            PropertyTree entry;
+                            entry.add_child("attention", Detail::serialize_longformer_attention_options(layer.attention));
+                            entry.add_child("feed_forward", Detail::serialize_longformer_feed_forward_options(layer.feed_forward));
+                            layers.push_back({"", entry});
+                        }
+                        tree.add_child("layers", layers);
+
                 } else {
                     static_assert(sizeof(DescriptorType) == 0, "Unsupported block descriptor supplied.");
                 }

@@ -1,6 +1,7 @@
 #ifndef THOT_EBT_HPP
 #define THOT_EBT_HPP
-// Energy based transformer
+// "Energy-Based Transformers" — Haziza et al., 2025 (arXiv:2507.02092).
+// Models discrete or continuous modalities by refining latent tokens through learned energy gradients instead of explicit softmax attention.
 // https://arxiv.org/pdf/2507.02092
 #include <algorithm>
 #include <cstddef>

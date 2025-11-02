@@ -14,8 +14,18 @@
 #include "details/transformers/mamba.hpp"
 #include "details/transformers/ebt.hpp"
 #include "details/transformers/plusplus.hpp"
+#include "details/transformers/atlas.hpp"
+#include "details/transformers/titan.hpp"
+#include "details/transformers/bert.hpp"
+#include "details/transformers/vision.hpp"
+#include "details/transformers/perceiver.hpp"
+#include "details/transformers/longformer_xl.hpp"
 
 namespace Thot::Block {
+    namespace Details::Transformer::Bert {
+        struct EncoderDescriptor;
+    }
+
     using SequentialDescriptor = Details::SequentialDescriptor;
     using ResidualDescriptor = Details::ResidualDescriptor;
 
@@ -29,7 +39,11 @@ namespace Thot::Block {
                                     Transformer::EBT::EncoderDescriptor,
                                     Transformer::EBT::DecoderDescriptor,
                                     Transformer::PlusPlus::EncoderDescriptor,
-                                    Transformer::PlusPlus::DecoderDescriptor>;
+                                    Transformer::PlusPlus::DecoderDescriptor,
+                                    Transformer::Bert::EncoderDescriptor,
+                                    Transformer::Vision::EncoderDescriptor,
+                                    Transformer::Perceiver::EncoderDescriptor,
+                                    Transformer::LongformerXL::EncoderDescriptor>;
 
     [[nodiscard]] inline auto Sequential(std::initializer_list<::Thot::Layer::Descriptor> layers, ::Thot::LocalConfig local = {}) -> SequentialDescriptor {
         SequentialDescriptor descriptor{};
