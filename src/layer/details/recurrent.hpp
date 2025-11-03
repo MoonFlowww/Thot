@@ -272,6 +272,7 @@ namespace Thot::Layer::Details {
 
                 // Apply forget bias once at init on the forget gate slice [H..2H)
                 if (forget_bias != 0.0) {
+                    torch::NoGradGuard guard;
                     bias.slice(/*dim=*/0, hidden_size, 2 * hidden_size).add_(forget_bias);
                 }
 
