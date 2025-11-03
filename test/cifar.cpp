@@ -92,12 +92,12 @@ int main() {
                 Thot::Activation::GeLU,
                 Thot::Initialization::HeNormal
             ),
-                Thot::Layer::Conv2d(
+            Thot::Layer::Conv2d(
                 {8, 8, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
                 Thot::Activation::GeLU,
                 Thot::Initialization::HeNormal
             ),
-                Thot::Layer::Conv2d(
+            Thot::Layer::Conv2d(
                 {8, 8, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
                 Thot::Activation::GeLU,
                 Thot::Initialization::HeNormal
@@ -109,13 +109,32 @@ int main() {
             ),
 
         }), "Send");
+        Thot::Block::Transformer::Vision::EncoderOptions vit_options{};
+        vit_options.layers = 4;
+        vit_options.embed_dim = 192;
+        vit_options.attention.num_heads = 6;
+        vit_options.attention.dropout = 0.1;
+        vit_options.feed_forward.mlp_ratio = 3.0;
+        vit_options.residual_dropout = 0.1;
+        vit_options.attention_dropout = 0.1;
+        vit_options.feed_forward_dropout = 0.1;
+        vit_options.patch_embedding.in_channels = 8;
+        vit_options.patch_embedding.embed_dim = vit_options.embed_dim;
+        vit_options.patch_embedding.patch_size = 2;
+        vit_options.patch_embedding.add_class_token = false;
+        vit_options.patch_embedding.normalize = true;
+        vit_options.patch_embedding.dropout = 0.1;
+        vit_options.positional_encoding.type = Thot::Block::Transformer::Vision::PositionalEncodingType::Sinusoidal;
+        vit_options.positional_encoding.dropout = 0.1;
+
+        model.add(Thot::Block::Transformer::Vision::Encoder(vit_options), "ViT");
 
 
         model.add(Thot::Layer::Flatten(), "flat");
 
-        model.add(Thot::Layer::FC({512, 256, true}, Thot::Activation::SiLU, Thot::Initialization::HeNormal), "FC1");
+        model.add(Thot::Layer::FC({3072, 512, true}, Thot::Activation::SiLU, Thot::Initialization::HeNormal), "FC1");
         model.add(Thot::Layer::HardDropout({.probability = 0.5}), "HDFin");
-        model.add(Thot::Layer::FC({256, 10, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal), "FC2");
+        model.add(Thot::Layer::FC({512, 10, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal), "FC2");
 
 
 
@@ -134,7 +153,8 @@ int main() {
 
             Thot::LinkSpec{Thot::Port::parse("S2"), Thot::Port::parse("Send")},
 
-            Thot::LinkSpec{Thot::Port::parse("Send"), Thot::Port::parse("flat")},
+            Thot::LinkSpec{Thot::Port::parse("Send"), Thot::Port::parse("ViT")},
+            Thot::LinkSpec{Thot::Port::parse("ViT"), Thot::Port::parse("flat")},
             Thot::LinkSpec{Thot::Port::parse("flat"), Thot::Port::parse("FC1")},
             Thot::LinkSpec{Thot::Port::parse("FC1"), Thot::Port::parse("HDFin")},
             Thot::LinkSpec{Thot::Port::parse("HDFin"), Thot::Port::parse("FC2")},
