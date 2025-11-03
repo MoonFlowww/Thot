@@ -21,49 +21,21 @@
 
 #include "../include/Thot.h"
 
-namespace {
-    struct ECGDataset {
-        torch::Tensor signals;
-        torch::Tensor labels;
-    };
 
-    struct ECGDatasetSplit {
-        ECGDataset train;
-        ECGDataset validation;
-    };
+struct ECGDataset {
+    torch::Tensor signals;
+    torch::Tensor labels;
+};
 
-}
+struct ECGDatasetSplit {
+    ECGDataset train;
+    ECGDataset validation;
+};
 
-ECGDatasetSplit load_ptbxl_dataset(const std::string& root, bool low_res, float train_split)
-{
+
+ECGDatasetSplit load_ptbxl_dataset(const std::string& root, bool low_res, float train_split) {
     auto [train_inputs, train_targets, validation_inputs, validation_targets] = Thot::Data::Load::PTBXL<>(root, low_res, train_split, true);
-
-    if (train_inputs.dim() != 3 || train_inputs.size(1) != 12) {
-        throw std::runtime_error("Expected PTB-XL training signals to have shape [N, 12, L].");
-    }
-    if (train_targets.size(0) != train_inputs.size(0)) {
-        throw std::runtime_error("PTB-XL training inputs and targets size mismatch");
-    }
-    if (train_targets.dtype() != torch::kInt64) {
-        throw std::runtime_error("PTB-XL training labels must be int64_t");
-    }
-
-    const auto label_min = train_targets.min().item<std::int64_t>();
-    const auto label_max = train_targets.max().item<std::int64_t>();
-    if (label_min < 0 || label_max > 4) {
-        throw std::runtime_error("PTB-XL labels must fall within the five diagnostic superclasses");
-    }
-    if (validation_inputs.defined() && validation_inputs.size(0) > 0) {
-        if (validation_inputs.dim() != 3 || validation_inputs.size(1) != 12) {
-            throw std::runtime_error("Expected PTB-XL validation signals to have shape [N, 12, L].");
-        }
-        if (validation_targets.size(0) != validation_inputs.size(0)) {
-            throw std::runtime_error("PTB-XL validation inputs and targets size mismatch");
-        }
-    }
-    return {{std::move(train_inputs), std::move(train_targets)},
-            {std::move(validation_inputs), std::move(validation_targets)}};
-
+    return {{std::move(train_inputs), std::move(train_targets)}, {std::move(validation_inputs), std::move(validation_targets)}};
 }
 
 int main()
