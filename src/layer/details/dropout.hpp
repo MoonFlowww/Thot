@@ -69,16 +69,20 @@ namespace Thot::Layer::Details {
 
 
 
-
-
-
-
-
-
     struct SoftDropoutOptions {
+        enum class NoiseType {
+            Gaussian,
+            Poisson,
+            Dithering,
+            InterleavedGradientNoise,
+            BlueNoise,
+            Bayer
+        };
         double probability{0.5};
         double noise_mean{0.0};
         double noise_std{1.0};
+        /// Controls which distribution is sampled to generate noise.
+        NoiseType noise_type{NoiseType::Gaussian};
         bool inplace{false};
     };
 
@@ -97,6 +101,10 @@ namespace Thot::Layer::Details {
                         "SoftDropout probability must be in the range [0, 1).");
             TORCH_CHECK(options_.noise_std >= 0.0,
                         "SoftDropout noise standard deviation must be non-negative.");
+            if (options_.noise_type == SoftDropoutOptions::NoiseType::Poisson) {
+                TORCH_CHECK(options_.noise_mean >= 0.0,
+                            "SoftDropout Poisson noise requires a non-negative rate (noise_mean).");
+            }
         }
 
         torch::Tensor forward(torch::Tensor input)
@@ -118,7 +126,71 @@ namespace Thot::Layer::Details {
 
             auto mask = torch::bernoulli(torch::full_like(input, keep_prob)).to(torch::kBool);
             auto scaled_input = input / keep_prob;
-            auto noise = torch::empty_like(input).normal_(options_.noise_mean, options_.noise_std);
+            torch::Tensor noise;
+            switch (options_.noise_type) {
+                case SoftDropoutOptions::NoiseType::Gaussian:
+                    noise = torch::empty_like(input).normal_(options_.noise_mean, options_.noise_std);
+                    break;
+                case SoftDropoutOptions::NoiseType::Poisson: {
+                    const double rate_value = options_.noise_mean;
+                    TORCH_CHECK(rate_value >= 0.0,
+                                "SoftDropout Poisson noise requires a non-negative rate (noise_mean).");
+                    auto rate = torch::full_like(input, rate_value);
+                    auto samples = torch::poisson(rate);
+                    if (rate_value > 0.0) {
+                        const auto poisson_std = std::sqrt(rate_value);
+                        if (options_.noise_std > 0.0 && poisson_std > 0.0) {
+                            samples = (samples - rate) / poisson_std;
+                            noise = samples * options_.noise_std + options_.noise_mean;
+                        } else {
+                            noise = (samples - rate) + options_.noise_mean;
+                        }
+                    } else {
+                        noise = torch::zeros_like(input) + options_.noise_mean;
+                    }
+                    break;
+                }
+                case SoftDropoutOptions::NoiseType::Dithering: {
+                    const double low = options_.noise_mean - options_.noise_std;
+                    const double high = options_.noise_mean + options_.noise_std;
+                    noise = torch::empty_like(input).uniform_(low, high);
+                    break;
+                }
+                case SoftDropoutOptions::NoiseType::InterleavedGradientNoise: {
+                    const auto total = input.numel();
+                    auto device = input.device();
+                    auto indices = torch::arange(total, torch::TensorOptions().dtype(torch::kLong).device(device));
+                    auto positive = torch::full({total}, 1.0, input.options());
+                    auto negative = torch::full({total}, -1.0, input.options());
+                    auto pattern = torch::where((indices.remainder(2) == 0), positive, negative);
+                    noise = pattern.view_as(input) * options_.noise_std + options_.noise_mean;
+                    break;
+                }
+                case SoftDropoutOptions::NoiseType::BlueNoise: {
+                    auto raw_noise = torch::rand_like(input) - 0.5;
+                    auto centered = raw_noise - raw_noise.mean();
+                    auto std_tensor = centered.std();
+                    const auto std_value = std_tensor.to(torch::kCPU).item<double>();
+                    if (std_value > 0.0) {
+                        centered = centered / std_value;
+                    }
+                    noise = centered * options_.noise_std + options_.noise_mean;
+                    break;
+                }
+                case SoftDropoutOptions::NoiseType::Bayer: {
+                    const auto total = input.numel();
+                    auto device = input.device();
+                    auto indices = torch::arange(total, torch::TensorOptions().dtype(torch::kLong).device(device));
+                    auto base_pattern = torch::tensor({0.0, 2.0, 3.0, 1.0},
+                                                       torch::TensorOptions().dtype(input.scalar_type()));
+                    base_pattern = base_pattern.to(device);
+                    auto tiled = base_pattern.index_select(0, indices.remainder(4)).view_as(input);
+                    noise = (tiled / 3.0) * options_.noise_std + options_.noise_mean;
+                    break;
+                }
+                default:
+                    TORCH_CHECK(false, "Unsupported SoftDropout noise type encountered.");
+            }
             auto noisy_input = scaled_input + noise;
             auto output = torch::where(mask, scaled_input, noisy_input);
 

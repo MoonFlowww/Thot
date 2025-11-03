@@ -1504,10 +1504,10 @@ namespace Thot {
                 std::is_same<Decayed, Loss::MSEDescriptor>,
                 std::is_same<Decayed, Loss::CrossEntropyDescriptor>,
                 std::is_same<Decayed, Loss::BCEWithLogitsDescriptor>,
-                std::is_same<Decayed, Loss::CosineEmbeddingDescriptor>,
-                std::is_same<Decayed, Loss::KLDivDescriptor>,
+                //std::is_same<Decayed, Loss::CosineEmbeddingDescriptor>,
+                //std::is_same<Decayed, Loss::KLDivDescriptor>,
                 std::is_same<Decayed, Loss::MAEDescriptor>,
-                std::is_same<Decayed, Loss::MarginRankingDescriptor>,
+                //std::is_same<Decayed, Loss::MarginRankingDescriptor>,
                 std::is_same<Decayed, Loss::NegativeLogLikelihoodDescriptor>,
                 std::is_same<Decayed, Loss::SmoothL1Descriptor>>;
             static_assert(kSupported, "Unsupported loss descriptor type provided to Model::set_loss.");
@@ -2276,9 +2276,9 @@ namespace Thot {
                 throw std::logic_error("Loss function has not been configured.");
             }
             return std::visit(
-                            [&](const auto& descriptor) {
-                                return Loss::Details::compute(descriptor, prediction, target, weight);
-                            }, *loss_descriptor_);
+                [&](const auto& descriptor) {
+                    return Loss::Details::compute(descriptor, prediction, target, weight);
+                }, *loss_descriptor_);
         }
 
         auto evaluate(torch::Tensor evaluation_inputs, torch::Tensor evaluation_targets, Evaluation::ClassificationDescriptor descriptor, std::vector<Metric::Classification::Descriptor> metrics, Evaluation::Options options = {}) -> Evaluation::ClassificationReport {
@@ -4674,10 +4674,10 @@ namespace Thot {
             Loss::MSEDescriptor,
             Loss::CrossEntropyDescriptor,
             Loss::BCEWithLogitsDescriptor,
-            Loss::CosineEmbeddingDescriptor,
-            Loss::KLDivDescriptor,
+            //Loss::CosineEmbeddingDescriptor,
+            //Loss::KLDivDescriptor,
             Loss::MAEDescriptor,
-            Loss::MarginRankingDescriptor,
+            //Loss::MarginRankingDescriptor,
             Loss::NegativeLogLikelihoodDescriptor,
             Loss::SmoothL1Descriptor>;
         std::optional<LossDescriptor> loss_descriptor_{};

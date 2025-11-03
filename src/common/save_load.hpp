@@ -200,6 +200,58 @@ namespace Thot::Common::SaveLoad {
             message << "Unknown attention variant '" << value << "'.";
             throw std::runtime_error(message.str());
         }
+        inline std::string soft_dropout_noise_type_to_string(Layer::Details::SoftDropoutOptions::NoiseType type)
+        {
+            using NoiseType = Layer::Details::SoftDropoutOptions::NoiseType;
+            switch (type) {
+                case NoiseType::Gaussian: return "gaussian";
+                case NoiseType::Poisson: return "poisson";
+                case NoiseType::Dithering: return "dithering";
+                case NoiseType::InterleavedGradientNoise: return "interleaved_gradient_noise";
+                case NoiseType::BlueNoise: return "blue_noise";
+                case NoiseType::Bayer: return "bayer";
+            }
+            throw std::runtime_error("Unsupported SoftDropout noise type during serialisation.");
+        }
+
+        inline Layer::Details::SoftDropoutOptions::NoiseType soft_dropout_noise_type_from_string(const std::string& value)
+        {
+            using NoiseType = Layer::Details::SoftDropoutOptions::NoiseType;
+            const auto lowered = to_lower(value);
+            if (lowered == "gaussian") return NoiseType::Gaussian;
+            if (lowered == "poisson") return NoiseType::Poisson;
+            if (lowered == "dithering") return NoiseType::Dithering;
+            if (lowered == "interleaved_gradient_noise") return NoiseType::InterleavedGradientNoise;
+            if (lowered == "blue_noise") return NoiseType::BlueNoise;
+            if (lowered == "bayer") return NoiseType::Bayer;
+            std::ostringstream message;
+            message << "Unknown SoftDropout noise type '" << value << "'.";
+            throw std::runtime_error(message.str());
+        }
+
+        inline std::string reduce_op_to_string(Layer::Details::ReduceOp op)
+        {
+            switch (op) {
+                case Layer::Details::ReduceOp::Sum: return "sum";
+                case Layer::Details::ReduceOp::Mean: return "mean";
+                case Layer::Details::ReduceOp::Max: return "max";
+                case Layer::Details::ReduceOp::Min: return "min";
+            }
+            throw std::runtime_error("Unsupported reduce operation during serialisation.");
+        }
+
+        inline Layer::Details::ReduceOp reduce_op_from_string(const std::string& value)
+        {
+            const auto lowered = to_lower(value);
+            if (lowered == "sum") return Layer::Details::ReduceOp::Sum;
+            if (lowered == "mean") return Layer::Details::ReduceOp::Mean;
+            if (lowered == "max") return Layer::Details::ReduceOp::Max;
+            if (lowered == "min") return Layer::Details::ReduceOp::Min;
+            std::ostringstream message;
+            message << "Unknown reduce operation '" << value << "'.";
+            throw std::runtime_error(message.str());
+        }
+
         inline Mamba::FeedForwardOptions deserialize_mamba_feed_forward_options(const PropertyTree& tree,
                                                                                 const std::string& context)
         {
@@ -1947,6 +1999,7 @@ namespace Thot::Common::SaveLoad {
                     tree.put("options.inplace", concrete.options.inplace);
                     tree.put("options.noise_mean", concrete.options.noise_mean);
                     tree.put("options.noise_std", concrete.options.noise_std);
+                    tree.put("options.noise_type", Detail::soft_dropout_noise_type_to_string(concrete.options.noise_type));
                     tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
                     tree.add_child("local", serialize_local_config(concrete.local));
                 } else if constexpr (std::is_same_v<DescriptorType, Layer::FlattenDescriptor>) {
@@ -1955,7 +2008,14 @@ namespace Thot::Common::SaveLoad {
                     tree.put("options.end_dim", concrete.options.end_dim);
                     tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
                     tree.add_child("local", serialize_local_config(concrete.local));
-                    } else if constexpr (std::is_same_v<DescriptorType, Layer::RNNDescriptor>) {
+                } else if constexpr (std::is_same_v<DescriptorType, Layer::ReduceDescriptor>) {
+                    tree.put("type", "reduce");
+                    tree.put("options.op", Detail::reduce_op_to_string(concrete.options.op));
+                    tree.add_child("options.dims", Detail::write_array(concrete.options.dims));
+                    tree.put("options.keep_dim", concrete.options.keep_dim);
+                    tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
+                    tree.add_child("local", serialize_local_config(concrete.local));
+                } else if constexpr (std::is_same_v<DescriptorType, Layer::RNNDescriptor>) {
                     tree.put("type", "rnn");
                     tree.put("options.input_size", concrete.options.input_size);
                     tree.put("options.hidden_size", concrete.options.hidden_size);
@@ -1969,6 +2029,17 @@ namespace Thot::Common::SaveLoad {
                     tree.add_child("local", serialize_local_config(concrete.local));
                 } else if constexpr (std::is_same_v<DescriptorType, Layer::LSTMDescriptor>) {
                     tree.put("type", "lstm");
+                    tree.put("options.input_size", concrete.options.input_size);
+                    tree.put("options.hidden_size", concrete.options.hidden_size);
+                    tree.put("options.num_layers", concrete.options.num_layers);
+                    tree.put("options.dropout", concrete.options.dropout);
+                    tree.put("options.batch_first", concrete.options.batch_first);
+                    tree.put("options.bidirectional", concrete.options.bidirectional);
+                    tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
+                    tree.add_child("initialization", Detail::serialize_initialization_descriptor(concrete.initialization));
+                    tree.add_child("local", serialize_local_config(concrete.local));
+                } else if constexpr (std::is_same_v<DescriptorType, Layer::xLSTMDescriptor>) {
+                    tree.put("type", "xlstm");
                     tree.put("options.input_size", concrete.options.input_size);
                     tree.put("options.hidden_size", concrete.options.hidden_size);
                     tree.put("options.num_layers", concrete.options.num_layers);
@@ -2139,6 +2210,17 @@ namespace Thot::Common::SaveLoad {
             descriptor.local = deserialize_local_config(tree.get_child("local"), context);
             return Layer::Descriptor{descriptor};
         }
+        if (type == "reduce") {
+            Layer::Details::ReduceDescriptor descriptor;
+            descriptor.options.op = Detail::reduce_op_from_string(Detail::get_string(tree, "options.op", context));
+            if (auto dims = tree.get_child_optional("options.dims")) {
+                descriptor.options.dims = Detail::read_array<std::int64_t>(*dims, context);
+            }
+            descriptor.options.keep_dim = Detail::get_boolean(tree, "options.keep_dim", context);
+            descriptor.activation = Detail::deserialize_activation_descriptor(tree.get_child("activation"), context);
+            descriptor.local = deserialize_local_config(tree.get_child("local"), context);
+            return Layer::Descriptor{descriptor};
+        }
         if (type == "rnn") {
             Layer::Details::RNNDescriptor descriptor;
             descriptor.options.input_size = Detail::get_numeric<std::int64_t>(tree, "options.input_size", context);
@@ -2155,6 +2237,19 @@ namespace Thot::Common::SaveLoad {
         }
         if (type == "lstm") {
             Layer::Details::LSTMDescriptor descriptor;
+            descriptor.options.input_size = Detail::get_numeric<std::int64_t>(tree, "options.input_size", context);
+            descriptor.options.hidden_size = Detail::get_numeric<std::int64_t>(tree, "options.hidden_size", context);
+            descriptor.options.num_layers = Detail::get_numeric<std::int64_t>(tree, "options.num_layers", context);
+            descriptor.options.dropout = Detail::get_numeric<double>(tree, "options.dropout", context);
+            descriptor.options.batch_first = Detail::get_boolean(tree, "options.batch_first", context);
+            descriptor.options.bidirectional = Detail::get_boolean(tree, "options.bidirectional", context);
+            descriptor.activation = Detail::deserialize_activation_descriptor(tree.get_child("activation"), context);
+            descriptor.initialization = Detail::deserialize_initialization_descriptor(tree.get_child("initialization"), context);
+            descriptor.local = deserialize_local_config(tree.get_child("local"), context);
+            return Layer::Descriptor{descriptor};
+        }
+        if (type == "xlstm") {
+            Layer::Details::xLSTMDescriptor descriptor;
             descriptor.options.input_size = Detail::get_numeric<std::int64_t>(tree, "options.input_size", context);
             descriptor.options.hidden_size = Detail::get_numeric<std::int64_t>(tree, "options.hidden_size", context);
             descriptor.options.num_layers = Detail::get_numeric<std::int64_t>(tree, "options.num_layers", context);

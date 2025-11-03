@@ -45,6 +45,7 @@ int xmain() {
             Thot::Layer::MaxPool2d({{2, 2}, {2, 2}})
         }), "stem");
 
+        model.add(Thot::Layer::SoftDropout({.}));
 
 
         model.add(Thot::Block::Sequential({
@@ -136,7 +137,7 @@ int xmain() {
         model.add(Thot::Layer::HardDropout({.probability = 0.5}), "HDFin");
         model.add(Thot::Layer::FC({512, 10, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal), "FC2");
 
-
+        // TODO: DO INTERLEAVED GRADIENT NOISE
         /*
         model.links({
             Thot::LinkSpec{Thot::Port::parse("@input"), Thot::Port::parse("stem")},

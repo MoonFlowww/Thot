@@ -61,34 +61,26 @@ int main()
     const int64_t steps_per_epoch = std::max<int64_t>(1, (train_signals.size(0) + batch_size - 1) / batch_size);
 
     if (!load_existing_model) {
-        model.add(Thot::Layer::LSTM({
-                              .input_size = input_features,
-                              .hidden_size = 128,
-                              .num_layers = 2,
-                              .dropout = 0.1,
-                              .batch_first = true,
-                              .bidirectional = true
-                          }, Thot::Activation::Identity, Thot::Initialization::XavierUniform), "lstm");
-        
-        model.add(Thot::Layer::Flatten(), "flat");
-        model.add(Thot::Layer::HardDropout({.probability = 0.5}), "HD1");
-        model.add(Thot::Layer::FC({sequence_length * 128 * 2, 256, true}, Thot::Activation::SiLU, Thot::Initialization::HeNormal), "fc1"); // seq_len * Hsize LSTM * bidirectional
-        model.add(Thot::Layer::HardDropout({.probability = 0.5}), "HD2");
-        model.add(Thot::Layer::FC({256, 128, true}, Thot::Activation::SiLU, Thot::Initialization::HeNormal), "fc2");
-        model.add(Thot::Layer::FC({128, 5, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal), "end");
+
+        model.add(Thot::Layer::xLSTM({ .input_size = input_features, .hidden_size = 128, .num_layers = 2, .dropout = 0.1, .batch_first = true, .bidirectional = true }, Thot::Activation::Identity, Thot::Initialization::XavierUniform), "lstm");
+
+        model.add(Thot::Layer::Reduce({.op=Thot::Layer::ReduceOp::Max, .dims = {1}, .keep_dim=false}), "tmean");
+
+        model.add(Thot::Layer::HardDropout({ .probability = 0.5 }), "HD1");
+        model.add(Thot::Layer::FC({ 256, 128, true }, Thot::Activation::SiLU, Thot::Initialization::HeNormal), "fc1");
+        model.add(Thot::Layer::HardDropout({ .probability = 0.5 }), "HD2");
+        model.add(Thot::Layer::FC({ 128, 5, true }, Thot::Activation::Identity, Thot::Initialization::HeNormal), "end");
 
         model.links({
-            Thot::LinkSpec{Thot::Port::parse("@input"), Thot::Port::parse("lstm")},
-            Thot::LinkSpec{Thot::Port::parse("lstm"), Thot::Port::parse("flatten")},
-
-            Thot::LinkSpec{Thot::Port::parse("flat"), Thot::Port::parse("dropout1")},
-
-            Thot::LinkSpec{Thot::Port::parse("HD1"), Thot::Port::parse("fc1")},
-            Thot::LinkSpec{Thot::Port::parse("fc1"), Thot::Port::parse("HD2")},
-            Thot::LinkSpec{Thot::Port::parse("dropout2"), Thot::Port::parse("fc2")},
-            Thot::LinkSpec{Thot::Port::parse("fc2"), Thot::Port::parse("classifier")},
-            Thot::LinkSpec{Thot::Port::parse("end"), Thot::Port::parse("@output")}
+            {Thot::Port::parse("@input"), Thot::Port::parse("lstm")},
+            {Thot::Port::parse("lstm"),   Thot::Port::parse("tmean")},
+            {Thot::Port::parse("tmean"),  Thot::Port::parse("HD1")},
+            {Thot::Port::parse("HD1"),    Thot::Port::parse("fc1")},
+            {Thot::Port::parse("fc1"),    Thot::Port::parse("HD2")},
+            {Thot::Port::parse("HD2"),    Thot::Port::parse("end")},
+            {Thot::Port::parse("end"),    Thot::Port::parse("@output")}
         }, true);
+
 
         model.set_optimizer(
         Thot::Optimizer::AdamW({.learning_rate = 2e-4, .weight_decay = 1e-4}),
@@ -99,7 +91,7 @@ int main()
             .warmup_start_factor = 0.1
         }));
 
-        model.set_loss(Thot::Loss::BCEWithLogits({}));
+        model.set_loss(Thot::Loss::CrossEntropy({.label_smoothing = 0.05f}));
     }
 
     Thot::TrainOptions train_options{};

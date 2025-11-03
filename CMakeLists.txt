@@ -160,5 +160,6 @@ add_executable(test_Thot test/ecg.cpp
         src/block/details/transformers/perceiver.hpp
         src/block/details/transformers/bert.hpp
         src/block/details/transformers/vision.hpp
+        src/layer/details/reduce.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)

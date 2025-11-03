@@ -11,6 +11,7 @@
 #include "details/dropout.hpp"
 #include "details/s4.hpp"
 #include "details/fc.hpp"
+#include "details/reduce.hpp"
 #include "details/flatten.hpp"
 #include "details/pooling.hpp"
 #include "details/recurrent.hpp"
@@ -55,6 +56,10 @@ namespace Thot::Layer {
     using LSTMOptions = Details::LSTMOptions;
     using LSTMDescriptor = Details::LSTMDescriptor;
 
+    using xLSTMOptions = Details::xLSTMOptions;
+    using xLSTMDescriptor = Details::xLSTMDescriptor;
+
+
     using GRUOptions = Details::GRUOptions;
     using GRUDescriptor = Details::GRUDescriptor;
 
@@ -63,6 +68,10 @@ namespace Thot::Layer {
     using S4Options = Details::S4Options;
     using S4Descriptor = Details::S4Descriptor;
 
+    //NB: this is a layer
+    using ReduceOp = Details::ReduceOp;
+    using ReduceOptions = Details::ReduceOptions;
+    using ReduceDescriptor = Details::ReduceDescriptor;
 
 
     using Descriptor = std::variant<FCDescriptor,
@@ -75,8 +84,10 @@ namespace Thot::Layer {
                                     FlattenDescriptor,
                                     RNNDescriptor,
                                     LSTMDescriptor,
+                                    xLSTMDescriptor,
                                     GRUDescriptor,
-                                    S4Descriptor>;
+                                    S4Descriptor,
+                                    ReduceDescriptor>;
 
     [[nodiscard]] inline auto FC(const FCOptions& options,
                                  ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
@@ -221,6 +232,13 @@ namespace Thot::Layer {
                                     ::Thot::LocalConfig local = {}) -> LSTMDescriptor {
         return {options, activation, initialization, std::move(local)};
     }
+    [[nodiscard]] inline auto xLSTM(const xLSTMOptions& options,
+                                    ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
+                                    ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default,
+                                    ::Thot::LocalConfig local = {}) -> xLSTMDescriptor {
+        return {options, activation, initialization, std::move(local)};
+    }
+
 
     [[nodiscard]] inline auto GRU(const GRUOptions& options,
                                    ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
@@ -239,6 +257,15 @@ namespace Thot::Layer {
     {
         return {options, activation, initialization, std::move(local)};
     }
+
+
+    [[nodiscard]] inline auto Reduce(const ReduceOptions& options = {},
+                                 ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
+                                 ::Thot::LocalConfig local = {}) -> ReduceDescriptor
+    {
+        return {options, activation, std::move(local)};
+    }
+
 
 
 
