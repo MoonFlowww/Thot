@@ -25,8 +25,6 @@
 
 namespace Thot::Data::Load {
     namespace Details {
-        namespace fs = std::filesystem;
-
         inline std::string trim_copy(const std::string& value)
         {
             const auto not_space = [](unsigned char character) { return !std::isspace(character); };
@@ -817,7 +815,7 @@ namespace Thot::Data::Load {
     }
 
     template <bool BufferVRAM = false, class DevicePolicyT = Core::DevicePolicy<BufferVRAM>>
-    [[nodiscard]] inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> PTBXL(const std::string& root, bool low_resolution, float train_fraction = 0.8f, bool normalise = true) {
+    [[nodiscard]] inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> PTBXL(const std::string& root, bool low_resolution, float train_fraction = 0.8f, bool normalise = true, bool multilabel = false, float multilabel_threshold = 0.0f) {
         namespace fs = std::filesystem;
         const std::filesystem::path root_path = std::filesystem::path(root);
         const std::filesystem::path database_csv = root_path / "ptbxl_database.csv";
@@ -827,6 +825,8 @@ namespace Thot::Data::Load {
         static const std::unordered_map<std::string, std::int64_t> class_to_index{
             {"NORM", 0}, {"MI", 1}, {"STTC", 2}, {"CD", 3}, {"HYP", 4}
         };
+        static const std::vector<std::string> class_order = {"NORM","MI","STTC","CD","HYP"};
+
 
         const auto scp_to_superclass = Details::load_scp_superclass_map(scp_csv, class_to_index);
 
@@ -851,6 +851,7 @@ namespace Thot::Data::Load {
 
         std::vector<torch::Tensor> all_signals;
         std::vector<std::int64_t>  all_labels;
+        std::vector<torch::Tensor> all_multilabels;
         std::optional<std::int64_t> expected_signal_length;
         std::int64_t rows_seen = 0;
         std::int64_t rows_with_filename = 0;
@@ -874,10 +875,44 @@ namespace Thot::Data::Load {
             if (base_path.empty()) continue;
             bases_resolved += 1;
 
+
             const auto votes = Details::extract_superclass_votes(fields[scp_codes_it->second], scp_to_superclass);
-            const auto label = Details::select_superclass_label(votes, class_to_index);
-            if (!label) continue;
-            rows_with_label += 1;
+            std::optional<std::int64_t> label;
+            torch::Tensor multi;
+            if (multilabel) {
+                multi = torch::zeros({(long)class_order.size()}, torch::TensorOptions().dtype(torch::kFloat32));
+                int pos_count = 0;
+                for (const auto& kv : votes) {
+                    // kv.first is superclass string, kv.second is vote weight
+                    auto itc = class_to_index.find(kv.first);
+                    if (itc == class_to_index.end()) continue;
+                    if (kv.second > multilabel_threshold) {
+                        multi.index_put_({itc->second}, 1.0f);
+                        ++pos_count;
+                    }
+                }
+                if (pos_count == 0) {
+                    // If nothing passed threshold but we do have votes, take the argmax to avoid dropping the sample
+                    if (!votes.empty()) {
+                        auto best = std::max_element(votes.begin(), votes.end(),
+                                                     [](auto& a, auto& b){ return a.second < b.second; });
+                        auto itb = class_to_index.find(best->first);
+                        if (itb != class_to_index.end()) {
+                            multi.index_put_({itb->second}, 1.0f);
+                            pos_count = 1;
+                        }
+                    }
+                }
+                if (pos_count == 0) continue; // truly no label
+                rows_with_label += 1;
+                if (multilabel) all_multilabels.push_back(multi);
+            } else {
+                label = Details::select_superclass_label(votes, class_to_index);
+                if (!label) continue;
+                rows_with_label += 1;
+                if (multilabel) all_multilabels.push_back(multi);
+            }
+
 
             auto signal = Details::read_ptbxl_signal(base_path, expected_signal_length, normalise);
             if (!signal) continue;
@@ -900,7 +935,15 @@ namespace Thot::Data::Load {
 
         // Stack -> shuffle -> split (ignore folds completely)
         auto inputs  = torch::stack(all_signals);
-        auto targets = torch::tensor(all_labels, torch::TensorOptions().dtype(torch::kInt64));
+        torch::Tensor targets;
+        if (multilabel) {
+            if (all_multilabels.empty()) {
+                throw std::runtime_error("PTB-XL multilabel: no labels constructed");
+            }
+            targets = torch::stack(all_multilabels).to(torch::kFloat32); // [N,5]
+        } else {
+            targets = torch::tensor(all_labels, torch::TensorOptions().dtype(torch::kInt64)); // [N]
+        }
 
         if (inputs.size(0) > 1) {
             auto perm = torch::randperm(inputs.size(0), torch::TensorOptions().dtype(torch::kLong));

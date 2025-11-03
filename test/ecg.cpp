@@ -29,7 +29,7 @@ struct ECGDatasetSplit {
 
 
 ECGDatasetSplit load_ptbxl_dataset(const std::string& root, bool low_res, float train_split) {
-    auto [train_inputs, train_targets, validation_inputs, validation_targets] = Thot::Data::Load::PTBXL<>(root, low_res, train_split, true);
+    auto [train_inputs, train_targets, validation_inputs, validation_targets] = Thot::Data::Load::PTBXL<>(root, low_res, train_split, true, true, 0.1f);
     return {{std::move(train_inputs), std::move(train_targets)}, {std::move(validation_inputs), std::move(validation_targets)}};
 }
 
@@ -46,7 +46,6 @@ int main()
 
     const std::int64_t batch_size = 64;
     const std::int64_t epochs = 40;
-    const std::int64_t num_classes = 5;
     const std::int64_t steps_per_epoch = std::max<std::int64_t>(1, (dataset.train.signals.size(0) + batch_size - 1) / batch_size);
 
     if (!load_existing_model) {
@@ -78,7 +77,7 @@ int main()
         model.add(Thot::Layer::Flatten(), "flatten");
         model.add(Thot::Layer::FC({256, 128, true}, Thot::Activation::SiLU, Thot::Initialization::HeNormal), "fc1");
         model.add(Thot::Layer::HardDropout({.probability = 0.5}), "dropout");
-        model.add(Thot::Layer::FC({128, num_classes, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal), "classifier");
+        model.add(Thot::Layer::FC({128, 5, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal), "classifier");
 
         model.links({
             Thot::LinkSpec{Thot::Port::parse("@input"), Thot::Port::parse("stem")},
