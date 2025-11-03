@@ -905,12 +905,10 @@ namespace Thot::Data::Load {
                 }
                 if (pos_count == 0) continue; // truly no label
                 rows_with_label += 1;
-                if (multilabel) all_multilabels.push_back(multi);
             } else {
                 label = Details::select_superclass_label(votes, class_to_index);
                 if (!label) continue;
                 rows_with_label += 1;
-                if (multilabel) all_multilabels.push_back(multi);
             }
 
 
@@ -919,7 +917,11 @@ namespace Thot::Data::Load {
             signals_read += 1;
 
             all_signals.push_back(std::move(*signal));
-            all_labels.push_back(*label);
+            if (multilabel) {
+                all_multilabels.push_back(std::move(multi));
+            } else {
+                all_labels.push_back(*label);
+            }
         }
 
         if (all_signals.empty()) {
