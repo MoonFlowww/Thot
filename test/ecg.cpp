@@ -99,7 +99,7 @@ int main()
             .warmup_start_factor = 0.1
         }));
 
-        model.set_loss(Thot::Loss::BCEWithLogits());
+        model.set_loss(Thot::Loss::BCEWithLogits({}));
     }
 
     Thot::TrainOptions train_options{};
