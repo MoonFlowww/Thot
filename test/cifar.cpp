@@ -5,7 +5,7 @@
 #include <utility>
 #include "../include/Thot.h"
 
-int main() {
+int xmain() {
     Thot::Model model("Debug_CIFAR");
     model.to_device(torch::cuda::is_available());
 
