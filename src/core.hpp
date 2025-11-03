@@ -748,6 +748,9 @@ namespace Thot {
                 },
                 [&](Block::Transformer::LongformerXL::EncoderDescriptor encoder_descriptor) {
                     transformer_block_handler(std::move(encoder_descriptor));
+                },
+                [&](Block::Transformer::Bert::EncoderDescriptor encoder_descriptor) {
+                    transformer_block_handler(std::move(encoder_descriptor));
                 }
             };
 
