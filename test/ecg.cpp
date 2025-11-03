@@ -74,7 +74,7 @@ int main()
     std::cout << "Cuda: " << use_cuda << std::endl;
     model.to_device(use_cuda);
 
-    const std::string dataset_root = "/home/moonfloww/Projects/DATASETS/ECG\&ACC";
+    const std::string dataset_root = "/home/moonfloww/Projects/DATASETS/ECG_ACC";
     const auto dataset = load_ptbxl_dataset(dataset_root, true, 0.8f);
 
     const std::int64_t batch_size = 64;

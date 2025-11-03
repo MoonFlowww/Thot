@@ -104,28 +104,107 @@ namespace Thot::Data::Load {
             return mapping;
         }
 
+
         inline std::filesystem::path resolve_ptbxl_record_base(const std::filesystem::path& root,
-                                                  const std::filesystem::path& preferred_records_dir,
-                                                  const std::string& relative_field)
+                                                                const std::filesystem::path& preferred_records_dir,
+                                                                const std::string& relative_field)
         {
+            // relative_field is typically like "records500/21000/21837_hr" or "records100/00000/00001_lr"
+            // We must return the *base* path without extension so that ".hea"/".dat" can be appended.
             auto trimmed = trim_copy(relative_field);
             if (trimmed.empty()) {
                 return {};
             }
 
-            std::filesystem::path candidate(trimmed);
-            if (candidate.is_relative()) {
-                const auto first_component = candidate.begin() != candidate.end() ? *candidate.begin() : std::filesystem::path{};
-                if (first_component != preferred_records_dir.filename()) {
-                    candidate = preferred_records_dir / candidate;
+            auto ensure_base = [](std::filesystem::path p) {
+                if (p.has_extension()) {
+                    p.replace_extension(); // drop .hea/.dat if present
                 }
+                return p.lexically_normal();
+            };
+
+            auto base_exists = [](const std::filesystem::path& base) {
+                return std::filesystem::exists(base.string() + ".hea") || std::filesystem::exists(base.string() + ".dat");
+            };
+
+            std::filesystem::path candidate(trimmed);
+
+            // Normalize known directory aliases (e.g., '100' -> 'records100')
+            auto normalize_dir_alias = [](const std::filesystem::path& p)->std::filesystem::path {
+                auto parts = p;
+                std::vector<std::string> items;
+                for (auto &comp : parts) items.push_back(comp.string());
+                for (auto &s : items) {
+                    std::string t = s; for (auto &c : t) c = std::tolower(static_cast<unsigned char>(c));
+                    if (t == "100") s = "records100"; else if (t == "500") s = "records500";
+                    else if (t == "record100") s = "records100"; else if (t == "record500") s = "records500";
+                }
+                std::filesystem::path out; for (auto &s : items) out /= s; return out;
+            };
+            candidate = normalize_dir_alias(candidate);
+
+            // If it's relative, first try root/<relative_field>
+            if (candidate.is_relative()) {
+                std::filesystem::path try1 = ensure_base(root / candidate);
+                if (base_exists(try1)) {
+                    return try1;
+                }
+
+                // If user passed only the filename part (e.g., "00001_lr"), prepend preferred_records_dir
+                std::filesystem::path try2 = ensure_base(root / preferred_records_dir.filename() / candidate);
+                if (base_exists(try2)) {
+                    return try2;
+                }
+
+                // If still missing the subfolder layer (e.g., "records100/00001_lr"), infer directory from numeric prefix
+                const auto stem = candidate.stem().string(); // e.g., "00001_lr"
+                // extract leading integer
+                std::size_t pos = 0;
+                while (pos < stem.size() && std::isdigit(static_cast<unsigned char>(stem[pos]))) { ++pos; }
+                std::filesystem::path try3;
+                if (pos > 0) {
+                    try {
+                        int id = std::stoi(stem.substr(0, pos));
+                        int bucket = (id / 1000) * 1000; // group folders by thousands
+                        char buf[8];
+                        std::snprintf(buf, sizeof(buf), "%05d", bucket);
+                        try3 = ensure_base(root / preferred_records_dir.filename() / buf / stem);
+                        if (base_exists(try3)) {
+                            return try3;
+                        }
+                    } catch (...) {
+                        // swallow and fall through to directory scan
+                    }
+                }
+
+                // Last resort: scan immediate subdirs of preferred_records_dir for matching stem
+                try {
+                    const auto base_dir = root / preferred_records_dir.filename();
+                    if (std::filesystem::exists(base_dir) && std::filesystem::is_directory(base_dir)) {
+                        for (auto const& entry : std::filesystem::directory_iterator(base_dir)) {
+                            if (!entry.is_directory()) continue;
+                            std::filesystem::path probe = ensure_base(entry.path() / candidate.stem());
+                            if (base_exists(probe)) {
+                                return probe;
+                            }
+                        }
+                    }
+                } catch (...) {
+                    // ignore errors from directory iteration and fall through
+                }
+
+                // As a final fallback, return the normalized guess under root/<relative_field> without extension
+                return ensure_base(root / candidate);
+            } else {
+                // Absolute path given. Just normalize and strip extension.
+                std::filesystem::path abs = ensure_base(candidate);
+                if (base_exists(abs)) return abs;
+                // Also try relative to root to be forgiving
+                std::filesystem::path alt = ensure_base(root / candidate.relative_path());
+                return base_exists(alt) ? alt : abs;
             }
-            candidate = root / candidate;
-            if (candidate.has_extension()) {
-                candidate.replace_extension();
-            }
-            return candidate.lexically_normal();
         }
+
 
 
         inline std::optional<double> parse_float(const std::string& token)
@@ -155,6 +234,7 @@ namespace Thot::Data::Load {
         }
 
 
+
         inline std::unordered_map<std::string, std::string> load_scp_superclass_map(
             const std::filesystem::path& scp_csv,
             const std::unordered_map<std::string, std::int64_t>& allowed_classes)
@@ -171,71 +251,131 @@ namespace Thot::Data::Load {
 
             const auto header_tokens = split_csv_line(header_line);
             const auto indices = header_index_map(header_tokens);
-            const auto code_it = indices.find("description");
+
+            // Column names vary across mirrors; prefer 'scp_code', fall back to 'statement' or 'code'. Avoid 'description'.
+            auto code_it = indices.find("scp_code");
+            if (code_it == indices.end()) code_it = indices.find("statement");
+            if (code_it == indices.end()) code_it = indices.find("code");
+            if (code_it == indices.end()) code_it = indices.find("description");
+
             const auto diagnostic_flag_it = indices.find("diagnostic");
             const auto diagnostic_class_it = indices.find("diagnostic_class");
+
             if (code_it == indices.end() || diagnostic_flag_it == indices.end() || diagnostic_class_it == indices.end()) {
-                throw std::runtime_error("scp_statements.csv missing required columns: description, diagnostic, diagnostic_class");
+                throw std::runtime_error("scp_statements.csv missing required columns: scp_code (or statement/code/description), diagnostic, diagnostic_class");
             }
 
             std::unordered_map<std::string, std::string> scp_to_superclass;
             std::string row;
             while (std::getline(scp_file, row)) {
-                if (row.empty()) {
-                    continue;
-                }
+                if (row.empty()) continue;
                 const auto fields = split_csv_line(row);
-                if (fields.size() <=
-                    std::max({code_it->second, diagnostic_flag_it->second, diagnostic_class_it->second})) {
+                if (fields.size() <= std::max({code_it->second, diagnostic_flag_it->second, diagnostic_class_it->second})) {
                     continue;
                 }
 
-                const auto diagnostic_flag = trim_copy(fields[diagnostic_flag_it->second]);
-                if (diagnostic_flag != "1") {
-                    continue;
-                }
+                auto scp_code = trim_copy(fields[code_it->second]);
+                auto diagnostic_flag = trim_copy(fields[diagnostic_flag_it->second]);
+                auto diagnostic_class = trim_copy(fields[diagnostic_class_it->second]);
 
-                const auto scp_code = trim_copy(fields[code_it->second]);
-                const auto diagnostic_class = trim_copy(fields[diagnostic_class_it->second]);
-                if (scp_code.empty()) {
-                    continue;
-                }
-
-                if (allowed_classes.find(diagnostic_class) == allowed_classes.end()) {
-                    continue;
-                }
+                if (diagnostic_flag != "1" || scp_code.empty()) continue;
+                // Only keep superclasses we model
+                if (allowed_classes.find(diagnostic_class) == allowed_classes.end()) continue;
 
                 scp_to_superclass[scp_code] = diagnostic_class;
             }
-
             return scp_to_superclass;
         }
+
 
         inline std::unordered_map<std::string, float> extract_superclass_votes(
             const std::string& scp_codes_field,
             const std::unordered_map<std::string, std::string>& scp_to_superclass)
-        {
-            static const std::regex code_weight_regex("'([^']+)'\\s*:\\s*([0-9]*\\.?[0-9]+)");
-            std::unordered_map<std::string, float> superclass_votes;
 
-            for (std::sregex_iterator match(scp_codes_field.begin(), scp_codes_field.end(), code_weight_regex);
-                 match != std::sregex_iterator();
-                 ++match) {
-                const auto scp_code = (*match)[1].str();
-                const auto weight_token = (*match)[2].str();
-                const auto weight = parse_float(weight_token);
-                if (!weight) {
-                    continue;
-                }
-                const auto superclass_it = scp_to_superclass.find(scp_code);
-                if (superclass_it == scp_to_superclass.end()) {
-                    continue;
-                }
-                superclass_votes[superclass_it->second] += static_cast<float>(*weight);
-            }
+{
+    static const std::regex code_weight_regex(R"((["'])([^"']+)\1\s*:\s*([0-9]*\.?[0-9]+))");
+    std::unordered_map<std::string, float> superclass_votes;
 
-            return superclass_votes;
+    // Fallback heuristic: infer superclass from common PTB-XL code patterns when mapping is missing.
+    auto infer_superclass = [](const std::string& raw)->std::string {
+        std::string s; s.reserve(raw.size());
+        for (char c : raw) s.push_back(std::toupper(static_cast<unsigned char>(c)));
+        auto contains = [&](const char* pat){ return s.find(pat) != std::string::npos; };
+        auto starts_with = [&](const char* pat){ return s.rfind(pat, 0) == 0; };
+
+        if (s == "NORM" || s == "NORMAL") return "NORM";
+
+        // Myocardial infarction
+        if (s == "MI" || contains("INFAR") || contains("MI")) return "MI";
+
+        // ST/T changes
+        if (s == "STTC" || starts_with("ST") || contains("STD") || contains("STE") || contains("NST")
+            || contains("TINV") || contains("TWA"))
+            return "STTC";
+
+        // Conduction disturbances
+        if (contains("BBB") || contains("AVB") || s == "LAFB" || s == "LAHB" || s == "LPFB"
+            || s == "IVCD" || s == "WPW" || contains("BIFASC") || contains("TRIFASC"))
+            return "CD";
+
+        // Hypertrophy
+        if (s == "HYP" || contains("LVH") || contains("RVH"))
+            return "HYP";
+
+        return "";
+    };
+
+    // First pass: parse explicit weights from scp_codes
+    bool any_match = false;
+    for (std::sregex_iterator match(scp_codes_field.begin(), scp_codes_field.end(), code_weight_regex);
+         match != std::sregex_iterator();
+         ++match) {
+        any_match = true;
+        const auto scp_code_raw = (*match)[2].str();
+        const auto weight_token = (*match)[3].str();
+
+        // Try mapping via scp_statements, fallback to heuristic
+        auto it = scp_to_superclass.find(scp_code_raw);
+        if (it == scp_to_superclass.end()) {
+            std::string up = scp_code_raw; for (auto &c : up) c = std::toupper(static_cast<unsigned char>(c));
+            it = scp_to_superclass.find(up);
         }
+        std::string superclass = (it != scp_to_superclass.end()) ? it->second : infer_superclass(scp_code_raw);
+        if (superclass.empty()) continue;
+
+        float w = 0.f;
+        try {
+            w = std::stof(weight_token);
+        } catch (...) {
+            w = 0.f;
+        }
+        // Treat zero/unknown as presence vote to avoid dropping rows
+        if (!(w > 0.f)) w = 1.0f;
+
+        superclass_votes[superclass] += w;
+    }
+
+    // If regex failed entirely (e.g., different formatting), try a ultra-simple fallback:
+    if (!any_match) {
+        // Look for quoted tokens (keys) without requiring weights
+        static const std::regex key_only(R"((["'])([^"']+)\1)");
+        for (std::sregex_iterator m(scp_codes_field.begin(), scp_codes_field.end(), key_only);
+             m != std::sregex_iterator(); ++m) {
+            const auto scp_code_raw = (*m)[2].str();
+            auto it = scp_to_superclass.find(scp_code_raw);
+            if (it == scp_to_superclass.end()) {
+                std::string up = scp_code_raw; for (auto &c : up) c = std::toupper(static_cast<unsigned char>(c));
+                it = scp_to_superclass.find(up);
+            }
+            std::string superclass = (it != scp_to_superclass.end()) ? it->second : infer_superclass(scp_code_raw);
+            if (superclass.empty()) continue;
+            superclass_votes[superclass] += 1.0f;
+        }
+    }
+
+    return superclass_votes;
+}
+
 
         inline std::optional<std::int64_t> select_superclass_label(
             const std::unordered_map<std::string, float>& superclass_votes,
@@ -677,144 +817,131 @@ namespace Thot::Data::Load {
     }
 
     template <bool BufferVRAM = false, class DevicePolicyT = Core::DevicePolicy<BufferVRAM>>
-    [[nodiscard]] inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-    PTBXL(const std::string& root,
-          bool low_resolution,
-          float train_fraction = 0.8f,
-          bool normalise = true)
-    {
+    [[nodiscard]] inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> PTBXL(const std::string& root, bool low_resolution, float train_fraction = 0.8f, bool normalise = true) {
         namespace fs = std::filesystem;
         const std::filesystem::path root_path = std::filesystem::path(root);
-        const std::filesystem::path database_csv = root_path / "scp_statements.csv";
+        const std::filesystem::path database_csv = root_path / "ptbxl_database.csv";
         const std::filesystem::path scp_csv = root_path / "scp_statements.csv";
-        const std::filesystem::path records_dir = root_path / (low_resolution ? "records100" : "records500");
+        const std::filesystem::path records_dir = (low_resolution ? (root_path / "records100") : (root_path / "records500"));
 
-        static const std::unordered_map<std::string, std::int64_t> class_to_index{{"NORM", 0},
-                                                                                 {"MI", 1},
-                                                                                 {"STTC", 2},
-                                                                                 {"CD", 3},
-                                                                                 {"HYP", 4}};
+        static const std::unordered_map<std::string, std::int64_t> class_to_index{
+            {"NORM", 0}, {"MI", 1}, {"STTC", 2}, {"CD", 3}, {"HYP", 4}
+        };
 
         const auto scp_to_superclass = Details::load_scp_superclass_map(scp_csv, class_to_index);
 
         std::ifstream database_file(database_csv);
         if (!database_file) {
-            throw std::runtime_error("Failed to open scp_statements.csv at " + database_csv.string());
+            throw std::runtime_error("Failed to open ptbxl_database.csv at " + database_csv.string());
         }
 
         std::string header_line;
         if (!std::getline(database_file, header_line)) {
-            throw std::runtime_error("scp_statements.csv is empty");
+            throw std::runtime_error("ptbxl_database.csv is empty");
         }
-
         const auto header_tokens = Details::split_csv_line(header_line);
-        const auto header_indices = Details::header_index_map(header_tokens);
+        const auto header = Details::header_index_map(header_tokens);
+
         const auto filename_key = low_resolution ? "filename_lr" : "filename_hr";
-        const auto filename_it = header_indices.find(filename_key);
-        const auto scp_codes_it = header_indices.find("scp_codes");
-        const auto sampling_it = header_indices.find("sampling_frequency");
-        if (filename_it == header_indices.end() ||
-            scp_codes_it == header_indices.end() ||
-            sampling_it == header_indices.end()) {
-            throw std::runtime_error("scp_statements.csv missing required columns: description, diagnostic, diagnostic_class");
+        const auto filename_it = header.find(filename_key);
+        const auto scp_codes_it = header.find("scp_codes");
+        if (filename_it == header.end() || scp_codes_it == header.end()) {
+            throw std::runtime_error("ptbxl_database.csv missing required columns: " + std::string(filename_key) + " and scp_codes");
         }
 
-        const auto expected_sampling_frequency = low_resolution ? 100LL : 500LL;
-
-        std::vector<torch::Tensor> signal_tensors;
-        std::vector<std::int64_t> label_ids;
+        std::vector<torch::Tensor> all_signals;
+        std::vector<std::int64_t>  all_labels;
         std::optional<std::int64_t> expected_signal_length;
+        std::int64_t rows_seen = 0;
+        std::int64_t rows_with_filename = 0;
+        std::int64_t rows_with_label = 0;
+        std::int64_t bases_resolved = 0;
+        std::int64_t signals_read = 0;
+
 
         std::string row;
         while (std::getline(database_file, row)) {
-            if (row.empty()) {
-                continue;
-            }
-
+            ++rows_seen;
+            if (row.empty()) continue;
             const auto fields = Details::split_csv_line(row);
-            if (fields.size() <=
-                std::max({filename_it->second, scp_codes_it->second, sampling_it->second})) {
-                continue;
-            }
 
-            const auto sampling_frequency_token = fields[sampling_it->second];
-            const auto sampling_frequency_value = Details::parse_float(sampling_frequency_token);
-            if (!sampling_frequency_value) {
-                continue;
-            }
+            const auto needed_max = std::max(filename_it->second, scp_codes_it->second);
+            if (fields.size() <= static_cast<std::size_t>(needed_max)) continue;
 
-            const auto sampling_frequency = static_cast<std::int64_t>(std::llround(*sampling_frequency_value));
-            if (sampling_frequency != expected_sampling_frequency) {
-                continue;
-            }
+            rows_with_filename += 1;
 
-            const auto base_path = Details::resolve_ptbxl_record_base(
-                root_path, records_dir, fields[filename_it->second]);
-            if (base_path.empty()) {
-                continue;
-            }
+            const auto base_path = Details::resolve_ptbxl_record_base(root_path, records_dir, fields[filename_it->second]);
+            if (base_path.empty()) continue;
+            bases_resolved += 1;
 
-            const auto votes = Details::extract_superclass_votes(
-                fields[scp_codes_it->second], scp_to_superclass);
+            const auto votes = Details::extract_superclass_votes(fields[scp_codes_it->second], scp_to_superclass);
             const auto label = Details::select_superclass_label(votes, class_to_index);
-            if (!label) {
-                continue;
-            }
+            if (!label) continue;
+            rows_with_label += 1;
 
             auto signal = Details::read_ptbxl_signal(base_path, expected_signal_length, normalise);
-            if (!signal) {
-                continue;
-            }
+            if (!signal) continue;
+            signals_read += 1;
 
-            signal_tensors.push_back(std::move(*signal));
-            label_ids.push_back(*label);
+            all_signals.push_back(std::move(*signal));
+            all_labels.push_back(*label);
         }
 
-        if (signal_tensors.empty()) {
-            throw std::runtime_error("No PTB-XL records matched the selection criteria.");
+        if (all_signals.empty()) {
+            std::ostringstream oss;
+            oss << "No PTB-XL records matched. "
+                << "root=" << root_path << " low_resolution=" << (low_resolution?"true":"false") << " records_dir=" << records_dir << "\n"
+                << "rows_seen=" << rows_seen << " rows_with_filename=" << rows_with_filename
+                << " rows_with_label=" << rows_with_label
+                << " bases_resolved=" << bases_resolved
+                << " signals_read=" << signals_read << "\n";
+            throw std::runtime_error(oss.str());
         }
 
-        auto inputs = torch::stack(signal_tensors);
-        auto targets = torch::tensor(label_ids, torch::TensorOptions().dtype(torch::kInt64));
+        // Stack -> shuffle -> split (ignore folds completely)
+        auto inputs  = torch::stack(all_signals);
+        auto targets = torch::tensor(all_labels, torch::TensorOptions().dtype(torch::kInt64));
 
-        const auto sample_count = inputs.size(0);
-        auto permutation = torch::randperm(sample_count, torch::TensorOptions().dtype(torch::kLong));
-        inputs = inputs.index_select(0, permutation);
-        targets = targets.index_select(0, permutation);
+        if (inputs.size(0) > 1) {
+            auto perm = torch::randperm(inputs.size(0), torch::TensorOptions().dtype(torch::kLong));
+            inputs  = inputs.index_select(0, perm);
+            targets = targets.index_select(0, perm);
+        }
 
         train_fraction = std::clamp(train_fraction, 0.0f, 1.0f);
-        auto train_count = static_cast<std::int64_t>(std::round(train_fraction * static_cast<float>(sample_count)));
-        train_count = std::clamp<std::int64_t>(train_count, 1, sample_count);
-        const auto validation_count = sample_count - train_count;
+        const auto total = static_cast<std::int64_t>(inputs.size(0));
+        auto train_count = static_cast<std::int64_t>(std::llround(train_fraction * static_cast<float>(total)));
+        train_count = std::clamp<std::int64_t>(train_count, std::int64_t{1}, total);
 
-        auto train_inputs = inputs.narrow(0, 0, train_count).clone();
-        auto train_targets = targets.narrow(0, 0, train_count).clone();
-
-        torch::Tensor validation_inputs;
-        torch::Tensor validation_targets;
-        if (validation_count > 0) {
-            validation_inputs = inputs.narrow(0, train_count, validation_count).clone();
-            validation_targets = targets.narrow(0, train_count, validation_count).clone();
+        torch::Tensor train_inputs, train_targets, test_inputs, test_targets;
+        if (train_count == total) {
+            train_inputs  = inputs;
+            train_targets = targets;
+            test_inputs   = inputs.narrow(0, total, 0);
+            test_targets  = targets.narrow(0, total, 0);
         } else {
-            validation_inputs = torch::empty({0, inputs.size(1), inputs.size(2)}, inputs.options());
-            validation_targets = torch::empty({0}, targets.options());
+            train_inputs  = inputs.narrow(0, 0, train_count);
+            train_targets = targets.narrow(0, 0, train_count);
+            test_inputs   = inputs.narrow(0, train_count, total - train_count);
+            test_targets  = targets.narrow(0, train_count, total - train_count);
         }
 
         if (!normalise) {
             train_inputs = train_inputs.to(torch::kFloat32);
-            validation_inputs = validation_inputs.to(torch::kFloat32);
+            test_inputs  = test_inputs.to(torch::kFloat32);
         }
 
         if constexpr (BufferVRAM) {
             const auto device = DevicePolicyT::select();
-            train_inputs = train_inputs.to(device);
+            train_inputs  = train_inputs.to(device);
             train_targets = train_targets.to(device);
-            validation_inputs = validation_inputs.to(device);
-            validation_targets = validation_targets.to(device);
+            test_inputs   = test_inputs.to(device);
+            test_targets  = test_targets.to(device);
         }
 
-        return {train_inputs, train_targets, validation_inputs, validation_targets};
+        return {train_inputs, train_targets, test_inputs, test_targets};
     }
+
 }
 
 #endif //THOT_LOAD_HPP
