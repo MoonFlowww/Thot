@@ -82,12 +82,24 @@ namespace Thot::Data::Load {
             return tokens;
         }
 
+        inline std::string strip_utf8_bom(std::string value)
+        {
+            constexpr unsigned char bom[] = {0xEF, 0xBB, 0xBF};
+            if (value.size() >= 3 &&
+                static_cast<unsigned char>(value[0]) == bom[0] &&
+                static_cast<unsigned char>(value[1]) == bom[1] &&
+                static_cast<unsigned char>(value[2]) == bom[2]) {
+                value.erase(0, 3);
+                }
+            return value;
+        }
+
 
         inline std::unordered_map<std::string, std::size_t> header_index_map(const std::vector<std::string>& header)
         {
             std::unordered_map<std::string, std::size_t> mapping;
             for (std::size_t index = 0; index < header.size(); ++index) {
-                mapping[trim_copy(header[index])] = index;
+                mapping[strip_utf8_bom(trim_copy(header[index]))] = index;
             }
             return mapping;
         }
@@ -149,21 +161,21 @@ namespace Thot::Data::Load {
         {
             std::ifstream scp_file(scp_csv);
             if (!scp_file) {
-                throw std::runtime_error("Failed to open ptbxl_database.csv at " + scp_csv.string());
+                throw std::runtime_error("Failed to open scp_statements.csv at " + scp_csv.string());
             }
 
             std::string header_line;
             if (!std::getline(scp_file, header_line)) {
-                throw std::runtime_error("ptbxl_database.csv is empty");
+                throw std::runtime_error("scp_statements.csv is empty");
             }
 
             const auto header_tokens = split_csv_line(header_line);
             const auto indices = header_index_map(header_tokens);
-            const auto code_it = indices.find("scp_code");
+            const auto code_it = indices.find("description");
             const auto diagnostic_flag_it = indices.find("diagnostic");
             const auto diagnostic_class_it = indices.find("diagnostic_class");
             if (code_it == indices.end() || diagnostic_flag_it == indices.end() || diagnostic_class_it == indices.end()) {
-                throw std::runtime_error("ptbxl_database.csv missing required columns");
+                throw std::runtime_error("scp_statements.csv missing required columns: description, diagnostic, diagnostic_class");
             }
 
             std::unordered_map<std::string, std::string> scp_to_superclass;
@@ -673,8 +685,8 @@ namespace Thot::Data::Load {
     {
         namespace fs = std::filesystem;
         const std::filesystem::path root_path = std::filesystem::path(root);
-        const std::filesystem::path database_csv = root_path / "ptbxl_database.csv";
-        const std::filesystem::path scp_csv = root_path / "ptbxl_database.csv";
+        const std::filesystem::path database_csv = root_path / "scp_statements.csv";
+        const std::filesystem::path scp_csv = root_path / "scp_statements.csv";
         const std::filesystem::path records_dir = root_path / (low_resolution ? "records100" : "records500");
 
         static const std::unordered_map<std::string, std::int64_t> class_to_index{{"NORM", 0},
@@ -687,12 +699,12 @@ namespace Thot::Data::Load {
 
         std::ifstream database_file(database_csv);
         if (!database_file) {
-            throw std::runtime_error("Failed to open ptbxl_database.csv at " + database_csv.string());
+            throw std::runtime_error("Failed to open scp_statements.csv at " + database_csv.string());
         }
 
         std::string header_line;
         if (!std::getline(database_file, header_line)) {
-            throw std::runtime_error("ptbxl_database.csv is empty");
+            throw std::runtime_error("scp_statements.csv is empty");
         }
 
         const auto header_tokens = Details::split_csv_line(header_line);
@@ -704,7 +716,7 @@ namespace Thot::Data::Load {
         if (filename_it == header_indices.end() ||
             scp_codes_it == header_indices.end() ||
             sampling_it == header_indices.end()) {
-            throw std::runtime_error("ptbxl_database.csv missing required columns");
+            throw std::runtime_error("scp_statements.csv missing required columns: description, diagnostic, diagnostic_class");
         }
 
         const auto expected_sampling_frequency = low_resolution ? 100LL : 500LL;
