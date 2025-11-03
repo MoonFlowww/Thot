@@ -706,8 +706,18 @@ namespace Thot {
                     registered_layer.activation = Activation::Type::Identity;
                     registered_layer.module = Layer::Details::to_shared_module_ptr(module);
                     registered_layer.bind_module_forward(module.get());
+                    store_layer(std::move(registered_layer));
+                },
+                [&](Block::Transformer::Bert::EncoderDescriptor encoder_descriptor) {
+                    const auto index = next_module_index();
+                    auto module = register_module(
+                        "bert_encoder_" + std::to_string(index),
+                        Block::Transformer::Bert::BertEncoder(std::move(encoder_descriptor)));
 
-
+                    Layer::Details::RegisteredLayer registered_layer{};
+                    registered_layer.activation = Activation::Type::Identity;
+                    registered_layer.module = Layer::Details::to_shared_module_ptr(module);
+                    registered_layer.bind_module_forward(module.get());
                     store_layer(std::move(registered_layer));
                 }
             };
