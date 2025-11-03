@@ -137,7 +137,7 @@ int main() {
         model.add(Thot::Layer::FC({512, 10, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal), "FC2");
 
 
-
+        /*
         model.links({
             Thot::LinkSpec{Thot::Port::parse("@input"), Thot::Port::parse("stem")},
 
@@ -160,7 +160,7 @@ int main() {
             Thot::LinkSpec{Thot::Port::parse("HDFin"), Thot::Port::parse("FC2")},
             Thot::LinkSpec{Thot::Port::parse("FC2"), Thot::Port::parse("@output")}
         }, true);
-
+        */
 
 
 

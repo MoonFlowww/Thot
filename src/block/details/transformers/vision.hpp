@@ -353,8 +353,14 @@ namespace Thot::Block::Details::Transformer::Vision {
                     if (key_padding_mask.defined()) {
                         padding_mask = key_padding_mask;
                     }
-                    auto attention = attention_->forward(attn_input, attn_input, attn_input, padding_mask.value(), true, attention_mask.value());
-                    attn_output = std::get<0>(attention);
+                    auto attention = attention_->forward(
+                        attn_input,
+                        attn_input,
+                        attn_input,
+                        padding_mask.value_or(torch::Tensor{}), // optional
+                        true,
+                        attention_mask.value_or(torch::Tensor{})); // optional
+                        attn_output = std::get<0>(attention);
 
                 } else {
                     if (height <= 0 || width <= 0) {
