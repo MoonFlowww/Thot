@@ -698,6 +698,106 @@ namespace Thot::Data::Load {
 
             return tensor;
         }
+        struct ETThRawDataset {
+            torch::Tensor inputs;
+            torch::Tensor targets;
+        };
+
+        inline ETThRawDataset read_etth_csv(const std::filesystem::path& file_path) {
+            if (!std::filesystem::exists(file_path)) {
+                throw std::runtime_error("ETTh CSV file does not exist: " + file_path.string());
+            }
+
+            std::ifstream file(file_path);
+            if (!file) {
+                throw std::runtime_error("Failed to open ETTh CSV file: " + file_path.string());
+            }
+
+            std::string header_line;
+            if (!std::getline(file, header_line)) {
+                throw std::runtime_error("ETTh CSV file is empty: " + file_path.string());
+            }
+
+            header_line = strip_utf8_bom(header_line);
+            const auto header_tokens = split_csv_line(header_line);
+            if (header_tokens.size() < 3) {
+                throw std::runtime_error("ETTh CSV header must contain at least timestamp, one feature, and target columns: " + file_path.string());
+            }
+
+            const std::size_t column_count = header_tokens.size();
+            const std::size_t target_index = column_count - 1;
+            const std::size_t feature_count = column_count - 2; // skip timestamp + target
+
+            if (feature_count == 0) {
+                throw std::runtime_error("ETTh CSV header does not expose any feature columns: " + file_path.string());
+            }
+
+            std::vector<float> feature_buffer;
+            std::vector<float> target_buffer;
+            feature_buffer.reserve(static_cast<std::size_t>(1024) * feature_count);
+            target_buffer.reserve(1024);
+
+            std::vector<float> row_features;
+            row_features.reserve(feature_count);
+
+            std::string line;
+            while (std::getline(file, line)) {
+                if (line.empty()) {
+                    continue;
+                }
+
+                const auto tokens = split_csv_line(line);
+                if (tokens.size() < column_count) {
+                    continue;
+                }
+
+                row_features.clear();
+                bool valid = true;
+                float target_value = 0.0f;
+
+                for (std::size_t index = 1; index < column_count; ++index) {
+                    const auto maybe_value = parse_float(tokens[index]);
+                    if (!maybe_value.has_value()) {
+                        valid = false;
+                        break;
+                    }
+
+                    const float value = static_cast<float>(*maybe_value);
+                    if (index == target_index) {
+                        target_value = value;
+                    } else {
+                        row_features.push_back(value);
+                    }
+                }
+
+                if (!valid || row_features.size() != feature_count) {
+                    continue;
+                }
+
+                feature_buffer.insert(feature_buffer.end(), row_features.begin(), row_features.end());
+                target_buffer.push_back(target_value);
+            }
+
+            if (target_buffer.empty()) {
+                throw std::runtime_error("ETTh CSV contained no parseable rows: " + file_path.string());
+            }
+
+            const auto sample_count = static_cast<int64_t>(target_buffer.size());
+            if (feature_buffer.size() != static_cast<std::size_t>(sample_count) * feature_count) {
+                throw std::runtime_error("ETTh CSV feature buffer size mismatch: " + file_path.string());
+            }
+
+            auto inputs = torch::from_blob(feature_buffer.data(),
+                                           {sample_count, static_cast<int64_t>(feature_count)},
+                                           torch::TensorOptions().dtype(torch::kFloat32))
+                              .clone();
+            auto targets = torch::from_blob(target_buffer.data(),
+                                            {sample_count},
+                                            torch::TensorOptions().dtype(torch::kFloat32))
+                               .clone();
+
+            return {std::move(inputs), std::move(targets)};
+        }
     }
 
     template <bool BufferVRAM = false, class DevicePolicyT = Core::DevicePolicy<BufferVRAM>>
@@ -748,6 +848,75 @@ namespace Thot::Data::Load {
         } else {
             train_inputs = train_inputs.to(torch::kFloat32);
             test_inputs = test_inputs.to(torch::kFloat32);
+        }
+
+        if constexpr (BufferVRAM) {
+            const auto device = DevicePolicyT::select();
+            train_inputs = train_inputs.to(device);
+            train_targets = train_targets.to(device);
+            test_inputs = test_inputs.to(device);
+            test_targets = test_targets.to(device);
+        }
+
+        return {train_inputs, train_targets, test_inputs, test_targets};
+    }
+
+    template <bool BufferVRAM = false, class DevicePolicyT = Core::DevicePolicy<BufferVRAM>>
+    [[nodiscard]] inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+    ETTh(const std::string& csv_file,
+         float train_fraction = 0.7f,
+         float test_fraction = 0.2f,
+         bool normalise = true) {
+        auto [inputs, targets] = Details::read_etth_csv(csv_file);
+
+        const auto total_samples = static_cast<std::int64_t>(inputs.size(0));
+        const auto feature_size = inputs.size(1);
+
+        train_fraction = std::max(train_fraction, 0.0f);
+        test_fraction = std::max(test_fraction, 0.0f);
+
+        auto train_count = std::clamp<std::int64_t>(
+            static_cast<std::int64_t>(std::llround(train_fraction * static_cast<float>(total_samples))),
+            std::int64_t{0},
+            total_samples);
+
+        const auto remaining_for_test = total_samples - train_count;
+        auto test_count = std::clamp<std::int64_t>(
+            static_cast<std::int64_t>(std::llround(test_fraction * static_cast<float>(total_samples))),
+            std::int64_t{0},
+            remaining_for_test);
+
+        torch::Tensor train_inputs;
+        torch::Tensor train_targets;
+        torch::Tensor test_inputs;
+        torch::Tensor test_targets;
+
+        const auto float_opts = torch::TensorOptions().dtype(torch::kFloat32);
+
+        if (train_count > 0) {
+            train_inputs = inputs.narrow(0, 0, train_count).clone();
+            train_targets = targets.narrow(0, 0, train_count).clone();
+        } else {
+            train_inputs = torch::empty({0, feature_size}, float_opts);
+            train_targets = torch::empty({0}, float_opts);
+        }
+
+        if (test_count > 0) {
+            test_inputs = inputs.narrow(0, train_count, test_count).clone();
+            test_targets = targets.narrow(0, train_count, test_count).clone();
+        } else {
+            test_inputs = torch::empty({0, feature_size}, float_opts);
+            test_targets = torch::empty({0}, float_opts);
+        }
+
+        if (normalise && train_count > 0) {
+            auto mean = train_inputs.mean(0, true);
+            auto std = train_inputs.std(0, false, true);
+            std = torch::where(std < 1e-6, torch::ones_like(std), std);
+            train_inputs = (train_inputs - mean) / std;
+            if (test_count > 0) {
+                test_inputs = (test_inputs - mean) / std;
+            }
         }
 
         if constexpr (BufferVRAM) {

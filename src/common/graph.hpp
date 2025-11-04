@@ -21,10 +21,10 @@ namespace Thot::Layer::Details {
 }
 
 namespace Thot {
-    enum class MergePolicyKind {
+    enum class MergePolicy {
         Strict,
         Broadcast,
-        Concat
+        Stack
     };
 
     struct Port {
@@ -39,7 +39,7 @@ namespace Thot {
         std::string identifier{};
         std::string attribute{};
         std::string representation{};
-        MergePolicyKind merge_policy{MergePolicyKind::Strict};
+        MergePolicy merge_policy{MergePolicy::Strict};
         std::optional<std::size_t> node_index{};
         std::optional<std::size_t> join_index{};
         std::vector<std::string> join_members{};
@@ -47,7 +47,7 @@ namespace Thot {
 
         Port() = default;
 
-        Port(Kind kind, std::string identifier, std::string attribute, MergePolicyKind merge)
+        Port(Kind kind, std::string identifier, std::string attribute, MergePolicy merge)
             : kind(kind)
             , identifier(std::move(identifier))
             , attribute(std::move(attribute))
@@ -80,7 +80,7 @@ namespace Thot {
         void assign_node(std::size_t value) { node_index = value; }
         void assign_join(std::size_t value) { join_index = value; }
 
-        static Port parse(std::string_view specification)
+        static Port Module(std::string_view specification)
         {
             const auto trimmed = trim(specification);
             if (trimmed.empty()) {
@@ -120,11 +120,11 @@ namespace Thot {
                     "Port specification '" + port.representation + "' is missing an identifier.");
             }
 
-            port.merge_policy = MergePolicyKind::Strict;
+            port.merge_policy = MergePolicy::Strict;
             return port;
         }
 
-        static Port join(std::string_view name, MergePolicyKind policy = MergePolicyKind::Strict)
+        static Port Join(std::string_view name, MergePolicy policy = MergePolicy::Strict)
         {
             const auto trimmed = trim(name);
             if (trimmed.empty()) {
@@ -151,24 +151,24 @@ namespace Thot {
             return port;
         }
 
-        static Port join(
+        static Port Join(
             std::initializer_list<std::string_view> names,
-            MergePolicyKind policy = MergePolicyKind::Strict)
+            MergePolicy policy = MergePolicy::Strict)
         {
-            return join(names, policy, std::nullopt);
+            return Join(names, policy, std::nullopt);
         }
 
-        static Port join(
+        static Port Join(
             std::initializer_list<std::string_view> names,
-            MergePolicyKind policy,
+            MergePolicy policy,
             int64_t concat_dimension)
         {
-            return join(names, policy, std::optional<int64_t>{concat_dimension});
+            return Join(names, policy, std::optional<int64_t>{concat_dimension});
         }
 
-        static Port join(
+        static Port Join(
             std::initializer_list<std::string_view> names,
-            MergePolicyKind policy,
+            MergePolicy policy,
             std::optional<int64_t> concat_dimension)
         {
             if (names.size() == 0) {
@@ -295,7 +295,7 @@ namespace Thot {
 
         Kind kind{Kind::Module};
         std::size_t index{std::numeric_limits<std::size_t>::max()};
-        MergePolicyKind merge{MergePolicyKind::Strict};
+        MergePolicy merge{MergePolicy::Strict};
         std::string label{};
         std::vector<std::size_t> inputs{};
         std::vector<std::size_t> outputs{};
@@ -322,7 +322,7 @@ namespace Thot {
         };
 
         struct JoinData {
-            MergePolicyKind policy{MergePolicyKind::Strict};
+            MergePolicy policy{MergePolicy::Strict};
             std::vector<std::size_t> producers{};
             std::size_t workspace_index{std::numeric_limits<std::size_t>::max()};
             std::optional<int64_t> concat_dimension{};
@@ -339,7 +339,7 @@ namespace Thot {
 
     struct JoinBuffer {
         std::size_t node_index{std::numeric_limits<std::size_t>::max()};
-        MergePolicyKind policy{MergePolicyKind::Strict};
+        MergePolicy policy{MergePolicy::Strict};
         std::vector<std::size_t> producers{};
         std::optional<int64_t> concat_dimension{};
     };

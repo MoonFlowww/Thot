@@ -175,8 +175,10 @@ namespace Thot::Layer::Details {
 
                 register_module("lstm", lstm_);
 
-                // cuDNN setup
-                at::globalContext().setAllowTF32CuDNN(options_.allow_tf32);
+                // cuDNN setup (use new precision API instead of deprecated allowTF32)
+                const char* tf32_setting = options_.allow_tf32 ? "tf32" : "none";
+                at::globalContext().setFloat32Precision("cuda", "rnn", tf32_setting);
+                at::globalContext().setFloat32Precision("cuda", "conv", tf32_setting);
                 if (torch::cuda::is_available() && torch::cuda::cudnn_is_available()) {
                     at::globalContext().setBenchmarkCuDNN(options_.benchmark_cudnn);
                 }
@@ -327,7 +329,9 @@ namespace Thot::Layer::Details {
             module->to(descriptor.options.param_dtype);
         }
 
-        at::globalContext().setAllowTF32CuDNN(descriptor.options.allow_tf32);
+        const char* tf32_setting = descriptor.options.allow_tf32 ? "tf32" : "none";
+        at::globalContext().setFloat32Precision("cuda", "rnn", tf32_setting);
+        at::globalContext().setFloat32Precision("cuda", "conv", tf32_setting);
         if (torch::cuda::is_available() && torch::cuda::cudnn_is_available()) {
             at::globalContext().setBenchmarkCuDNN(descriptor.options.benchmark_cudnn);
             if (module && !module->parameters().empty()) {

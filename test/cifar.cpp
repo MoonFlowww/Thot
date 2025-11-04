@@ -45,8 +45,6 @@ int xmain() {
             Thot::Layer::MaxPool2d({{2, 2}, {2, 2}})
         }), "stem");
 
-        model.add(Thot::Layer::SoftDropout({.}));
-
 
         model.add(Thot::Block::Sequential({
             Thot::Layer::Conv2d(
@@ -160,9 +158,8 @@ int xmain() {
             Thot::LinkSpec{Thot::Port::parse("FC1"), Thot::Port::parse("HDFin")},
             Thot::LinkSpec{Thot::Port::parse("HDFin"), Thot::Port::parse("FC2")},
             Thot::LinkSpec{Thot::Port::parse("FC2"), Thot::Port::parse("@output")}
-        }, true);
+        }, {.enable_graph_capture = true});
         */
-
 
 
         model.set_optimizer(

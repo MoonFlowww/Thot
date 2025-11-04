@@ -34,7 +34,7 @@ ECGDatasetSplit load_ptbxl_dataset(const std::string& root, bool low_res, float 
 }
 
 
-int main()
+int tmain()
 {
     Thot::Model model("PTBXL_ECG");
     constexpr bool load_existing_model = false;
@@ -80,7 +80,7 @@ int main()
             {Thot::Port::parse("fc1"),    Thot::Port::parse("HD1")},
             {Thot::Port::parse("HD1"),    Thot::Port::parse("end")},
             {Thot::Port::parse("end"),    Thot::Port::parse("@output")}
-        }, true);
+        }, {.enable_graph_capture = true});
 
 
         model.set_optimizer(
@@ -98,7 +98,7 @@ int main()
     Thot::TrainOptions train_options{};
     train_options.epoch = static_cast<std::size_t>(epochs);
     train_options.batch_size = static_cast<std::size_t>(batch_size);
-    train_options.shuffle = true;
+    train_options.shuffle = false;
     train_options.buffer_vram = 0;
     train_options.graph_mode = Thot::GraphMode::Capture;
     train_options.restore_best_state = true;

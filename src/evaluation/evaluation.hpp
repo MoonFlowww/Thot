@@ -10,22 +10,38 @@
 #include "details/timeserie.hpp"
 
 namespace Thot::Evaluation {
-    using Options = Details::Classification::Options;
+    using ClassificationOptions = Details::Classification::Options;
+    using TimeseriesOptions = Details::Timeseries::Options;
 
     using ClassificationDescriptor = Details::Classification::Descriptor;
     inline constexpr ClassificationDescriptor Classification{};
 
     using ClassificationReport = Details::Classification::Report;
 
+
+    using TimeseriesDescriptor = Details::Timeseries::Descriptor;
+    inline constexpr TimeseriesDescriptor Timeseries{};
+
+    using TimeseriesReport = Details::Timeseries::Report;
+
+    using Options = ClassificationOptions;
+
     template <class Model>
-    [[nodiscard]] inline auto Evaluate(Model& model,
-                                       torch::Tensor inputs,
-                                       torch::Tensor targets,
-                                       ClassificationDescriptor,
+    [[nodiscard]] inline auto Evaluate(Model& model, torch::Tensor inputs, torch::Tensor targets, ClassificationDescriptor,
                                        std::vector<Metric::Classification::Descriptor> metrics,
-                                       const Options& options = Options{}) -> ClassificationReport
-    {
+                                       const ClassificationOptions& options = ClassificationOptions{}) -> ClassificationReport {
         return Details::Classification::Evaluate(
+            model,
+            std::move(inputs),
+            std::move(targets),
+            std::move(metrics),
+            options);
+    }
+
+    template <class Model> [[nodiscard]] inline auto Evaluate(Model& model, torch::Tensor inputs, torch::Tensor targets,
+                                   TimeseriesDescriptor, std::vector<Metric::Timeseries::Descriptor> metrics,
+                                   const TimeseriesOptions& options = TimeseriesOptions{}) -> TimeseriesReport {
+        return Details::Timeseries::Evaluate(
             model,
             std::move(inputs),
             std::move(targets),

@@ -97,8 +97,7 @@ target_link_libraries(Thot "${TORCH_LIBRARIES}" Boost::filesystem)
 target_include_directories(Thot PUBLIC ${CMAKE_SOURCE_DIR}/include ${TORCH_INCLUDE_DIRS})
 
 #Test---------------
-add_executable(test_Thot test/ecg.cpp
-        test/semi_lazy.cpp
+add_executable(test_Thot test/etth/etth.cpp
         src/block/details/blocks/residual.hpp
         src/block/details/blocks/sequential.hpp
         src/lrscheduler/details/common.hpp
@@ -142,7 +141,6 @@ add_executable(test_Thot test/ecg.cpp
         src/regularization/details/common.hpp
         src/common/graph.hpp
         src/common/streaming.hpp
-        test/ecg.cpp
         src/loss/details/bce.hpp
         src/loss/details/cosine_embedding.hpp
         src/loss/details/kl.hpp
@@ -161,5 +159,6 @@ add_executable(test_Thot test/ecg.cpp
         src/block/details/transformers/bert.hpp
         src/block/details/transformers/vision.hpp
         src/layer/details/reduce.hpp
+        test/etth/wavelet.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)

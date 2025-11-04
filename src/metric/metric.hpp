@@ -182,6 +182,60 @@ namespace Thot::Metric::Timeseries {
     };
 
     [[nodiscard]] constexpr auto Make(Kind kind) noexcept -> Descriptor { return Descriptor{kind}; }
+    inline constexpr Descriptor MeanAbsoluteError{Kind::MeanAbsoluteError};
+    inline constexpr Descriptor MeanAbsolutePercentageError{Kind::MeanAbsolutePercentageError};
+    inline constexpr Descriptor MeanBiasError{Kind::MeanBiasError};
+    inline constexpr Descriptor MeanSquaredError{Kind::MeanSquaredError};
+    inline constexpr Descriptor MedianAbsoluteError{Kind::MedianAbsoluteError};
+    inline constexpr Descriptor R2Score{Kind::R2Score};
+    inline constexpr Descriptor RootMeanSquaredError{Kind::RootMeanSquaredError};
+    inline constexpr Descriptor SymmetricMeanAbsolutePercentageError{Kind::SymmetricMeanAbsolutePercentageError};
+    inline constexpr Descriptor WeightedAbsolutePercentageError{Kind::WeightedAbsolutePercentageError};
+    inline constexpr Descriptor MeanPercentageError{Kind::MeanPercentageError};
+    inline constexpr Descriptor ExplainedVariance{Kind::ExplainedVariance};
+    inline constexpr Descriptor TheilsU1{Kind::TheilsU1};
+    inline constexpr Descriptor TheilsU2{Kind::TheilsU2};
+    inline constexpr Descriptor MeanAbsoluteScaledError{Kind::MeanAbsoluteScaledError};
+    inline constexpr Descriptor RootMeanSquaredScaledError{Kind::RootMeanSquaredScaledError};
+    inline constexpr Descriptor MedianRelativeAbsoluteError{Kind::MedianRelativeAbsoluteError};
+    inline constexpr Descriptor GeometricMeanRelativeAbsoluteError{Kind::GeometricMeanRelativeAbsoluteError};
+    inline constexpr Descriptor OverallWeightedAverage{Kind::OverallWeightedAverage};
+    inline constexpr Descriptor DynamicTimeWarpingDistance{Kind::DynamicTimeWarpingDistance};
+    inline constexpr Descriptor TimeWarpEditDistance{Kind::TimeWarpEditDistance};
+    inline constexpr Descriptor SpectralDistance{Kind::SpectralDistance};
+    inline constexpr Descriptor CosineSimilarity{Kind::CosineSimilarity};
+    inline constexpr Descriptor NegativeLogLikelihood{Kind::NegativeLogLikelihood};
+    inline constexpr Descriptor ContinuousRankedProbabilityScore{Kind::ContinuousRankedProbabilityScore};
+    inline constexpr Descriptor EnergyScore{Kind::EnergyScore};
+    inline constexpr Descriptor PinballLossAverage{Kind::PinballLossAverage};
+    inline constexpr Descriptor BrierScore{Kind::BrierScore};
+    inline constexpr Descriptor PredictionIntervalCoverageProbability{Kind::PredictionIntervalCoverageProbability};
+    inline constexpr Descriptor MeanPredictionIntervalWidth{Kind::MeanPredictionIntervalWidth};
+    inline constexpr Descriptor WinklerScore{Kind::WinklerScore};
+    inline constexpr Descriptor ConditionalCoverageError{Kind::ConditionalCoverageError};
+    inline constexpr Descriptor QuantileCrossingRate{Kind::QuantileCrossingRate};
+    inline constexpr Descriptor AutocorrelationOfResiduals{Kind::AutocorrelationOfResiduals};
+    inline constexpr Descriptor PartialAutocorrelationOfResiduals{Kind::PartialAutocorrelationOfResiduals};
+    inline constexpr Descriptor LjungBoxStatistic{Kind::LjungBoxStatistic};
+    inline constexpr Descriptor BoxPierceStatistic{Kind::BoxPierceStatistic};
+    inline constexpr Descriptor DurbinWatsonStatistic{Kind::DurbinWatsonStatistic};
+    inline constexpr Descriptor JarqueBeraStatistic{Kind::JarqueBeraStatistic};
+    inline constexpr Descriptor AndersonDarlingStatistic{Kind::AndersonDarlingStatistic};
+    inline constexpr Descriptor BreuschPaganStatistic{Kind::BreuschPaganStatistic};
+    inline constexpr Descriptor WhiteStatistic{Kind::WhiteStatistic};
+    inline constexpr Descriptor PopulationStabilityIndex{Kind::PopulationStabilityIndex};
+    inline constexpr Descriptor KullbackLeiblerDivergence{Kind::KullbackLeiblerDivergence};
+    inline constexpr Descriptor JensenShannonDivergence{Kind::JensenShannonDivergence};
+    inline constexpr Descriptor WassersteinDistance{Kind::WassersteinDistance};
+    inline constexpr Descriptor MaximumMeanDiscrepancy{Kind::MaximumMeanDiscrepancy};
+    inline constexpr Descriptor LossDriftSlope{Kind::LossDriftSlope};
+    inline constexpr Descriptor LossCusumStatistic{Kind::LossCusumStatistic};
+    inline constexpr Descriptor ResidualChangePointScore{Kind::ResidualChangePointScore};
+    inline constexpr Descriptor QLIKE{Kind::QLIKE};
+    inline constexpr Descriptor LogVarianceMeanSquaredError{Kind::LogVarianceMeanSquaredError};
+    inline constexpr Descriptor SqrtVarianceMeanSquaredError{Kind::SqrtVarianceMeanSquaredError};
+    inline constexpr Descriptor msIC{Kind::msIC};
+    inline constexpr Descriptor msIR{Kind::msIR};
 }
 
 
