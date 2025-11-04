@@ -84,7 +84,7 @@ namespace Thot {
         {
             const auto trimmed = trim(specification);
             if (trimmed.empty()) {
-                throw std::invalid_argument("Port::parse requires a non-empty specification.");
+                throw std::invalid_argument("Port::Module requires a non-empty specification.");
             }
 
             auto [token, attribute] = split_token(trimmed);
@@ -97,23 +97,13 @@ namespace Thot {
 
             if (token.empty()) {
                 throw std::invalid_argument(
-                    "Port::parse encountered an empty identifier in '" + port.representation + "'.");
+                    "Port::Module encountered an empty identifier in '" + port.representation + "'.");
             }
 
-            if (token.front() == '@') {
-                auto sentinel = token.substr(1);
-                if (sentinel == "input") {
-                    port.kind = Kind::Input;
-                } else if (sentinel == "output") {
-                    port.kind = Kind::Output;
-                } else {
-                    throw std::invalid_argument("Unsupported sentinel port '@" + std::string(sentinel) + "'.");
-                }
-                port.identifier.assign(sentinel.begin(), sentinel.end());
-            } else {
-                port.kind = Kind::Module;
-                port.identifier.assign(token.begin(), token.end());
-            }
+
+            port.kind = Kind::Module;
+            port.identifier.assign(token.begin(), token.end());
+
 
             if (port.identifier.empty()) {
                 throw std::invalid_argument(
@@ -123,7 +113,6 @@ namespace Thot {
             port.merge_policy = MergePolicy::Strict;
             return port;
         }
-
         static Port Join(std::string_view name, MergePolicy policy = MergePolicy::Strict)
         {
             const auto trimmed = trim(name);
@@ -228,6 +217,49 @@ namespace Thot {
             port.representation = std::move(repr);
 
             return port;
+        }
+
+        static Port Input(std::string_view name = "@input") {
+            const auto trimmed = trim(name);
+            if (trimmed.empty()) {
+                throw std::invalid_argument("Port::Input requires a non-empty name.");
+            }
+            Port p{};
+            p.kind = Kind::Input;
+            // If given "@input", store canonical identifier "input"; otherwise store the alias verbatim.
+            if (!trimmed.empty() && trimmed.front()=='@') {
+                if (trimmed != "@input") {
+                    throw std::invalid_argument("Unsupported input sentinel '" + std::string(trimmed) + "'. Use '@input' or an alias.");
+                }
+                p.identifier = "input";
+                p.representation = "@input";
+            } else {
+                p.identifier.assign(trimmed.begin(), trimmed.end());
+                p.representation.assign(trimmed.begin(), trimmed.end());
+            }
+            p.merge_policy = MergePolicy::Strict;
+            return p;
+        }
+
+        static Port Output(std::string_view name = "@output") {
+            const auto trimmed = trim(name);
+            if (trimmed.empty()) {
+                throw std::invalid_argument("Port::Output requires a non-empty name.");
+            }
+            Port p{};
+            p.kind = Kind::Output;
+            if (!trimmed.empty() && trimmed.front()=='@') {
+                if (trimmed != "@output") {
+                    throw std::invalid_argument("Unsupported output sentinel '" + std::string(trimmed) + "'. Use '@output' or an alias.");
+                }
+                p.identifier = "output";
+                p.representation = "@output";
+            } else {
+                p.identifier.assign(trimmed.begin(), trimmed.end());
+                p.representation.assign(trimmed.begin(), trimmed.end());
+            }
+            p.merge_policy = MergePolicy::Strict;
+            return p;
         }
 
 

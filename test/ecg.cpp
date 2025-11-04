@@ -73,13 +73,13 @@ int tmain()
         model.add(Thot::Layer::FC({ 128, 5, true }, Thot::Activation::Identity, Thot::Initialization::HeNormal), "end");
 
         model.links({
-            {Thot::Port::parse("@input"), Thot::Port::parse("lstm")},
-            {Thot::Port::parse("lstm"),   Thot::Port::parse("Reduc")},
-            {Thot::Port::parse("Reduc"),  Thot::Port::parse("SD1")},
-            {Thot::Port::parse("SD1"),    Thot::Port::parse("fc1")},
-            {Thot::Port::parse("fc1"),    Thot::Port::parse("HD1")},
-            {Thot::Port::parse("HD1"),    Thot::Port::parse("end")},
-            {Thot::Port::parse("end"),    Thot::Port::parse("@output")}
+            {Thot::Port::Module("@input"), Thot::Port::Module("lstm")},
+            {Thot::Port::Module("lstm"),   Thot::Port::Module("Reduc")},
+            {Thot::Port::Module("Reduc"),  Thot::Port::Module("SD1")},
+            {Thot::Port::Module("SD1"),    Thot::Port::Module("fc1")},
+            {Thot::Port::Module("fc1"),    Thot::Port::Module("HD1")},
+            {Thot::Port::Module("HD1"),    Thot::Port::Module("end")},
+            {Thot::Port::Module("end"),    Thot::Port::Module("@output")}
         }, {.enable_graph_capture = true});
 
 
