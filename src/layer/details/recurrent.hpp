@@ -267,9 +267,9 @@ namespace Thot::Layer::Details {
     // We only bind RNN/LSTM/GRU/xLSTM here. S4/etc. live elsewhere.
 
     template <class Owner>
-    RegisteredLayer build_registered_layer(Owner& owner, const RNNDescriptor& descriptor, std::size_t /*index*/)
+    RegisteredLayer build_registered_layer(Owner& owner, const RNNDescriptor& descriptor, std::size_t index)
     {
-        auto module = torch::nn::RNN(Detail::to_torch_rnn_options(descriptor.options));
+        auto module = owner.register_module("recurrent_" + std::to_string(index), torch::nn::RNN(Detail::to_torch_rnn_options(descriptor.options)));
 
         if constexpr (requires(Owner& o, torch::nn::Module& m, ::Thot::Initialization::Descriptor d) {
                           o.apply_initialization(m, d);
@@ -293,9 +293,8 @@ namespace Thot::Layer::Details {
         return registered_layer;
     }
     template <class Owner>
-    RegisteredLayer build_registered_layer(Owner& owner, const LSTMDescriptor& descriptor, std::size_t /*index*/) {
-        // Build pure LibTorch LSTM
-        auto module = torch::nn::LSTM(Detail::to_torch_lstm_options(descriptor.options));
+    RegisteredLayer build_registered_layer(Owner& owner, const LSTMDescriptor& descriptor, std::size_t index) {
+        auto module = owner.register_module("recurrent_" + std::to_string(index), torch::nn::LSTM(Detail::to_torch_lstm_options(descriptor.options)));
 
         // Optional initialization hook at Model level
         if constexpr (requires(Owner& o, torch::nn::Module& m, ::Thot::Initialization::Descriptor d) {
@@ -320,9 +319,9 @@ namespace Thot::Layer::Details {
     }
 
     template <class Owner>
-    RegisteredLayer build_registered_layer(Owner& owner, const GRUDescriptor& descriptor, std::size_t /*index*/)
+    RegisteredLayer build_registered_layer(Owner& owner, const GRUDescriptor& descriptor, std::size_t index)
     {
-        auto module = torch::nn::GRU(Detail::to_torch_gru_options(descriptor.options));
+        auto module = owner.register_module("recurrent_" + std::to_string(index), torch::nn::GRU(Detail::to_torch_gru_options(descriptor.options)));
 
         if (descriptor.options.param_dtype != at::kFloat) {
             module->to(descriptor.options.param_dtype);
@@ -360,9 +359,9 @@ namespace Thot::Layer::Details {
 
 
     template <class Owner>
-    RegisteredLayer build_registered_layer(Owner& owner, const xLSTMDescriptor& descriptor, std::size_t /*index*/) {
+    RegisteredLayer build_registered_layer(Owner& owner, const xLSTMDescriptor& descriptor, std::size_t index) {
         // Build our wrapper (still uses torch::nn::LSTM underneath)
-        auto module = xLSTM(descriptor.options);
+        auto module = owner.register_module("recurrent_" + std::to_string(index), xLSTM(descriptor.options));
 
         if constexpr (requires(Owner& o, torch::nn::Module& m, ::Thot::Initialization::Descriptor d) {
             o.apply_initialization(m, d);
