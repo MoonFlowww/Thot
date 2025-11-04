@@ -230,6 +230,7 @@ namespace Thot::Layer::Details {
 
             // Set forget gate bias across all layers & directions.
             void set_forget_gate_bias_(double value) {
+                torch::NoGradGuard no_grad;
                 const int64_t num_dir = options_.bidirectional ? 2 : 1;
                 const int64_t H = options_.hidden_size;
                 const int64_t fourH = 4 * H;
