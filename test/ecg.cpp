@@ -29,7 +29,7 @@ struct ECGDatasetSplit {
 
 
 ECGDatasetSplit load_ptbxl_dataset(const std::string& root, bool low_res, float train_split) {
-    auto [train_inputs, train_targets, validation_inputs, validation_targets] = Thot::Data::Load::PTBXL<>(root, low_res, train_split, true, true, 0.1f);
+    auto [train_inputs, train_targets, validation_inputs, validation_targets] = Thot::Data::Load::PTBXL<>(root, low_res, train_split, true, false);
     return {{std::move(train_inputs), std::move(train_targets)}, {std::move(validation_inputs), std::move(validation_targets)}};
 }
 
@@ -60,24 +60,25 @@ int main()
     const int64_t epochs = 40;
     const int64_t steps_per_epoch = std::max<int64_t>(1, (train_signals.size(0) + batch_size - 1) / batch_size);
 
+    Thot::Data::Check::Size(train_signals);
     if (!load_existing_model) {
 
-        model.add(Thot::Layer::xLSTM({ .input_size = input_features, .hidden_size = 128, .num_layers = 2, .dropout = 0.1, .batch_first = true, .bidirectional = true }, Thot::Activation::Identity, Thot::Initialization::XavierUniform), "lstm");
+        model.add(Thot::Layer::LSTM({ .input_size = input_features, .hidden_size = 128, .num_layers = 2, .dropout = 0.1, .batch_first = true, .bidirectional = true }, Thot::Activation::Identity, Thot::Initialization::XavierUniform), "lstm");
 
-        model.add(Thot::Layer::Reduce({.op=Thot::Layer::ReduceOp::Max, .dims = {1}, .keep_dim=false}), "tmean");
+        model.add(Thot::Layer::Reduce({.op=Thot::Layer::ReduceOp::Max, .dims = {1}, .keep_dim=false}), "Reduc");
 
-        model.add(Thot::Layer::HardDropout({ .probability = 0.5 }), "HD1");
+        model.add(Thot::Layer::SoftDropout({ .probability = 0.5}), "SD1");
         model.add(Thot::Layer::FC({ 256, 128, true }, Thot::Activation::SiLU, Thot::Initialization::HeNormal), "fc1");
-        model.add(Thot::Layer::HardDropout({ .probability = 0.5 }), "HD2");
+        model.add(Thot::Layer::HardDropout({ .probability = 0.5 }), "HD1");
         model.add(Thot::Layer::FC({ 128, 5, true }, Thot::Activation::Identity, Thot::Initialization::HeNormal), "end");
 
         model.links({
             {Thot::Port::parse("@input"), Thot::Port::parse("lstm")},
-            {Thot::Port::parse("lstm"),   Thot::Port::parse("tmean")},
-            {Thot::Port::parse("tmean"),  Thot::Port::parse("HD1")},
-            {Thot::Port::parse("HD1"),    Thot::Port::parse("fc1")},
-            {Thot::Port::parse("fc1"),    Thot::Port::parse("HD2")},
-            {Thot::Port::parse("HD2"),    Thot::Port::parse("end")},
+            {Thot::Port::parse("lstm"),   Thot::Port::parse("Reduc")},
+            {Thot::Port::parse("Reduc"),  Thot::Port::parse("SD1")},
+            {Thot::Port::parse("SD1"),    Thot::Port::parse("fc1")},
+            {Thot::Port::parse("fc1"),    Thot::Port::parse("HD1")},
+            {Thot::Port::parse("HD1"),    Thot::Port::parse("end")},
             {Thot::Port::parse("end"),    Thot::Port::parse("@output")}
         }, true);
 
