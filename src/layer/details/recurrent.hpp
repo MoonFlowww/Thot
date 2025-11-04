@@ -112,6 +112,43 @@ namespace Thot::Layer::Details {
         inline torch::Tensor take_recurrent_output(const std::tuple<A, Rest...>& tup) {
             return std::get<0>(tup);
         }
+        // Convert our options to LibTorch's RNN/GRU/LSTM options
+        inline torch::nn::RNNOptions to_torch_rnn_options(const RNNOptions& o)
+        {
+            auto options = torch::nn::RNNOptions(o.input_size, o.hidden_size);
+            options = options.num_layers(o.num_layers);
+            options = options.dropout(o.dropout);
+            options = options.batch_first(o.batch_first);
+            options = options.bidirectional(o.bidirectional);
+
+            std::string nonlinearity = o.nonlinearity;
+            std::transform(
+                nonlinearity.begin(),
+                nonlinearity.end(),
+                nonlinearity.begin(),
+                [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+
+            if (nonlinearity == "tanh") {
+                options = options.nonlinearity(torch::kTanh);
+            } else if (nonlinearity == "relu") {
+                options = options.nonlinearity(torch::kReLU);
+            } else {
+                throw std::invalid_argument("Unsupported RNN nonlinearity: " + o.nonlinearity);
+            }
+
+            return options;
+        }
+
+        inline torch::nn::GRUOptions to_torch_gru_options(const GRUOptions& o)
+        {
+            auto options = torch::nn::GRUOptions(o.input_size, o.hidden_size);
+            options = options.num_layers(o.num_layers);
+            options = options.dropout(o.dropout);
+            options = options.batch_first(o.batch_first);
+            options = options.bidirectional(o.bidirectional);
+            options = options.bias(o.bias);
+            return options;
+        }
 
         // Convert our options to LibTorch's LSTMOptions
         inline torch::nn::LSTMOptions to_torch_lstm_options(const LSTMOptions& o) {
@@ -226,8 +263,34 @@ namespace Thot::Layer::Details {
     TORCH_MODULE(xLSTM);
 
     // ---------------- Registry bindings ----------------
-    // We only bind LSTM and xLSTM here. RNN/GRU/S4/etc. live elsewhere.
+    // We only bind RNN/LSTM/GRU/xLSTM here. S4/etc. live elsewhere.
 
+    template <class Owner>
+    RegisteredLayer build_registered_layer(Owner& owner, const RNNDescriptor& descriptor, std::size_t /*index*/)
+    {
+        auto module = torch::nn::RNN(Detail::to_torch_rnn_options(descriptor.options));
+
+        if constexpr (requires(Owner& o, torch::nn::Module& m, ::Thot::Initialization::Descriptor d) {
+                          o.apply_initialization(m, d);
+                      }) {
+            owner.apply_initialization(*module, descriptor.initialization);
+                      }
+
+        RegisteredLayer registered_layer;
+        registered_layer.module = to_shared_module_ptr(module);
+        registered_layer.local = descriptor.local;
+
+        struct ForwardFunctor {
+            decltype(module.get()) module_ptr;
+            torch::Tensor operator()(torch::Tensor input) const
+            {
+                auto out = module_ptr->forward(std::move(input));
+                return Detail::take_recurrent_output(out);
+            }
+        };
+        registered_layer.bind_inline_forward(ForwardFunctor{module.get()});
+        return registered_layer;
+    }
     template <class Owner>
     RegisteredLayer build_registered_layer(Owner& owner, const LSTMDescriptor& descriptor, std::size_t /*index*/) {
         // Build pure LibTorch LSTM
@@ -254,6 +317,46 @@ namespace Thot::Layer::Details {
         registered_layer.bind_inline_forward(ForwardFunctor{module.get()});
         return registered_layer;
     }
+
+    template <class Owner>
+    RegisteredLayer build_registered_layer(Owner& owner, const GRUDescriptor& descriptor, std::size_t /*index*/)
+    {
+        auto module = torch::nn::GRU(Detail::to_torch_gru_options(descriptor.options));
+
+        if (descriptor.options.param_dtype != at::kFloat) {
+            module->to(descriptor.options.param_dtype);
+        }
+
+        at::globalContext().setAllowTF32CuDNN(descriptor.options.allow_tf32);
+        if (torch::cuda::is_available() && torch::cuda::cudnn_is_available()) {
+            at::globalContext().setBenchmarkCuDNN(descriptor.options.benchmark_cudnn);
+            if (module && !module->parameters().empty()) {
+                module->flatten_parameters();
+            }
+        }
+
+        if constexpr (requires(Owner& o, torch::nn::Module& m, ::Thot::Initialization::Descriptor d) {
+                          o.apply_initialization(m, d);
+                      }) {
+            owner.apply_initialization(*module, descriptor.initialization);
+                      }
+
+        RegisteredLayer registered_layer;
+        registered_layer.module = to_shared_module_ptr(module);
+        registered_layer.local = descriptor.local;
+
+        struct ForwardFunctor {
+            decltype(module.get()) module_ptr;
+            torch::Tensor operator()(torch::Tensor input) const
+            {
+                auto out = module_ptr->forward(std::move(input));
+                return Detail::take_recurrent_output(out);
+            }
+        };
+        registered_layer.bind_inline_forward(ForwardFunctor{module.get()});
+        return registered_layer;
+    }
+
 
     template <class Owner>
     RegisteredLayer build_registered_layer(Owner& owner, const xLSTMDescriptor& descriptor, std::size_t /*index*/) {
