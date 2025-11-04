@@ -41,7 +41,10 @@ namespace Thot::Layer::Details {
             auto eps = torch::empty_like(input).normal_(1.0, std);
             auto output = input * eps;
 
-            if (options_.inplace) { input.mul_(eps); return input; }
+            if (options_.inplace && !input.requires_grad()) {
+                input.mul_(eps);
+                return input;
+            }
             return output;
         }
 
