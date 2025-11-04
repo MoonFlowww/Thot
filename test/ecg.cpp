@@ -63,7 +63,7 @@ int main()
     Thot::Data::Check::Size(train_signals);
     if (!load_existing_model) {
 
-        model.add(Thot::Layer::LSTM({ .input_size = input_features, .hidden_size = 128, .num_layers = 2, .dropout = 0.1, .batch_first = true, .bidirectional = true }, Thot::Activation::Identity, Thot::Initialization::XavierUniform), "lstm");
+        model.add(Thot::Layer::xLSTM({ .input_size = input_features, .hidden_size = 128, .num_layers = 2, .dropout = 0.1, .batch_first = true, .bidirectional = true }, Thot::Activation::Identity, Thot::Initialization::XavierUniform), "lstm");
 
         model.add(Thot::Layer::Reduce({.op=Thot::Layer::ReduceOp::Max, .dims = {1}, .keep_dim=false}), "Reduc");
 
