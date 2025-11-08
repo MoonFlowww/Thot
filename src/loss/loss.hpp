@@ -1,6 +1,9 @@
 #ifndef THOT_LOSS_HPP
 #define THOT_LOSS_HPP
 // This file is a factory, must exempt it from any logical-code. For functions look into "/details"
+#include <variant>
+
+
 
 #include "details/reduction.hpp"
 #include "details/ce.hpp"
@@ -43,6 +46,20 @@ namespace Thot::Loss {
 
     using MarginRankingOptions = Details::MarginRankingOptions;
     using MarginRankingDescriptor = Details::MarginRankingDescriptor;
+
+
+
+    using Descriptor = std::variant<
+        MSEDescriptor,
+        CrossEntropyDescriptor,
+        BCEWithLogitsDescriptor,
+        //CosineEmbeddingDescriptor,
+        //KLDivDescriptor,
+        MAEDescriptor,
+        //MarginRankingDescriptor,
+        NegativeLogLikelihoodDescriptor,
+        SmoothL1Descriptor>;
+
 
     [[nodiscard]] constexpr auto MSE(const MSEOptions& options = {}) noexcept -> MSEDescriptor {
         return {options};

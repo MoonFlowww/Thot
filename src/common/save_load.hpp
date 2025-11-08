@@ -127,6 +127,27 @@ namespace Thot::Common::SaveLoad {
             return array;
         }
 
+        inline std::string loss_reduction_to_string(Loss::Reduction reduction)
+        {
+            switch (reduction) {
+                case Loss::Reduction::None: return "none";
+                case Loss::Reduction::Sum: return "sum";
+                case Loss::Reduction::Mean:
+                default: return "mean";
+            }
+        }
+
+        inline Loss::Reduction loss_reduction_from_string(const std::string& value, const std::string& context)
+        {
+            const auto lowered = to_lower(value);
+            if (lowered == "mean") return Loss::Reduction::Mean;
+            if (lowered == "sum") return Loss::Reduction::Sum;
+            if (lowered == "none") return Loss::Reduction::None;
+            std::ostringstream message;
+            message << "Unknown loss reduction '" << value << "' in " << context;
+            throw std::runtime_error(message.str());
+        }
+
         namespace Mamba = Block::Details::Transformer::Mamba;
         namespace PlusPlus = Block::Details::Transformer::PlusPlus;
         inline Activation::Descriptor deserialize_activation_descriptor(const PropertyTree& tree, const std::string& context);
@@ -1819,12 +1840,116 @@ namespace Thot::Common::SaveLoad {
         message << "Unknown regularisation descriptor '" << type << "' in " << context;
         throw std::runtime_error(message.str());
     }
+    inline PropertyTree serialize_loss(const Loss::Descriptor& descriptor)
+    {
+        PropertyTree tree;
+        std::visit(
+            [&](const auto& concrete) {
+                using DescriptorType = std::decay_t<decltype(concrete)>;
+                const auto& options = concrete.options;
+                if constexpr (std::is_same_v<DescriptorType, Loss::MSEDescriptor>) {
+                    tree.put("type", "mse");
+                    tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
+                    tree.put("options.use_weight", options.use_weight);
+                } else if constexpr (std::is_same_v<DescriptorType, Loss::CrossEntropyDescriptor>) {
+                    tree.put("type", "cross_entropy");
+                    tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
+                    tree.put("options.use_weight", options.use_weight);
+                    tree.put("options.label_smoothing", options.label_smoothing);
+                } else if constexpr (std::is_same_v<DescriptorType, Loss::BCEWithLogitsDescriptor>) {
+                    tree.put("type", "bce_with_logits");
+                    tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
+                    tree.put("options.use_weight", options.use_weight);
+                    tree.put("options.use_pos_weight", options.use_pos_weight);
+                } else if constexpr (std::is_same_v<DescriptorType, Loss::MAEDescriptor>) {
+                    tree.put("type", "mae");
+                    tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
+                    tree.put("options.use_weight", options.use_weight);
+                } else if constexpr (std::is_same_v<DescriptorType, Loss::NegativeLogLikelihoodDescriptor>) {
+                    tree.put("type", "nll");
+                    tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
+                    tree.put("options.use_weight", options.use_weight);
+                    if (options.ignore_index.has_value()) {
+                        tree.put("options.ignore_index", options.ignore_index.value());
+                    }
+                } else if constexpr (std::is_same_v<DescriptorType, Loss::SmoothL1Descriptor>) {
+                    tree.put("type", "smooth_l1");
+                    tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
+                    tree.put("options.use_weight", options.use_weight);
+                    tree.put("options.beta", options.beta);
+                } else {
+                    static_assert(sizeof(DescriptorType) == 0, "Unsupported loss descriptor supplied.");
+                }
+            },
+            descriptor);
+        return tree;
+    }
+
+    inline Loss::Descriptor deserialize_loss(const PropertyTree& tree, const std::string& context)
+    {
+        const auto type = Detail::to_lower(Detail::get_string(tree, "type", context));
+        if (type == "mse") {
+            Loss::MSEOptions options;
+            options.reduction = Detail::loss_reduction_from_string(
+                Detail::get_string(tree, "options.reduction", context), context);
+            options.use_weight = Detail::get_boolean(tree, "options.use_weight", context);
+            return Loss::Descriptor{Loss::MSEDescriptor{options}};
+        }
+        if (type == "cross_entropy") {
+            Loss::CrossEntropyOptions options;
+            options.reduction = Detail::loss_reduction_from_string(
+                Detail::get_string(tree, "options.reduction", context), context);
+            options.use_weight = Detail::get_boolean(tree, "options.use_weight", context);
+            options.label_smoothing = Detail::get_numeric<double>(tree, "options.label_smoothing", context);
+            return Loss::Descriptor{Loss::CrossEntropyDescriptor{options}};
+        }
+        if (type == "bce_with_logits") {
+            Loss::BCEWithLogitsOptions options;
+            options.reduction = Detail::loss_reduction_from_string(
+                Detail::get_string(tree, "options.reduction", context), context);
+            options.use_weight = Detail::get_boolean(tree, "options.use_weight", context);
+            options.use_pos_weight = Detail::get_boolean(tree, "options.use_pos_weight", context);
+            return Loss::Descriptor{Loss::BCEWithLogitsDescriptor{options}};
+        }
+        if (type == "mae") {
+            Loss::MAEOptions options;
+            options.reduction = Detail::loss_reduction_from_string(
+                Detail::get_string(tree, "options.reduction", context), context);
+            options.use_weight = Detail::get_boolean(tree, "options.use_weight", context);
+            return Loss::Descriptor{Loss::MAEDescriptor{options}};
+        }
+        if (type == "nll") {
+            Loss::NegativeLogLikelihoodOptions options;
+            options.reduction = Detail::loss_reduction_from_string(
+                Detail::get_string(tree, "options.reduction", context), context);
+            options.use_weight = Detail::get_boolean(tree, "options.use_weight", context);
+            if (const auto ignore_index = tree.get_optional<std::int64_t>("options.ignore_index")) {
+                options.ignore_index = *ignore_index;
+            }
+            return Loss::Descriptor{Loss::NegativeLogLikelihoodDescriptor{options}};
+        }
+        if (type == "smooth_l1") {
+            Loss::SmoothL1Options options;
+            options.reduction = Detail::loss_reduction_from_string(
+                Detail::get_string(tree, "options.reduction", context), context);
+            options.use_weight = Detail::get_boolean(tree, "options.use_weight", context);
+            options.beta = Detail::get_numeric<double>(tree, "options.beta", context);
+            return Loss::Descriptor{Loss::SmoothL1Descriptor{options}};
+        }
+        std::ostringstream message;
+        message << "Unknown loss descriptor '" << type << "' in " << context;
+        throw std::runtime_error(message.str());
+    }
+
 
     inline PropertyTree serialize_local_config(const LocalConfig& config)
     {
         PropertyTree tree;
         if (config.optimizer) {
             tree.add_child("optimizer", serialize_optimizer(*config.optimizer));
+        }
+        if (config.loss) {
+            tree.add_child("loss", serialize_loss(*config.loss));
         }
         PropertyTree regularization;
         for (const auto& descriptor : config.regularization) {
@@ -1839,6 +1964,9 @@ namespace Thot::Common::SaveLoad {
         LocalConfig config;
         if (const auto optimizer = tree.get_child_optional("optimizer")) {
             config.optimizer = deserialize_optimizer(*optimizer, context + " optimizer");
+        }
+        if (const auto loss = tree.get_child_optional("loss")) {
+            config.loss = deserialize_loss(*loss, context + " loss");
         }
         if (const auto regularization = tree.get_child_optional("regularization")) {
             for (const auto& node : *regularization) {

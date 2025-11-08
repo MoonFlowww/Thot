@@ -5,7 +5,7 @@
 #include <utility>
 #include "../include/Thot.h"
 
-int xmain() {
+int main() {
     Thot::Model model("Debug_CIFAR");
     model.to_device(torch::cuda::is_available());
 
@@ -21,6 +21,7 @@ int xmain() {
 
     const int64_t steps_per_epoch = (N + B - 1) / B;
     if (!IsLoading) {
+
 
         model.add(Thot::Block::Sequential({
             Thot::Layer::Conv2d(
@@ -71,6 +72,8 @@ int xmain() {
         }), "S2");
 
 
+        model.add(Thot::Layer::SoftDropout({.probability=0.1f, .noise_type = Thot::Layer::SoftDropoutOptions::NoiseType::BlueNoise}));
+
         model.add(Thot::Block::Sequential({
             Thot::Layer::Conv2d(
                 {128, 32, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
@@ -108,6 +111,8 @@ int xmain() {
             ),
 
         }), "Send");
+
+        /*
         Thot::Block::Transformer::Vision::EncoderOptions vit_options{};
         vit_options.layers = 4;
         vit_options.embed_dim = 192;
@@ -128,36 +133,36 @@ int xmain() {
 
         model.add(Thot::Block::Transformer::Vision::Encoder(vit_options), "ViT");
 
-
+        */
         model.add(Thot::Layer::Flatten(), "flat");
 
-        model.add(Thot::Layer::FC({3072, 512, true}, Thot::Activation::SiLU, Thot::Initialization::HeNormal), "FC1");
+        model.add(Thot::Layer::FC({512, 512, true}, Thot::Activation::SiLU, Thot::Initialization::HeNormal), "FC1");
         model.add(Thot::Layer::HardDropout({.probability = 0.5}), "HDFin");
         model.add(Thot::Layer::FC({512, 10, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal), "FC2");
 
         // TODO: DO INTERLEAVED GRADIENT NOISE
         /*
         model.links({
-            Thot::LinkSpec{Thot::Port::parse("@input"), Thot::Port::parse("stem")},
+            Thot::LinkSpec{Thot::Port::Input("@input"), Thot::Port::Module("stem")},
 
-            Thot::LinkSpec{Thot::Port::parse("stem"), Thot::Port::parse("S1")}, // path #¹
-            //Thot::LinkSpec{Thot::Port::parse("R1"), Thot::Port::parse("R2")},
+            Thot::LinkSpec{Thot::Port::Module("stem"), Thot::Port::Module("S1")}, // path #¹
+            //Thot::LinkSpec{Thot::Port::Module("R1"), Thot::Port::Module("R2")},
 
-            //Thot::LinkSpec{Thot::Port::parse("stem"), Thot::Port::parse("S1")}, // path #2
-            //Thot::LinkSpec{Thot::Port::parse("S1"), Thot::Port::parse("S2")},
+            //Thot::LinkSpec{Thot::Port::Module("stem"), Thot::Port::Module("S1")}, // path #2
+            //Thot::LinkSpec{Thot::Port::Module("S1"), Thot::Port::Module("S2")},
 
-            //Thot::LinkSpec{Thot::Port::join({"R2", "S2"}, Thot::MergePolicyKind::Concat), Thot::Port::parse("Send")}, // join
-            //Thot::LinkSpec{Thot::Port::parse("R2"), Thot::Port::parse("S1")},
-            Thot::LinkSpec{Thot::Port::parse("S1"), Thot::Port::parse("S2")},
+            //Thot::LinkSpec{Thot::Port::join({"R2", "S2"}, Thot::MergePolicyKind::Concat), Thot::Port::Module("Send")}, // join
+            //Thot::LinkSpec{Thot::Port::Module("R2"), Thot::Port::Module("S1")},
+            Thot::LinkSpec{Thot::Port::Module("S1"), Thot::Port::Module("S2")},
 
-            Thot::LinkSpec{Thot::Port::parse("S2"), Thot::Port::parse("Send")},
+            Thot::LinkSpec{Thot::Port::Module("S2"), Thot::Port::Module("Send")},
 
-            Thot::LinkSpec{Thot::Port::parse("Send"), Thot::Port::parse("ViT")},
-            Thot::LinkSpec{Thot::Port::parse("ViT"), Thot::Port::parse("flat")},
-            Thot::LinkSpec{Thot::Port::parse("flat"), Thot::Port::parse("FC1")},
-            Thot::LinkSpec{Thot::Port::parse("FC1"), Thot::Port::parse("HDFin")},
-            Thot::LinkSpec{Thot::Port::parse("HDFin"), Thot::Port::parse("FC2")},
-            Thot::LinkSpec{Thot::Port::parse("FC2"), Thot::Port::parse("@output")}
+            Thot::LinkSpec{Thot::Port::Module("Send"), Thot::Port::Module("ViT")},
+            Thot::LinkSpec{Thot::Port::Module("ViT"), Thot::Port::Module("flat")},
+            Thot::LinkSpec{Thot::Port::Module("flat"), Thot::Port::Module("FC1")},
+            Thot::LinkSpec{Thot::Port::Module("FC1"), Thot::Port::Module("HDFin")},
+            Thot::LinkSpec{Thot::Port::Module("HDFin"), Thot::Port::Module("FC2")},
+            Thot::LinkSpec{Thot::Port::Module("FC2"), Thot::Port::Output("@output")}
         }, {.enable_graph_capture = true});
         */
 

@@ -4651,16 +4651,7 @@ namespace Thot {
         std::unique_ptr<LrScheduler::Details::Scheduler> scheduler_{};
         using StepImpl = void (Model::*)();
         StepImpl step_impl_{&Model::step_not_configured};
-        using LossDescriptor = std::variant<
-            Loss::MSEDescriptor,
-            Loss::CrossEntropyDescriptor,
-            Loss::BCEWithLogitsDescriptor,
-            //Loss::CosineEmbeddingDescriptor,
-            //Loss::KLDivDescriptor,
-            Loss::MAEDescriptor,
-            //Loss::MarginRankingDescriptor,
-            Loss::NegativeLogLikelihoodDescriptor,
-            Loss::SmoothL1Descriptor>;
+        using LossDescriptor = Loss::Descriptor;
         std::optional<LossDescriptor> loss_descriptor_{};
         std::string name_{};
         torch::Device device_{torch::kCPU, 0};
