@@ -802,10 +802,7 @@ namespace Thot::Data::Load {
 
     template <bool BufferVRAM = false, class DevicePolicyT = Core::DevicePolicy<BufferVRAM>>
     [[nodiscard]] inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-    CIFAR10(const std::string& root,
-            float train_fraction = 1.0f,
-            float test_fraction = 1.0f,
-            bool normalise = true) {
+    CIFAR10(const std::string& root, float train_fraction = 1.0f, float test_fraction = 1.0f, bool normalise = true) {
         const auto dataset_root = Details::resolve_cifar10_root(root);
 
         const std::array<const char*, 5> train_files = {
@@ -863,10 +860,7 @@ namespace Thot::Data::Load {
 
     template <bool BufferVRAM = false, class DevicePolicyT = Core::DevicePolicy<BufferVRAM>>
     [[nodiscard]] inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-    ETTh(const std::string& csv_file,
-         float train_fraction = 0.7f,
-         float test_fraction = 0.2f,
-         bool normalise = true) {
+    ETTh(const std::string& csv_file, float train_fraction = 0.7f, float test_fraction = 0.2f, bool normalise = true) {
         auto [inputs, targets] = Details::read_etth_csv(csv_file);
 
         const auto total_samples = static_cast<std::int64_t>(inputs.size(0));
@@ -932,10 +926,7 @@ namespace Thot::Data::Load {
 
     template <bool BufferVRAM = false, class DevicePolicyT = Core::DevicePolicy<BufferVRAM>>
     [[nodiscard]] inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-    MNIST(const std::string& root,
-          float train_fraction = 1.0f,
-          float test_fraction = 1.0f,
-          bool normalise = true) {
+    MNIST(const std::string& root, float train_fraction = 1.0f, float test_fraction = 1.0f, bool normalise = true) {
         const auto dataset_root = Details::resolve_mnist_root(root);
 
         auto train_inputs = Details::read_idx_images(dataset_root / "train-images-idx3-ubyte");
