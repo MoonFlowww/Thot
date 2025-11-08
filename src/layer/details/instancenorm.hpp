@@ -1,0 +1,6 @@
+#ifndef THOT_INSTANCENORM_HPP
+#define THOT_INSTANCENORM_HPP
+
+// https://arxiv.org/pdf/1607.08022
+
+#endif //THOT_INSTANCENORM_HPP

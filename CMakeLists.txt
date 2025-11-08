@@ -160,5 +160,7 @@ add_executable(test_Thot test/etth/etth.cpp
         src/block/details/transformers/vision.hpp
         src/layer/details/reduce.hpp
         test/etth/wavelet.hpp
+        src/layer/details/instancenorm.hpp
+        src/data/details/repair.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)

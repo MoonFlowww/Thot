@@ -1,5 +1,6 @@
 #ifndef THOT_CONV_HPP
 #define THOT_CONV_HPP
+//https://hal.science/hal-05083427/document
 #include <cstdint>
 #include <string>
 #include <vector>

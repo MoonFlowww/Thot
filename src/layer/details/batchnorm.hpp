@@ -1,5 +1,6 @@
 #ifndef THOT_BATCHNORM_HPP
 #define THOT_BATCHNORM_HPP
+//https://arxiv.org/pdf/1502.03167
 #include <cstdint>
 
 #include <stdexcept>
