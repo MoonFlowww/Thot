@@ -9,6 +9,7 @@
 #include <vector>
 #include <torch/torch.h>
 
+#include "details/data.hpp"
 #include "details/training.hpp"
 #include "details/reliability.hpp"
 #include "details/reliability/reliability_det.hpp"
