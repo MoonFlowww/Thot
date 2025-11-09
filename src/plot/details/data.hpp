@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstddef>
 #include <optional>
+#include <atomic>
 #include <stdexcept>
 #include <string>
 #include <functional>
@@ -495,6 +496,8 @@ namespace Thot::Plot::Data {
         plotter.command("unset xtics");
         plotter.command("unset ytics");
 
+        static std::atomic<std::size_t> datablockCounter{0}; // warning: Reading from '-' inside a multiplot not supported; use a datablock instead
+
         for (std::size_t idx = 0; idx < selected.size(); ++idx) {
             const auto& tensor = selected[idx];
             const auto imageIndex = images.indices()[idx];
@@ -511,6 +514,9 @@ namespace Thot::Plot::Data {
                 const auto height = prepared.size(1);
                 const auto width = prepared.size(2);
 
+                const auto datablockId = "thot_image_" + std::to_string(++datablockCounter);
+                const auto datablockRef = "$" + datablockId;
+
                 std::ostringstream xrange;
                 xrange << "set xrange [0:" << (width - 1) << ']';
                 plotter.command(xrange.str());
@@ -519,12 +525,16 @@ namespace Thot::Plot::Data {
                 plotter.command(yrange.str());
                 plotter.command("unset palette");
 
-                plotter.plotRaw("plot '-' using 1:2:3:4:5 with rgbimage",
-                                 Details::build_color_writer(prepared));
+                plotter.defineDatablock(datablockId, Details::build_color_writer(prepared));
+                std::ostringstream plotCommand;
+                plotCommand << "plot " << datablockRef << " using 1:2:3:4:5 with rgbimage";
+                plotter.command(plotCommand.str());
             } else {
                 auto prepared = Details::prepare_grayscale_tensor(tensor.clone());
                 const auto height = prepared.size(0);
                 const auto width = prepared.size(1);
+                const auto datablockId = "thot_image_" + std::to_string(++datablockCounter);
+                const auto datablockRef = "$" + datablockId;
 
                 std::ostringstream xrange;
                 xrange << "set xrange [0:" << (width - 1) << ']';
@@ -545,8 +555,10 @@ namespace Thot::Plot::Data {
                 }
                 plotter.command("set palette gray");
 
-                plotter.plotRaw("plot '-' using 1:2:3 with image",
-                                 Details::build_grayscale_writer(prepared));
+                plotter.defineDatablock(datablockId, Details::build_grayscale_writer(prepared));
+                std::ostringstream plotCommand;
+                plotCommand << "plot " << datablockRef << " using 1:2:3 with image";
+                plotter.command(plotCommand.str());
             }
         }
 

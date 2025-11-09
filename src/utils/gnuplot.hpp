@@ -378,6 +378,30 @@ namespace Thot::Utils {
         }
 
 
+        void defineDatablock(const std::string& name, const std::function<void(std::FILE*)>& writer, const std::string& terminator = "EOD") {
+            ensureValid();
+            if (name.empty()) {
+                throw std::invalid_argument("defineDatablock requires a non-empty name");
+            }
+            if (!writer) {
+                throw std::invalid_argument("defineDatablock requires a valid writer");
+            }
+            if (terminator.empty()) {
+                throw std::invalid_argument("defineDatablock requires a non-empty terminator");
+            }
+
+            std::string blockName = name;
+            if (blockName.front() != '$') {
+                blockName.insert(blockName.begin(), '$');
+            }
+
+            writeLine(blockName + " << " + terminator);
+            writer(pipe_);
+            writeLine(terminator);
+            flush();
+        }
+
+
         void plot(const std::vector<double>& y,
                   const std::string& title = {},
                   PlotStyle style = PlotStyle{}) {

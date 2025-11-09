@@ -190,7 +190,8 @@ int main() {
     auto [train_images, train_labels, test_images, test_labels] = Thot::Data::Load::CIFAR10("/home/moonfloww/Projects/DATASETS/CIFAR10", 1.f, 1.f, true);
     auto [validation_images, validation_labels] = Thot::Data::Manipulation::Fraction(test_images, test_labels, 0.1f);
     Thot::Data::Check::Size(train_images, "Input train size raw");
-    Thot::Plot::Data::Image(train_images, {1,2,3,4,5,6,7});
+    auto selection = Thot::Plot::Data::Image(train_images, {1,2,3,4,5,6,7});
+    Thot::Plot::Data::Render(selection);
 
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Cutout(train_images, train_labels, {-1, -1}, {12, 12}, -1, 1.f, true, false);
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Shuffle(train_images, train_labels);
