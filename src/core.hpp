@@ -1482,15 +1482,15 @@ namespace Thot {
         void set_loss(Descriptor descriptor) {
             using Decayed = std::decay_t<Descriptor>;
             constexpr bool kSupported = std::disjunction_v<
-                std::is_same<Decayed, Loss::MSEDescriptor>,
-                std::is_same<Decayed, Loss::CrossEntropyDescriptor>,
-                std::is_same<Decayed, Loss::BCEWithLogitsDescriptor>,
-                //std::is_same<Decayed, Loss::CosineEmbeddingDescriptor>,
-                //std::is_same<Decayed, Loss::KLDivDescriptor>,
-                std::is_same<Decayed, Loss::MAEDescriptor>,
-                //std::is_same<Decayed, Loss::MarginRankingDescriptor>,
-                std::is_same<Decayed, Loss::NegativeLogLikelihoodDescriptor>,
-                std::is_same<Decayed, Loss::SmoothL1Descriptor>>;
+                std::is_same<Decayed, Loss::Details::MSEDescriptor>,
+                std::is_same<Decayed, Loss::Details::CrossEntropyDescriptor>,
+                std::is_same<Decayed, Loss::Details::BCEWithLogitsDescriptor>,
+                //std::is_same<Decayed, Loss::Details::CosineEmbeddingDescriptor>,
+                //std::is_same<Decayed, Loss::Details::KLDivDescriptor>,
+                std::is_same<Decayed, Loss::Details::MAEDescriptor>,
+                //std::is_same<Decayed, Loss::Details::MarginRankingDescriptor>,
+                std::is_same<Decayed, Loss::Details::NegativeLogLikelihoodDescriptor>,
+                std::is_same<Decayed, Loss::Details::SmoothL1Descriptor>>;
             static_assert(kSupported, "Unsupported loss descriptor type provided to Model::set_loss.");
 
             loss_descriptor_ = LossDescriptor{std::in_place_type<Decayed>, std::move(descriptor)};

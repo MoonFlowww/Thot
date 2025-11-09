@@ -71,9 +71,7 @@ int main() {
             )
         }), "S2");
 
-
         model.add(Thot::Layer::SoftDropout({.probability=0.1f, .noise_type = Thot::Layer::SoftDropoutOptions::NoiseType::BlueNoise}));
-
         model.add(Thot::Block::Sequential({
             Thot::Layer::Conv2d(
                 {128, 32, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
@@ -283,6 +281,29 @@ int main() {
 
 
 /*
+Epoch [1/20] | Train loss: 1.969582 | Test loss: 1.555169 | ΔLoss: N/A (∇) | duration: 11.05sec
+Epoch [2/20] | Train loss: 1.506606 | Test loss: 1.313850 | ΔLoss: -0.241319 (∇) | duration: 10.74sec
+Epoch [3/20] | Train loss: 1.319500 | Test loss: 1.192241 | ΔLoss: -0.121609 (∇) | duration: 10.63sec
+Epoch [4/20] | Train loss: 1.167014 | Test loss: 1.053578 | ΔLoss: -0.138663 (∇) | duration: 10.04sec
+Epoch [5/20] | Train loss: 1.038362 | Test loss: 0.941287 | ΔLoss: -0.112291 (∇) | duration: 10.03sec
+Epoch [6/20] | Train loss: 0.942045 | Test loss: 0.868643 | ΔLoss: -0.072644 (∇) | duration: 10.02sec
+Epoch [7/20] | Train loss: 0.867824 | Test loss: 0.828729 | ΔLoss: -0.039914 (∇) | duration: 10.05sec
+Epoch [8/20] | Train loss: 0.810952 | Test loss: 0.822771 | ΔLoss: -0.005958 (∇) | duration: 10.04sec
+Epoch [9/20] | Train loss: 0.762011 | Test loss: 0.795204 | ΔLoss: -0.027567 (∇) | duration: 10.03sec
+Epoch [10/20] | Train loss: 0.724816 | Test loss: 0.766069 | ΔLoss: -0.029134 (∇) | duration: 10.02sec
+Epoch [11/20] | Train loss: 0.690788 | Test loss: 0.741530 | ΔLoss: -0.024540 (∇) | duration: 10.04sec
+Epoch [12/20] | Train loss: 0.659150 | Test loss: 0.732725 | ΔLoss: -0.008805 (∇) | duration: 10.04sec
+Epoch [13/20] | Train loss: 0.634025 | Test loss: 0.709602 | ΔLoss: -0.023123 (∇) | duration: 10.06sec
+Epoch [14/20] | Train loss: 0.610396 | Test loss: 0.702317 | ΔLoss: -0.007285 (∇) | duration: 10.03sec
+Epoch [15/20] | Train loss: 0.590512 | Test loss: 0.695988 | ΔLoss: -0.006329 (∇) | duration: 10.03sec
+Epoch [16/20] | Train loss: 0.573686 | Test loss: 0.696038 | ΔLoss: +0.000051 (∇) | duration: 10.03sec
+Epoch [17/20] | Train loss: 0.560695 | Test loss: 0.697579 | ΔLoss: +0.001592 (∇) | duration: 10.02sec
+Epoch [18/20] | Train loss: 0.547826 | Test loss: 0.697189 | ΔLoss: +0.001202 (∇) | duration: 10.02sec
+Epoch [19/20] | Train loss: 0.541938 | Test loss: 0.694397 | ΔLoss: -0.001591 (∇) | duration: 12.86sec
+Epoch [20/20] | Train loss: 0.534568 | Test loss: 0.692383 | ΔLoss: -0.002013 (∇) | duration: 12.84sec
+
+
+
 
 Epoch [1/80] | Train loss: 2.043670 | Test loss: 1.558099 | ΔLoss: N/A (∇) | duration: 21.43sec
 Epoch [2/80] | Train loss: 1.551665 | Test loss: 1.325052 | ΔLoss: -0.233048 (∇) | duration: 22.25sec

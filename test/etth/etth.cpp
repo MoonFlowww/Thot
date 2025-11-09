@@ -9,7 +9,6 @@ int xmain() {
     Thot::Data::Check::Size(x1);
 
 
-
     //auto res = thot::signal::wavelet::dwt(x1, /*levels=*/4);
     //auto files = dump_for_gnuplot("/home/moonfloww/CLionProjects/Thot/test/etth/out/wave", x1.to(at::kCPU), res);
 

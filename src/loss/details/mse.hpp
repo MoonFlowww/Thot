@@ -49,6 +49,10 @@ namespace Thot::Loss::Details {
         return apply_reduction_weighted(per_elem, *weight, descriptor.options.reduction);
     }
 
-} // namespace Thot::Loss::Details
+
+}
+
+
+
 
 #endif // THOT_MSE_HPP

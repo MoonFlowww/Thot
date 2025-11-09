@@ -19,82 +19,52 @@
 namespace Thot::Loss {
     using Reduction = Details::Reduction;
 
-
-    using MSEOptions = Details::MSEOptions;
-    using MSEDescriptor = Details::MSEDescriptor;
-
-    using CrossEntropyOptions = Details::CrossEntropyOptions;
-    using CrossEntropyDescriptor = Details::CrossEntropyDescriptor;
-
-    using BCEWithLogitsOptions = Details::BCEWithLogitsOptions;
-    using BCEWithLogitsDescriptor = Details::BCEWithLogitsDescriptor;
-
-    using NegativeLogLikelihoodOptions = Details::NegativeLogLikelihoodOptions;
-    using NegativeLogLikelihoodDescriptor = Details::NegativeLogLikelihoodDescriptor;
-
-    using MAEOptions = Details::MAEOptions;
-    using MAEDescriptor = Details::MAEDescriptor;
-
-    using SmoothL1Options = Details::SmoothL1Options;
-    using SmoothL1Descriptor = Details::SmoothL1Descriptor;
-
-    using KLDivOptions = Details::KLDivOptions;
-    using KLDivDescriptor = Details::KLDivDescriptor;
-
-    using CosineEmbeddingOptions = Details::CosineEmbeddingOptions;
-    using CosineEmbeddingDescriptor = Details::CosineEmbeddingDescriptor;
-
-    using MarginRankingOptions = Details::MarginRankingOptions;
-    using MarginRankingDescriptor = Details::MarginRankingDescriptor;
-
-
-
     using Descriptor = std::variant<
-        MSEDescriptor,
-        CrossEntropyDescriptor,
-        BCEWithLogitsDescriptor,
-        //CosineEmbeddingDescriptor,
-        //KLDivDescriptor,
-        MAEDescriptor,
-        //MarginRankingDescriptor,
-        NegativeLogLikelihoodDescriptor,
-        SmoothL1Descriptor>;
+        Details::MSEDescriptor,
+        Details::CrossEntropyDescriptor,
+        Details::BCEWithLogitsDescriptor,
+        //Details::CosineEmbeddingDescriptor,
+        //Details::KLDivDescriptor,
+        Details::MAEDescriptor,
+        //Details::MarginRankingDescriptor,
+        Details::NegativeLogLikelihoodDescriptor,
+        Details::SmoothL1Descriptor>;
 
 
-    [[nodiscard]] constexpr auto MSE(const MSEOptions& options = {}) noexcept -> MSEDescriptor {
+    [[nodiscard]] constexpr auto MSE(const Details::MSEOptions& options = {}) noexcept -> Details::MSEDescriptor {
         return {options};
     }
 
-    [[nodiscard]] constexpr auto CrossEntropy(const CrossEntropyOptions& options = {}) noexcept -> CrossEntropyDescriptor {
+    [[nodiscard]] constexpr auto CrossEntropy(const Details::CrossEntropyOptions& options = {}) noexcept -> Details::CrossEntropyDescriptor {
         return {options};
     }
 
 
-    [[nodiscard]] constexpr auto BCEWithLogits(const BCEWithLogitsOptions& options = {}) noexcept -> BCEWithLogitsDescriptor {
+    [[nodiscard]] constexpr auto BCEWithLogits(const Details::BCEWithLogitsOptions& options = {}) noexcept -> Details::BCEWithLogitsDescriptor {
         return {options};
     }
 
-    [[nodiscard]] constexpr auto NegativeLogLikelihood(const NegativeLogLikelihoodOptions& options = {}) noexcept -> NegativeLogLikelihoodDescriptor {
+    [[nodiscard]] constexpr auto NegativeLogLikelihood(const Details::NegativeLogLikelihoodOptions& options = {}) noexcept -> Details::NegativeLogLikelihoodDescriptor {
         return {options};
     }
 
-    [[nodiscard]] constexpr auto MAE(const MAEOptions& options = {}) noexcept -> MAEDescriptor {
+    [[nodiscard]] constexpr auto MAE(const Details::MAEOptions& options = {}) noexcept -> Details::MAEDescriptor {
         return {options};
     }
 
-    [[nodiscard]] constexpr auto SmoothL1(const SmoothL1Options& options = {}) noexcept -> SmoothL1Descriptor {
+    [[nodiscard]] constexpr auto SmoothL1(const Details::SmoothL1Options& options = {}) noexcept -> Details::SmoothL1Descriptor {
         return {options};
     }
 
-    [[nodiscard]] constexpr auto KLDiv(const KLDivOptions& options = {}) noexcept -> KLDivDescriptor {
+    [[nodiscard]] constexpr auto KLDiv(const Details::KLDivOptions& options = {}) noexcept -> Details::KLDivDescriptor {
         return {options};
     }
 
-    [[nodiscard]] constexpr auto CosineEmbedding(const CosineEmbeddingOptions& options = {}) noexcept -> CosineEmbeddingDescriptor {
+    [[nodiscard]] constexpr auto CosineEmbedding(const Details::CosineEmbeddingOptions& options = {}) noexcept -> Details::CosineEmbeddingDescriptor {
         return {options};
     }
 
-    [[nodiscard]] constexpr auto MarginRanking(const MarginRankingOptions& options = {}) noexcept -> MarginRankingDescriptor {
+    [[nodiscard]] constexpr auto MarginRanking(const Details::MarginRankingOptions& options = {}) noexcept -> Details::MarginRankingDescriptor {
         return {options};
     }
 }

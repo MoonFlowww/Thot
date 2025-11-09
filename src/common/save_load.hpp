@@ -1847,32 +1847,32 @@ namespace Thot::Common::SaveLoad {
             [&](const auto& concrete) {
                 using DescriptorType = std::decay_t<decltype(concrete)>;
                 const auto& options = concrete.options;
-                if constexpr (std::is_same_v<DescriptorType, Loss::MSEDescriptor>) {
+                if constexpr (std::is_same_v<DescriptorType, Loss::Details::MSEDescriptor>) {
                     tree.put("type", "mse");
                     tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
                     tree.put("options.use_weight", options.use_weight);
-                } else if constexpr (std::is_same_v<DescriptorType, Loss::CrossEntropyDescriptor>) {
+                } else if constexpr (std::is_same_v<DescriptorType, Loss::Details::CrossEntropyDescriptor>) {
                     tree.put("type", "cross_entropy");
                     tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
                     tree.put("options.use_weight", options.use_weight);
                     tree.put("options.label_smoothing", options.label_smoothing);
-                } else if constexpr (std::is_same_v<DescriptorType, Loss::BCEWithLogitsDescriptor>) {
+                } else if constexpr (std::is_same_v<DescriptorType, Loss::Details::BCEWithLogitsDescriptor>) {
                     tree.put("type", "bce_with_logits");
                     tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
                     tree.put("options.use_weight", options.use_weight);
                     tree.put("options.use_pos_weight", options.use_pos_weight);
-                } else if constexpr (std::is_same_v<DescriptorType, Loss::MAEDescriptor>) {
+                } else if constexpr (std::is_same_v<DescriptorType, Loss::Details::MAEDescriptor>) {
                     tree.put("type", "mae");
                     tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
                     tree.put("options.use_weight", options.use_weight);
-                } else if constexpr (std::is_same_v<DescriptorType, Loss::NegativeLogLikelihoodDescriptor>) {
+                } else if constexpr (std::is_same_v<DescriptorType, Loss::Details::NegativeLogLikelihoodDescriptor>) {
                     tree.put("type", "nll");
                     tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
                     tree.put("options.use_weight", options.use_weight);
                     if (options.ignore_index.has_value()) {
                         tree.put("options.ignore_index", options.ignore_index.value());
                     }
-                } else if constexpr (std::is_same_v<DescriptorType, Loss::SmoothL1Descriptor>) {
+                } else if constexpr (std::is_same_v<DescriptorType, Loss::Details::SmoothL1Descriptor>) {
                     tree.put("type", "smooth_l1");
                     tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
                     tree.put("options.use_weight", options.use_weight);
@@ -1889,52 +1889,52 @@ namespace Thot::Common::SaveLoad {
     {
         const auto type = Detail::to_lower(Detail::get_string(tree, "type", context));
         if (type == "mse") {
-            Loss::MSEOptions options;
+            Loss::Details::MSEOptions options;
             options.reduction = Detail::loss_reduction_from_string(
                 Detail::get_string(tree, "options.reduction", context), context);
             options.use_weight = Detail::get_boolean(tree, "options.use_weight", context);
-            return Loss::Descriptor{Loss::MSEDescriptor{options}};
+            return Loss::Descriptor{Loss::Details::MSEDescriptor{options}};
         }
         if (type == "cross_entropy") {
-            Loss::CrossEntropyOptions options;
+            Loss::Details::CrossEntropyOptions options;
             options.reduction = Detail::loss_reduction_from_string(
                 Detail::get_string(tree, "options.reduction", context), context);
             options.use_weight = Detail::get_boolean(tree, "options.use_weight", context);
             options.label_smoothing = Detail::get_numeric<double>(tree, "options.label_smoothing", context);
-            return Loss::Descriptor{Loss::CrossEntropyDescriptor{options}};
+            return Loss::Descriptor{Loss::Details::CrossEntropyDescriptor{options}};
         }
         if (type == "bce_with_logits") {
-            Loss::BCEWithLogitsOptions options;
+            Loss::Details::BCEWithLogitsOptions options;
             options.reduction = Detail::loss_reduction_from_string(
                 Detail::get_string(tree, "options.reduction", context), context);
             options.use_weight = Detail::get_boolean(tree, "options.use_weight", context);
             options.use_pos_weight = Detail::get_boolean(tree, "options.use_pos_weight", context);
-            return Loss::Descriptor{Loss::BCEWithLogitsDescriptor{options}};
+            return Loss::Descriptor{Loss::Details::BCEWithLogitsDescriptor{options}};
         }
         if (type == "mae") {
-            Loss::MAEOptions options;
+            Loss::Details::MAEOptions options;
             options.reduction = Detail::loss_reduction_from_string(
                 Detail::get_string(tree, "options.reduction", context), context);
             options.use_weight = Detail::get_boolean(tree, "options.use_weight", context);
-            return Loss::Descriptor{Loss::MAEDescriptor{options}};
+            return Loss::Descriptor{Loss::Details::MAEDescriptor{options}};
         }
         if (type == "nll") {
-            Loss::NegativeLogLikelihoodOptions options;
+            Loss::Details::NegativeLogLikelihoodOptions options;
             options.reduction = Detail::loss_reduction_from_string(
                 Detail::get_string(tree, "options.reduction", context), context);
             options.use_weight = Detail::get_boolean(tree, "options.use_weight", context);
             if (const auto ignore_index = tree.get_optional<std::int64_t>("options.ignore_index")) {
                 options.ignore_index = *ignore_index;
             }
-            return Loss::Descriptor{Loss::NegativeLogLikelihoodDescriptor{options}};
+            return Loss::Descriptor{Loss::Details::NegativeLogLikelihoodDescriptor{options}};
         }
         if (type == "smooth_l1") {
-            Loss::SmoothL1Options options;
+            Loss::Details::SmoothL1Options options;
             options.reduction = Detail::loss_reduction_from_string(
                 Detail::get_string(tree, "options.reduction", context), context);
             options.use_weight = Detail::get_boolean(tree, "options.use_weight", context);
             options.beta = Detail::get_numeric<double>(tree, "options.beta", context);
-            return Loss::Descriptor{Loss::SmoothL1Descriptor{options}};
+            return Loss::Descriptor{Loss::Details::SmoothL1Descriptor{options}};
         }
         std::ostringstream message;
         message << "Unknown loss descriptor '" << type << "' in " << context;
