@@ -1,7 +1,7 @@
 #include "wavelet.hpp"
 #include "../../include/Thot.h"
 
-int xmain() {
+int main() {
     Thot::Model model("Etth1");
     model.to_device(torch::cuda::is_available());
 
