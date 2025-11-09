@@ -3,14 +3,21 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <functional>
+#include <limits>
 #include <utility>
 #include <vector>
+#include <sstream>
+#include <iomanip>
 
 #include <torch/torch.h>
+
+#include "../../utils/gnuplot.hpp"
 
 namespace Thot::Plot::Data {
     namespace Details {
@@ -50,6 +57,180 @@ namespace Thot::Plot::Data {
                 "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
                 "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"};
             return {palette.begin(), palette.end()};
+        }
+        inline auto compute_series_bounds(const std::vector<std::vector<double>>& series)
+            -> std::pair<double, double>
+        {
+            if (series.empty()) {
+                return {0.0, 0.0};
+            }
+            double minValue = std::numeric_limits<double>::infinity();
+            double maxValue = -std::numeric_limits<double>::infinity();
+            for (const auto& values : series) {
+                for (double value : values) {
+                    minValue = std::min(minValue, value);
+                    maxValue = std::max(maxValue, value);
+                }
+            }
+
+            if (!std::isfinite(minValue) || !std::isfinite(maxValue)) {
+                return {0.0, 0.0};
+            }
+            if (minValue == maxValue) {
+                constexpr double epsilon = 1.0;
+                return {minValue - epsilon, maxValue + epsilon};
+            }
+            return {minValue, maxValue};
+        }
+
+        inline auto escape_single_quotes(const std::string& input) -> std::string
+        {
+            std::string escaped;
+            escaped.reserve(input.size());
+            for (char ch : input) {
+                if (ch == static_cast<char>(39)) {
+                    escaped += "\\'";
+                } else {
+                    escaped += ch;
+                }
+            }
+            return escaped;
+        }
+
+        inline auto prepare_grayscale_tensor(torch::Tensor tensor) -> torch::Tensor
+        {
+            tensor = as_cpu_contiguous(std::move(tensor));
+            tensor = tensor.to(torch::kFloat32);
+            if (tensor.dim() == 3) {
+                if (tensor.size(0) == 1) {
+                    tensor = tensor.squeeze(0);
+                } else if (tensor.size(2) == 1) {
+                    tensor = tensor.squeeze(2);
+                }
+            }
+            if (tensor.dim() != 2) {
+                throw std::invalid_argument("Image expects grayscale tensors to be 2D after squeezing");
+            }
+            return tensor.contiguous();
+        }
+
+        inline auto prepare_color_tensor(torch::Tensor tensor) -> torch::Tensor
+        {
+            tensor = as_cpu_contiguous(std::move(tensor));
+            tensor = tensor.to(torch::kFloat32);
+            if (tensor.dim() == 3) {
+                if (tensor.size(0) == 3 || tensor.size(0) == 4) {
+                    if (tensor.size(0) == 4) {
+                        tensor = tensor.index({torch::indexing::Slice(0, 3), torch::indexing::Ellipsis});
+                    }
+                } else if (tensor.size(2) == 3 || tensor.size(2) == 4) {
+                    tensor = tensor.permute({2, 0, 1}).contiguous();
+                    if (tensor.size(0) == 4) {
+                        tensor = tensor.index({torch::indexing::Slice(0, 3), torch::indexing::Ellipsis});
+                    }
+                } else {
+                    throw std::invalid_argument("Unsupported color tensor layout");
+                }
+            } else {
+                throw std::invalid_argument("Image expects color tensors to be 3D");
+            }
+            return tensor.contiguous();
+        }
+
+        inline auto compute_rgb_scaling(const torch::Tensor& tensor) -> std::pair<double, double>
+        {
+            auto minTensor = tensor.min();
+            auto maxTensor = tensor.max();
+            const double minValue = minTensor.item<double>();
+            const double maxValue = maxTensor.item<double>();
+            double offset = 0.0;
+            double scale = 1.0;
+
+            if (maxValue <= 1.0 && minValue >= 0.0) {
+                scale = 255.0;
+            } else if (maxValue > 255.0 || minValue < 0.0) {
+                offset = -minValue;
+                const double range = maxValue + offset;
+                if (range > 0.0) {
+                    scale = 255.0 / range;
+                } else {
+                    scale = 255.0;
+                }
+            }
+            return {scale, offset};
+        }
+
+        inline auto build_grayscale_writer(const torch::Tensor& tensor)
+            -> std::function<void(std::FILE*)>
+        {
+            auto prepared = prepare_grayscale_tensor(tensor.clone());
+            const auto height = prepared.size(0);
+            const auto width = prepared.size(1);
+            return [prepared, height, width](std::FILE* pipe) {
+                auto accessor = prepared.accessor<float, 2>();
+                for (int64_t row = 0; row < height; ++row) {
+                    for (int64_t col = 0; col < width; ++col) {
+                        if (std::fprintf(pipe,
+                                          "%lld %lld %.*g\n",
+                                          static_cast<long long>(col),
+                                          static_cast<long long>(row),
+                                          15,
+                                          static_cast<double>(accessor[row][col])) < 0) {
+                            throw std::runtime_error("Failed to write grayscale image data to gnuplot");
+                        }
+                    }
+                    if (std::fprintf(pipe, "\n") < 0) {
+                        throw std::runtime_error("Failed to write grayscale row separator to gnuplot");
+                    }
+                }
+            };
+        }
+
+        inline auto build_color_writer(const torch::Tensor& tensor)
+            -> std::function<void(std::FILE*)>
+        {
+            auto prepared = prepare_color_tensor(tensor.clone());
+            const auto height = prepared.size(1);
+            const auto width = prepared.size(2);
+            const auto [scale, offset] = compute_rgb_scaling(prepared);
+            return [prepared, height, width, scale, offset](std::FILE* pipe) {
+                auto accessor = prepared.accessor<float, 3>();
+                for (int64_t row = 0; row < height; ++row) {
+                    for (int64_t col = 0; col < width; ++col) {
+                        const auto r = std::clamp(
+                            std::lround((static_cast<double>(accessor[0][row][col]) + offset) * scale),
+                            0L,
+                            255L);
+                        const auto g = std::clamp(
+                            std::lround((static_cast<double>(accessor[1][row][col]) + offset) * scale),
+                            0L,
+                            255L);
+                        const auto b = std::clamp(
+                            std::lround((static_cast<double>(accessor[2][row][col]) + offset) * scale),
+                            0L,
+                            255L);
+                        if (std::fprintf(pipe,
+                                          "%lld %lld %ld %ld %ld\n",
+                                          static_cast<long long>(col),
+                                          static_cast<long long>(row),
+                                          r,
+                                          g,
+                                          b) < 0) {
+                            throw std::runtime_error("Failed to write color image data to gnuplot");
+                        }
+                    }
+                    if (std::fprintf(pipe, "\n") < 0) {
+                        throw std::runtime_error("Failed to write color row separator to gnuplot");
+                    }
+                }
+            };
+        }
+
+        inline auto format_double(double value) -> std::string
+        {
+            std::ostringstream stream;
+            stream << std::setprecision(10) << value;
+            return stream.str();
         }
     }
 
@@ -151,6 +332,78 @@ namespace Thot::Plot::Data {
 
 
     };
+    struct TimeseriePlotOptions {
+        std::string title{"Timeseries"};
+        std::string xLabel{"Time"};
+        std::string yLabel{"Value"};
+        std::vector<std::string> seriesTitles{};
+        std::optional<std::string> testSeparatorLabel{std::string("Test separator")};
+        bool showGrid{true};
+    };
+
+    inline void Render(const Timeserie& timeserie, const TimeseriePlotOptions& options = {})
+    {
+        Utils::Gnuplot plotter{};
+        if (!options.title.empty()) {
+            plotter.setTitle(options.title);
+        }
+        if (!options.xLabel.empty()) {
+            plotter.setXLabel(options.xLabel);
+        }
+        if (!options.yLabel.empty()) {
+            plotter.setYLabel(options.yLabel);
+        }
+        if (options.showGrid) {
+            plotter.setGrid(true);
+        }
+
+        const auto& xAxis = timeserie.xAxis();
+        const auto& series = timeserie.series();
+        const auto& colors = timeserie.colors();
+        std::vector<Utils::Gnuplot::DataSet2D> datasets;
+        datasets.reserve(series.size() + (timeserie.testSeparator().has_value() ? 1 : 0));
+
+        for (std::size_t idx = 0; idx < series.size(); ++idx) {
+            Utils::Gnuplot::DataSet2D dataset{};
+            dataset.x = xAxis;
+            dataset.y = series[idx];
+            if (idx < options.seriesTitles.size() && !options.seriesTitles[idx].empty()) {
+                dataset.title = options.seriesTitles[idx];
+            } else {
+                dataset.title = series.size() > 1 ? "Series " + std::to_string(idx + 1) : "Values";
+            }
+            Utils::Gnuplot::PlotStyle style{};
+            style.mode = Utils::Gnuplot::PlotMode::Lines;
+            if (idx < colors.size()) {
+                style.lineColor = colors[idx];
+            }
+            style.lineWidth = 2.0;
+            dataset.style = std::move(style);
+            datasets.push_back(std::move(dataset));
+        }
+
+        if (timeserie.testSeparator()) {
+            const auto [minValue, maxValue] = Details::compute_series_bounds(series);
+            Utils::Gnuplot::DataSet2D separator{};
+            const double separatorX = *timeserie.testSeparator();
+            separator.x = {separatorX, separatorX};
+            separator.y = {minValue, maxValue};
+            separator.title = options.testSeparatorLabel.value_or(std::string{});
+            Utils::Gnuplot::PlotStyle style{};
+            style.mode = Utils::Gnuplot::PlotMode::Lines;
+            style.lineColor = "#000000";
+            style.lineWidth = 1.0;
+            style.extra = "dashtype 2";
+            separator.style = std::move(style);
+            datasets.push_back(std::move(separator));
+        }
+
+        if (datasets.empty()) {
+            throw std::runtime_error("Timeserie::Render requires at least one dataset");
+        }
+
+        plotter.plot(datasets);
+    }
 
     class Image {
     private:
@@ -211,6 +464,94 @@ namespace Thot::Plot::Data {
 
 
     };
+    struct ImagePlotOptions {
+        std::string layoutTitle{"Selected images"};
+        std::vector<std::string> imageTitles{};
+        bool showColorBox{false};
+    };
+
+    inline void Render(const Image& images, const ImagePlotOptions& options = {})
+    {
+        const auto& selected = images.selected();
+        if (selected.empty()) {
+            throw std::invalid_argument("Image::Render requires at least one image");
+        }
+
+        const std::size_t count = selected.size();
+        const int columns = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count))));
+        const int rows = static_cast<int>((static_cast<int>(count) + columns - 1) / columns);
+
+        Utils::Gnuplot plotter{};
+        std::ostringstream multiplotOptions;
+        multiplotOptions << "layout " << rows << ',' << columns;
+        if (!options.layoutTitle.empty()) {
+            multiplotOptions << " title '" << Details::escape_single_quotes(options.layoutTitle) << "'";
+        }
+        plotter.beginMultiplot(multiplotOptions.str());
+        plotter.command(options.showColorBox ? "set colorbox" : "unset colorbox");
+        plotter.command("unset key");
+        plotter.command("set view map");
+        plotter.command("set size ratio -1");
+        plotter.command("unset xtics");
+        plotter.command("unset ytics");
+
+        for (std::size_t idx = 0; idx < selected.size(); ++idx) {
+            const auto& tensor = selected[idx];
+            const auto imageIndex = images.indices()[idx];
+            std::string title;
+            if (idx < options.imageTitles.size() && !options.imageTitles[idx].empty()) {
+                title = options.imageTitles[idx];
+            } else {
+                title = "Image " + std::to_string(imageIndex);
+            }
+            plotter.setTitle(title);
+
+            if (images.isColor()) {
+                auto prepared = Details::prepare_color_tensor(tensor.clone());
+                const auto height = prepared.size(1);
+                const auto width = prepared.size(2);
+
+                std::ostringstream xrange;
+                xrange << "set xrange [0:" << (width - 1) << ']';
+                plotter.command(xrange.str());
+                std::ostringstream yrange;
+                yrange << "set yrange [" << (height - 1) << ":0]";
+                plotter.command(yrange.str());
+                plotter.command("unset palette");
+
+                plotter.plotRaw("plot '-' using 1:2:3:4:5 with rgbimage",
+                                 Details::build_color_writer(prepared));
+            } else {
+                auto prepared = Details::prepare_grayscale_tensor(tensor.clone());
+                const auto height = prepared.size(0);
+                const auto width = prepared.size(1);
+
+                std::ostringstream xrange;
+                xrange << "set xrange [0:" << (width - 1) << ']';
+                plotter.command(xrange.str());
+                std::ostringstream yrange;
+                yrange << "set yrange [" << (height - 1) << ":0]";
+                plotter.command(yrange.str());
+
+                const auto minValue = prepared.min().item<double>();
+                const auto maxValue = prepared.max().item<double>();
+                if (std::isfinite(minValue) && std::isfinite(maxValue) && maxValue > minValue) {
+                    std::ostringstream cbrange;
+                    cbrange << "set cbrange [" << Details::format_double(minValue) << ':'
+                            << Details::format_double(maxValue) << ']';
+                    plotter.command(cbrange.str());
+                } else {
+                    plotter.command("unset cbrange");
+                }
+                plotter.command("set palette gray");
+
+                plotter.plotRaw("plot '-' using 1:2:3 with image",
+                                 Details::build_grayscale_writer(prepared));
+            }
+        }
+
+        plotter.endMultiplot();
+    }
 }
 
 #endif // THOT_PLOT_DETAILS_DATA_HPP

@@ -6,6 +6,7 @@
 #include <initializer_list>
 #include <optional>
 #include <sstream>
+#include <functional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -347,6 +348,35 @@ namespace Thot::Utils {
         void plot(std::initializer_list<DataSet2D> dataSets) {
             plot(std::vector<DataSet2D>(dataSets));
         }
+        void plotRaw(const std::string& header,
+                      const std::function<void(std::FILE*)>& writer) {
+            ensureValid();
+            if (!writer) {
+                throw std::invalid_argument("plotRaw requires a valid writer");
+            }
+            writeLine(header);
+            writer(pipe_);
+            writeLine("e");
+            flush();
+        }
+
+        void plotRaw(const std::string& header,
+                      const std::vector<std::function<void(std::FILE*)>>& writers) {
+            ensureValid();
+            if (writers.empty()) {
+                throw std::invalid_argument("plotRaw requires at least one writer");
+            }
+            writeLine(header);
+            for (const auto& writer : writers) {
+                if (!writer) {
+                    throw std::invalid_argument("plotRaw requires a valid writer");
+                }
+                writer(pipe_);
+                writeLine("e");
+            }
+            flush();
+        }
+
 
         void plot(const std::vector<double>& y,
                   const std::string& title = {},
