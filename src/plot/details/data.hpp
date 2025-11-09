@@ -235,6 +235,18 @@ namespace Thot::Plot::Data {
         }
     }
 
+    struct TimeseriePlotOptions {
+        std::string title{"Timeseries"};
+        std::string xLabel{"Time"};
+        std::string yLabel{"Value"};
+        std::vector<std::string> seriesTitles{};
+        std::optional<std::string> testSeparatorLabel{std::string("Test separator")};
+        bool showGrid{true};
+    };
+
+    class Timeserie;
+    void Render(const Timeserie& timeserie, const TimeseriePlotOptions& options = {});
+
     class Timeserie {
     private:
         std::vector<double> m_xAxis{};
@@ -242,10 +254,13 @@ namespace Thot::Plot::Data {
         std::vector<std::string> m_colors{};
         std::optional<double> m_testSeparator{};
     public:
-        Timeserie(torch::Tensor values,
-                  std::optional<std::size_t> testSeparator = std::nullopt)
-        {
+        Timeserie(torch::Tensor values, std::optional<std::size_t> testSeparator = std::nullopt, std::optional<TimeseriePlotOptions> renderOptions = std::nullopt) {
             initialize(std::move(values), testSeparator);
+            if (renderOptions.has_value()) {
+                Render(*this, *renderOptions);
+            } else {
+                Render(*this, TimeseriePlotOptions{});
+            }
         }
 
         [[nodiscard]] auto xAxis() const noexcept -> const std::vector<double>&
@@ -333,17 +348,9 @@ namespace Thot::Plot::Data {
 
 
     };
-    struct TimeseriePlotOptions {
-        std::string title{"Timeseries"};
-        std::string xLabel{"Time"};
-        std::string yLabel{"Value"};
-        std::vector<std::string> seriesTitles{};
-        std::optional<std::string> testSeparatorLabel{std::string("Test separator")};
-        bool showGrid{true};
-    };
 
-    inline void Render(const Timeserie& timeserie, const TimeseriePlotOptions& options = {})
-    {
+
+    inline void Render(const Timeserie& timeserie, const TimeseriePlotOptions& options) {
         Utils::Gnuplot plotter{};
         if (!options.title.empty()) {
             plotter.setTitle(options.title);
@@ -406,14 +413,30 @@ namespace Thot::Plot::Data {
         plotter.plot(datasets);
     }
 
+
+
+    struct ImagePlotOptions {
+        std::string layoutTitle{"Selected images"};
+        std::vector<std::string> imageTitles{};
+        bool showColorBox{false};
+    };
+
+    class Image;
+    void Render(const Image& images, const ImagePlotOptions& options = {});
+
     class Image {
     private:
         std::vector<std::size_t> m_indices{};
         std::vector<torch::Tensor> m_selectedImages{};
         bool m_isColor{false};
     public:
-        Image(torch::Tensor images, std::vector<std::size_t> indices) : m_indices(std::move(indices)) {
+        Image(torch::Tensor images, std::vector<std::size_t> indices, std::optional<ImagePlotOptions> renderOptions = std::nullopt) : m_indices(std::move(indices)) {
             initialize(std::move(images));
+            if (renderOptions.has_value()) {
+                Render(*this, *renderOptions);
+            } else {
+                Render(*this, ImagePlotOptions{});
+            }
         }
 
         [[nodiscard]] auto selected() const noexcept -> const std::vector<torch::Tensor>& {
@@ -465,14 +488,10 @@ namespace Thot::Plot::Data {
 
 
     };
-    struct ImagePlotOptions {
-        std::string layoutTitle{"Selected images"};
-        std::vector<std::string> imageTitles{};
-        bool showColorBox{false};
-    };
 
-    inline void Render(const Image& images, const ImagePlotOptions& options = {})
-    {
+
+
+    inline void Render(const Image& images, const ImagePlotOptions& options) {
         const auto& selected = images.selected();
         if (selected.empty()) {
             throw std::invalid_argument("Image::Render requires at least one image");
@@ -523,7 +542,6 @@ namespace Thot::Plot::Data {
                 std::ostringstream yrange;
                 yrange << "set yrange [" << (height - 1) << ":0]";
                 plotter.command(yrange.str());
-                plotter.command("unset palette");
 
                 plotter.defineDatablock(datablockId, Details::build_color_writer(prepared));
                 std::ostringstream plotCommand;
