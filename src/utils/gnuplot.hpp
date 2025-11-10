@@ -78,6 +78,12 @@ namespace Thot::Utils {
             if (pipe_ == nullptr) {
                 throw std::runtime_error("Failed to open pipe to gnuplot");
             }
+            try {
+                initializeDefaultTerminal();
+            } catch (...) {
+                close();
+                throw;
+            }
         }
 
         ~Gnuplot() {
@@ -306,6 +312,11 @@ namespace Thot::Utils {
             command("unset key");
         }
 
+        void setMouse(bool enable = true) {
+            command(std::string(enable ? "set" : "unset") + " mouse");
+        }
+
+
         void setAutoscale(bool enable = true) {
             command(std::string(enable ? "set" : "unset") + " autoscale");
         }
@@ -516,6 +527,11 @@ namespace Thot::Utils {
             }
             return command;
         }
+
+        void initializeDefaultTerminal() {
+            setTerminal("qt enhanced");
+        }
+
 
         static std::string EscapeSingleQuotes(const std::string& input) {
             std::string escaped;

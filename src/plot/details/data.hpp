@@ -323,10 +323,10 @@ namespace Thot::Plot::Data {
         }
     };
 
-    // --- Render stays mostly same but with clearer separator logic ---
     inline void Render(const Timeserie& timeserie, const TimeseriePlotOptions& options)
     {
         Utils::Gnuplot plotter{};
+        plotter.setMouse(true);
         if (!options.title.empty()) plotter.setTitle(options.title);
         if (!options.xLabel.empty()) plotter.setXLabel(options.xLabel);
         if (!options.yLabel.empty()) plotter.setYLabel(options.yLabel);
@@ -466,6 +466,7 @@ namespace Thot::Plot::Data {
         const int rows = static_cast<int>((static_cast<int>(count) + columns - 1) / columns);
 
         Utils::Gnuplot plotter{};
+        plotter.setMouse(false);
         std::ostringstream multiplotOptions;
         multiplotOptions << "layout " << rows << ',' << columns;
         if (!options.layoutTitle.empty()) {
