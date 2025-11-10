@@ -178,7 +178,7 @@ namespace Thot::Plot::Data {
                                           15,
                                           static_cast<double>(accessor[row][col])) < 0) {
                             throw std::runtime_error("Failed to write grayscale image data to gnuplot");
-                        }
+                                          }
                     }
                     if (std::fprintf(pipe, "\n") < 0) {
                         throw std::runtime_error("Failed to write grayscale row separator to gnuplot");
@@ -218,7 +218,7 @@ namespace Thot::Plot::Data {
                                           g,
                                           b) < 0) {
                             throw std::runtime_error("Failed to write color image data to gnuplot");
-                        }
+                                          }
                     }
                     if (std::fprintf(pipe, "\n") < 0) {
                         throw std::runtime_error("Failed to write color row separator to gnuplot");
@@ -253,165 +253,129 @@ namespace Thot::Plot::Data {
         std::vector<std::vector<double>> m_series{};
         std::vector<std::string> m_colors{};
         std::optional<double> m_testSeparator{};
+
     public:
-        Timeserie(torch::Tensor values, std::optional<std::size_t> testSeparator = std::nullopt, std::optional<TimeseriePlotOptions> renderOptions = std::nullopt) {
-            initialize(std::move(values), testSeparator);
-            if (renderOptions.has_value()) {
+        Timeserie(torch::Tensor xtrain,
+                  std::optional<torch::Tensor> xtest = std::nullopt,
+                  std::optional<TimeseriePlotOptions> renderOptions = std::nullopt)
+        {
+            initialize(std::move(xtrain), std::move(xtest));
+            if (renderOptions.has_value())
                 Render(*this, *renderOptions);
-            } else {
+            else
                 Render(*this, TimeseriePlotOptions{});
-            }
         }
 
-        [[nodiscard]] auto xAxis() const noexcept -> const std::vector<double>&
-        {
-            return m_xAxis;
-        }
-
-        [[nodiscard]] auto series() const noexcept -> const std::vector<std::vector<double>>&
-        {
-            return m_series;
-        }
-
-        [[nodiscard]] auto colors() const noexcept -> const std::vector<std::string>&
-        {
-            return m_colors;
-        }
-
-        [[nodiscard]] auto hasMultipleInputs() const noexcept -> bool
-        {
-            return m_series.size() > 1;
-        }
-
-        [[nodiscard]] auto testSeparator() const noexcept -> const std::optional<double>&
-        {
-            return m_testSeparator;
-        }
+        [[nodiscard]] auto xAxis() const noexcept -> const std::vector<double>& { return m_xAxis; }
+        [[nodiscard]] auto series() const noexcept -> const std::vector<std::vector<double>>& { return m_series; }
+        [[nodiscard]] auto colors() const noexcept -> const std::vector<std::string>& { return m_colors; }
+        [[nodiscard]] auto testSeparator() const noexcept -> const std::optional<double>& { return m_testSeparator; }
+        [[nodiscard]] auto hasMultipleInputs() const noexcept -> bool { return m_series.size() > 1; }
 
     private:
-        void initialize(torch::Tensor values, std::optional<std::size_t> testSeparator)
+        void initialize(torch::Tensor xtrain, std::optional<torch::Tensor> xtest)
         {
-            if (!values.defined()) {
-                throw std::invalid_argument("Timeserie values must be defined");
+            if (!xtrain.defined()) throw std::invalid_argument("Timeserie xtrain must be defined");
+            xtrain = Details::as_cpu_contiguous(xtrain).to(torch::kFloat32);
+
+            // Concatenate if xtest exists
+            std::size_t train_len = static_cast<std::size_t>(xtrain.size(0));
+            if (xtest && xtest->defined()) {
+                auto test_cpu = Details::as_cpu_contiguous(*xtest).to(torch::kFloat32);
+                if (xtrain.dim() != test_cpu.dim())
+                    throw std::invalid_argument("xtrain and xtest must have same dimensionality");
+                xtrain = torch::cat({xtrain, test_cpu}, 0);
+                m_testSeparator = static_cast<double>(train_len);
             }
 
-            values = Details::as_cpu_contiguous(values);
-            values = values.to(torch::kFloat32);
-            if (values.dim() == 1) {
-                const auto length = static_cast<std::size_t>(values.size(0));
-                m_series.emplace_back();
-                m_series.back().reserve(length);
-                auto accessor = values.accessor<float, 1>();
-                for (int64_t idx = 0; idx < values.size(0); ++idx) {
-                    m_series.back().push_back(static_cast<double>(accessor[idx]));
-                }
-            } else if (values.dim() == 2) {
-                const auto length = static_cast<std::size_t>(values.size(0));
-                const auto features = static_cast<std::size_t>(values.size(1));
-                auto accessor = values.accessor<float, 2>();
+            // Extract series (1D or 2D)
+            if (xtrain.dim() == 1) {
+                auto acc = xtrain.accessor<float, 1>();
+                m_series.resize(1);
+                m_series[0].reserve(xtrain.size(0));
+                for (int64_t i = 0; i < xtrain.size(0); ++i)
+                    m_series[0].push_back(static_cast<double>(acc[i]));
+            } else if (xtrain.dim() == 2) {
+                const auto length = static_cast<std::size_t>(xtrain.size(0));
+                const auto features = static_cast<std::size_t>(xtrain.size(1));
+                auto acc = xtrain.accessor<float, 2>();
                 m_series.resize(features);
-                for (std::size_t feature = 0; feature < features; ++feature) {
-                    auto& serie = m_series[feature];
-                    serie.reserve(length);
-                    for (int64_t time = 0; time < values.size(0); ++time) {
-                        serie.push_back(static_cast<double>(accessor[time][static_cast<int64_t>(feature)]));
-                    }
+                for (std::size_t f = 0; f < features; ++f) {
+                    m_series[f].reserve(length);
+                    for (int64_t t = 0; t < xtrain.size(0); ++t)
+                        m_series[f].push_back(static_cast<double>(acc[t][static_cast<int64_t>(f)]));
                 }
             } else {
-                throw std::invalid_argument("Timeserie expects a 1D or 2D tensor");
+                throw std::invalid_argument("Timeserie expects 1D or 2D tensor");
             }
 
-            const auto length = m_series.empty() ? 0 : m_series.front().size();
-            m_xAxis.resize(length);
-            for (std::size_t index = 0; index < length; ++index) {
-                m_xAxis[index] = static_cast<double>(index);
-            }
+            // Build X-axis
+            const auto total_len = m_series.empty() ? 0 : m_series.front().size();
+            m_xAxis.resize(total_len);
+            for (std::size_t i = 0; i < total_len; ++i)
+                m_xAxis[i] = static_cast<double>(i);
 
-            if (m_series.size() > 1U) {
-                auto palette = Details::build_color_palette();
-                m_colors.reserve(m_series.size());
-                for (std::size_t idx = 0; idx < m_series.size(); ++idx) {
-                    m_colors.push_back(palette[idx % palette.size()]);
-                }
-            } else {
-                m_colors.emplace_back("#1f77b4");
-            }
-
-            if (testSeparator.has_value()) {
-                const auto separator = testSeparator.value();
-                if (separator >= length) {
-                    throw std::out_of_range("Timeserie test separator outside of range");
-                }
-                m_testSeparator = static_cast<double>(separator);
-            }
+            // Assign colors
+            auto palette = Details::build_color_palette();
+            m_colors.reserve(m_series.size());
+            for (std::size_t idx = 0; idx < m_series.size(); ++idx)
+                m_colors.push_back(palette[idx % palette.size()]);
         }
-
-
     };
 
-
-    inline void Render(const Timeserie& timeserie, const TimeseriePlotOptions& options) {
+    // --- Render stays mostly same but with clearer separator logic ---
+    inline void Render(const Timeserie& timeserie, const TimeseriePlotOptions& options)
+    {
         Utils::Gnuplot plotter{};
-        if (!options.title.empty()) {
-            plotter.setTitle(options.title);
-        }
-        if (!options.xLabel.empty()) {
-            plotter.setXLabel(options.xLabel);
-        }
-        if (!options.yLabel.empty()) {
-            plotter.setYLabel(options.yLabel);
-        }
-        if (options.showGrid) {
-            plotter.setGrid(true);
-        }
+        if (!options.title.empty()) plotter.setTitle(options.title);
+        if (!options.xLabel.empty()) plotter.setXLabel(options.xLabel);
+        if (!options.yLabel.empty()) plotter.setYLabel(options.yLabel);
+        if (options.showGrid) plotter.setGrid(true);
 
         const auto& xAxis = timeserie.xAxis();
         const auto& series = timeserie.series();
         const auto& colors = timeserie.colors();
+
         std::vector<Utils::Gnuplot::DataSet2D> datasets;
         datasets.reserve(series.size() + (timeserie.testSeparator().has_value() ? 1 : 0));
 
         for (std::size_t idx = 0; idx < series.size(); ++idx) {
-            Utils::Gnuplot::DataSet2D dataset{};
-            dataset.x = xAxis;
-            dataset.y = series[idx];
-            if (idx < options.seriesTitles.size() && !options.seriesTitles[idx].empty()) {
-                dataset.title = options.seriesTitles[idx];
-            } else {
-                dataset.title = series.size() > 1 ? "Series " + std::to_string(idx + 1) : "Values";
-            }
-            Utils::Gnuplot::PlotStyle style{};
-            style.mode = Utils::Gnuplot::PlotMode::Lines;
-            if (idx < colors.size()) {
-                style.lineColor = colors[idx];
-            }
-            style.lineWidth = 2.0;
-            dataset.style = std::move(style);
-            datasets.push_back(std::move(dataset));
+            Utils::Gnuplot::DataSet2D d{};
+            d.x = xAxis;
+            d.y = series[idx];
+            d.title = (idx < options.seriesTitles.size() && !options.seriesTitles[idx].empty())
+                        ? options.seriesTitles[idx]
+                        : "Series " + std::to_string(idx + 1);
+            Utils::Gnuplot::PlotStyle s{};
+            s.mode = Utils::Gnuplot::PlotMode::Lines;
+            s.lineColor = colors[idx % colors.size()];
+            s.lineWidth = 2.0;
+            d.style = std::move(s);
+            datasets.push_back(std::move(d));
         }
 
         if (timeserie.testSeparator()) {
-            const auto [minValue, maxValue] = Details::compute_series_bounds(series);
-            Utils::Gnuplot::DataSet2D separator{};
-            const double separatorX = *timeserie.testSeparator();
-            separator.x = {separatorX, separatorX};
-            separator.y = {minValue, maxValue};
-            separator.title = options.testSeparatorLabel.value_or(std::string{});
-            Utils::Gnuplot::PlotStyle style{};
-            style.mode = Utils::Gnuplot::PlotMode::Lines;
-            style.lineColor = "#000000";
-            style.lineWidth = 1.0;
-            style.extra = "dashtype 2";
-            separator.style = std::move(style);
-            datasets.push_back(std::move(separator));
+            const auto [minv, maxv] = Details::compute_series_bounds(series);
+            Utils::Gnuplot::DataSet2D sep{};
+            const double sepX = *timeserie.testSeparator();
+            sep.x = {sepX, sepX};
+            sep.y = {minv, maxv};
+            sep.title = options.testSeparatorLabel.value_or("Test split");
+            Utils::Gnuplot::PlotStyle s{};
+            s.mode = Utils::Gnuplot::PlotMode::Lines;
+            s.lineColor = "#000000";
+            s.lineWidth = 1.5;
+            s.extra = "dashtype 2";
+            sep.style = std::move(s);
+            datasets.push_back(std::move(sep));
         }
 
-        if (datasets.empty()) {
+        if (datasets.empty())
             throw std::runtime_error("Timeserie::Render requires at least one dataset");
-        }
 
         plotter.plot(datasets);
     }
+
 
 
 
