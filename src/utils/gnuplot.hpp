@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <initializer_list>
 #include <optional>
+#include <cstdlib>
 #include <sstream>
 #include <functional>
 #include <stdexcept>
@@ -72,9 +73,9 @@ namespace Thot::Utils {
             PlotStyle style{};
         };
 
-        explicit Gnuplot(std::string command = "gnuplot")
-            : command_(EnsurePersist(std::move(command))),
-              pipe_(popen(command_.c_str(), "w")) {
+        explicit Gnuplot(std::string command = "gnuplot") : command_(EnsurePersist(std::move(command))), pipe_(nullptr) {
+            ApplyQtHighDpiScaling();
+            pipe_ = popen(command_.c_str(), "w");
             if (pipe_ == nullptr) {
                 throw std::runtime_error("Failed to open pipe to gnuplot");
             }
@@ -491,6 +492,47 @@ namespace Thot::Utils {
     private:
         std::string command_;
         std::FILE* pipe_;
+
+
+        static void ApplyQtHighDpiScaling() {
+            // Ensure Qt uses reasonable defaults on Wayland compositors such as Hyprland.
+
+            const char* sessionType = std::getenv("XDG_SESSION_TYPE");
+            const bool isWayland = (sessionType && std::string_view(sessionType) == "wayland");
+
+            // Force fallback to XWayland if running under Wayland — fixes gnuplot-qt scaling bugs
+            if (isWayland) {
+                const char* qpaPlatform = std::getenv("QT_QPA_PLATFORM");
+                if (qpaPlatform == nullptr || std::string_view(qpaPlatform) != "xcb") {
+#ifdef _WIN32
+                    _putenv_s("QT_QPA_PLATFORM", "xcb");
+#else
+                    setenv("QT_QPA_PLATFORM", "xcb", 1);
+#endif
+                }
+            }
+
+            // Standard Qt DPI scaling variables
+            const char* autoScale = std::getenv("QT_AUTO_SCREEN_SCALE_FACTOR");
+            if (autoScale == nullptr) {
+#ifdef _WIN32
+                _putenv_s("QT_AUTO_SCREEN_SCALE_FACTOR", "1");
+#else
+                setenv("QT_AUTO_SCREEN_SCALE_FACTOR", "1", 1);
+#endif
+            }
+
+            const char* enableHighDpi = std::getenv("QT_ENABLE_HIGHDPI_SCALING");
+            if (enableHighDpi == nullptr) {
+#ifdef _WIN32
+                _putenv_s("QT_ENABLE_HIGHDPI_SCALING", "1");
+#else
+                setenv("QT_ENABLE_HIGHDPI_SCALING", "1", 1);
+#endif
+            }
+        }
+
+
 
         void close() {
             if (pipe_ != nullptr) {
