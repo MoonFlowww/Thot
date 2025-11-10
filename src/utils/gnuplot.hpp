@@ -315,6 +315,11 @@ namespace Thot::Utils {
 
         void setMouse(bool enable = true) {
             command(std::string(enable ? "set" : "unset") + " mouse");
+            if (enable) {
+                // Optional keybindings for smoother UX
+                command("bind all 'r' 'refresh'");
+                command("bind all 'BackSpace' 'reset'");
+            }
         }
 
 
