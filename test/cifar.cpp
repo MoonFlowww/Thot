@@ -215,8 +215,7 @@ int xmain() {
         train_options.restore_best_state = true;
         train_options.enable_amp=true;
         train_options.memory_format = torch::MemoryFormat::Contiguous;
-        train_options.test = std::make_pair(validation_images, validation_labels);
-
+        train_options.test = {validation_images, validation_labels};
 
         model.train(train_images, train_labels, train_options);
     }

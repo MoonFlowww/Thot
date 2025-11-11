@@ -148,11 +148,11 @@ namespace Thot {
         std::size_t buffer_vram{Core::kDefaultTrainingConfig.buffer_vram};
         bool monitor{true};
         bool restore_best_state{false};
-        std::optional<std::pair<torch::Tensor, torch::Tensor>> validation{};
-        std::optional<std::pair<torch::Tensor, torch::Tensor>> test{};
+        std::optional<std::vector<torch::Tensor>> validation{};
+        std::optional<std::vector<torch::Tensor>> test{};
         std::ostream* stream{&std::cout};
         GraphMode graph_mode{GraphMode::Disabled};  // Enable CUDA graph capture/replay; pad or drop remainder batches first.
-        bool enable_amp{false};
+        bool enable_amp{false}; // Enable TensorCores
         torch::MemoryFormat memory_format{torch::MemoryFormat::Contiguous};
     };
 
@@ -2332,10 +2332,7 @@ namespace Thot {
             train(std::move(packed.inputs), std::move(packed.targets), options);
         }
 
-        void train(torch::Tensor train_inputs,
-                   torch::Tensor train_targets,
-                   TrainOptions options = {})
-        {
+        void train(torch::Tensor train_inputs, torch::Tensor train_targets, TrainOptions options = {}) {
 
             if (!has_optimizer()) {
                 throw std::logic_error("Cannot train without an optimizer.");
@@ -2346,21 +2343,17 @@ namespace Thot {
             if (!train_inputs.defined() || !train_targets.defined()) {
                 throw std::invalid_argument("Training tensors must be defined.");
             }
-
             if (train_inputs.dim() == 0 || train_targets.dim() == 0) {
                 throw std::invalid_argument("Training tensors must not be scalars.");
             }
-
             if (train_inputs.size(0) != train_targets.size(0)) {
                 throw std::invalid_argument("Mismatched number of training samples between inputs and targets.");
             }
-
             if (options.batch_size == 0) {
                 throw std::invalid_argument("Batch size must be greater than zero.");
             }
 
             clear_training_telemetry();
-
             if (options.epoch == 0) {
                 return;
             }
@@ -2381,23 +2374,26 @@ namespace Thot {
             if (effective_options.stream == nullptr) {
                 effective_options.monitor = false;
             }
-#ifdef TORCH_CUDA_AVAILABLE
+            #ifdef TORCH_CUDA_AVAILABLE
             amp_training_active_ = effective_options.enable_amp && device_.is_cuda();
             if (amp_training_active_) {
                 ensure_amp_scaler();
             } else {
                 amp_scaler_.reset();
             }
-#else
+            #else
             (void)effective_options.enable_amp;
             amp_training_active_ = false;
-#endif
+            #endif
             zero_grad();
-            const bool requested_channels_last = effective_options.memory_format == torch::MemoryFormat::ChannelsLast;
-            bool channels_last_applicable = requested_channels_last && device_.is_cuda() && has_convolutional_layers_;
-#ifdef TORCH_CUDA_AVAILABLE
+
+            const bool requested_channels_last =
+                effective_options.memory_format == torch::MemoryFormat::ChannelsLast;
+            bool channels_last_applicable =
+                requested_channels_last && device_.is_cuda() && has_convolutional_layers_;
+            #ifdef TORCH_CUDA_AVAILABLE
             channels_last_applicable = channels_last_applicable && torch::cuda::is_available();
-#endif
+            #endif
             if (channels_last_applicable) {
                 channels_last_applicable = train_inputs.dim() >= 4;
             }
@@ -2408,29 +2404,36 @@ namespace Thot {
 
             set_tensor_memory_format(effective_options.memory_format);
 
-            auto training_dataset = TrainingDetails::prepare_tensor_dataset(std::move(train_inputs),
-                                                                            std::move(train_targets),
-                                                                            effective_options.memory_format);
+            auto training_dataset = TrainingDetails::prepare_tensor_dataset(std::move(train_inputs), std::move(train_targets), effective_options.memory_format);
+
             std::optional<typename TrainingDetails::TensorDataset> test_dataset{};
-            auto build_evaluation_dataset = [&](const std::pair<torch::Tensor, torch::Tensor>& dataset,
-                                                std::string_view name) {
-                if (!dataset.first.defined() || !dataset.second.defined()) {
+
+            // NEW: vector<torch::Tensor> with size==2: [inputs, targets]
+            auto build_evaluation_dataset = [&](const std::vector<torch::Tensor>& dataset, std::string_view name)
+                -> typename TrainingDetails::TensorDataset {
+                if (dataset.size() != 2) {
+                    throw std::invalid_argument(std::string(name) +
+                        " must contain exactly 2 tensors: [inputs, targets].");
+                }
+                const auto& inputs  = dataset[0];
+                const auto& targets = dataset[1];
+
+                if (!inputs.defined() || !targets.defined()) {
                     throw std::invalid_argument(std::string(name) + " tensors must be defined when provided.");
                 }
-                if (dataset.first.size(0) != dataset.second.size(0)) {
-                    throw std::invalid_argument("Mismatched number of " + std::string(name)
-                                                + " samples between inputs and targets.");
+                if (inputs.size(0) != targets.size(0)) {
+                    throw std::invalid_argument("Mismatched number of " + std::string(name) +
+                                                " samples between inputs and targets.");
                 }
-                return TrainingDetails::prepare_tensor_dataset(dataset.first,
-                                               dataset.second,
-                                               effective_options.memory_format);
+                return TrainingDetails::prepare_tensor_dataset(inputs, targets, effective_options.memory_format);
             };
 
-            if (options.test.has_value()) {
+            if (options.test) {
                 test_dataset = build_evaluation_dataset(*options.test, "test");
-            } else if (options.validation.has_value()) {
+            } else if (options.validation) {
                 test_dataset = build_evaluation_dataset(*options.validation, "validation");
             }
+
 
             const bool use_buffer = effective_options.buffer_vram > 0;
 
@@ -2446,21 +2449,21 @@ namespace Thot {
                                                             effective_options.memory_format);
             }
 
-
             if (effective_options.shuffle) {
                 if (use_buffer) {
-                    TrainingDetails::run_epochs<true, true>(*this, training_dataset, test_dataset, effective_options);
+                    TrainingDetails::run_epochs<true,  true>(*this, training_dataset, test_dataset, effective_options);
                 } else {
                     TrainingDetails::run_epochs<false, true>(*this, training_dataset, test_dataset, effective_options);
-
                 }
             } else {
                 if (use_buffer) {
-                    TrainingDetails::run_epochs<true, false>(*this, training_dataset, test_dataset, effective_options);
+                    TrainingDetails::run_epochs<true,  false>(*this, training_dataset, test_dataset, effective_options);
                 } else {
                     TrainingDetails::run_epochs<false, false>(*this, training_dataset, test_dataset, effective_options);
                 }
             }
+
+
 
         }
         [[nodiscard]] torch::MemoryFormat preferred_tensor_memory_format() const noexcept
@@ -3691,11 +3694,8 @@ namespace Thot {
             }
 
             template <bool BufferVRAM, bool ShouldShuffle>
-            static void run_epochs(Model& model,
-                                   TensorDataset& train_dataset,
-                                   const std::optional<TensorDataset>& test_dataset,
-                                   const TrainOptions& options)
-            {
+            static void run_epochs(Model& model, TensorDataset& train_dataset,
+                                   const std::optional<TensorDataset>& test_dataset, const TrainOptions& options) {
                 const auto device = model.device();
                 const auto total_samples = train_dataset.inputs.size(0);
                 const auto batch_size = static_cast<std::int64_t>(options.batch_size);
