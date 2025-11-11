@@ -1,0 +1,125 @@
+Robust & Outlier-Resistant
+- Median/MAD Z-score
+- Winsorized Z-score
+- IQR scaling
+- Huberized scaling
+- Tukey’s biweight scaling
+- Hampel filter + standardize
+- Qn scale estimator
+- Sn scale estimator
+- Trimmed mean/variance standardization
+
+Bounded / S-Shaped (Squashers)
+- Tanh scaling
+- Sigmoid scaling
+- Logit scaling
+- Softsign scaling
+- Arctan squashing
+- Inverse Fisher transform
+
+Distribution Shaping / Gaussianization
+- Tukey ladder of powers
+- Quantile transform to Uniform
+- Quantile transform to Gaussian (probit / van der Waerden / rank-Gauss)
+- Normal scores (Blom, Hazen, etc.)
+- Lambert-W × F transform
+- Quantile normalization
+- Histogram equalization CDF mapping
+- Arcsinh scaling
+
+Online / Rolling / Leakage-Safe
+- Rolling-window Z-score
+- Exponential-weighted Z-score
+- Rolling / EW Min-Max scaling
+- Baseline-period Z-score
+- Streaming robust Z-score
+- Rolling rank-Gauss
+
+Cross-Sectional (Panels / Multi-Asset)
+- Cross-sectional demeaning
+- Cross-sectional Z-score
+- Cross-sectional ranks
+- Industry / sector neutralization
+- Beta-neutral residual scaling
+- Orthogonalization + Z-score
+
+Volatility & Microstructure-Aware
+- Vol-targeting / studentization
+- GARCH-sigma standardization
+- Parkinson volatility normalization
+- Garman–Klass volatility normalization
+- Rogers–Satchell volatility normalization
+- ATR scaling
+- Bollinger Z-score
+- %b oscillator
+- Stochastic oscillator
+- Williams %R
+- EW/RW spread or microprice Z-score
+- Signed volume imbalance normalization
+- VWAP deviation Z-score
+
+Filters & Detrenders
+- Hodrick–Prescott filter + Boost
+- Hamilton filter
+- Baxter–King band-pass filter
+- Christiano–Fitzgerald band-pass filter
+- STL decomposition
+- Kalman local-level / local-trend smoother
+- Butterworth filter
+- Savitzky–Golay smoothing
+- LOWESS / LOESS detrending
+- Beveridge–Nelson decomposition
+- One-sided HP filter
+- Seasonal differencing
+- Fractional differencing
+- Wavelet detrending / denoising
+
+Spectral / Decorrelation / Whitening
+- PCA whitening
+- ZCA whitening
+- Cholesky whitening
+- Ledoit–Wolf shrinkage whitening
+- Oracle Approximating Shrinkage whitening
+- Robust covariance (MCD) whitening
+- Graphical Lasso whitening
+
+
+Ehlers / DSP-Style
+- Ehlers Fisher Transform
+- Inverse Fisher squashing
+- Roofing filter normalization
+- Super Smoother normalization
+- Homodyne discriminator normalization
+- Hilbert transform envelope normalization
+- Dominant cycle period adaptive normalization
+- Ehlers phase-plane loops
+
+Time-Series Stationarity Staples
+- Log scaling
+- Square-root scaling
+- Box–Cox / Yeo–Johnson
+- Simple differencing
+- Seasonal differencing
+- Z-normalization for subsequences
+- Baseline-period normalization
+
+Copula / Rank-Based
+- Gaussian copula transform
+- NORTA / nonparanormal transform
+- Empirical copula rescaling
+
+Compositional / Simplex Data
+- CLR transform
+- ALR transform
+- ILR transform
+- Unit-sum (simplex) normalization
+
+Signal / Image / Energy
+- Local contrast normalization
+- Peak normalization
+- RMS normalization
+- dB scaling
+
+Residualization Then Scale
+- Rezidualization standardization
+- Partial-out residual Z-score

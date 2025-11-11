@@ -163,5 +163,9 @@ add_executable(test_Thot test/etth/etth.cpp
         src/layer/details/instancenorm.hpp
         src/data/details/repair.hpp
         src/plot/details/data.hpp
+        src/data/details/manipulation/normalization/zscore.hpp
+        src/data/details/manipulation/normalization/common.hpp
+        src/data/details/manipulation/normalization/power.hpp
+        src/data/details/manipulation/normalization/ehlers.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)
