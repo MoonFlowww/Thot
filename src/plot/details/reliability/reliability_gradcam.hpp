@@ -9,6 +9,7 @@
 #include <memory>
 #include <numeric>
 #include <optional>
+#include <type_traits>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -34,22 +35,52 @@ namespace Thot::Plot::Details::Reliability {
             }
             return filtered;
         }
+                template <typename Module, typename Hook, typename = void>
+        struct HasRegisterModuleForwardHook : std::false_type {};
+
+        template <typename Module, typename Hook>
+        struct HasRegisterModuleForwardHook<Module,Hook,std::void_t<decltype(std::declval<Module&>().register_module_forward_hook(std::declval<Hook>()))>> : std::true_type {};
+
+        template <typename Module, typename Hook, typename = void>
+        struct HasRegisterForwardHook : std::false_type {};
+
+        template <typename Module, typename Hook>
+        struct HasRegisterForwardHook<Module,Hook,std::void_t<decltype(std::declval<Module&>().register_forward_hook(std::declval<Hook>()))>> : std::true_type {};
+
+        template <typename Module, typename Hook, typename = void>
+        struct HasRegisterModuleFullBackwardHook : std::false_type {};
+
+        template <typename Module, typename Hook>
+        struct HasRegisterModuleFullBackwardHook<Module,Hook,std::void_t<decltype(std::declval<Module&>().register_module_full_backward_hook(std::declval<Hook>()))>> : std::true_type {};
+
+        template <typename Module, typename Hook, typename = void>
+        struct HasRegisterFullBackwardHook : std::false_type {};
+
+        template <typename Module, typename Hook>
+        struct HasRegisterFullBackwardHook<Module,Hook,std::void_t<decltype(std::declval<Module&>().register_full_backward_hook(std::declval<Hook>()))>> : std::true_type {};
+
         template <typename Hook>
-        inline auto RegisterForwardHook(torch::nn::Module& module, Hook&& hook) {
-            if constexpr (requires { module.register_module_forward_hook(std::forward<Hook>(hook)); }) {
+        inline auto RegisterForwardHook(torch::nn::Module& module, Hook&& hook) -> torch::nn::Handle
+        {
+            using DecayedHook = std::decay_t<Hook>;
+            if constexpr (HasRegisterModuleForwardHook<torch::nn::Module, DecayedHook>::value) {
                 return module.register_module_forward_hook(std::forward<Hook>(hook));
-            } else {
+            } else if constexpr (HasRegisterForwardHook<torch::nn::Module, DecayedHook>::value) {
                 return module.register_forward_hook(std::forward<Hook>(hook));
             }
+            throw std::runtime_error("This LibTorch build does not expose forward hooks required for Grad-CAM rendering.");
         }
 
         template <typename Hook>
-        inline auto RegisterBackwardHook(torch::nn::Module& module, Hook&& hook) {
-            if constexpr (requires { module.register_module_full_backward_hook(std::forward<Hook>(hook)); }) {
+        inline auto RegisterBackwardHook(torch::nn::Module& module, Hook&& hook) -> torch::nn::Handle
+        {
+            using DecayedHook = std::decay_t<Hook>;
+            if constexpr (HasRegisterModuleFullBackwardHook<torch::nn::Module, DecayedHook>::value) {
                 return module.register_module_full_backward_hook(std::forward<Hook>(hook));
-            } else {
+            } else if constexpr (HasRegisterFullBackwardHook<torch::nn::Module, DecayedHook>::value) {
                 return module.register_full_backward_hook(std::forward<Hook>(hook));
             }
+            throw std::runtime_error("This LibTorch build does not expose backward hooks required for Grad-CAM rendering.");
         }
 
         inline auto ResolveTargetLayer(Thot::Model& model,
