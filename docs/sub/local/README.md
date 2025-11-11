@@ -27,6 +27,30 @@ helpers mirror that convention. Passing a default-constructed `LocalConfig`
 keeps the global behaviour, while filling any field activates the override on
 that specific descriptor.【[Layer factory overloads impl](../../../src/layer/layer.hpp#L92-L138)】【[Block factory overloads impl](../../../src/block/block.hpp#L48-L80)】
 
+```cpp
+Thot::LocalConfig bottleneck_scope{
+    .optimizer = Thot::Optimizer::AdamW({.learning_rate = 3e-4f}),
+    .regularization = {/*vector field*/
+        Thot::Regularization::L2({.coefficient=0.f})
+    }
+};
+
+model.add(
+    Thot::Layer::FC({1024, 256, /*bias*/true},
+        Thot::Activation::GeLU,
+        Thot::Initialization::HeNormal,
+        bottleneck_scope), "bottleneck");
+```
+
+The example above builds a layer that retains the global loss and regularizers,
+yet it replaces the model-wide optimizer for the `bottleneck` parameters and
+adds an extra DropConnect penalty only for that layer. Global optimizers and
+regularization declared via `Model::set_*` continue to govern every layer that
+does not opt into its own override, so shared defaults remain intact while the
+local scope tailors behaviour where needed. For a catalogue of descriptors that
+can populate these scopes see [Optimizer](../optimizer/README.md) and
+[Regularization](../regularization/README.md).
+
 ### Layer and block semantics
 * **Sequential blocks.** When a `Block::Sequential` descriptor declares a local
   optimizer, the framework either wraps the entire block as a single module so

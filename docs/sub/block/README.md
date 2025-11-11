@@ -17,6 +17,23 @@ block. Attach a `LocalConfig` to scope optimizers, losses, or regularisation to
 the entire block. This is a convenient way to fuse patterns such as
 `Conv2d → BatchNorm2d → Activation` while keeping a single local training scope.
 
+Build a residual-flavoured sequential block and register it on a model with the following pattern:
+
+```cpp
+   Thot::Model model("resnet_tiny");
+   model.add(Thot::Block::Sequential({
+      Thot::Layer::Conv2d{.out_channels = 64, .kernel = {3, 3}, .padding = {1, 1}},
+      Thot::Layer::BatchNorm2d{.features = 64},
+      Thot::Layer::Activation::ReLU{},
+      Thot::Block::Residual{{
+         Thot::Layer::Conv2d{.out_channels = 64, .kernel = {3, 3}, .padding = {1, 1}},
+         Thot::Layer::Activation::ReLU{},
+      }}
+   }, .repeats = 2)); 
+```
+
+Use this when you want to wrap a reusable skip-connected motif and replicate it multiple times within a larger architecture.
+
 ## Residual
 
 `Block::Residual` composes skip-connected stacks. Key options include:

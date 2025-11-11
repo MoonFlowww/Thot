@@ -30,6 +30,30 @@ implementation at compile time through `std::variant` visitation.
 | `Loss::CosineEmbedding` | `margin` | Measures cosine similarity between paired embeddings with ±1 labels. |
 | `Loss::MarginRanking` | `margin` | Compares ordered pairs of scores. |
 
+`Loss::CrossEntropy` covers the common multi-class classification scenario where logits are compared against integer class indices. Use it when your output layer represents mutually-exclusive classes and you want a numerically stable softmax + negative-log-likelihood pipeline. The options map directly onto LibTorch's `torch::nn::functional::CrossEntropyFuncOptions`: enable `label_smoothing` to soften hard targets, flip `use_weight` to `true` when class imbalance requires weighting, and adjust `reduction` to control aggregation.
+
+```cpp
+#include <torch/torch.h>
+#include <Thot.h>
+
+Thot::Model model{/* module configuration */};
+
+model.set_loss(Thot::Loss::CrossEntropy({
+    .reduction = Thot::Loss::Reduction::Mean,
+    .use_weight = true,
+    .label_smoothing = 0.05
+}));
+
+torch::Tensor class_weights = torch::tensor({1.0f, 1.5f, 0.75f}, torch::TensorOptions{}.dtype(torch::kFloat32));
+torch::Tensor logits = /*forward pass logits*/;
+torch::Tensor targets = /*class indices*/;
+
+auto loss = model.compute_loss(logits, targets, class_weights);
+```
+
+When `use_weight` is `true`, pass a tensor of per-class weights to `Model::compute_loss` (or to training utilities that forward the optional argument) so the descriptor can propagate it to LibTorch. Omitting the tensor while `use_weight` is enabled will trigger the runtime validation baked into the descriptor's `compute` function, ensuring configuration errors are surfaced immediately.
+
+
 Descriptors can be stored globally via `Model::set_loss()` or attached to
 individual layers through `LocalConfig` when different heads require distinct
 criteria. During `Model::save`, all descriptors (and their option structs) are

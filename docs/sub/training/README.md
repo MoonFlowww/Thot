@@ -55,6 +55,57 @@ cheap to log or feed into [Plot](../plot/README.md). When `monitor` is `true`,
 progress is streamed to the provided `std::ostream` with non-blocking CUDA event
 handling to avoid stalling the training loop.
 
+### Manual training loop (“semi Thot”)
+
+Thot keeps the underlying LibTorch modules exposed, so you can orchestrate a
+training loop manually when you need custom control flow (curriculum learning,
+reinforcement updates, mixed dataloaders, etc.). The model still constructs the
+network graph and owns the optimizer/loss descriptors, but you steer the forward
+and backward passes yourself:
+
+```cpp
+Thot::Model model("ManualMLP");
+model.add(Thot::Layer::FC({784, 512, /*bias=*/true}, Thot::Activation::ReLU));
+model.add(Thot::Layer::FC({512, 256, /*bias=*/true}, Thot::Activation::ReLU));
+model.add(Thot::Layer::FC({256, 10, /*bias=*/true}, Thot::Activation::Identity));
+
+model.set_optimizer(Thot::Optimizer::Adam({.learning_rate = 1e-3}));
+const auto cross_entropy = Thot::Loss::CrossEntropy({});
+model.set_loss(cross_entropy);
+
+for (auto epoch = 0; epoch < max_epochs; ++epoch) {
+    for (auto [inputs, targets] : minibatches) {
+        inputs = inputs.to(model.device());
+        targets = targets.to(model.device());
+
+        model.zero_grad();                                 // clear stale gradients
+        auto logits = model.forward(inputs);               // forward pass through the DAG
+        auto loss = Thot::Loss::Details::compute(          // reuse Thot loss helpers
+            cross_entropy, logits, targets);
+        loss.backward();                                   // populate gradients
+        model.step();                                      // step optimizer (+ scheduler if set)
+    }
+}
+```
+
+- **Forward.** `model.forward` executes the compiled graph exactly as
+  `Model::train` would; this keeps AMP, calibration hooks, and CUDA graph capture
+  available when you enable them via `ForwardOptions`.
+- **Backward.** Loss tensors expose the standard `.backward()` API. You can mix
+  Thot descriptors with custom reductions, attach gradient hooks, or integrate
+  reinforcement learning signals before calling backward.
+- **Optimizer step.** `model.step()` respects global and local optimizers plus
+  schedulers. Use it when you still want Thot to handle learning-rate policies;
+  call `model.optimizer().step()` directly only if you intend to bypass
+  scheduler bookkeeping.
+
+Prefer the manual path when you need tight integration with bespoke data
+pipelines, gradient accumulation strategies, or debugging hooks that do not fit
+inside `Model::train`. The abstractions remain the same—you reuse layer builders,
+loss factories, optimizers, and telemetry APIs—while keeping full control over
+loop structure.
+
+
 ## Advanced hooks
 
 - **Staging observer.** `Model::set_staging_observer` lets you inspect every

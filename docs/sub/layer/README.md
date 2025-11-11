@@ -8,6 +8,23 @@ signature (activation defaults to `Identity`, initialization to
 summarises every layer available in `src/layer/layer.hpp` and details the fields
 of their option structures.
 
+## Usage
+
+```cpp
+Thot::Model model("Classifier");
+model.add("fc1", Thot::Layer::FC(
+    {.in_features = 128, .out_features = 64, .bias = true},               // options struct
+    Thot::Activation::ReLU,                                               // activation override
+    Thot::Initialization::HeNormal,                                       // w&B initialisation
+    {.optimizer = Thot::Optimizer::AdamW({.learning_rate = 1e-3})}        // optional local config
+));
+```
+
+The descriptor tuple mirrors the common calling pattern used throughout the
+framework: an options aggregate for the underlying LibTorch module, followed by
+an activation decorator, an initialization policy, and (optionally) a
+`Thot::LocalConfig` carrying per-layer/per-block overrides.
+
 
 ## Linear
 

@@ -23,6 +23,32 @@ construction and updates each group's `lr` in lockstep. Use it alongside the
 telemetry exposed by [Training](../training/README.md) to plot learning-rate
 trajectories with [Plot](../plot/README.md).
 
+When you advance the scheduler once per optimizer update, express `T_max` and
+`warmup_steps` in the same units as your training loop (for example,
+`steps_per_epoch`) so a single cosine cycle or warmup period covers the intended
+number of batches.
+
+```cpp
+Thot::Model model("CosineWarmup");
+
+model.set_optimizer(
+    Thot::Optimizer::AdamW({
+        .learning_rate = 3e-4,
+        .beta1 = 0.9,
+        .beta2 = 0.999,
+        .eps = 1e-8,
+        .weight_decay = 1e-2,
+        .amsgrad = false,
+    }),
+    Thot::LrScheduler::CosineAnnealing({
+        .T_max = steps_per_epoch * epochs,
+        .eta_min = 3e-6,
+        .warmup_steps = 5 * steps_per_epoch,
+        .warmup_start_factor = 0.1,
+    })
+);
+```
+
 ---
 
 Additional schedulers can be added by implementing `Details::Scheduler` and
