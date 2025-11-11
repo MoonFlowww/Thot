@@ -2,7 +2,7 @@
 #include "../../include/Thot.h"
 #include "../../src/data/details/manipulation/normalization/zscore.hpp"
 
-int main() {
+int xmain() {
     Thot::Model model("Etth1");
     model.to_device(torch::cuda::is_available());
 

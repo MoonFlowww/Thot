@@ -56,7 +56,7 @@ namespace Thot::Data::Normalization {
 
                 auto win = x0.narrow(/*dim=*/-1, /*start=*/start, /*length=*/len);
                 auto m = win.mean(-1, /*keepdim=*/true);
-                auto s = clamp_std(win.std(-1, /*unbiased=*/false, /*keepdim=*/true), opt.eps);
+                auto s = clamp_std(win.std(-1, /*unbiased=*/false, /*keepdim=*/true), o.eps);
 
                 auto xt = x0.select(/*dim=*/-1, /*index=*/t).unsqueeze(-1);
                 auto zt = (xt - m) / s; // shape: [..., 1]
@@ -67,7 +67,7 @@ namespace Thot::Data::Normalization {
             TORCH_CHECK(o.lag > 0 && o.lag < T, "lag must be in (0, T) for static mode");
             auto head = x0.narrow(-1, 0, o.lag);
             auto m = head.mean(-1, /*keepdim=*/true);
-            auto s = clamp_std(head.std(-1, /*unbiased=*/false, /*keepdim=*/true), opt.eps);
+            auto s = clamp_std(head.std(-1, /*unbiased=*/false, /*keepdim=*/true), o.eps);
             y = (x0 - m) / s;
         }
         return move_time_restore(y, plan);
@@ -162,7 +162,7 @@ namespace Thot::Data::Normalization {
 
     inline at::Tensor StandardizeToTarget(const at::Tensor& x_in, const Options::StandardizeToTargetOptions opt) {
         using namespace Details;
-        auto z = Zscore(x_in, Options::ZscoreOptions{
+        auto z = Zscore(x_in, ::Thot::Data::Normalization::Options::ZscoreOptions{
             .lag = opt.lag,
             .temporal_dim = opt.temporal_dim,
             .forward_only = opt.forward_only,
