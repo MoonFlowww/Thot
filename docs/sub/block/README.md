@@ -19,20 +19,56 @@ the entire block. This is a convenient way to fuse patterns such as
 
 Build a residual-flavoured sequential block and register it on a model with the following pattern:
 
+Sequential Block:
 ```cpp
-   Thot::Model model("resnet_tiny");
-   model.add(Thot::Block::Sequential({
-      Thot::Layer::Conv2d{.out_channels = 64, .kernel = {3, 3}, .padding = {1, 1}},
-      Thot::Layer::BatchNorm2d{.features = 64},
-      Thot::Layer::Activation::ReLU{},
-      Thot::Block::Residual{{
-         Thot::Layer::Conv2d{.out_channels = 64, .kernel = {3, 3}, .padding = {1, 1}},
-         Thot::Layer::Activation::ReLU{},
-      }}
-   }, .repeats = 2)); 
+Thot::Model model("resnet_tiny");
+
+model.add(Thot::Block::Sequential({
+    Thot::Layer::Conv2d(
+        Thot::Layer::Conv2dOptions{
+            .in_channels = 3,
+            .out_channels = 64,
+            .kernel_size = {3, 3},
+            .stride = {1, 1},
+            .padding = {1, 1}
+        },
+        Thot::Activation::ReLU),
+    Thot::Layer::BatchNorm2d(Thot::Layer::BatchNorm2dOptions{.num_features = 64}),
+    Thot::Layer::Conv2d(
+        Thot::Layer::Conv2dOptions{
+            .in_channels = 64,
+            .out_channels = 64,
+            .kernel_size = {3, 3},
+            .stride = {1, 1},
+            .padding = {1, 1}
+        },
+        Thot::Activation::ReLU)
+}));
+```
+Residual Block:
+```cpp
+model.add(Thot::Block::Residual({
+    Thot::Layer::Conv2d(
+        Thot::Layer::Conv2dOptions{
+            .in_channels = 64,
+            .out_channels = 64,
+            .kernel_size = {3, 3},
+            .stride = {1, 1},
+            .padding = {1, 1}
+        },
+        Thot::Activation::ReLU),
+    Thot::Layer::Conv2d(
+        Thot::Layer::Conv2dOptions{
+            .in_channels = 64,
+            .out_channels = 64,
+            .kernel_size = {3, 3},
+            .stride = {1, 1},
+            .padding = {1, 1}
+        })
+}, /*repeats=*/2, {/*skip*/}));
 ```
 
-Use this when you want to wrap a reusable skip-connected motif and replicate it multiple times within a larger architecture.
+Sequential blocks forward descriptors exactly once in declaration order. To loop a motif multiple times, wrap it in a `Block::Residual` and configure its `repeats` argument as shown above.
 
 ## Residual
 
