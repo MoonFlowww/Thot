@@ -34,6 +34,23 @@ namespace Thot::Plot::Details::Reliability {
             }
             return filtered;
         }
+        template <typename Hook>
+        inline auto RegisterForwardHook(torch::nn::Module& module, Hook&& hook) {
+            if constexpr (requires { module.register_module_forward_hook(std::forward<Hook>(hook)); }) {
+                return module.register_module_forward_hook(std::forward<Hook>(hook));
+            } else {
+                return module.register_forward_hook(std::forward<Hook>(hook));
+            }
+        }
+
+        template <typename Hook>
+        inline auto RegisterBackwardHook(torch::nn::Module& module, Hook&& hook) {
+            if constexpr (requires { module.register_module_full_backward_hook(std::forward<Hook>(hook)); }) {
+                return module.register_module_full_backward_hook(std::forward<Hook>(hook));
+            } else {
+                return module.register_full_backward_hook(std::forward<Hook>(hook));
+            }
+        }
 
         inline auto ResolveTargetLayer(Thot::Model& model,
                                        std::optional<std::size_t> requested)
@@ -194,10 +211,12 @@ namespace Thot::Plot::Details::Reliability {
             cam = torch::relu(cam);
 
             if (!target_size.empty()) {
-                auto options = torch::nn::functional::InterpolateFuncOptions()
-                                   .size(target_size)
-                                   .mode(target_size.size() == 1 ? torch::kLinear : torch::kBilinear)
-                                   .align_corners(false);
+                auto options = torch::nn::functional::InterpolateFuncOptions().size(target_size).align_corners(false);
+                if (target_size.size() == 1) {
+                    options.mode(torch::kLinear);
+                } else {
+                    options.mode(torch::kBilinear);
+                }
                 cam = torch::nn::functional::interpolate(cam, options);
             }
 
@@ -243,7 +262,8 @@ namespace Thot::Plot::Details::Reliability {
         torch::Tensor captured_activation;
         torch::Tensor captured_gradients;
 
-        auto forward_handle = module->register_forward_hook(
+        auto forward_handle = detail::RegisterForwardHook(*module,
+
             [&captured_activation](torch::nn::Module&,
                                    const std::vector<torch::Tensor>&,
                                    torch::Tensor output) {
@@ -253,7 +273,7 @@ namespace Thot::Plot::Details::Reliability {
                 }
             });
 
-        auto backward_handle = module->register_full_backward_hook(
+        auto backward_handle = detail::RegisterBackwardHook(*module,
             [&captured_gradients](torch::nn::Module&,
                                   const std::vector<torch::Tensor>&,
                                   const std::vector<torch::Tensor>& grad_output) {
