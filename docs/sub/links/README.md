@@ -10,8 +10,10 @@ join buffers:
   index when unnamed).
 * `Port::Join(...)` materialises a named aggregation buffer that can operate in
   `Strict` (pass-through), `Broadcast` (elementwise sum), or `Stack` (tensor
-  concatenation) mode. The stack mode accepts an optional `dim`/`axis`
-  attribute to choose the concatenation dimension.【F:src/common/graph.hpp†L24-L220】【F:src/core.hpp†L1891-L1916】
+  concatenation) mode. The builder offers overloads for referencing an existing
+  join by name, for declaring a multi-source join through an initializer-list of
+  module names, and for pinning the stack dimension either via a dedicated
+  parameter or an inline `dim=`/`axis=` attribute.【F:src/common/graph.hpp†L116-L220】
 
 When the same join is mentioned multiple times, the compiler verifies that the
 merge policy and concatenation dimension stay consistent, ensuring that shared
@@ -19,11 +21,37 @@ aggregation points behave predictably.【[Code: Join policy impl](../../../src/c
 
 ### Building the graph
 `Model::links` accepts either the legacy `(specs, bool)` signature or the newer
-`LinkParams` structure. The latter lets you:
+`LinkParams` structure. The latter exposes three knobs that travel alongside the
+vector of `LinkSpec`s:
 
-* Opt into CUDA graph capture for the linked execution plan.
-* Map human-readable aliases to multi-input/multi-output indices.
-* Describe the actual routing edges through `std::vector<LinkSpec>`.【F:src/core.hpp†L778-L812】【F:src/core.hpp†L789-L1012】
+* `LinkParams::enable_graph_capture` turns CUDA graphs on for the compiled
+  wiring plan (no effect when the spec list is empty).【F:src/core.hpp†L788-L803】
+* `LinkParams::inputs` is an alias → index table for addressing multiple exposed
+  inputs.
+* `LinkParams::outputs` performs the same role for outputs.【F:src/core.hpp†L779-L803】
+
+The engine uses the highest referenced index from those maps to decide how many
+`@input[k]`/`@output[k]` terminals to materialise and ensures the zeroth entry is
+present even when the maps are left empty.【F:src/core.hpp†L801-L862】 Aliases are
+consulted when resolving `Port::Input("alias")` or `Port::Output("alias")` and
+fall back to numeric selectors like `@input[1]` or direct indices such as
+`#0`. Requests for unknown aliases raise an exception so mis-spellings are
+caught early.【F:src/core.hpp†L967-L1012】
+
+The helper maps make it easy to express readable routing. For instance, to wire
+an auxiliary loss head you can bind names to indices and still use numbered
+ports when convenient:
+
+```cpp
+model.links(
+    {/* link specs */},
+    {
+        .inputs = {{"HUFL", 0}, {"HULL", 1}, {"MUFL", 2}, {"MULL", 3}, {"LUFL", 4}, {"LULL", 5}}, // ETTH1 inputs name with their idx
+        .outputs = {{"logits", 0}, {"aux_loss", 1}},
+        .enable_graph_capture = true,
+    }
+);
+```
 
 During compilation the engine automatically adds join edges for aggregated ports
 and disallows illegal connections (for example, trying to source from an output
