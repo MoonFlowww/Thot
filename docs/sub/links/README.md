@@ -71,7 +71,7 @@ model.links({
     Thot::LinkSpec{Thot::Port::Module("ConvEntry"), Thot::Port::Module("MpPath2")}, // path #2
 
     //Level 3 (Merge Channels)
-    Thot::LinkSpec{Thot::Port::join({"ConvPath1", "MpPath2"}, Thot::MergePolicyKind::Concat), Thot::Port::Module("FCExit")}, // join
+    Thot::LinkSpec{Thot::Port::Join({"ConvPath1", "MpPath2"}, Thot::MergePolicy::Stack), Thot::Port::Module("FCExit")}, // join
 
     //Level 4 (Output)
     Thot::LinkSpec{Thot::Port::Module("FCExit"), Thot::Port::Output("@output")},
