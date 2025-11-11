@@ -165,5 +165,7 @@ add_executable(test_Thot test/classification/images/cifar10.cpp
         src/data/details/manipulation/normalization/common.hpp
         src/data/details/manipulation/normalization/power.hpp
         src/data/details/manipulation/normalization/ehlers.hpp
+        src/plot/details/reliability/reliability_lime.hpp
+        src/plot/details/reliability/reliability_gradcam.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)

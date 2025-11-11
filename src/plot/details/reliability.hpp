@@ -3,7 +3,6 @@
 
 #include <cstddef>
 #include <optional>
-#include <stdexcept>
 
 #include <torch/torch.h>
 
@@ -78,15 +77,17 @@ namespace Thot::Plot::Reliability {
 }
 
 namespace Thot::Plot::Details::Reliability {
-    inline void RenderGradCAM(Model& /*model*/, const Plot::Reliability::GradCAMDescriptor& /*descriptor*/,
-                                  torch::Tensor /*inputs*/, torch::Tensor /*targets*/,
-                                  std::optional<std::size_t> /*targetLayer*/) {
-        throw std::logic_error("Plot::Details::Reliability::RenderGradCAM is not implemented yet.");
-    }
+    void RenderGradCAM(Model& model,
+                       const Plot::Reliability::GradCAMDescriptor& descriptor,
+                       torch::Tensor inputs,
+                       torch::Tensor targets,
+                       std::optional<std::size_t> targetLayer = std::nullopt);
 
-    inline void RenderLIME(Model& /*model*/, const Plot::Reliability::LIMEDescriptor& /*descriptor*/, torch::Tensor /*inputs*/, torch::Tensor /*targets*/) {
-        throw std::logic_error("Plot::Details::Reliability::RenderLIME is not implemented yet.");
-    }
+    void RenderLIME(Model& model,
+                    const Plot::Reliability::LIMEDescriptor& descriptor,
+                    torch::Tensor inputs,
+                    torch::Tensor targets);
 }
-
+#include "reliability/reliability_gradcam.hpp"
+#include "reliability/reliability_lime.hpp"
 #endif // THOT_PLOT_DETAILS_RELIABILITY_HPP

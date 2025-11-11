@@ -357,4 +357,53 @@ namespace Thot::Plot::Details::Reliability::Curves {
         return series;
     }
 }
+
+namespace Thot::Plot::Details::Reliability::Interpretability {
+    inline auto SelectIndices(std::size_t total, std::size_t requested, bool random)
+        -> std::vector<std::size_t>
+    {
+        if (total == 0) {
+            return {};
+        }
+
+        std::size_t count = requested == 0 ? total : std::min(requested, total);
+        count = std::max<std::size_t>(1, count);
+
+        std::vector<std::size_t> all(total);
+        std::iota(all.begin(), all.end(), 0);
+
+        if (!random || count == total) {
+            return {all.begin(), all.begin() + static_cast<std::ptrdiff_t>(count)};
+        }
+
+        std::vector<std::size_t> selected;
+        selected.reserve(count);
+        std::sample(all.begin(), all.end(), std::back_inserter(selected), count, std::mt19937{std::random_device{}()});
+        std::sort(selected.begin(), selected.end());
+        return selected;
+    }
+
+    inline auto FlattenTargets(torch::Tensor targets, std::size_t expected) -> torch::Tensor
+    {
+        if (!targets.defined()) {
+            throw std::invalid_argument("Targets must be defined for interpretability plots.");
+        }
+
+        if (targets.dim() == 2) {
+            if (targets.size(1) != 1) {
+                throw std::invalid_argument("Target tensor must have shape (batch) or (batch, 1).");
+            }
+            targets = targets.reshape({targets.size(0)});
+        } else if (targets.dim() != 1) {
+            throw std::invalid_argument("Target tensor must be one- or two-dimensional.");
+        }
+
+        if (static_cast<std::size_t>(targets.size(0)) != expected) {
+            throw std::invalid_argument("Input batch and targets must share the same leading dimension.");
+        }
+
+        targets = targets.to(torch::kLong).cpu().contiguous();
+        return targets;
+    }
+}
 #endif //THOT_RELIABILITY_CURVE_UTILS_HPP
