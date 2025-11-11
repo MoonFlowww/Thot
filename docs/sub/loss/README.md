@@ -1,1 +1,43 @@
+# Loss Descriptors
 
+Loss descriptors wrap LibTorch criterion implementations so they can be stored
+inside model graphs, attached to [Local](../local/README.md) scopes, and reused
+across [Training](../training/README.md) sessions. Every helper in
+`Thot::Loss` returns a stateless descriptor; the runtime picks the correct
+implementation at compile time through `std::variant` visitation.
+
+## Shared conventions
+
+- `Reduction` controls how element-wise losses collapse to scalars. Supported
+  values are `Mean`, `Sum`, and `None`.
+- Many descriptors expose `use_weight` or `use_pos_weight` toggles. When set to
+  `true`, you must provide the corresponding tensor to `Model::set_loss` or
+  `Model::compute_loss`.
+- All implementations validate tensor shapes and throw informative errors when
+  sample counts mismatch, which helps diagnose data/target plumbing issues.
+
+## Catalogue
+
+| Helper | Key options | Notes |
+| --- | --- | --- |
+| `Loss::MSE` | `reduction`, `use_weight` | Falls back to manual reduction when weights are provided. |
+| `Loss::MAE` | `reduction`, `use_weight` | Absolute error counterpart to MSE. |
+| `Loss::SmoothL1` | `reduction`, `beta`, `threshold` | Hybrid between L1 and L2 with configurable transition. |
+| `Loss::CrossEntropy` | `reduction`, `use_weight`, `label_smoothing` | Supports class weighting and label smoothing with runtime validation. |
+| `Loss::BCEWithLogits` | `reduction`, `use_weight`, `use_pos_weight` | Combines sigmoid and binary cross-entropy for numerical stability. |
+| `Loss::NegativeLogLikelihood` | `reduction`, `ignore_index` | Works with log-probabilities and optional class masking. |
+| `Loss::KLDiv` | `reduction`, `log_target` | Computes KL divergence against targets that can be log-probabilities. |
+| `Loss::CosineEmbedding` | `margin` | Measures cosine similarity between paired embeddings with ±1 labels. |
+| `Loss::MarginRanking` | `margin` | Compares ordered pairs of scores. |
+
+Descriptors can be stored globally via `Model::set_loss()` or attached to
+individual layers through `LocalConfig` when different heads require distinct
+criteria. During `Model::save`, all descriptors (and their option structs) are
+serialised into `architecture.json`, ensuring checkpoints restore identical
+losses after a [Save & Load](../saveload/README.md) round-trip.
+
+---
+
+Combine these losses with [Regularization](../regularization/README.md) and
+[Optimizer](../optimizer/README.md) descriptors to fully specify the training
+objective.
