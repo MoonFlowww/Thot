@@ -57,6 +57,7 @@ AdamW optimizer is scoped to the `head` classifier, and a `Stack` join merges tw
 branches before the head runs:
 
 ```cpp
+//model.add(..., "_name_"); Name is optional
 model.add(Thot::Layer::Conv2d({3, 32, {3, 3}}), "ConvEntry");
 model.add(Thot::Layer::Conv2d({32, 64, {3, 3}}), "ConvPath1");
 model.add(Thot::Layer::MaxPool2d({{2, 2}}), "MpPath2");

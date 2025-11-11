@@ -600,8 +600,26 @@ namespace Thot {
 
                     store_layer(std::move(registered_layer));
                 },
-                [](const Block::Transformer::Classic::DecoderDescriptor&) {
-                    throw std::invalid_argument("Transformer decoder blocks are not yet supported by Model::add.");
+                [&](Block::Transformer::Classic::DecoderDescriptor decoder_descriptor) {
+                    const auto index = next_module_index();
+                    auto module = register_module(
+                        "transformer_decoder_" + std::to_string(index),
+                        Block::Transformer::Classic::TransformerDecoder(std::move(decoder_descriptor)));
+
+                    Layer::Details::RegisteredLayer registered_layer{};
+                    registered_layer.activation = Activation::Type::Identity;
+                    registered_layer.module = Layer::Details::to_shared_module_ptr(module);
+                    struct TransformerDecoderForward {
+                        decltype(module.get()) module_ptr;
+
+                        torch::Tensor operator()(torch::Tensor input) const
+                        {
+                            return module_ptr->forward(std::move(input), torch::Tensor{});
+                        }
+                    };
+                    registered_layer.bind_inline_forward(TransformerDecoderForward{module.get()});
+
+                    store_layer(std::move(registered_layer));
                 },
             [&](Block::Transformer::EBT::EncoderDescriptor encoder_descriptor) {
                 const auto index = next_module_index();
@@ -616,8 +634,26 @@ namespace Thot {
 
                 store_layer(std::move(registered_layer));
                 },
-                [](const Block::Transformer::EBT::DecoderDescriptor&) {
-                    throw std::invalid_argument("EBT decoder blocks are not yet supported by Model::add.");
+                [&](Block::Transformer::EBT::DecoderDescriptor decoder_descriptor) {
+                    const auto index = next_module_index();
+                    auto module = register_module(
+                        "ebt_decoder_" + std::to_string(index),
+                        Block::Transformer::EBT::DecoderModule(std::move(decoder_descriptor)));
+
+                    Layer::Details::RegisteredLayer registered_layer{};
+                    registered_layer.activation = Activation::Type::Identity;
+                    registered_layer.module = Layer::Details::to_shared_module_ptr(module);
+                    struct EBTDecoderForward {
+                        decltype(module.get()) module_ptr;
+
+                        torch::Tensor operator()(torch::Tensor input) const
+                        {
+                            return module_ptr->forward(std::move(input), torch::Tensor{});
+                        }
+                    };
+                    registered_layer.bind_inline_forward(EBTDecoderForward{module.get()});
+
+                    store_layer(std::move(registered_layer));
                 },
             [&](Block::Transformer::PlusPlus::EncoderDescriptor encoder_descriptor) {
                 const auto index = next_module_index();
@@ -1485,10 +1521,10 @@ namespace Thot {
                 std::is_same<Decayed, Loss::Details::MSEDescriptor>,
                 std::is_same<Decayed, Loss::Details::CrossEntropyDescriptor>,
                 std::is_same<Decayed, Loss::Details::BCEWithLogitsDescriptor>,
-                //std::is_same<Decayed, Loss::Details::CosineEmbeddingDescriptor>,
-                //std::is_same<Decayed, Loss::Details::KLDivDescriptor>,
+                std::is_same<Decayed, Loss::Details::CosineEmbeddingDescriptor>,
+                std::is_same<Decayed, Loss::Details::KLDivDescriptor>,
                 std::is_same<Decayed, Loss::Details::MAEDescriptor>,
-                //std::is_same<Decayed, Loss::Details::MarginRankingDescriptor>,
+                std::is_same<Decayed, Loss::Details::MarginRankingDescriptor>,
                 std::is_same<Decayed, Loss::Details::NegativeLogLikelihoodDescriptor>,
                 std::is_same<Decayed, Loss::Details::SmoothL1Descriptor>>;
             static_assert(kSupported, "Unsupported loss descriptor type provided to Model::set_loss.");

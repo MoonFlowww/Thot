@@ -547,11 +547,240 @@ namespace Thot::Block::Details::Transformer::Classic {
         };
 
         TORCH_MODULE(TransformerEncoder);
+
+        class TransformerDecoderLayerImpl : public torch::nn::Module {
+        public:
+            TransformerDecoderLayerImpl(DecoderLayerDescriptor descriptor, const DecoderOptions& options)
+                : embed_dim_(options.embed_dim),
+                  layer_norm_options_(options.layer_norm)
+            {
+                if (embed_dim_ <= 0) {
+                    throw std::invalid_argument("Transformer decoder layer requires a positive embedding dimension.");
+                }
+
+                auto norm_options = torch::nn::LayerNormOptions(std::vector<int64_t>{embed_dim_})
+                                         .eps(layer_norm_options_.eps)
+                                         .elementwise_affine(layer_norm_options_.elementwise_affine);
+
+                norm1_ = register_module("norm1", torch::nn::LayerNorm(norm_options));
+                norm2_ = register_module("norm2", torch::nn::LayerNorm(norm_options));
+                norm3_ = register_module("norm3", torch::nn::LayerNorm(norm_options));
+
+                self_attention_ = std::visit(
+                    [&](auto&& attention_descriptor) {
+                        using Descriptor = std::decay_t<decltype(attention_descriptor)>;
+                        if constexpr (std::is_same_v<Descriptor, ::Thot::Attention::MultiHeadDescriptor>) {
+                            ::Thot::Attention::Details::MultiHeadAttentionOptions attention_options{};
+                            attention_options.embed_dim = attention_descriptor.options.embed_dim;
+                            attention_options.num_heads = attention_descriptor.options.num_heads;
+                            attention_options.dropout = attention_descriptor.options.dropout;
+                            attention_options.bias = attention_descriptor.options.bias;
+                            attention_options.batch_first = attention_descriptor.options.batch_first;
+                            attention_options.variant = attention_descriptor.options.variant;
+                            return register_module("self_attention",
+                                                   ::Thot::Attention::Details::MultiHeadAttention(attention_options));
+                        } else {
+                            throw std::invalid_argument(
+                                "Unsupported attention descriptor provided to transformer decoder layer.");
+                        }
+                    },
+                    std::move(descriptor.self_attention));
+
+                cross_attention_ = std::visit(
+                    [&](auto&& attention_descriptor) {
+                        using Descriptor = std::decay_t<decltype(attention_descriptor)>;
+                        if constexpr (std::is_same_v<Descriptor, ::Thot::Attention::MultiHeadDescriptor>) {
+                            ::Thot::Attention::Details::MultiHeadAttentionOptions attention_options{};
+                            attention_options.embed_dim = attention_descriptor.options.embed_dim;
+                            attention_options.num_heads = attention_descriptor.options.num_heads;
+                            attention_options.dropout = attention_descriptor.options.dropout;
+                            attention_options.bias = attention_descriptor.options.bias;
+                            attention_options.batch_first = attention_descriptor.options.batch_first;
+                            attention_options.variant = attention_descriptor.options.variant;
+                            return register_module("cross_attention",
+                                                   ::Thot::Attention::Details::MultiHeadAttention(attention_options));
+                        } else {
+                            throw std::invalid_argument(
+                                "Unsupported attention descriptor provided to transformer decoder layer.");
+                        }
+                    },
+                    std::move(descriptor.cross_attention));
+
+                std::size_t module_index = 0;
+                auto register_layer = [&](::Thot::Layer::Descriptor layer_descriptor) {
+                    return std::visit(
+                        [&](const auto& concrete_descriptor) {
+                            return ::Thot::Layer::Details::build_registered_layer(
+                                *this, concrete_descriptor, module_index++);
+                        },
+                        std::move(layer_descriptor));
+                };
+
+                self_attention_dropout_ = register_layer(std::move(descriptor.self_attention_dropout));
+                cross_attention_dropout_ = register_layer(std::move(descriptor.cross_attention_dropout));
+
+                feed_forward_layers_.reserve(descriptor.feed_forward.size());
+                for (auto& layer : descriptor.feed_forward) {
+                    feed_forward_layers_.push_back(register_layer(std::move(layer)));
+                }
+
+                feed_forward_dropout_ = register_layer(std::move(descriptor.feed_forward_dropout));
+            }
+
+            torch::Tensor forward(torch::Tensor target,
+                                  const torch::Tensor& memory = {},
+                                  const torch::Tensor& tgt_mask = {},
+                                  const torch::Tensor& memory_mask = {},
+                                  const torch::Tensor& tgt_key_padding_mask = {},
+                                  const torch::Tensor& memory_key_padding_mask = {})
+            {
+                auto [normalised_target, target_shape] = normalise_to_sequence(std::move(target), embed_dim_);
+
+                auto output = std::move(normalised_target);
+
+                auto residual = output;
+                auto self_norm = norm1_->forward(residual);
+                auto self_attention = self_attention_->forward(
+                    self_norm, self_norm, self_norm, tgt_mask, tgt_key_padding_mask);
+                if (self_attention_dropout_.forward) {
+                    self_attention = self_attention_dropout_.forward(std::move(self_attention));
+                    self_attention = ::Thot::Activation::Details::apply(
+                        self_attention_dropout_.activation, std::move(self_attention));
+                }
+                output = residual + self_attention;
+
+                if (memory.defined()) {
+                    residual = output;
+                    auto cross_norm = norm2_->forward(output);
+                    auto cross_attention = cross_attention_->forward(
+                        cross_norm, memory, memory, memory_mask, memory_key_padding_mask);
+                    if (cross_attention_dropout_.forward) {
+                        cross_attention = cross_attention_dropout_.forward(std::move(cross_attention));
+                        cross_attention = ::Thot::Activation::Details::apply(
+                            cross_attention_dropout_.activation, std::move(cross_attention));
+                    }
+                    output = residual + cross_attention;
+                }
+
+                residual = output;
+                auto feed_forward = norm3_->forward(output);
+                for (auto& layer : feed_forward_layers_) {
+                    if (!layer.forward) {
+                        continue;
+                    }
+                    feed_forward = layer.forward(std::move(feed_forward));
+                    feed_forward = ::Thot::Activation::Details::apply(
+                        layer.activation, std::move(feed_forward));
+                }
+                if (feed_forward_dropout_.forward) {
+                    feed_forward = feed_forward_dropout_.forward(std::move(feed_forward));
+                    feed_forward = ::Thot::Activation::Details::apply(
+                        feed_forward_dropout_.activation, std::move(feed_forward));
+                }
+
+                output = residual + feed_forward;
+                return restore_from_sequence(std::move(output), target_shape);
+            }
+
+        private:
+            std::int64_t embed_dim_{};
+            LayerNormOptions layer_norm_options_{};
+            ::Thot::Attention::Details::MultiHeadAttention self_attention_{nullptr};
+            ::Thot::Attention::Details::MultiHeadAttention cross_attention_{nullptr};
+            torch::nn::LayerNorm norm1_{nullptr};
+            torch::nn::LayerNorm norm2_{nullptr};
+            torch::nn::LayerNorm norm3_{nullptr};
+            ::Thot::Layer::Details::RegisteredLayer self_attention_dropout_{};
+            ::Thot::Layer::Details::RegisteredLayer cross_attention_dropout_{};
+            std::vector<::Thot::Layer::Details::RegisteredLayer> feed_forward_layers_{};
+            ::Thot::Layer::Details::RegisteredLayer feed_forward_dropout_{};
+        };
+
+        TORCH_MODULE(TransformerDecoderLayer);
+
+        class TransformerDecoderImpl : public torch::nn::Module {
+        public:
+            explicit TransformerDecoderImpl(DecoderDescriptor descriptor)
+                : options_(std::move(descriptor.options))
+            {
+                if (options_.embed_dim <= 0) {
+                    throw std::invalid_argument("Transformer decoder requires a positive embedding dimension.");
+                }
+
+                if (options_.positional_encoding.type != PositionalEncodingType::None ||
+                    options_.positional_encoding.dropout > 0.0) {
+                    positional_encoding_ = register_module(
+                        "positional_encoding",
+                        PositionalEncoding(options_.embed_dim, options_.positional_encoding));
+                }
+
+                auto norm_options = torch::nn::LayerNormOptions(std::vector<int64_t>{options_.embed_dim})
+                                         .eps(options_.layer_norm.eps)
+                                         .elementwise_affine(options_.layer_norm.elementwise_affine);
+                final_layer_norm_ = register_module("final_layer_norm", torch::nn::LayerNorm(norm_options));
+
+                layers_.reserve(descriptor.layers.size());
+                for (std::size_t index = 0; index < descriptor.layers.size(); ++index) {
+                    auto layer = register_module(
+                        "layer_" + std::to_string(index),
+                        TransformerDecoderLayer(std::move(descriptor.layers[index]), options_));
+                    layers_.push_back(std::move(layer));
+                }
+            }
+
+            torch::Tensor forward(torch::Tensor target,
+                                  torch::Tensor memory = {},
+                                  const torch::Tensor& tgt_mask = {},
+                                  const torch::Tensor& memory_mask = {},
+                                  const torch::Tensor& tgt_key_padding_mask = {},
+                                  const torch::Tensor& memory_key_padding_mask = {})
+            {
+                auto [normalised_target, target_shape] = normalise_to_sequence(std::move(target), options_.embed_dim);
+
+                torch::Tensor normalised_memory;
+                if (memory.defined()) {
+                    auto memory_pair = normalise_to_sequence(std::move(memory), options_.embed_dim);
+                    normalised_memory = std::move(memory_pair.first);
+                }
+
+                auto output = std::move(normalised_target);
+                if (positional_encoding_) {
+                    output = positional_encoding_->forward(std::move(output));
+                }
+
+                for (auto& layer : layers_) {
+                    output = layer->forward(std::move(output),
+                                            normalised_memory,
+                                            tgt_mask,
+                                            memory_mask,
+                                            tgt_key_padding_mask,
+                                            memory_key_padding_mask);
+                }
+
+                if (final_layer_norm_) {
+                    output = final_layer_norm_->forward(output);
+                }
+
+                return restore_from_sequence(std::move(output), target_shape);
+            }
+
+        private:
+            DecoderOptions options_{};
+            std::vector<TransformerDecoderLayer> layers_{};
+            PositionalEncoding positional_encoding_{nullptr};
+            torch::nn::LayerNorm final_layer_norm_{nullptr};
+        };
+
+        TORCH_MODULE(TransformerDecoder);
     }
 
     using PositionalEncoding = Detail::PositionalEncoding;
+
     using TransformerEncoderLayer = Detail::TransformerEncoderLayer;
     using TransformerEncoder = Detail::TransformerEncoder;
+
+    using TransformerDecoderLayer = Detail::TransformerDecoderLayer;
+    using TransformerDecoder = Detail::TransformerDecoder;
 }
 
 #endif //THOT_CLASSIC_HPP
