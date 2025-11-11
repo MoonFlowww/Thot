@@ -28,7 +28,7 @@ model.add(Thot::Layer::FC({258, 10, /*bias*/true}, Thot::Activation::GeLU, Thot:
 ```
 or blocks:
 ```cpp
-model.add(Thot::Block::Sequential({
+model.add(Thot::Block::Sequential({ /*vector field*/
     Thot::Layer::Conv2d({3, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
         Thot::Activation::Identity, Thot::Initialization::HeNormal),
     Thot::Layer::BatchNorm2d({64, 1e-5, 0.1, true, true},
@@ -36,7 +36,7 @@ model.add(Thot::Block::Sequential({
     Thot::Layer::MaxPool2d({{2, 2}, {2, 2}})
 }));
 ```
-The framework ships with a rich catalog of layers (see in [Layers](sub/layer/README.md) or [Blocks](sub/block/README.md)). It will link automatically every item's call via `.add()`. To rewire items use `.links()` (see in [Links](sub/links/README.md))
+The framework ships with a rich catalog of layers (see in [Layers](sub/layer/README.md) or [Blocks](sub/block/README.md)). It will automatically link linearly every item's called via `.add()`. To rewire the network use `.links()` (see in [Links](sub/links/README.md))
 
 ## Configuring Optimization
 
@@ -61,7 +61,7 @@ Losses and regularization follow the same pattern:
 
 ```cpp
 model.set_loss(Thot::Loss::CrossEntropy({.label_smoothing = 0.02f}));
-model.set_regularization({
+model.set_regularization({ /*vector field*/
     Thot::Regularization::SWAG({
         .coefficient = 1e-3,
         .variance_epsilon = 1e-6,
@@ -73,7 +73,7 @@ model.set_regularization({
 ```
 To see the complete list of Optimizers, Losses or Regularizations and their parameters check [Optimizer](sub/optimizer/README.md), [Loss](sub/loss/README.md) and [Regularization](sub/regularization/README.md)
 
-If you want to use multiples or differents parameters over the network check [Local](sub/local/README.md)
+It is also possible to use multiples configurations over the network, check [Local](sub/local/README.md)
 ## Working with Data
 
 The `Thot::Data::Load` namespace includes ready-made loaders for popular datasets
@@ -108,37 +108,28 @@ accumulates metrics such as accuracy, precision, recall, calibration errors, and
 more.
 
 ```cpp
-model.evaluate(test_images, test_labels, Thot::Evaluation::Classification, {
-    Thot::Metric::Classification::Accuracy,
+model.evaluate(test_images, test_labels, Thot::Evaluation::Classification, { /*vector field*/
     Thot::Metric::Classification::Precision,
     Thot::Metric::Classification::Recall,
     Thot::Metric::Classification::F1,
     Thot::Metric::Classification::TruePositiveRate,
-    Thot::Metric::Classification::TrueNegativeRate,
-    Thot::Metric::Classification::Top1Error,
-    Thot::Metric::Classification::ExpectedCalibrationError,
-    Thot::Metric::Classification::MaximumCalibrationError,
-    Thot::Metric::Classification::CohensKappa,
     Thot::Metric::Classification::LogLoss,
-    Thot::Metric::Classification::BrierScore,
 }, {.batch_size = 64});
 ```
+More details inside [Evaluation](sub/evaluation/README.md)
 
 ## Saving and Loading
 
-Checkpointing is handled through `model.save(path)` and `model.load(path)`. Capture
-these calls behind a flag or runtime option to control when checkpoints are
-materialized.
+To keep save your Network use `model.save()` and `model.load()`;
+`model.save()` will create a folder of `_Network_Name_` name, and save inside `architecture.json` which correspond to Network layers, dimensions parameters, optimizer used, etc. As well as a `parameter.binary` which store learnable parameters of layers. 
+
+NB: Since `model.load()` read `architecture.json`, you don't need to re-code your network via `model.add()`
+
 
 ```cpp
-if (should_save) {
-    model.save(output_directory);
-}
+model.save("PATH");
+model.load("PATH"+"/_Network_Name_");
 ```
-
+Details in: [Save&Load](sub/saveload/README.md)
 ## Next Steps
 
-The CIFAR-10 script showcases only a subset of Thot's capabilities. Explore the
-`include/` headers for the full catalog of layers, blocks, metrics, plotting tools,
-and utilities. Combine the primitives demonstrated above to build custom training
-pipelines tailored to your datasets and research ideas.
