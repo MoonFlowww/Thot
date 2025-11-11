@@ -23,6 +23,5 @@ int main() {
 
     //std::cerr << "Wrote " << files.size() << " files.\n";
 
-
     return 0;
 }
