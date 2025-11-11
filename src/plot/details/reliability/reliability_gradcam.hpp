@@ -9,7 +9,6 @@
 #include <memory>
 #include <numeric>
 #include <optional>
-#include <type_traits>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -35,53 +34,10 @@ namespace Thot::Plot::Details::Reliability {
             }
             return filtered;
         }
-                template <typename Module, typename Hook, typename = void>
-        struct HasRegisterModuleForwardHook : std::false_type {};
 
-        template <typename Module, typename Hook>
-        struct HasRegisterModuleForwardHook<Module,Hook,std::void_t<decltype(std::declval<Module&>().register_module_forward_hook(std::declval<Hook>()))>> : std::true_type {};
 
-        template <typename Module, typename Hook, typename = void>
-        struct HasRegisterForwardHook : std::false_type {};
 
-        template <typename Module, typename Hook>
-        struct HasRegisterForwardHook<Module,Hook,std::void_t<decltype(std::declval<Module&>().register_forward_hook(std::declval<Hook>()))>> : std::true_type {};
 
-        template <typename Module, typename Hook, typename = void>
-        struct HasRegisterModuleFullBackwardHook : std::false_type {};
-
-        template <typename Module, typename Hook>
-        struct HasRegisterModuleFullBackwardHook<Module,Hook,std::void_t<decltype(std::declval<Module&>().register_module_full_backward_hook(std::declval<Hook>()))>> : std::true_type {};
-
-        template <typename Module, typename Hook, typename = void>
-        struct HasRegisterFullBackwardHook : std::false_type {};
-
-        template <typename Module, typename Hook>
-        struct HasRegisterFullBackwardHook<Module,Hook,std::void_t<decltype(std::declval<Module&>().register_full_backward_hook(std::declval<Hook>()))>> : std::true_type {};
-
-        template <typename Hook>
-        inline auto RegisterForwardHook(torch::nn::Module& module, Hook&& hook) -> torch::nn::Handle
-        {
-            using DecayedHook = std::decay_t<Hook>;
-            if constexpr (HasRegisterModuleForwardHook<torch::nn::Module, DecayedHook>::value) {
-                return module.register_module_forward_hook(std::forward<Hook>(hook));
-            } else if constexpr (HasRegisterForwardHook<torch::nn::Module, DecayedHook>::value) {
-                return module.register_forward_hook(std::forward<Hook>(hook));
-            }
-            throw std::runtime_error("This LibTorch build does not expose forward hooks required for Grad-CAM rendering.");
-        }
-
-        template <typename Hook>
-        inline auto RegisterBackwardHook(torch::nn::Module& module, Hook&& hook) -> torch::nn::Handle
-        {
-            using DecayedHook = std::decay_t<Hook>;
-            if constexpr (HasRegisterModuleFullBackwardHook<torch::nn::Module, DecayedHook>::value) {
-                return module.register_module_full_backward_hook(std::forward<Hook>(hook));
-            } else if constexpr (HasRegisterFullBackwardHook<torch::nn::Module, DecayedHook>::value) {
-                return module.register_full_backward_hook(std::forward<Hook>(hook));
-            }
-            throw std::runtime_error("This LibTorch build does not expose backward hooks required for Grad-CAM rendering.");
-        }
 
         inline auto ResolveTargetLayer(Thot::Model& model,
                                        std::optional<std::size_t> requested)
@@ -290,28 +246,6 @@ namespace Thot::Plot::Details::Reliability {
         inputs = inputs.to(device);
         auto module = detail::ResolveTargetLayer(model, targetLayer);
 
-        torch::Tensor captured_activation;
-        torch::Tensor captured_gradients;
-
-        auto forward_handle = detail::RegisterForwardHook(*module,
-
-            [&captured_activation](torch::nn::Module&,
-                                   const std::vector<torch::Tensor>&,
-                                   torch::Tensor output) {
-                captured_activation = output;
-                if (captured_activation.requires_grad()) {
-                    captured_activation.retain_grad();
-                }
-            });
-
-        auto backward_handle = detail::RegisterBackwardHook(*module,
-            [&captured_gradients](torch::nn::Module&,
-                                  const std::vector<torch::Tensor>&,
-                                  const std::vector<torch::Tensor>& grad_output) {
-                if (!grad_output.empty()) {
-                    captured_gradients = grad_output.front();
-                }
-            });
 
         const bool was_training = model.is_training();
         model.eval();
@@ -325,7 +259,8 @@ namespace Thot::Plot::Details::Reliability {
             auto sample = inputs.index({static_cast<int64_t>(index)}).unsqueeze(0).clone();
             auto target_class = flattened_targets.index({static_cast<int64_t>(index)}).item<int64_t>();
 
-            auto logits = model.forward(sample);
+            auto capture = model.forward_with_activation_capture(sample, module.get());
+            auto logits = std::move(capture.logits);
             if (logits.dim() == 1) {
                 logits = logits.unsqueeze(0);
             }
@@ -333,26 +268,29 @@ namespace Thot::Plot::Details::Reliability {
                 throw std::runtime_error("Grad-CAM expects model outputs shaped as (batch, classes).");
             }
 
-            captured_activation = at::Tensor{};
-            captured_gradients = at::Tensor{};
+
 
             auto probabilities = torch::softmax(logits, 1);
             auto selected = probabilities.index({0, target_class});
-            selected.backward();
-
-            if (!captured_activation.defined() ||
-                (!captured_activation.grad().defined() && !captured_gradients.defined())) {
-                throw std::runtime_error("Failed to capture Grad-CAM activation gradients.");
+            auto activation = capture.activation;
+            if (!activation.defined() || !activation.requires_grad()) {
+                throw std::runtime_error("Target layer activation does not require gradients.");
             }
 
-            auto gradients = captured_gradients.defined() ? captured_gradients : captured_activation.grad();
+            model.zero_grad();
+            auto gradients_vec = torch::autograd::grad({selected}, {activation});
+            if (gradients_vec.empty() || !gradients_vec.front().defined()) {
+                throw std::runtime_error("Failed to compute Grad-CAM gradients for the requested activation.");
+            }
+
+            auto gradients = gradients_vec.front();
             std::vector<int64_t> target_size;
             if (sample.dim() >= 4) {
                 for (int64_t dim = 2; dim < sample.dim(); ++dim) {
                     target_size.push_back(sample.size(dim));
                 }
             }
-            auto heatmap = detail::BuildHeatmap(captured_activation, gradients, target_size, descriptor.options.normalize);
+            auto heatmap = detail::BuildHeatmap(activation, gradients, target_size, descriptor.options.normalize);
 
             auto prepared_input = sample.squeeze().to(torch::kCPU);
             render_images.push_back(detail::EnsureThreeChannel(prepared_input));
@@ -369,8 +307,6 @@ namespace Thot::Plot::Details::Reliability {
             model.train();
         }
 
-        forward_handle.remove();
-        backward_handle.remove();
 
         if (render_images.empty()) {
             throw std::runtime_error("Grad-CAM did not capture any visualisations.");

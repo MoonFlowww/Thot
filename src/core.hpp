@@ -1699,15 +1699,53 @@ namespace Thot {
 
         [[nodiscard]] torch::Tensor forward(torch::Tensor input)
         {
-            return forward(std::move(input), {});
+            return forward_internal(std::move(input), {}, nullptr, nullptr);
         }
 
         [[nodiscard]] torch::Tensor forward(torch::Tensor input, ForwardOptions options)
         {
+            return forward_internal(std::move(input), std::move(options), nullptr, nullptr);
+        }
+
+        struct ForwardActivationCaptureResult {
+            torch::Tensor logits{};
+            torch::Tensor activation{};
+        };
+
+        [[nodiscard]] ForwardActivationCaptureResult forward_with_activation_capture(
+            torch::Tensor input,
+            torch::nn::Module* target_module,
+            ForwardOptions options = {})
+        {
+            if (target_module == nullptr) {
+                throw std::invalid_argument("forward_with_activation_capture requires a valid module pointer.");
+            }
+
+            auto* layer = resolve_registered_layer(target_module);
+            if (layer == nullptr) {
+                throw std::runtime_error("Requested module is not part of the model graph.");
+            }
+
+            torch::Tensor captured_activation;
+            auto logits = forward_internal(std::move(input), std::move(options), layer, &captured_activation);
+            if (!captured_activation.defined()) {
+                throw std::runtime_error("Failed to capture activation for the requested module.");
+            }
+
+            ForwardActivationCaptureResult result{};
+            result.logits = std::move(logits);
+            result.activation = std::move(captured_activation);
+            return result;
+        }
+
+        [[nodiscard]] torch::Tensor forward_internal(torch::Tensor input, ForwardOptions options, Layer::Details::RegisteredLayer* capture_layer, torch::Tensor* captured_activation) {
             const auto phase = is_training() ? GraphExecutionPhase::Training : GraphExecutionPhase::Inference;
             const auto requested_graph_mode = options.graph_mode;
             const bool graph_mode_active = graph_execution_enabled(requested_graph_mode, phase);
             auto resolved_graph_mode = graph_mode_active ? requested_graph_mode : GraphMode::Disabled;
+            if (capture_layer != nullptr && resolved_graph_mode != GraphMode::Disabled) {
+                throw std::runtime_error("Activation capture is not supported when graph execution is enabled.");
+            }
 
 #ifdef TORCH_CUDA_AVAILABLE
             if (phase == GraphExecutionPhase::Inference && resolved_graph_mode == GraphMode::Capture) {
@@ -1719,8 +1757,13 @@ namespace Thot {
 #endif
             options.graph_mode = resolved_graph_mode;
 
+            if (capture_layer != nullptr && options.buffering_enabled()) {
+                throw std::runtime_error("Activation capture is not supported when forward chunking is enabled.");
+            }
+
+
             auto execute = [&](torch::Tensor tensor, GraphMode mode) {
-                return execute_plan(std::move(tensor), mode);
+                return execute_plan(std::move(tensor), mode, capture_layer, captured_activation);
             };
 
 
@@ -1827,7 +1870,7 @@ namespace Thot {
             return torch::cat(outputs, 0);
         }
 
-        torch::Tensor execute_plan(torch::Tensor tensor, GraphMode graph_mode)
+        torch::Tensor execute_plan(torch::Tensor tensor, GraphMode graph_mode, Layer::Details::RegisteredLayer* capture_layer = nullptr, torch::Tensor* captured_activation = nullptr)
         {
             tensor = stage_tensor_for_execution(std::move(tensor));
             if (graph_mode == GraphMode::Replay) {
@@ -1866,8 +1909,12 @@ namespace Thot {
 
             if (!has_compiled_routing() || execution_steps_.empty()) {
                 for (auto& layer : layers_) {
-                    tensor = layer.forward(std::move(tensor));
-                    tensor = Activation::Details::apply(layer.activation, std::move(tensor));
+                    auto module_output = layer.forward(std::move(tensor));
+                    if (capture_layer != nullptr && captured_activation != nullptr &&
+                        capture_layer == &layer) {
+                        *captured_activation = module_output;
+                        }
+                    tensor = Activation::Details::apply(layer.activation, std::move(module_output));
                 }
                 return apply_calibrations(std::move(tensor));
             }
@@ -1901,6 +1948,9 @@ namespace Thot {
 #endif
                         auto* layer = step.module.layer;
                         auto output_tensor = layer->forward(input_tensor);
+                        if (capture_layer != nullptr && captured_activation != nullptr && capture_layer == layer) {
+                            *captured_activation = output_tensor;
+                        }
                         output_tensor = Activation::Details::apply(layer->activation, std::move(output_tensor));
                         auto& destination = workspace.node_buffers[step.activation_index];
                         copy_tensor_into(destination, output_tensor, workspace_tensor_policy(graph_mode));
@@ -3232,6 +3282,20 @@ namespace Thot {
             }
 
             execution_workspace_dirty_ = false;
+        }
+
+        [[nodiscard]] Layer::Details::RegisteredLayer* resolve_registered_layer(torch::nn::Module* module) noexcept
+        {
+            if (module == nullptr) {
+                return nullptr;
+            }
+
+            for (auto& layer : layers_) {
+                if (layer.module && layer.module.get() == module) {
+                    return &layer;
+                }
+            }
+            return nullptr;
         }
 
         static std::vector<torch::Tensor> collect_layer_parameters(const Layer::Details::RegisteredLayer& layer)
