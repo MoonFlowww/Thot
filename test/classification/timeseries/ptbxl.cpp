@@ -14,7 +14,7 @@
 
 #include <torch/torch.h>
 
-#include "../include/Thot.h"
+#include "../../../include/Thot.h"
 
 
 struct ECGDataset {

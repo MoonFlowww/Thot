@@ -190,12 +190,12 @@ namespace Thot {
         };
 
         struct GraphCaptureState {
-            #ifdef TORCH_CUDA_AVAILABLE
+#ifdef TORCH_CUDA_AVAILABLE
             std::unique_ptr<torch::cuda::CUDAGraph> graph{};
             std::optional<torch::cuda::CUDAStream> capture_stream{};
             torch::Dict<std::string, torch::Tensor> amp_scaler_state{};
             bool amp_scaler_state_valid{false};
-            #endif
+#endif
             bool captured{false};
             bool dirty{true};
             torch::Tensor loss_buffer{};
@@ -225,10 +225,10 @@ namespace Thot {
         struct TrainingTelemetry {
             struct DeferredScalar {
                 torch::Tensor host_tensor{};
-                #ifdef TORCH_CUDA_AVAILABLE
+#ifdef TORCH_CUDA_AVAILABLE
                 mutable std::shared_ptr<at::cuda::CUDAEvent> ready_event{};
                 int device_index{-1};
-                #endif
+#endif
                 mutable std::optional<double> cached_value{};
 
                 DeferredScalar() = default;
@@ -246,7 +246,7 @@ namespace Thot {
                         tensor = tensor.to(torch::kFloat64);
                     }
 
-                    #ifdef TORCH_CUDA_AVAILABLE
+#ifdef TORCH_CUDA_AVAILABLE
                     if (device.is_cuda()) {
                         const auto device_index = device.index();
                         auto stream = at::cuda::getCurrentCUDAStream(device_index);
@@ -258,7 +258,7 @@ namespace Thot {
                         scalar.device_index = device_index;
                         return scalar;
                     }
-                    #endif
+#endif
 
                     scalar.host_tensor = tensor.to(torch::kCPU, torch::kFloat64);
                     return scalar;
@@ -272,14 +272,14 @@ namespace Thot {
                         return false;
                     }
 
-                    #ifdef TORCH_CUDA_AVAILABLE
+#ifdef TORCH_CUDA_AVAILABLE
                     if (ready_event) {
                         if (!ready_event->query()) {
                             return false;
                         }
                         ready_event.reset();
                     }
-                    #endif
+#endif
 
                     if (!cached_value) {
                         cached_value = host_tensor.item<double>();
@@ -295,14 +295,14 @@ namespace Thot {
                         return 0.0;
                     }
 
-                    #ifdef TORCH_CUDA_AVAILABLE
+#ifdef TORCH_CUDA_AVAILABLE
                     if (ready_event) {
                         if (!ready_event->query()) {
                             ready_event->synchronize();
                         }
                         ready_event.reset();
                     }
-                    #endif
+#endif
 
                     if (!cached_value) {
                         cached_value = host_tensor.item<double>();
@@ -1673,14 +1673,14 @@ namespace Thot {
             const bool graph_mode_active = graph_execution_enabled(requested_graph_mode, phase);
             auto resolved_graph_mode = graph_mode_active ? requested_graph_mode : GraphMode::Disabled;
 
-            #ifdef TORCH_CUDA_AVAILABLE
+#ifdef TORCH_CUDA_AVAILABLE
             if (phase == GraphExecutionPhase::Inference && resolved_graph_mode == GraphMode::Capture) {
                 auto& state = graph_capture_state(phase);
                 if (state.captured && !state.dirty) {
                     resolved_graph_mode = GraphMode::Replay;
                 }
             }
-            #endif
+#endif
             options.graph_mode = resolved_graph_mode;
 
             auto execute = [&](torch::Tensor tensor, GraphMode mode) {
@@ -1690,7 +1690,7 @@ namespace Thot {
 
             if (phase == GraphExecutionPhase::Inference) {
                 if (resolved_graph_mode == GraphMode::Replay) {
-                    #ifdef TORCH_CUDA_AVAILABLE
+#ifdef TORCH_CUDA_AVAILABLE
                     auto& state = graph_capture_state(phase);
                     if (!state.captured || state.dirty || !state.graph) {
                         throw std::runtime_error(
@@ -1707,13 +1707,13 @@ namespace Thot {
                     torch::cuda::CUDAStreamGuard guard(*state.capture_stream);
                     state.graph->replay();
                     return graph_output_tensor();
-                    #else
+#else
                     throw std::runtime_error("CUDA graph replay requested but CUDA support is unavailable.");
-                    #endif
+#endif
                 }
 
                 if (resolved_graph_mode == GraphMode::Capture) {
-                    #ifdef TORCH_CUDA_AVAILABLE
+#ifdef TORCH_CUDA_AVAILABLE
                     auto& state = graph_capture_state(phase);
                     if (state.dirty) {
                         reset_graph_shape_cache(GraphMode::Capture);
@@ -1753,9 +1753,9 @@ namespace Thot {
                         state.dirty = true;
                         throw;
                     }
-                    #else
+#else
                     throw std::runtime_error("CUDA graph capture requested but CUDA support is unavailable.");
-                    #endif
+#endif
                 }
             }
 
@@ -1845,24 +1845,24 @@ namespace Thot {
 
 
             const auto output_index = resolve_output_node_index();
-            #ifndef NDEBUG
+#ifndef NDEBUG
             assert(output_index < workspace.node_buffers.size());
-            #endif
+#endif
             workspace.bind_output(output_index);
 
             for (const auto& step : execution_steps_) {
                 switch (step.kind) {
                     case ExecutionStep::Kind::Module: {
                         const auto input_index = step.module.input_index;
-                        #ifndef NDEBUG
+#ifndef NDEBUG
                         assert(step.module.layer != nullptr);
                         assert(input_index < workspace.node_buffers.size());
                         assert(step.activation_index < workspace.node_buffers.size());
-                        #endif
+#endif
                         auto input_tensor = workspace.node_buffers[input_index];
-                        #ifndef NDEBUG
+#ifndef NDEBUG
                         assert(input_tensor.defined());
-                        #endif
+#endif
                         auto* layer = step.module.layer;
                         auto output_tensor = layer->forward(input_tensor);
                         output_tensor = Activation::Details::apply(layer->activation, std::move(output_tensor));
@@ -1871,36 +1871,36 @@ namespace Thot {
                         break;
                     }
                     case ExecutionStep::Kind::Join: {
-                        #ifndef NDEBUG
+#ifndef NDEBUG
                         assert(step.join.workspace_index < workspace.join_scratch.size());
-                        #endif
+#endif
                         auto& scratch = workspace.join_scratch[step.join.workspace_index];
                         scratch.clear();
                         scratch.reserve(step.join.producers.size());
                         for (auto producer : step.join.producers) {
-                            #ifndef NDEBUG
+#ifndef NDEBUG
                             assert(producer < workspace.node_buffers.size());
-                            #endif
+#endif
                             auto value = workspace.node_buffers[producer];
-                            #ifndef NDEBUG
+#ifndef NDEBUG
                             assert(value.defined());
-                            #endif
+#endif
                             scratch.push_back(value);
                         }
 
                         torch::Tensor joined;
                         switch (step.join.policy) {
                             case MergePolicy::Strict: {
-                                #ifndef NDEBUG
+#ifndef NDEBUG
                                 assert(scratch.size() == 1);
-                                #endif
+#endif
                                 joined = scratch.front();
                                 break;
                             }
                             case MergePolicy::Broadcast: {
-                                #ifndef NDEBUG
+#ifndef NDEBUG
                                 assert(!scratch.empty());
-                                #endif
+#endif
                                 joined = scratch.front();
                                 for (std::size_t index = 1; index < scratch.size(); ++index) {
                                     joined = joined + scratch[index];
@@ -1908,18 +1908,18 @@ namespace Thot {
                                 break;
                             }
                             case MergePolicy::Stack: {
-                                #ifndef NDEBUG
+#ifndef NDEBUG
                                 assert(!scratch.empty());
-                                #endif
+#endif
                                 const auto dimension = step.join.concat_dimension.value_or(1);
                                 joined = torch::cat(scratch, dimension);
                                 break;
                             }
                         }
 
-                        #ifndef NDEBUG
+#ifndef NDEBUG
                         assert(step.activation_index < workspace.node_buffers.size());
-                        #endif
+#endif
                         auto& destination = workspace.node_buffers[step.activation_index];
                         copy_tensor_into(destination, joined, workspace_tensor_policy(graph_mode));
 
@@ -1928,13 +1928,13 @@ namespace Thot {
                     }
                     case ExecutionStep::Kind::Output: {
                         const auto upstream_index = step.output.input_index;
-                        #ifndef NDEBUG
+#ifndef NDEBUG
                         assert(upstream_index < workspace.node_buffers.size());
-                        #endif
+#endif
                         auto upstream_tensor = workspace.node_buffers[upstream_index];
-                        #ifndef NDEBUG
+#ifndef NDEBUG
                         assert(upstream_tensor.defined());
-                        #endif
+#endif
                         copy_tensor_into(workspace.output, upstream_tensor, workspace_tensor_policy(graph_mode));
                         workspace.bind_output(step.activation_index);
                         break;
@@ -1942,7 +1942,7 @@ namespace Thot {
                 }
 
 
-                #ifndef NDEBUG
+#ifndef NDEBUG
                 if (step.kind == ExecutionStep::Kind::Module) {
                     const auto node_index = step.activation_index;
                     if (node_index < compiled_nodes_.size()) {
@@ -1953,11 +1953,11 @@ namespace Thot {
                         }
                     }
                 }
-                #endif
+#endif
             }
-            #ifndef NDEBUG
+#ifndef NDEBUG
             assert(output_index < workspace.node_buffers.size());
-            #endif
+#endif
 
             auto output_tensor = workspace.node_buffers[output_index];
             if (!output_tensor.defined()) {
@@ -1983,17 +1983,39 @@ namespace Thot {
             return model_name_;
         }
 
-        void save(const std::filesystem::path& directory) const
-        {
+        void save(const std::filesystem::path& directory) const {
             namespace fs = std::filesystem;
             if (directory.empty()) {
                 throw std::invalid_argument("Model::save requires a non-empty directory path.");
             }
 
-            fs::create_directories(directory);
+            auto target_dir = directory / model_name();
 
-            const auto architecture_path = directory / "architecture.json";
-            const auto parameters_path = directory / "parameters.binary";
+            if (fs::exists(target_dir)) {
+                std::cout << "\aDirectory '" << target_dir.string() << "' already exists. Overwrite? [y/N]: ";
+                std::string response;
+                std::getline(std::cin, response);
+
+                if (response.empty() || (response[0] != 'y' && response[0] != 'Y')) {
+                    int counter = 1;
+                    while (true) {
+                        auto candidate = directory / (model_name() + "_" + std::to_string(counter));
+                        if (!fs::exists(candidate)) {
+                            target_dir = candidate;
+                            break;
+                        }
+                        ++counter;
+                    }
+                    std::cout << "Saving model as: " << target_dir.string() << std::endl;
+                } else {
+                    std::cout << "Overwriting existing model in: " << target_dir.string() << std::endl;
+                }
+            }
+
+            fs::create_directories(target_dir);
+
+            const auto architecture_path = target_dir / "architecture.json";
+            const auto parameters_path   = target_dir / "parameters.binary";
 
             Common::SaveLoad::PropertyTree architecture;
             architecture.put("name", model_name());
@@ -2002,14 +2024,16 @@ namespace Thot {
             try {
                 Common::SaveLoad::write_json_file(architecture_path, architecture);
             } catch (const std::exception& error) {
-                throw std::runtime_error(std::string("Failed to write architecture description to '")
-                                         + architecture_path.string() + "': " + error.what());
+                throw std::runtime_error(
+                    std::string("Failed to write architecture description to '")
+                    + architecture_path.string() + "': " + error.what());
             }
 
             torch::serialize::OutputArchive archive;
             torch::nn::Module::save(archive);
             archive.save_to(parameters_path.string());
         }
+
 
         void load(const std::filesystem::path& directory)
         {

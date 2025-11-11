@@ -49,7 +49,7 @@ configured dimension.【[Join policy runtime impl](../../../src/core.hpp#L1891-L
 ### Example from the test suite
 The CIFAR example shows how to rewire a staged vision encoder by naming layers
 and explicitly linking the branches into a Vision Transformer head, while also
-opting into CUDA graph capture for the final plan.【[CIFAR routing example impl](../../../test/cifar.cpp#L144-L165)】
+opting into CUDA graph capture for the final plan.【[CIFAR routing example impl](../../../test/classification/images/cifar10.cpp#L144-L165)】
 
 ## Worked example
 The snippet below fuses local configuration with custom routing. A dedicated
