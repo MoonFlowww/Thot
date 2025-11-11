@@ -8,13 +8,7 @@ signature (activation defaults to `Identity`, initialization to
 summarises every layer available in `src/layer/layer.hpp` and details the fields
 of their option structures.
 
-HyperLinks:
-- [Activations](../activation/README.md)
-- [Initialization](../initialization/README.md)
-- [Local](../local/README.md)
 
-
-- [Introduction](../../README.md)
 ## Linear
 
 ### `Thot::Layer::FC(...)`
@@ -247,3 +241,12 @@ Every layer descriptor returned by these helpers can be passed to
 `Model::add()` or any block container. Combine them with activations,
 initializers, and local overrides to tailor the computation graph to your
 experiment.
+
+
+#### HyperLinks related:
+- [Introduction](../../README.md) (`model.add()`)
+- [Activations](../activation/README.md) (`Thot::Activation::*`)
+- [Initialization](../initialization/README.md) (`Thot::Initialization::*`)
+- [Local](../local/README.md) (`model.links()`)
+
+
