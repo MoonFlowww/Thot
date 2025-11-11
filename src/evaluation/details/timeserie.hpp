@@ -27,7 +27,7 @@ namespace Thot::Evaluation::Details::Timeseries {
     struct Descriptor { };
 
     struct Options {
-        std::size_t batch_size{0};
+        std::size_t batch_size{8};
         std::size_t buffer_vram{0};
         bool print_summary{true};
         std::ostream* stream{&std::cout};

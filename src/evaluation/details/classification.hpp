@@ -30,7 +30,7 @@ namespace Thot::Evaluation::Details::Classification {
     struct Descriptor { };
 
     struct Options {
-        std::size_t batch_size{0};
+        std::size_t batch_size{8};
         std::size_t buffer_vram{0};
         std::size_t calibration_bins{15};
         bool print_summary{true};

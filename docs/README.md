@@ -97,18 +97,9 @@ Training is initiated with `model.train`, which accepts tensors and a
 splits, AMP, and other runtime settings.
 
 ```cpp
-Thot::TrainOptions train_options{};
-train_options.epoch = epochs;
-train_options.batch_size = B;
-train_options.shuffle = true;
-train_options.graph_mode = Thot::GraphMode::Capture;
-train_options.restore_best_state = true;
-train_options.enable_amp = true;
-train_options.test = std::make_pair(validation_images, validation_labels);
-
-model.train(train_images, train_labels, {.epoch=120, .batch_size=128, .test=std::make_pair});
+model.train(train_images, train_labels, {.epoch=120, .batch_size=128, .test={x_val,y_val}});
 ```
-
+Full details of parameters and process in [Train](sub/training/README.md)
 ## Evaluation and Metrics
 
 Post-training evaluation is performed with `model.evaluate`, which accepts the test
