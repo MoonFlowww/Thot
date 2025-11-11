@@ -1,10 +1,9 @@
 # Thot Framework Overview
 
 Thot is a modular C++ deep learning framework built on top of LibTorch. It provides
-strongly-typed building blocks for defining neural networks, composing data
+strongly-typed building blocks for prototyping neural networks, composing data
 pipelines, training models, and evaluating their performance. This guide walks you
-through the core primitives and shows how to assemble end-to-end experiments such
-as the CIFAR-10 example in `test/cifar.cpp`.
+through the core primitives and shows how to assemble end-to-end experiments
 
 ## Creating a Model
 
