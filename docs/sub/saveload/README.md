@@ -27,7 +27,7 @@ update. During `Model::load`:
 Because descriptors are stored verbatim, saving after calling
 `Model::set_optimizer`, `Model::set_loss`, or attaching [Regularization](../regularization/README.md)
 ensures checkpoints carry full training intent. Tensor devices are preserved; if
-you wish to load on a different device, call `model.to_device(...)` after
+you wish to load on a different device, call `model.use_cuda(...)` after
 loading.
 
 For reproducible experiments, pair checkpoints with telemetry exported from
