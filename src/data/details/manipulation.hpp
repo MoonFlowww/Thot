@@ -16,6 +16,11 @@
 
 #include <torch/torch.h>
 
+
+#include "manipulation/normalization/ehlers.hpp"
+#include "manipulation/normalization/power.hpp"
+#include "manipulation/normalization/zscore.hpp"
+
 namespace Thot::Data::Manipulation {
     namespace Details {
         inline bool augmentation_enabled(const std::optional<bool>& data_augment) {

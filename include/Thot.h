@@ -8,8 +8,7 @@
 
 #include "../src/attention/attention.hpp"
 #include "../src/block/block.hpp"
-#include "../src/data/details/load.hpp"
-#include "../src/data/details/manipulation.hpp"
+#include "../src/data/data.hpp"
 
 
 

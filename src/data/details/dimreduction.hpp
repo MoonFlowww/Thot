@@ -37,7 +37,7 @@ namespace Thot::Data::DimReduction {
         }
 
         inline double spectral_norm(const torch::Tensor& tensor) {
-            auto svd = torch::linalg::svdvals(tensor);
+            auto svd = torch::linalg_svdvals(tensor);
             if (svd.numel() == 0) {
                 return 0.0;
             }
@@ -92,7 +92,7 @@ namespace Thot::Data::DimReduction {
 
         while (iteration < max_iterations && error > tolerance) {
             const auto current = data - S + (1.0 / mu) * Y;
-            auto svd = torch::linalg::svd(current, /*full_matrices=*/false);
+            auto svd = torch::linalg_svd(current, /*full_matrices=*/false);
             auto U = std::get<0>(svd);
             auto Sigma = std::get<1>(svd);
             auto Vh = std::get<2>(svd);

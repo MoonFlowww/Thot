@@ -87,8 +87,8 @@
 #include "block/block.hpp"
 #include "layer/details/positional_encoding.hpp"
 
-#include "../src/regularization/regularization.hpp"
-#include "../src/regularization/apply.hpp"
+#include "regularization/regularization.hpp"
+#include "regularization/apply.hpp"
 #include "calibration/calibration.hpp"
 
 namespace Thot {
