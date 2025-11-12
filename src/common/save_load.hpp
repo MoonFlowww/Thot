@@ -1877,6 +1877,21 @@ namespace Thot::Common::SaveLoad {
                     tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
                     tree.put("options.use_weight", options.use_weight);
                     tree.put("options.beta", options.beta);
+                } else if constexpr (std::is_same_v<DescriptorType, Loss::Details::KLDivDescriptor>) {
+                    tree.put("type", "smooth_l1");
+                    tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
+                    tree.put("options.log_target", options.log_target);
+                    tree.put("options.use_batch_mean", options.use_batch_mean);
+                    tree.put("options.log_softmax_dim", options.log_softmax_dim);
+                    tree.put("options.prediction_is_log", options.prediction_is_log);
+                } else if constexpr (std::is_same_v<DescriptorType, Loss::Details::MarginRankingDescriptor>) {
+                    tree.put("type", "smooth_l1");
+                    tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
+                    tree.put("options.use_weight", options.margin);
+                } else if constexpr (std::is_same_v<DescriptorType, Loss::Details::CosineEmbeddingDescriptor>) {
+                    tree.put("type", "smooth_l1");
+                    tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
+                    tree.put("options.use_weight", options.margin);
                 } else {
                     static_assert(sizeof(DescriptorType) == 0, "Unsupported loss descriptor supplied.");
                 }

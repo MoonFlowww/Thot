@@ -1,5 +1,8 @@
 #ifndef THOT_LOSS_KL_HPP
 #define THOT_LOSS_KL_HPP
+#include <optional>
+#include <stdexcept>
+
 #include <torch/torch.h>
 
 #include "reduction.hpp"
@@ -9,25 +12,33 @@ namespace Thot::Loss::Details {
         Reduction reduction{Reduction::Mean};
         bool log_target{false};
         bool use_batch_mean{false};
+        int64_t log_softmax_dim{1};
+        bool prediction_is_log{false};
     };
 
     struct KLDivDescriptor {
         KLDivOptions options{};
     };
 
-    inline torch::Tensor compute(const KLDivDescriptor& descriptor, const torch::Tensor& prediction, const torch::Tensor& target, int64_t dim = 1, bool prediction_is_log = false)  {
-        torch::Tensor input = prediction;
-        if (!prediction_is_log) {
-            input = torch::nn::functional::log_softmax(prediction, torch::nn::functional::LogSoftmaxFuncOptions(dim));
+    inline torch::Tensor compute(const KLDivDescriptor& descriptor, const torch::Tensor& prediction, const torch::Tensor& target,
+                                 const std::optional<torch::Tensor>& weight = std::nullopt)  {
+        if (weight && weight->defined()) {
+            throw std::invalid_argument("KLDiv loss does not support weighted reduction.");
         }
 
-        // Ensure target is floating and on same device/dtype as input.
-        torch::Tensor tgt = target.to(input.dtype()).to(input.device());
+        auto input = prediction;
+        if (!descriptor.options.prediction_is_log) {
+            auto log_softmax_opts = torch::nn::functional::LogSoftmaxFuncOptions(descriptor.options.log_softmax_dim);
+            input = torch::nn::functional::log_softmax(prediction, log_softmax_opts);
+        }
+
+        auto tgt = target.to(input.device(), input.scalar_type());
 
         // If target is given as class indices (int64), convert to one-hot prob
         if (tgt.dtype() == torch::kLong) {
+            const auto dim = descriptor.options.log_softmax_dim;
             const auto num_classes = input.size(dim);
-            tgt = torch::nn::functional::one_hot(tgt, num_classes).to(input.dtype());
+            tgt = torch::one_hot(tgt, num_classes).to(input.scalar_type());
             tgt = tgt / tgt.sum(dim, /*keepdim=*/true).clamp_min(1e-12);
         }
 

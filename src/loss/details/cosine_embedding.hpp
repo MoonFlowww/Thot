@@ -53,7 +53,7 @@ namespace Thot::Loss::Details {
                             descriptor.options.reduction));
 
         // y should be 1D with {-1, +1}
-        auto y = target;
+        auto y = target.to(x1.device(), x1.scalar_type());
         if (y.dim() != 1) {
             y = y.reshape({-1});
         }

@@ -58,10 +58,14 @@ classes before saving checkpoints with [Save & Load](../saveload/README.md).
 
 Specialised for regression and forecasting:
 
-- Supports error-based metrics (`MAE`, `RMSE`, `SMAPE`, `MAPE`), statistical
-  tests (`LjungBox`, `DurbinWatson`, `JarqueBera`), distributional distances
-  (`Wasserstein`, `MMD`), and probabilistic scores (`CRPS`, `Pinball`,
-  `PredictionIntervalCoverage`).
+- Supports the currently implemented error and variance metrics:
+  `MeanAbsoluteError`, `MeanSquaredError`, `RootMeanSquaredError`,
+  `MeanBiasError`, `MeanAbsolutePercentageError`, `MeanPercentageError`,
+  `SymmetricMeanAbsolutePercentageError`, `WeightedAbsolutePercentageError`,
+  `MedianAbsoluteError`, `MedianRelativeAbsoluteError`,
+  `GeometricMeanRelativeAbsoluteError`, `MeanAbsoluteScaledError`,
+  `RootMeanSquaredScaledError`, `R2Score`, `ExplainedVariance`, and
+  `BrierScore`.
 - Tracks the number of evaluated series and individual time points inside the
   `Report` so you can normalise metrics manually when composing multiple runs.
 - Ensures the model is in evaluation mode and restores the training flag after

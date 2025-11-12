@@ -22,7 +22,7 @@ implementation at compile time through `std::variant` visitation.
 | --- | --- | --- |
 | `Loss::MSE` | `reduction`, `use_weight` | Falls back to manual reduction when weights are provided. |
 | `Loss::MAE` | `reduction`, `use_weight` | Absolute error counterpart to MSE. |
-| `Loss::SmoothL1` | `reduction`, `beta`, `threshold` | Hybrid between L1 and L2 with configurable transition. |
+| `Loss::SmoothL1` | `reduction`, `beta`, `use_weight` | Hybrid between L1 and L2 with configurable transition. |
 | `Loss::CrossEntropy` | `reduction`, `use_weight`, `label_smoothing` | Supports class weighting and label smoothing with runtime validation. |
 | `Loss::BCEWithLogits` | `reduction`, `use_weight`, `use_pos_weight` | Combines sigmoid and binary cross-entropy for numerical stability. |
 | `Loss::NegativeLogLikelihood` | `reduction`, `ignore_index` | Works with log-probabilities and optional class masking. |

@@ -23,10 +23,10 @@ namespace Thot::Loss {
         Details::MSEDescriptor,
         Details::CrossEntropyDescriptor,
         Details::BCEWithLogitsDescriptor,
-        //Details::CosineEmbeddingDescriptor,
-        //Details::KLDivDescriptor,
+        Details::CosineEmbeddingDescriptor,
+        Details::KLDivDescriptor,
         Details::MAEDescriptor,
-        //Details::MarginRankingDescriptor,
+        Details::MarginRankingDescriptor,
         Details::NegativeLogLikelihoodDescriptor,
         Details::SmoothL1Descriptor>;
 
