@@ -2462,7 +2462,6 @@ namespace Thot::Common::SaveLoad {
 
                     tree.add_child("layers", layers);
                     tree.put("repeats", static_cast<std::uint64_t>(concrete.repeats));
-                    tree.put("skip.use_projection", concrete.skip.use_projection);
 
                     if (concrete.skip.projection)
                         tree.add_child("skip.projection", serialize_layer_descriptor(*concrete.skip.projection));
@@ -2746,7 +2745,6 @@ namespace Thot::Common::SaveLoad {
                 descriptor.layers.push_back(deserialize_layer_descriptor(node.second, context + " residual layer"));
             }
             descriptor.repeats = static_cast<std::size_t>(Detail::get_numeric<std::uint64_t>(tree, "repeats", context));
-            descriptor.skip.use_projection = Detail::get_boolean(tree, "skip.use_projection", context);
             if (const auto projection = tree.get_child_optional("skip.projection")) {
                 descriptor.skip.projection = deserialize_layer_descriptor(*projection, context + " residual projection");
             }
