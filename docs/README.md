@@ -12,7 +12,7 @@ on CPU or GPU depending on CUDA availability.
 
 ```cpp
 Thot::Model model("_Network_Name_");
-model.to_device(torch::cuda::is_available()); // accept true || false
+model.use_cuda(torch::cuda::is_available()); // accept true || false
 ```
 
 
