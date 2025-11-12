@@ -18,7 +18,7 @@ model.to_device(torch::cuda::is_available()); // accept true || false
 The model holds a directed acyclic graph of computational blocks and layers. You can
 construct it incrementally with `.add()`.
 
-## Adding Blocks and Layers
+## Adding Layers and Blocks
 
 Each `.add()` call can be tagged with an identifier to make graph connections clearer.
 
