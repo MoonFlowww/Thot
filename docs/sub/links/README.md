@@ -17,7 +17,7 @@ join buffers:
 
 When the same join is mentioned multiple times, the compiler verifies that the
 merge policy and concatenation dimension stay consistent, ensuring that shared
-aggregation points behave predictably.【[Code: Join policy impl](../../../src/core.hpp#L1891-L1916)】
+aggregation points behave predictably. [Code: Join policy impl](../../../src/core.hpp#L1891-L1916)
 
 ### Building the graph
 `Model::links` accepts either the legacy `(specs, bool)` signature or the newer
