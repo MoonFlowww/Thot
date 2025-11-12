@@ -7,7 +7,7 @@
 
 int xmain() {
     Thot::Model model("Debug_CIFAR");
-    model.to_device(torch::cuda::is_available());
+    model.use_cuda(torch::cuda::is_available());
 
     const int64_t N = 200000;
     const int64_t B = std::pow(2,7);
