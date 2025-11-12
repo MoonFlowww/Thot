@@ -20,7 +20,7 @@
  *  - Expose helper APIs to retrieve training, evaluation, calibration and
  *    monitoring routines pre-bound to the compile-time configuration.
  */
-
+#include <iostream>
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -1679,12 +1679,14 @@ namespace Thot {
             return total;
         }
 
-        Model& to_device(bool use_cuda = true)
-        {
-            if (use_cuda) {
-                if (!torch::cuda::is_available()) {
-                    throw std::runtime_error("CUDA device requested but is unavailable.");
-                }
+        Model& use_cuda(bool use_cuda = true) {
+            const auto cuda_available = torch::cuda::is_available();
+
+            if (use_cuda && !cuda_available) {
+                std::cerr << "CUDA requested but unavailable (from: torch::cuda::is_available()). Falling back to CPU." << std::endl;
+            }
+
+            if (use_cuda && cuda_available) {
                 device_ = torch::Device(torch::kCUDA, /*index=*/0);
             } else {
                 device_ = torch::Device(torch::kCPU, /*index=*/0);
@@ -1697,13 +1699,11 @@ namespace Thot {
         [[nodiscard]] const torch::Device& device() const noexcept { return device_; }
 
 
-        [[nodiscard]] torch::Tensor forward(torch::Tensor input)
-        {
+        [[nodiscard]] torch::Tensor forward(torch::Tensor input) {
             return forward_internal(std::move(input), {}, nullptr, nullptr);
         }
 
-        [[nodiscard]] torch::Tensor forward(torch::Tensor input, ForwardOptions options)
-        {
+        [[nodiscard]] torch::Tensor forward(torch::Tensor input, ForwardOptions options) {
             return forward_internal(std::move(input), std::move(options), nullptr, nullptr);
         }
 
@@ -1717,20 +1717,19 @@ namespace Thot {
             torch::nn::Module* target_module,
             ForwardOptions options = {})
         {
-            if (target_module == nullptr) {
+            if (target_module == nullptr)
                 throw std::invalid_argument("forward_with_activation_capture requires a valid module pointer.");
-            }
+            
 
             auto* layer = resolve_registered_layer(target_module);
-            if (layer == nullptr) {
+            if (layer == nullptr)
                 throw std::runtime_error("Requested module is not part of the model graph.");
-            }
+            
 
             torch::Tensor captured_activation;
             auto logits = forward_internal(std::move(input), std::move(options), layer, &captured_activation);
-            if (!captured_activation.defined()) {
+            if (!captured_activation.defined())
                 throw std::runtime_error("Failed to capture activation for the requested module.");
-            }
 
             ForwardActivationCaptureResult result{};
             result.logits = std::move(logits);
