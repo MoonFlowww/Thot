@@ -193,7 +193,142 @@ int main() {
 
     }
 
+    Thot::Model model("Etth1_Hanxel");
+    model.to_device(torch::cuda::is_available());
 
+
+    model.add(Thot::Layer::FC({x1.size(0), 128, true},
+                              Thot::Activation::SiLU,
+                              Thot::Initialization::HeNormal),
+              "token_projection");
+    model.add(Thot::Layer::HardDropout({.probability = 0.05f}), "proj_dropout");
+    model.add(Thot::Layer::FC({128, 128, true},
+                              Thot::Activation::SiLU,
+                              Thot::Initialization::HeNormal),
+              "token_mixer");
+    model.add(Thot::Layer::HardDropout({.probability = 0.05f}), "mixer_dropout");
+
+    Thot::Block::Details::Transformer::Classic::EncoderOptions encoder_options{};
+    encoder_options.layers = 4;
+    encoder_options.embed_dim = 128;
+    encoder_options.attention.num_heads = 8;
+    encoder_options.attention.dropout = 0.1;
+    encoder_options.feed_forward.mlp_ratio = 3.5;
+    encoder_options.feed_forward.activation = Thot::Activation::SiLU;
+    encoder_options.dropout = 0.1;
+    encoder_options.positional_encoding.type = Thot::Layer::Details::PositionalEncodingType::Sinusoidal;
+    encoder_options.positional_encoding.max_length = static_cast<std::size_t>(x1.size(1));
+    encoder_options.positional_encoding.dropout = 0.05;
+
+    model.add(Thot::Block::Transformer::Classic::Encoder(encoder_options), "encoder");
+    model.add(Thot::Layer::Reduce({.op = Thot::Layer::ReduceOp::Mean, .dims = {1}, .keep_dim = false}),
+              "token_pool");
+
+    std::vector<Thot::Layer::Descriptor> residual_branch{
+        Thot::Layer::FC({128, 512, true}, Thot::Activation::SiLU, Thot::Initialization::HeNormal),
+        Thot::Layer::HardDropout({.probability = 0.2f}),
+        Thot::Layer::FC({512, 128, true}, Thot::Activation::Identity, Thot::Initialization::XavierUniform),
+    };
+    model.add(Thot::Block::Residual(residual_branch,
+                                    /*repeats=*/3,
+                                    {},
+                                    {.final_activation = Thot::Activation::SiLU, .dropout = 0.1}),
+              "residual_core");
+
+    model.add(Thot::Layer::FC({128, 256, true},
+                              Thot::Activation::SiLU,
+                              Thot::Initialization::HeNormal),
+              "head_fc1");
+    model.add(Thot::Layer::HardDropout({.probability = 0.2f}), "head_dropout");
+    model.add(Thot::Layer::FC({256, 1, true},
+                              Thot::Activation::Identity,
+                              Thot::Initialization::XavierUniform),
+              "out");
+
+    model.links({
+        {Thot::Port::Module("@input"), Thot::Port::Module("token_projection")},
+        {Thot::Port::Module("token_projection"), Thot::Port::Module("proj_dropout")},
+        {Thot::Port::Module("proj_dropout"), Thot::Port::Module("token_mixer")},
+        {Thot::Port::Module("token_mixer"), Thot::Port::Module("mixer_dropout")},
+        {Thot::Port::Module("mixer_dropout"), Thot::Port::Module("encoder")},
+        {Thot::Port::Module("encoder"), Thot::Port::Module("token_pool")},
+        {Thot::Port::Module("token_pool"), Thot::Port::Module("residual_core")},
+        {Thot::Port::Module("residual_core"), Thot::Port::Module("head_fc1")},
+        {Thot::Port::Module("head_fc1"), Thot::Port::Module("head_dropout")},
+        {Thot::Port::Module("head_dropout"), Thot::Port::Module("out")},
+        {Thot::Port::Module("out"), Thot::Port::Module("@output")},
+    });
+
+    const auto mse_descriptor = Thot::Loss::MSE({});
+    model.set_loss(mse_descriptor);
+    model.set_optimizer(Thot::Optimizer::AdamW({.learning_rate = 1e-3, .weight_decay = 1e-4}));
+
+    model.train();
+
+    const int64_t epochs = 200;
+    const int64_t batch_size = 128;
+    const auto sample_count = train_sequence.size(0);
+
+    for (int64_t epoch = 0; epoch < epochs; ++epoch) {
+        auto permutation = torch::randperm(sample_count, torch::TensorOptions().dtype(torch::kLong)).to(device);
+        double epoch_loss = 0.0;
+        int64_t batch_counter = 0;
+
+        for (int64_t start = 0; start < sample_count; start += batch_size) {
+            const auto end = std::min<int64_t>(start + batch_size, sample_count);
+            auto indices = permutation.index({torch::indexing::Slice(start, end)});
+
+            auto batch_inputs = train_sequence.index_select(0, indices);
+            auto batch_targets = train_targets.index_select(0, indices);
+
+            model.zero_grad();
+            auto predictions = model.forward(batch_inputs);
+            auto loss = Thot::Loss::Details::compute(mse_descriptor, predictions, batch_targets);
+            loss.backward();
+            torch::nn::utils::clip_grad_norm_(model.parameters(), 1.0);
+            model.step();
+
+            epoch_loss += loss.item<double>();
+            ++batch_counter;
+        }
+
+        if ((epoch + 1) % 20 == 0 || epoch == 0) {
+            auto train_pred = model.forward(train_sequence).squeeze(1);
+            auto train_target_flat = train_targets.squeeze(1);
+            auto train_mse = torch::mse_loss(train_pred, train_target_flat).item<double>();
+            auto train_mae = torch::linalg_vector_norm(train_pred - train_target_flat, 1).item<double>() /
+                             static_cast<double>(train_target_flat.size(0));
+
+            std::cout << "Epoch " << (epoch + 1) << "/" << epochs
+                      << " | Avg batch MSE: " << (epoch_loss / static_cast<double>(batch_counter))
+                      << " | Train MSE: " << train_mse
+                      << " | Train MAE: " << train_mae << std::endl;
+
+            if (test_sequence.defined() && test_sequence.size(0) > 0) {
+                torch::NoGradGuard no_grad;
+                model.eval();
+                auto eval_predictions = model.forward(test_sequence).squeeze(1);
+                auto eval_mse = torch::mse_loss(eval_predictions, test_targets.squeeze(1)).item<double>();
+                auto eval_mae = torch::linalg_vector_norm(eval_predictions - test_targets.squeeze(1), 1).item<double>() /
+                                 static_cast<double>(test_targets.size(0));
+                std::cout << "    Test MSE: " << eval_mse << " | Test MAE: " << eval_mae << std::endl;
+                model.train();
+            }
+        }
+    }
+
+    if (test_sequence.defined() && test_sequence.size(0) > 0) {
+        torch::NoGradGuard no_grad;
+        model.eval();
+        auto eval_predictions = model.forward(test_sequence).squeeze(1);
+        auto eval_mse = torch::mse_loss(eval_predictions, test_targets.squeeze(1)).item<double>();
+        auto eval_rmse = std::sqrt(eval_mse);
+        auto eval_mae = torch::linalg_vector_norm(eval_predictions - test_targets.squeeze(1), 1).item<double>() /
+                         static_cast<double>(test_targets.size(0));
+
+        std::cout << "Final test metrics -> MSE: " << eval_mse << ", RMSE: " << eval_rmse
+                  << ", MAE: " << eval_mae << std::endl;
+    }
     std::cout << (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now()-t1)).count() << "ms" << std::endl;
     return 0;
 }
