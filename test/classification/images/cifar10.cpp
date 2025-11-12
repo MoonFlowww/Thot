@@ -45,8 +45,7 @@ int xmain() {
             Thot::Activation::SiLU),
         Thot::Layer::Conv2d({128, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true},
             Thot::Activation::Identity, Thot::Initialization::HeNormal)
-    }, 1,
-    {.use_projection = true, .projection = Thot::Layer::Conv2d({64, 128, {1, 1}, {2, 2}, {0, 0}, {1, 1}, 1, false},
+    }, 1, {.projection = Thot::Layer::Conv2d({64, 128, {1, 1}, {2, 2}, {0, 0}, {1, 1}, 1, false},
                 Thot::Activation::Identity, Thot::Initialization::HeNormal)},
         { .final_activation = Thot::Activation::SiLU }));
 
