@@ -16,7 +16,6 @@
 
 namespace Thot::Block::Details {
     struct ResidualSkipOptions {
-        bool use_projection{false};
         std::optional<::Thot::Layer::Descriptor> projection{};
     };
 
@@ -57,12 +56,7 @@ namespace Thot::Block::Details {
                 block_layers_.emplace_back(std::move(registered_layers));
             }
 
-            const bool use_projection = descriptor.skip.use_projection || descriptor.skip.projection.has_value();
-            if (use_projection) {
-                if (!descriptor.skip.projection.has_value()) {
-                    throw std::invalid_argument(
-                        "Residual projection requested but no descriptor was provided.");
-                }
+            if (descriptor.skip.projection.has_value()) {
                 projection_layer_ = ::Thot::Layer::Details::build_registered_layer(
                     *this, *descriptor.skip.projection, module_index++);
             }
