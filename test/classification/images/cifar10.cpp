@@ -12,9 +12,9 @@ int xmain() {
     const int64_t N = 200000;
     const int64_t B = std::pow(2,7);
     const int64_t epochs = 20;
-
     const int64_t steps_per_epoch = (N + B - 1) / B;
 
+    
     model.add(Thot::Block::Sequential({
         Thot::Layer::Conv2d({3, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false},
             Thot::Activation::Identity, Thot::Initialization::HeNormal),
@@ -99,8 +99,8 @@ int xmain() {
 
     
 
-    auto [train_images, train_labels, test_images, test_labels] = Thot::Data::Load::CIFAR10("/home/moonfloww/Projects/DATASETS/CIFAR10", 1.f, 1.f, true);
-    auto [validation_images, validation_labels] = Thot::Data::Manipulation::Fraction(test_images, test_labels, 0.1f);
+    at::Tensor [train_images, train_labels, test_images, test_labels] = Thot::Data::Load::CIFAR10("/home/moonfloww/Projects/DATASETS/CIFAR10", 1.f, 1.f, true);
+    at::Tensor [validation_images, validation_labels] = Thot::Data::Manipulation::Fraction(test_images, test_labels, 0.1f);
     Thot::Data::Check::Size(train_images, "Raw");
     Thot::Plot::Data::Image(train_images, {1,2,3,4,5,6,7}); //idx
 
