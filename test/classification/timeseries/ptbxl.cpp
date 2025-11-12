@@ -73,13 +73,13 @@ int tmain()
         model.add(Thot::Layer::FC({ 128, 5, true }, Thot::Activation::Identity, Thot::Initialization::HeNormal), "end");
 
         model.links({
-            {Thot::Port::Module("@input"), Thot::Port::Module("lstm")},
+            {Thot::Port::Input("@input"), Thot::Port::Module("lstm")},
             {Thot::Port::Module("lstm"),   Thot::Port::Module("Reduc")},
             {Thot::Port::Module("Reduc"),  Thot::Port::Module("SD1")},
             {Thot::Port::Module("SD1"),    Thot::Port::Module("fc1")},
             {Thot::Port::Module("fc1"),    Thot::Port::Module("HD1")},
             {Thot::Port::Module("HD1"),    Thot::Port::Module("end")},
-            {Thot::Port::Module("end"),    Thot::Port::Module("@output")}
+            {Thot::Port::Module("end"),    Thot::Port::Output("@output")}
         }, {.enable_graph_capture = true});
 
 
@@ -95,17 +95,6 @@ int tmain()
         model.set_loss(Thot::Loss::CrossEntropy({.label_smoothing = 0.05f}));
     }
 
-    Thot::TrainOptions train_options{};
-    train_options.epoch = static_cast<std::size_t>(epochs);
-    train_options.batch_size = static_cast<std::size_t>(batch_size);
-    train_options.shuffle = false;
-    train_options.buffer_vram = 0;
-    train_options.graph_mode = Thot::GraphMode::Capture;
-    train_options.restore_best_state = true;
-    train_options.enable_amp = true;
-    train_options.memory_format = torch::MemoryFormat::Contiguous;
-    train_options.test = std::make_pair(validation_signals, dataset.validation.labels);
-
     if (!load_existing_model)
         model.train(train_signals, dataset.train.labels, {
             .epoch = static_cast<std::size_t>(epochs),
@@ -113,7 +102,7 @@ int tmain()
             .shuffle = true,
             .buffer_vram = 0,
             .restore_best_state = true,
-            .test = std::make_pair(validation_signals, dataset.validation.labels),
+            .test = std::vector<at::Tensor>{validation_signals, dataset.validation.labels},
             .graph_mode = Thot::GraphMode::Capture,
             .enable_amp = true,
             .memory_format = torch::MemoryFormat::Contiguous,
