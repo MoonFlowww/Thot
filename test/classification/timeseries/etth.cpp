@@ -7,6 +7,11 @@
  * 2) Hanxel Decomp ([1]Trend, [2]Cycle, [3]Residual) ->
  */
 
+struct SSAGroup {
+    at::Tensor trend;
+    at::Tensor cycle;
+    at::Tensor residual;
+};
 
 
 at::Tensor autocorrelation_fft(const at::Tensor& x_in, int max_lag = -1) {
@@ -99,6 +104,71 @@ std::vector<at::Tensor> hankel_decomposition(const at::Tensor& x, const std::vec
     }
     return hankels;
 }
+SSAGroup ssa_from_hankel(const at::Tensor& H, int trend_rank = 1, int cycle_rank = 2) {
+    // Compute thin SVD
+    auto svd = torch::linalg_svd(H, /*full_matrices=*/false);
+    auto U = std::get<0>(svd);
+    auto S = std::get<1>(svd);
+    auto V = std::get<2>(svd);
+
+    auto make_part = [&](int start, int end) {
+        if (start >= S.size(0)) return torch::zeros_like(H);
+        end = std::min<int64_t>(end, S.size(0));
+        auto Usub = U.index({torch::indexing::Slice(), torch::indexing::Slice(start, end)});
+        auto Ssub = torch::diag(S.index({torch::indexing::Slice(start, end)}));
+        auto Vsub = V.index({torch::indexing::Slice(start, end)});
+        return Usub.matmul(Ssub).matmul(Vsub);
+    };
+
+    auto H_trend = make_part(0, trend_rank);
+    auto H_cycle = make_part(trend_rank, trend_rank + cycle_rank);
+    auto H_resid = H - H_trend - H_cycle;
+
+    return {H_trend, H_cycle, H_resid};
+}
+
+at::Tensor diagonal_average(const at::Tensor& H) {
+    const auto L = H.size(0);
+    const auto K = H.size(1);
+    const int64_t T = L + K - 1;
+
+    auto y = torch::zeros({T}, H.options());
+    auto counts = torch::zeros({T}, H.options());
+
+    auto H_cpu = H.to(torch::kCPU);
+    const float* data = H_cpu.data_ptr<float>();
+
+    for (int64_t i = 0; i < L; ++i)
+        for (int64_t j = 0; j < K; ++j) {
+            int64_t t = i + j;
+            y[t] += data[i * K + j];
+            counts[t] += 1.0f;
+        }
+
+    y = y / counts;
+    return y;
+}
+
+std::vector<at::Tensor> extract_trend_cycle_residual(const at::Tensor& x, const std::vector<int64_t>& taus) {
+    auto hankels = hankel_decomposition(x, taus);
+    std::vector<at::Tensor> results;
+    results.reserve(hankels.size());
+
+    for (const auto& H : hankels) {
+        auto parts = ssa_from_hankel(H);
+        auto trend = diagonal_average(parts.trend);
+        auto cycle = diagonal_average(parts.cycle);
+        auto resid = diagonal_average(parts.residual);
+
+        // Stack along last dim → (T, 3)
+        // Trim to same length (all have T' = L+K-1)
+        auto T = trend.size(0);
+        auto combined = torch::stack({trend, cycle, resid}, /*dim=*/1); // (T, 3)
+        results.push_back(combined);
+    }
+    return results; // vector of (T, 3) tensors, one per series
+}
+
 
 
 
@@ -108,15 +178,22 @@ int main() {
     auto [x1, y1, x2, y2] = Thot::Data::Load::ETTh("/home/moonfloww/Projects/DATASETS/ETT/ETTh1/ETTh1.csv", 0.5, 0.1f, true); // extract 60%
     Thot::Data::Check::Size(x1, "Raw");
 
-    Thot::Plot::Data::Timeserie{x2};
-    auto acf = autocorrelation_fft(x2);
-    Thot::Plot::Data::Timeserie{acf};
+
+    auto acf = autocorrelation_fft(x1);
     auto tau_c = decorrelation_lags(acf);
-    for (size_t i = 0; i < tau_c.size(); ++i)
-        std::cout << "Series " << i << " τ_c = " << tau_c[i] << std::endl;
+    for (int i =0; i<tau_c.size(); i++)
+        std::cout << "tau_c["<< i << "]: " << tau_c[i] << std::endl;
+    auto ssa_components = extract_trend_cycle_residual(x1, tau_c);
+
+    for (size_t i = 0; i < ssa_components.size(); ++i) {
+        auto comp = ssa_components[i]; // shape (T, 3)
+        std::cout << "Series " << i << " components shape = " << comp.sizes() << std::endl;
+
+        Thot::Plot::Data::Timeserie{comp};
+
+    }
 
 
-    (void)hankel_decomposition(x2, tau_c);
-    std::cout << (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now()-t1)).count() << "ms" << std::endl;
+    std::cout << (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now()-t1)).count() << "ms" << std::endl;
     return 0;
 }

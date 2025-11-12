@@ -15,6 +15,8 @@
 #include <vector>
 #include <sstream>
 #include <iomanip>
+#include <cctype>
+#include <iterator>
 
 #include <torch/torch.h>
 
@@ -376,7 +378,148 @@ namespace Thot::Plot::Data {
         plotter.plot(datasets);
     }
 
+struct MatrixOptions {
+        bool digits{false};
+        std::string color{"binary"};
+    };
 
+    inline void Matrix(torch::Tensor matrix, std::optional<MatrixOptions> plotOptions = std::nullopt)
+    {
+        MatrixOptions options = plotOptions.value_or(MatrixOptions{});
+
+        if (!matrix.defined()) {
+            throw std::invalid_argument("Matrix tensor must be defined");
+        }
+
+        matrix = Details::as_cpu_contiguous(std::move(matrix)).to(torch::kFloat32);
+        if (matrix.dim() == 1) {
+            matrix = matrix.unsqueeze(0);
+        }
+        if (matrix.dim() != 2) {
+            throw std::invalid_argument("Matrix expects a 2D tensor");
+        }
+
+        const auto height = static_cast<std::size_t>(matrix.size(0));
+        const auto width = static_cast<std::size_t>(matrix.size(1));
+        if (height == 0 || width == 0) {
+            throw std::invalid_argument("Matrix expects non-empty dimensions");
+        }
+
+        auto prepared = matrix.contiguous();
+
+        const double minValue = prepared.min().item<double>();
+        const double maxValue = prepared.max().item<double>();
+
+        Utils::Gnuplot plotter{};
+        plotter.setMouse(false);
+        plotter.command("unset key");
+        plotter.command("set view map");
+        plotter.command("set size ratio -1");
+        plotter.command("set tics scale 0");
+        plotter.command("set colorbox");
+
+        auto formatRange = [](double value) {
+            return Details::format_double(value);
+        };
+
+        {
+            std::ostringstream xrange;
+            xrange << "set xrange [" << formatRange(-0.5) << ':'
+                   << formatRange(static_cast<double>(width) - 0.5) << ']';
+            plotter.command(xrange.str());
+        }
+
+        {
+            std::ostringstream yrange;
+            yrange << "set yrange ["
+                   << formatRange(static_cast<double>(height) - 0.5) << ':'
+                   << formatRange(-0.5) << ']';
+            plotter.command(yrange.str());
+        }
+
+        {
+            std::ostringstream xtics;
+            xtics << "set xtics 0,1," << (width > 0 ? static_cast<long long>(width - 1) : 0);
+            plotter.command(xtics.str());
+        }
+
+        {
+            std::ostringstream ytics;
+            ytics << "set ytics 0,1," << (height > 0 ? static_cast<long long>(height - 1) : 0);
+            plotter.command(ytics.str());
+        }
+
+        const auto paletteName = [&]() {
+            std::string lowered;
+            lowered.reserve(options.color.size());
+            std::transform(options.color.begin(), options.color.end(), std::back_inserter(lowered), [](unsigned char ch) {
+                return static_cast<char>(std::tolower(ch));
+            });
+            if (lowered == "binary") {
+                return std::string{"defined (0 '#ffffff', 1 '#000000')"};
+            }
+            if (lowered == "grey") {
+                return std::string{"gray"};
+            }
+            return options.color;
+        }();
+
+        if (!paletteName.empty()) {
+            plotter.setPalette(paletteName);
+        } else {
+            plotter.unsetPalette();
+        }
+
+        if (std::isfinite(minValue) && std::isfinite(maxValue)) {
+            if (maxValue > minValue) {
+                std::ostringstream cbrange;
+                cbrange << "set cbrange [" << formatRange(minValue) << ':' << formatRange(maxValue) << ']';
+                plotter.command(cbrange.str());
+            } else {
+                const double epsilon = std::max(1.0, std::abs(maxValue) * 0.1);
+                std::ostringstream cbrange;
+                cbrange << "set cbrange [" << formatRange(maxValue - epsilon) << ':'
+                        << formatRange(maxValue + epsilon) << ']';
+                plotter.command(cbrange.str());
+            }
+        } else {
+            plotter.command("unset cbrange");
+        }
+
+        static std::atomic<std::size_t> matrixCounter{0};
+        const auto datablockId = "thot_matrix_" + std::to_string(++matrixCounter);
+        const auto datablockRef = "$" + datablockId;
+        plotter.defineDatablock(datablockId, Details::build_grayscale_writer(prepared));
+
+        if (options.digits) {
+            plotter.command("unset label");
+            const double contrastThreshold = (minValue + maxValue) / 2.0;
+            const bool useContrast = std::isfinite(contrastThreshold) && (maxValue > minValue);
+            auto accessor = prepared.accessor<float, 2>();
+            for (std::size_t row = 0; row < height; ++row) {
+                for (std::size_t col = 0; col < width; ++col) {
+                    const double value = static_cast<double>(accessor[row][col]);
+                    std::ostringstream textStream;
+                    textStream << std::setprecision(3) << value;
+                    auto text = Details::escape_single_quotes(textStream.str());
+                    std::ostringstream label;
+                    label << "set label '" << text << "' at "
+                          << formatRange(static_cast<double>(col)) << ','
+                          << formatRange(static_cast<double>(row))
+                          << " center front";
+                    if (useContrast) {
+                        const bool bright = value > contrastThreshold;
+                        label << " tc rgb '" << (bright ? "#ffffff" : "#000000") << "'";
+                    }
+                    plotter.command(label.str());
+                }
+            }
+        }
+
+        std::ostringstream plotCommand;
+        plotCommand << "plot " << datablockRef << " using 1:2:3 with image";
+        plotter.command(plotCommand.str());
+    }
 
 
     struct ImagePlotOptions {
