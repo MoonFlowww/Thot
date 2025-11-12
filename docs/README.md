@@ -15,12 +15,12 @@ Thot::Model model("_Network_Name_");
 model.to_device(torch::cuda::is_available()); // accept true || false
 ```
 
-The model holds a directed acyclic graph of computational blocks and layers. You can
-construct it incrementally with `.add()`.
+
 
 ## Adding Layers and Blocks
 
-Each `.add()` call can be tagged with an identifier to make graph connections clearer.
+The model holds a directed acyclic graph of computational blocks and layers. You can
+construct it incrementally with `.add()`.
 
 ```cpp
 model.add(Thot::Layer::FC({258, 10, /*bias*/true}, Thot::Activation::GeLU, Thot::Initialization::HeNormal))
