@@ -308,7 +308,7 @@ namespace SSA {
     }
 }
 
-int main() {
+int tmain() {
     auto t1 = std::chrono::high_resolution_clock::now();
 
     auto [x1, y1, x2, y2] =

@@ -96,7 +96,7 @@ target_link_libraries(Thot "${TORCH_LIBRARIES}" Boost::filesystem)
 target_include_directories(Thot PUBLIC ${CMAKE_SOURCE_DIR}/include ${TORCH_INCLUDE_DIRS})
 
 #Test---------------
-add_executable(test_Thot test/regression/timeseries/etth.cpp #images/cifar10.cpp
+add_executable(test_Thot test/speedtest.cpp #regression/timeseries/etth.cpp #images/cifar10.cpp
         src/block/details/blocks/residual.hpp
         src/block/details/blocks/sequential.hpp
         src/lrscheduler/details/common.hpp
@@ -167,5 +167,6 @@ add_executable(test_Thot test/regression/timeseries/etth.cpp #images/cifar10.cpp
         src/data/details/manipulation/normalization/ehlers.hpp
         src/plot/details/reliability/reliability_lime.hpp
         src/plot/details/reliability/reliability_gradcam.hpp
+        test/speedtest.cpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)
