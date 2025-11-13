@@ -2,7 +2,7 @@
 
 Optimizers are expressed as descriptors so they can be registered globally via
 `Model::set_optimizer` or attached to block-level scopes through
-[Local](../local/README.md). The variant defined in `src/optimizer/optimizer.hpp`
+[Docs/Local](../local/README.md). The variant defined in `src/optimizer/optimizer.hpp`
 covers first-order methods, adaptive optimizers, and experimental research
 optimizers. All descriptors expose an `.options` struct mirroring the fields of
 their underlying implementation.
@@ -42,6 +42,6 @@ state tensors resident on the correct device before the first optimisation step.
 
 ---
 
-Pair these optimizers with [LrScheduler](../lrscheduler/README.md) descriptors
-and [Regularization](../regularization/README.md) penalties to fully define the
-training regime configured through [Training](../training/README.md).
+Pair these optimizers with [Docs/LrScheduler](../lrscheduler/README.md) descriptors
+and [Docs/Regularization](../regularization/README.md) penalties to fully define the
+training regime configured through [Docs/Training](../training/README.md).

@@ -3,7 +3,7 @@ Regularizers in Thot are descriptors that wrap an option struct together with a
 `Details::*` implementation. Descriptors can be attached either globally through
 `Model::set_regularization` or scoped to individual layers via
 [`Thot::LocalConfig`](../local/README.md). During
-[Training](../training/README.md) the engine evaluates every descriptor once per
+[Docs/Training](../training/README.md) the engine evaluates every descriptor once per
 step while remaining compatible with CUDA graph capture.
 
 ## Attaching descriptors
@@ -128,6 +128,6 @@ constexpr std::array kAllRegularizers{
   statistics or snapshots for Bayesian-style ensembling.
 
 Descriptors are serialised alongside other components by
-[Save & Load](../saveload/README.md) and integrate with
-[Loss](../loss/README.md) and [Optimizer](../optimizer/README.md) descriptors to
+[Docs/Save & Load](../saveload/README.md) and integrate with
+[Docs/Loss](../loss/README.md) and [Docs/Optimizer](../optimizer/README.md) descriptors to
 shape the training signal for your experiments.

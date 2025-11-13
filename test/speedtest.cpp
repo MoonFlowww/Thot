@@ -316,15 +316,15 @@ inline Thot::Loss::Details::CrossEntropyDescriptor set(Thot::Model& model) { // 
     model.set_optimizer(Thot::Optimizer::SGD({.learning_rate = 1e-3}));
     const auto ce = Thot::Loss::CrossEntropy({.label_smoothing = 0.02f});
     model.set_loss(ce);
-    model.use_cuda(torch::cuda::is_available());
+    model.use_cuda(false);
     return ce;
 }
 
 
 int main() {
-    auto [x1, y1, x2, y2] = Thot::Data::Load::MNIST("/home/moonfloww/Projects/DATASETS/MNIST", 1.f, 1.f, true);
+    auto [x1, y1, x2, y2] = Thot::Data::Load::MNIST("/home/moonfloww/Projects/DATASETS/MNIST", .1f, 1.f, true);
 
-    const int64_t epochs= 100;
+    const int64_t epochs= 10;
     const int64_t B= 64;
     const int64_t N= x1.size(0);
     Thot::Data::Check::Size(x1);
@@ -398,7 +398,7 @@ int main() {
     //libtorch
     std::cout << "training 100% LibTorch" << std::endl;
 
-    torch::Device device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
+    torch::Device device = torch::kCPU;//torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
     Net net;
     net->to(device);
     torch::optim::SGD optimizer(net->parameters(), torch::optim::SGDOptions(1e-3));
@@ -423,9 +423,6 @@ int main() {
             libtorch_samples.push_back(step_ms);
         }
     }
-
-
-
 
     // Compute stats
     std::cout << "\n\n\n";

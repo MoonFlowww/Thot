@@ -261,9 +261,9 @@ experiment.
 
 
 #### HyperLinks related:
-- [Introduction](../../README.md) (`model.add()`)
-- [Activations](../activation/README.md) (`Thot::Activation::*`)
-- [Initialization](../initialization/README.md) (`Thot::Initialization::*`)
-- [Local](../local/README.md) (`model.links()`)
+- [Docs/Introduction](../../README.md) (`model.add()`)
+- [Docs/Activations](../activation/README.md) (`Thot::Activation::*`)
+- [Docs/Initialization](../initialization/README.md) (`Thot::Initialization::*`)
+- [Docs/Local](../local/README.md) (`model.links()`)
 
 

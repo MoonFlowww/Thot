@@ -27,7 +27,7 @@ auto report = model.evaluate(test_images, test_labels, Thot::Evaluation::Classif
 - **Batching and buffering.** Both descriptors accept `Options` with
   `batch_size` and `buffer_vram`. When buffering is enabled, inputs/targets are
   staged on the host and copied to the device chunk-by-chunk, mirroring the
-  streaming settings used by [Training](../training/README.md).
+  streaming settings used by [Docs/Training](../training/README.md).
 - **Console output.** Set `print_summary`/`print_per_class` (classification) or
   `print_summary` (timeseries) to control pretty-printed tables. Streams default
   to `std::cout`, but you can forward them anywhere via `Options::stream`.
@@ -35,7 +35,7 @@ auto report = model.evaluate(test_images, test_labels, Thot::Evaluation::Classif
   `Utils::Terminal::FrameStyle`.
 
 The resulting `Report` structures expose raw numbers so you can feed them into
-custom dashboards or the [Plot](../plot/README.md) reliability tools.
+custom dashboards or the [Docs/Plot](../plot/README.md) reliability tools.
 
 ## Classification descriptor
 
@@ -52,7 +52,7 @@ Designed for multi-class and multilabel classification:
 
 When `print_per_class` is `true`, the runner renders a confusion-matrix-style
 table sorted by label id. Use this to spot overconfident or undertrained
-classes before saving checkpoints with [Save & Load](../saveload/README.md).
+classes before saving checkpoints with [Docs/Save & Load](../saveload/README.md).
 
 ## Timeseries descriptor
 
@@ -78,5 +78,5 @@ experiment lifecycle.
 ---
 
 For post-training calibration, call `Model::calibrate` (see
-[Training](../training/README.md)) and visualise the resulting reliability curves
-with [Plot](../plot/README.md).
+[Docs/Training](../training/README.md)) and visualise the resulting reliability curves
+with [Docs/Plot](../plot/README.md).

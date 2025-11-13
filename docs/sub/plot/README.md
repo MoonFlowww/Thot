@@ -1,7 +1,7 @@
 # Plotting Utilities
 
 `Thot::Plot` exposes lightweight wrappers around the statistics captured during
-[Training](../training/README.md) and [Evaluation](../evaluation/README.md).
+[Docs/Training](../training/README.md) and [Docs/Evaluation](../evaluation/README.md).
 Plots rely on the Gnuplot bindings shipped in `src/utils/gnuplot.hpp`; ensure
 `gnuplot` is available in your environment when rendering to the desktop.
 

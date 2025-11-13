@@ -3,8 +3,8 @@
 Thot's `Model::train` orchestrates dataset streaming, optimisation, and telemetry
 capture. You can either pass a packed dataset (`std::vector` of `{inputs,
 targets}` pairs) or raw tensors. Training requires an optimizer and a loss
-descriptor to be set beforehand (see [Optimizer](../optimizer/README.md) and
-[Loss](../loss/README.md)).
+descriptor to be set beforehand (see [Docs/Optimizer](../optimizer/README.md) and
+[Docs/Loss](../loss/README.md)).
 
 ## TrainOptions
 
@@ -51,7 +51,7 @@ data transfers with compute.
   requested.
 
 These values remain on the host and lazily materialise GPU tensors, making them
-cheap to log or feed into [Plot](../plot/README.md). When `monitor` is `true`,
+cheap to log or feed into [Docs/Plot](../plot/README.md). When `monitor` is `true`,
 progress is streamed to the provided `std::ostream` with non-blocking CUDA event
 handling to avoid stalling the training loop.
 
@@ -114,11 +114,11 @@ loop structure.
   format to convolutional layers and residual projections so weight tensors match
   the layout of incoming batches.
 - **Regularization integration.** Regularisation descriptors registered via
-  [Regularization](../regularization/README.md) are evaluated inside the training
+  [Docs/Regularization](../regularization/README.md) are evaluated inside the training
   step; penalties participate in AMP and CUDA graph capture.
 
 ---
 
-Combine `TrainOptions` with [LrScheduler](../lrscheduler/README.md) and
-per-module [Local](../local/README.md) overrides to craft complex optimisation
-schemes. After training, persist the state with [Save & Load](../saveload/README.md).
+Combine `TrainOptions` with [Docs/LrScheduler](../lrscheduler/README.md) and
+per-module [Docs/Local](../local/README.md) overrides to craft complex optimisation
+schemes. After training, persist the state with [Docs/Save & Load](../saveload/README.md).

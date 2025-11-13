@@ -36,5 +36,5 @@ validation is still recommended when wiring them into layer pipelines.
 
 
 #### HyperLinks related:
-- [Introduction](../../README.md) (`model.add()`)
-- [Initialization](../initialization/README.md) (`Thot::Initialization::*`)
+- [Docs/Introduction](../../README.md) (`model.add()`)
+- [Docs/Initialization](../initialization/README.md) (`Thot::Initialization::*`)

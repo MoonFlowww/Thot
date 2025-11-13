@@ -19,13 +19,13 @@ attached to a module descriptor:
 
 The structure lives in `src/common/local.hpp` and is fully serialised when a
 model is saved, so local scopes survive round-trips through
-`architecture.json`. [code: LocalConfig struct](../../../src/common/local.hpp#L12-L16) [code: Serialization logic](../../../src/common/save_load.hpp#L1945-L1976)
+`architecture.json`. [Src/Local: LocalConfig struct](../../../src/common/local.hpp#L12-L16) [Src/Save & Load: Serialization logic](../../../src/common/save_load.hpp#L1945-L1976)
 
 ### Attaching a local scope
 All layer factories expose the `LocalConfig` as the last parameter, and block
 helpers mirror that convention. Passing a default-constructed `LocalConfig`
 keeps the global behaviour, while filling any field activates the override on
-that specific descriptor.[code: Layer factory overloads](../../../src/layer/layer.hpp#L92-L138) [code: Block factory overloads](../../../src/block/block.hpp#L48-L80)
+that specific descriptor.[Src/Layer: Layer factory overloads](../../../src/layer/layer.hpp#L92-L138) [code: Block factory overloads](../../../src/block/block.hpp#L48-L80)
 
 ```cpp
 Thot::LocalConfig bottleneck_scope{
@@ -48,8 +48,8 @@ adds an extra DropConnect penalty only for that layer. Global optimizers and
 regularization declared via `Model::set_*` continue to govern every layer that
 does not opt into its own override, so shared defaults remain intact while the
 local scope tailors behaviour where needed. For a catalogue of descriptors that
-can populate these scopes see [Optimizer](../optimizer/README.md) and
-[Regularization](../regularization/README.md).
+can populate these scopes see [Docs/Optimizer](../optimizer/README.md) and
+[Docs/Regularization](../regularization/README.md).
 
 ### Layer and block semantics
 * **Sequential blocks.** When a `Block::Sequential` descriptor declares a local
@@ -65,22 +65,22 @@ can populate these scopes see [Optimizer](../optimizer/README.md) and
 local optimizer, its parameters are removed from the global parameter pool and a
 separate optimizer instance is built just for that layer. Attempting to attach a
 local optimizer to a module without registered parameters raises a
-`logic_error`, avoiding silent misconfiguration.[code: Local optimizer setup](../../../src/core.hpp#L1422-L1465)
+`logic_error`, avoiding silent misconfiguration.[Src/Core: Local optimizer setup](../../../src/core.hpp#L1422-L1465)
 
 Local optimizers participate in `zero_grad()` and `step()` alongside the global
 optimizer, so the training loop clears and updates all optimizers in lock-step
-without additional user code. [code: Optimizer stepping integration](../../../src/core.hpp#L2281-L2294)
+without additional user code. [Src/Core: Optimizer stepping integration](../../../src/core.hpp#L2281-L2294)
 
 ### Local regularization
 When a layer is registered, the engine captures its trainable parameters and
 creates regularization bindings for every descriptor stored in its local
 configuration. Later on, `compute_regularization_penalty()` accumulates the
 contributions from both global and per-layer bindings, keeping CUDA graph safety
-checks intact. [code: Regularization bindings](../../../src/core.hpp#L2976-L3012) [code: Penalty accumulation](../../../src/core.hpp#L3261-L3271) [code: Regularization descriptors](../../../src/core.hpp#L1545-L1636)
+checks intact. [Src/Core: Regularization bindings](../../../src/core.hpp#L2976-L3012) [Src/Core: Penalty accumulation](../../../src/core.hpp#L3261-L3271) [Src/Core: Regularization descriptors](../../../src/core.hpp#L1545-L1636)
 
 ### Local losses
 Loss descriptors recorded inside `LocalConfig` are currently persisted through
 save/load, but the runtime still evaluates a single model-level loss via
 `Model::compute_loss`. This means per-layer loss overrides are not consumed
 during training yet, even though they remain part of the serialised
-configuration. [code: Loss serialization](../../../src/common/save_load.hpp#L1945-L1976) [code: Loss evaluation](../../../src/core.hpp#L2253-L2262)
+configuration. [Src/Save & Load: Loss serialization](../../../src/common/save_load.hpp#L1945-L1976) [Src/Core: Loss evaluation](../../../src/core.hpp#L2253-L2262)

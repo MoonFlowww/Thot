@@ -2,8 +2,8 @@
 
 The `Thot::Block` namespace bundles higher-level containers that stitch layers
 into reusable macro-architectures. Blocks honour the same activation,
-initialization, and [Local](../local/README.md) overrides accepted by individual
-[Layers](../layer/README.md), letting you mix coarse and fine-grained
+initialization, and [Docs/Local](../local/README.md) overrides accepted by individual
+[Docs/Layers](../layer/README.md), letting you mix coarse and fine-grained
 configuration inside a model. Every descriptor returned by these helpers can be
 fed directly to `Model::add()`.
 

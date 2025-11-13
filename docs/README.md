@@ -52,7 +52,7 @@ model.add(Thot::Block::Sequential({ /*vector field*/
     Thot::Layer::MaxPool2d({{2, 2}, {2, 2}})
 }));
 ```
-The framework ships with a rich catalog of layers (see in [Layers](sub/layer/README.md) or [Blocks](sub/block/README.md)). It will automatically link linearly every item's called via `.add()`. To rewire the network use `.links()` (see in [Links](sub/links/README.md)). Multi-head attention descriptors that power the transformer blocks are documented in [Attention](sub/attention/README.md).
+The framework ships with a rich catalog of layers (see in [Docs/Layers](sub/layer/README.md) or [Docs/Blocks](sub/block/README.md)). It will automatically link linearly every item's called via `.add()`. To rewire the network use `.links()` (see in [Links](sub/links/README.md)). Multi-head attention descriptors that power the transformer blocks are documented in [Attention](sub/attention/README.md).
 
 
 ## Configuring Optimization
@@ -88,9 +88,9 @@ model.set_regularization({ /*vector field*/
     })
 });
 ```
-To see the complete list of Optimizers, Losses or Regularizations and their parameters check [Optimizer](sub/optimizer/README.md), [Loss](sub/loss/README.md) and [Regularization](sub/regularization/README.md)
+To see the complete list of Optimizers, Losses or Regularizations and their parameters check [Docs/Optimizer](sub/optimizer/README.md), [Docs/Loss](sub/loss/README.md) and [Docs/Regularization](sub/regularization/README.md)
 
-It is also possible to use multiples configurations over the network, check [Local](sub/local/README.md)
+It is also possible to use multiples configurations over the network, check [Docs/Local](sub/local/README.md)
 ## Working with Data
 
 The `Thot::Data::Load` namespace includes ready-made loaders for popular datasets
@@ -105,7 +105,7 @@ at::Tensor [validation_images, validation_labels] = Thot::Data::Manipulation::Fr
 
 std::tie(train_images, train_labels) = Thot::Data::Manipulation::Cutout(train_images, train_labels,{-1, -1}, {12, 12}, -1, 1.f, true, false);
 ```
-More information of [Data](sub/data/README.md)
+More information inside [Docs/Data](sub/data/README.md)
 
 ## Training
 
@@ -116,7 +116,7 @@ splits, AMP, and other runtime settings.
 ```cpp
 model.train(train_images, train_labels, {.epoch=120, .batch_size=128, .test={x_val,y_val}});
 ```
-Full details of parameters and process of [Train](sub/training/README.md)
+More information in [Docs/Train](sub/training/README.md)
 ## Evaluation and Metrics
 
 Post-training evaluation is performed with `model.evaluate`, which accepts the test
@@ -133,7 +133,7 @@ model.evaluate(test_images, test_labels, Thot::Evaluation::Classification, { /*v
     Thot::Metric::Classification::LogLoss,
 }, {.batch_size = 64});
 ```
-More details inside [Evaluation](sub/evaluation/README.md)
+More details inside [Docs/Evaluation](sub/evaluation/README.md)
 
 ## Saving and Loading
 

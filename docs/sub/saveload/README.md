@@ -4,7 +4,7 @@ Thot serialises models as a pair of files inside the target directory:
 
 - `architecture.json` – human-readable description of the module graph, including
   block/layer descriptors, `LocalConfig` overrides, loss/optimizer/regularisation
-  descriptors, and named ports used by [Links](../links/README.md).
+  descriptors, and named ports used by [Docs/Links](../links/README.md).
 - `parameters.binary` – TorchScript archive containing module parameters and
   buffers.
 
@@ -25,14 +25,14 @@ update. During `Model::load`:
    is invoked to rebuild execution plans, CUDA graphs, and regularisation state.
 
 Because descriptors are stored verbatim, saving after calling
-`Model::set_optimizer`, `Model::set_loss`, or attaching [Regularization](../regularization/README.md)
+`Model::set_optimizer`, `Model::set_loss`, or attaching [Docs/Regularization](../regularization/README.md)
 ensures checkpoints carry full training intent. Tensor devices are preserved; if
 you wish to load on a different device, call `model.use_cuda(...)` after
 loading.
 
 For reproducible experiments, pair checkpoints with telemetry exported from
-[Training](../training/README.md) and reliability plots generated via
-[Plot](../plot/README.md).
+[Docs/Training](../training/README.md) and reliability plots generated via
+[Docs/Plot](../plot/README.md).
 
 For full implementation details, see `Model::save` in [`src/core.hpp`](../../../src/core.hpp);
 it delegates JSON persistence to `write_json_file` in [`src/common/save_load.hpp`](../../../src/common/save_load.hpp),

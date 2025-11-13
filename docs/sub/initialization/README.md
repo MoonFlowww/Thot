@@ -30,6 +30,6 @@ supported by the module (e.g. `Dirac` on 2-D weights quietly falls back to no
 change).
 
 #### HyperLinks related:
-- [Introduction](../../README.md) (`model.add()`)
-- [Activations](../activation/README.md) (`Thot::Activation::*`)
+- [Docs/Introduction](../../README.md) (`model.add()`)
+- [Docs/Activations](../activation/README.md) (`Thot::Activation::*`)
 

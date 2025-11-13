@@ -2,7 +2,7 @@
 
 The `Thot::Data` toolbox wraps dataset ingestion, augmentation, repair, and
 analysis helpers so you can prepare tensors before handing them to
-[Training](../training/README.md) or [Evaluation](../evaluation/README.md).
+[Docs/Training](../training/README.md) or [Docs/Evaluation](../evaluation/README.md).
 Factories live under `src/data/details` and are split into four main groups:
 `Load`, `Manipulation`, `DimReduction`, and `Check`/`Repair`.
 
@@ -81,7 +81,7 @@ avoid redundant device transfers.
   entropies, and KL divergence between train/test splits.
 - **`Check::Shuffled`** – Heuristic to flag datasets that might still be ordered
   by label (useful for verifying randomisation before calling
-  [Training](../training/README.md)).
+  [Docs/Training](../training/README.md)).
 - **`Check::Size`** – Convenience printer for tensor shapes.
 
 For structured datasets with discrete attributes, `Data::Repair::HoloClean`
@@ -91,7 +91,7 @@ suggest repairs above a chosen probability threshold.
 
 ---
 
-Pair these utilities with [Links](../links/README.md) to route pre-processed
+Pair these utilities with [Docs/Links](../links/README.md) to route pre-processed
 inputs into complex model branches, or combine them with local scopes from
-[Local](../local/README.md) when different data streams need bespoke training
+[Docs/Local](../local/README.md) when different data streams need bespoke training
 policies.

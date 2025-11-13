@@ -1,8 +1,8 @@
 # Loss Descriptors
 
 Loss descriptors wrap LibTorch criterion implementations so they can be stored
-inside model graphs, attached to [Local](../local/README.md) scopes, and reused
-across [Training](../training/README.md) sessions. Every helper in
+inside model graphs, attached to [Docs/Local](../local/README.md) scopes, and reused
+across [Docs/Training](../training/README.md) sessions. Every helper in
 `Thot::Loss` returns a stateless descriptor; the runtime picks the correct
 implementation at compile time through `std::variant` visitation.
 
@@ -58,10 +58,10 @@ Descriptors can be stored globally via `Model::set_loss()` or attached to
 individual layers through `LocalConfig` when different heads require distinct
 criteria. During `Model::save`, all descriptors (and their option structs) are
 serialised into `architecture.json`, ensuring checkpoints restore identical
-losses after a [Save & Load](../saveload/README.md) round-trip.
+losses after a [Docs/Save & Load](../saveload/README.md) round-trip.
 
 ---
 
-Combine these losses with [Regularization](../regularization/README.md) and
-[Optimizer](../optimizer/README.md) descriptors to fully specify the training
+Combine these losses with [Docs/Regularization](../regularization/README.md) and
+[Docs/Optimizer](../optimizer/README.md) descriptors to fully specify the training
 objective.

@@ -1,7 +1,7 @@
 # Learning Rate Schedulers
 
 Schedulers in `Thot::LrScheduler` are thin descriptors layered on top of LibTorch
-optimizers. Pair them with [Optimizer](../optimizer/README.md) descriptors via
+optimizers. Pair them with [Docs/Optimizer](../optimizer/README.md) descriptors via
 `Model::set_optimizer` or `LocalConfig` to control the learning rate schedule per
 module.
 
@@ -20,8 +20,8 @@ an optional linear warmup stage. The options struct exposes:
 
 The scheduler validates that optimizer parameter groups remain constant after
 construction and updates each group's `lr` in lockstep. Use it alongside the
-telemetry exposed by [Training](../training/README.md) to plot learning-rate
-trajectories with [Plot](../plot/README.md).
+telemetry exposed by [Docs/Training](../training/README.md) to plot learning-rate
+trajectories with [Docs/Plot](../plot/README.md).
 
 When you advance the scheduler once per optimizer update, express `T_max` and
 `warmup_steps` in the same units as your training loop (for example,
