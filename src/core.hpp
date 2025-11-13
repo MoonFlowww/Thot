@@ -319,10 +319,11 @@ namespace Thot {
                 std::vector<double> learning_rates{};
                 std::chrono::system_clock::time_point timestamp{};
                 double duration_seconds{};
+                DeferredScalar step_latency{};
 
 
                 [[nodiscard]] double train_loss_value() const { return train_loss.materialize(); }
-
+                [[nodiscard]] double step_latency_value() const { return step_latency.materialize(); }
                 [[nodiscard]] std::optional<double> test_loss_value() const
                 {
                     if (!test_loss) {
@@ -4033,6 +4034,7 @@ namespace Thot {
 
                     auto accumulation = torch::zeros({}, torch::TensorOptions().dtype(torch::kFloat64).device(device));
                     std::int64_t weight = 0;
+                    std::size_t processed_steps = 0;
 
 #ifdef TORCH_CUDA_AVAILABLE
                     auto process_with_prefetch = [&](auto&& provider, std::size_t max_batches) {
@@ -4235,6 +4237,7 @@ namespace Thot {
                             model.update_regularization_states(step_index, true);
                         }
                         ++step_index;
+                        ++processed_steps;
 
 
                         auto loss_tensor = loss.detach();
@@ -4413,6 +4416,13 @@ namespace Thot {
 
                     const auto epoch_timestamp = std::chrono::system_clock::now();
                     auto learning_rates = model.collect_learning_rates();
+                    TrainingTelemetry::DeferredScalar step_latency_scalar;
+                    if (processed_steps > 0) {
+                        const auto average_step_latency = duration_seconds / static_cast<double>(processed_steps);
+                        auto latency_tensor = torch::tensor(average_step_latency, torch::TensorOptions().dtype(torch::kFloat64));
+                        const torch::Device cpu_device{torch::kCPU};
+                        step_latency_scalar = TrainingTelemetry::DeferredScalar::from_tensor(std::move(latency_tensor), cpu_device);
+                    }
                     model.record_epoch_telemetry({
                         epoch + 1,
                         train_loss_scalar,
@@ -4420,7 +4430,8 @@ namespace Thot {
                         delta,
                         std::move(learning_rates),
                         epoch_timestamp,
-                        duration_seconds
+                        duration_seconds,
+                        step_latency_scalar
                     });
 
                     if (options.monitor && options.stream) {

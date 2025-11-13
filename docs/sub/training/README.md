@@ -45,8 +45,8 @@ data transfers with compute.
 
 `Model::training_telemetry()` exposes:
 
-- `EpochSnapshot` – epoch index, deferred train/test loss scalars, improvement
-  flags, elapsed time, and learning-rate snapshots.
+- `EpochSnapshot` – epoch index, deferred train/test loss scalars, deferred
+  step latency, improvement flags, elapsed time, and learning-rate snapshots.
 - `DatasetLossSnapshot` – detailed metrics for validation/test sweeps when
   requested.
 

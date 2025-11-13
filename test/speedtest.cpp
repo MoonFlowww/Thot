@@ -1,14 +1,16 @@
 #include <torch/torch.h>
 #include <../include/Thot.h>
 #include <chrono>
-
+#include <limits>
+#include <string>
+#include <algorithm>
 
 struct NetImpl : torch::nn::Module {
     torch::nn::Conv2d conv1{nullptr}, conv2{nullptr}, conv3{nullptr}, conv4{nullptr}, conv5{nullptr};
     torch::nn::MaxPool2d pool{nullptr};
     torch::nn::Linear fc1{nullptr}, fc2{nullptr}, fc3{nullptr};
 
-    NetImpl() {
+    NetImpl() { // Use XaimingUniform Init by default
         conv1 = register_module("conv1", torch::nn::Conv2d(torch::nn::Conv2dOptions(1, 32, 3).stride(1).padding(1)));
         conv2 = register_module("conv2", torch::nn::Conv2d(torch::nn::Conv2dOptions(32, 32, 3).stride(1).padding(1)));
         pool = register_module("pool", torch::nn::MaxPool2d(torch::nn::MaxPool2dOptions({2, 2}).stride({2, 2})));
@@ -45,6 +47,37 @@ struct NetImpl : torch::nn::Module {
 TORCH_MODULE(Net);
 
 
+struct StepLatencyStats {
+    std::string title;
+    double total_ms = 0.0;
+    double min_ms = std::numeric_limits<double>::max();
+    double max_ms = 0.0;
+    size_t steps = 0;
+
+    void record(double ms) {
+        total_ms += ms;
+        min_ms = std::min(min_ms, ms);
+        max_ms = std::max(max_ms, ms);
+        ++steps;
+    }
+
+    double average_ms() const {
+        return steps == 0 ? 0.0 : total_ms / static_cast<double>(steps);
+    }
+};
+
+void print_stats(const StepLatencyStats& stats) {
+    auto min_ms = stats.steps == 0 ? 0.0 : stats.min_ms;
+    auto max_ms = stats.steps == 0 ? 0.0 : stats.max_ms;
+    std::cout << stats.title << "\n"
+              << "  Steps: " << stats.steps << "\n"
+              << "  Avg latency: " << stats.average_ms() << " ms\n"
+              << "  Min latency: " << min_ms << " ms\n"
+              << "  Max latency: " << max_ms << " ms\n"
+              << std::endl;
+}
+
+
 int main() {
     Thot::Model model("SpeedTestMNIST");
     model.use_cuda(torch::cuda::is_available());
@@ -66,13 +99,13 @@ int main() {
     model.add(Thot::Layer::FC({126, 10},   Thot::Activation::Identity, Thot::Initialization::HeUniform));
 
     model.set_optimizer(Thot::Optimizer::SGD({.learning_rate = 1e-3}));
-    const auto ce = Thot::Loss::CrossEntropy({.label_smoothing = 0.02f});
+    const auto ce = Thot::Loss::CrossEntropy({.label_smoothing = 0.02f}); // 2% to reach 99.F1
     model.set_loss(ce);
     auto [x1, y1, x2, y2] = Thot::Data::Load::MNIST("/home/moonfloww/Projects/DATASETS/MNIST", 1.f, 1.f, true);
 
     auto [xvalid, yvalid] = Thot::Data::Manipulation::Fraction(x2, y2, 0.1f); // used as test set during training
 
-    const int64_t epochs=100;
+    const int64_t epochs=10;
     const int64_t B=128;
     const int64_t N = x1.size(0);
     Thot::Data::Check::Size(x1); // (60000, 1, 28, 28)
@@ -81,18 +114,19 @@ int main() {
 
     //100% Thot
     std::cout << "training 100% Thot" << std::endl;
-    std::vector<std::chrono::high_resolution_clock::time_point> timepoints = { std::chrono::high_resolution_clock::now() };
     model.train(x1, y1, {.epoch=epochs, .batch_size = B,  .monitor = false, .enable_amp = true}); // .test = std::vector<at::Tensor>{xvalid, yvalid},
-    timepoints.push_back(std::chrono::high_resolution_clock::now());
+
 
 
 
     //50% Thot
     std::cout << "training 50% Thot" << std::endl;
+    StepLatencyStats thot_homemade_stats{"Thot + homemade Train()"};
     for (auto e = 0; e < epochs; ++e) {
         for (int64_t i = 0; i < N; i += B) {
             const int64_t end = std::min(i + B, N);
 
+            auto step_start = std::chrono::high_resolution_clock::now();
             auto inputs  = x1.index({torch::indexing::Slice(i, end)}).to(model.device());
             auto targets = y1.index({torch::indexing::Slice(i, end)}).to(model.device());
 
@@ -101,9 +135,12 @@ int main() {
             auto loss = Thot::Loss::Details::compute(ce, logits, targets);
             loss.backward();
             model.step();
+
+            auto step_end = std::chrono::high_resolution_clock::now();
+            double step_ms = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(step_end - step_start).count();
+            thot_homemade_stats.record(step_ms);
         }
     }
-    timepoints.push_back(std::chrono::high_resolution_clock::now());
 
     //100% libtorch
     std::cout << "training 100% LibTorch" << std::endl;
@@ -116,10 +153,12 @@ int main() {
     torch::nn::CrossEntropyLoss criterion(torch::nn::CrossEntropyLossOptions().label_smoothing(0.02));
 
     net->train();
+    StepLatencyStats libtorch_stats{"Libtorch Raw"};
     for (int64_t e = 0; e < epochs; ++e) {
         for (int64_t i = 0; i < N; i += B) {
             const int64_t end = std::min(i + B, N);
 
+            auto step_start = std::chrono::high_resolution_clock::now();
             auto inputs  = x1.index({at::indexing::Slice(i, end)}).to(device);
             auto targets = y1.index({at::indexing::Slice(i, end)}).to(device);
 
@@ -128,22 +167,33 @@ int main() {
             auto loss   = criterion(logits, targets);
             loss.backward();
             optimizer.step();
+
+            auto step_end = std::chrono::high_resolution_clock::now();
+            double step_ms = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(step_end - step_start).count();
+            libtorch_stats.record(step_ms);
         }
     }
-    timepoints.push_back(std::chrono::high_resolution_clock::now());
+
 
     std::cout <<"\n\n\n" << std::endl;
-    std::vector<std::string> titles = {"Thot + PreBuild Train()", "Thot + homemade Train()", "Libtorch Raw"};
-    for(int i=1; i<timepoints.size(); ++i) {
-        std::cout << titles[i-1] << ": " << std::chrono::duration_cast<std::chrono::milliseconds>(timepoints[i]-timepoints[i-1]).count()/1000.f << "s" << std::endl;
-    } std::cout << std::endl;
 
-    double ThotPreBuild = std::chrono::duration_cast<std::chrono::milliseconds>(timepoints[1]-timepoints[0]).count();
-    double ThotHomeMade = std::chrono::duration_cast<std::chrono::milliseconds>(timepoints[2]-timepoints[1]).count();
-    double LibTorchRaw = std::chrono::duration_cast<std::chrono::milliseconds>(timepoints[3]-timepoints[2]).count();
-    std::cout << "Thot vs Libtorch Overhead: " << (ThotPreBuild-LibTorchRaw)/LibTorchRaw<< "%" << std::endl;
-    std::cout << "Thot PreBuild Train() Overhead: " << (ThotPreBuild-ThotHomeMade)/ThotHomeMade<< "%" << std::endl;
-    std::cout << "Thot HomeMade Train() vs Libtorch Overhead: " << (ThotHomeMade-ThotHomeMade)/ThotHomeMade<< "%" << std::endl;
+    print_stats(thot_prebuilt_stats);
+    print_stats(thot_homemade_stats);
+    print_stats(libtorch_stats);
+
+    auto compute_overhead = [](double lhs, double rhs) {
+        if (rhs == 0.0) {
+            return 0.0;
+        }
+        return (lhs - rhs) / rhs * 100.0;
+    };
+
+    double ThotPreBuild = thot_prebuilt_stats.average_ms();
+    double ThotHomeMade = thot_homemade_stats.average_ms();
+    double LibTorchRaw = libtorch_stats.average_ms();
+    std::cout << "Thot vs Libtorch Step Overhead: " << compute_overhead(ThotPreBuild, LibTorchRaw) << "%" << std::endl;
+    std::cout << "Thot PreBuild Step Overhead vs Homemade: " << compute_overhead(ThotPreBuild, ThotHomeMade) << "%" << std::endl;
+    std::cout << "Thot Homemade Step vs Libtorch Overhead: " << compute_overhead(ThotHomeMade, LibTorchRaw) << "%" << std::endl;
     return 0;
 }
 
