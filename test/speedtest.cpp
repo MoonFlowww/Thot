@@ -132,14 +132,15 @@ int main() {
     }
     timepoints.push_back(std::chrono::high_resolution_clock::now());
 
+    std::cout <<"\n\n\n" << std::endl;
     std::vector<std::string> titles = {"Thot + PreBuild Train()", "Thot + homemade Train()", "Libtorch Raw"};
     for(int i=1; i<timepoints.size(); ++i) {
         std::cout << titles[i-1] << ": " << std::chrono::duration_cast<std::chrono::milliseconds>(timepoints[i]-timepoints[i-1]).count()/1000.f << "s" << std::endl;
     } std::cout << std::endl;
 
-    const auto ThotPreBuild = std::chrono::duration_cast<std::chrono::milliseconds>(timepoints[1]-timepoints[0]).count();
-    const auto ThotHomeMade = std::chrono::duration_cast<std::chrono::milliseconds>(timepoints[2]-timepoints[1]).count();
-    const auto LibTorchRaw = std::chrono::duration_cast<std::chrono::milliseconds>(timepoints[3]-timepoints[2]).count();
+    double ThotPreBuild = std::chrono::duration_cast<std::chrono::milliseconds>(timepoints[1]-timepoints[0]).count();
+    double ThotHomeMade = std::chrono::duration_cast<std::chrono::milliseconds>(timepoints[2]-timepoints[1]).count();
+    double LibTorchRaw = std::chrono::duration_cast<std::chrono::milliseconds>(timepoints[3]-timepoints[2]).count();
     std::cout << "Thot vs Libtorch Overhead: " << (ThotPreBuild-LibTorchRaw)/LibTorchRaw<< "%" << std::endl;
     std::cout << "Thot PreBuild Train() Overhead: " << (ThotPreBuild-ThotHomeMade)/ThotHomeMade<< "%" << std::endl;
     std::cout << "Thot HomeMade Train() vs Libtorch Overhead: " << (ThotHomeMade-ThotHomeMade)/ThotHomeMade<< "%" << std::endl;
