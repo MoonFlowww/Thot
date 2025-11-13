@@ -138,6 +138,7 @@ int xmain() {
         Thot::Metric::Classification::CohensKappa,
         Thot::Metric::Classification::LogLoss,
         Thot::Metric::Classification::BrierScore,
+        Thot::Metric::Classification::Informedness
     }, {.batch_size = 64});
 
 

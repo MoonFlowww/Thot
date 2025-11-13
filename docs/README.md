@@ -1,18 +1,35 @@
-# Thot Framework Overview
+# Welcome to Thot
+Thot is a modern C++ deep-learning framework that layers a strongly-typed API over LibTorch. It is built for practitioners who enjoy the ergonomics of high-level frameworks but need deterministic control over kernels, data layout, and optimization steps. Thot lets you compose reusable blocks, stream large datasets, and run telemetry-grade training loops from a single, cohesive interface.
+## Why Thot?
+* **First-class graph authoring.** Layers and higher-order blocks can be connected as a DAG, letting you express anything from small CNNs to large transformer stacks without wrestling with manual tensor plumbing.
+* **Consistent systems model.** Data loaders, augmentations, optimizers, regularizers, and metrics share the same descriptor-driven style so you can mix-and-match building blocks safely.
+* **Native performance.** Thot keeps you close to the metal through LibTorch while still providing ergonomic abstractions. Benchmarks at the end of this document detail the runtime overhead compared to pure LibTorch.
 
-Thot is a modular C++ deep learning framework built on top of LibTorch. It provides
-strongly-typed building blocks for prototyping neural networks, composing data
-pipelines, training models, and evaluating their performance. This guide walks you
-through the core primitives and shows how to assemble end-to-end experiments
-
-## Creating a Model
-
-Create a model by giving it a descriptive name. The model can be configured to run
-on CPU or GPU depending on CUDA availability.
-
+## Quick Start
 ```cpp
-Thot::Model model("_Network_Name_");
-model.use_cuda(torch::cuda::is_available()); // accept true || false
+#include <thot/model.h>
+
+int main() {
+    Thot::Model model("demo");
+    model.use_cuda(torch::cuda::is_available());
+
+    model.add(Thot::Layer::FC({784, 256, true}, Thot::Activation::GeLU));
+    model.add(Thot::Layer::Dropout({0.1}));
+    model.add(Thot::Layer::FC({256, 10, true}, Thot::Activation::Softmax));
+
+    model.set_optimizer(
+        Thot::Optimizer::AdamW({.learning_rate = 1e-3}),
+        Thot::LrScheduler::CosineAnnealing({.T_max = 50})
+    );
+    auto [train_images, train_labels, test_images, test_labels] =
+        Thot::Data::Load::MNIST("./datasets", 1.f, 1.f, true);
+        
+    model.train(train_images, train_labels, {.epoch = 10, .batch_size = 64});
+    model.evaluate(test_images, test_labels, Thot::Evaluation::Classification, {
+        Thot::Metric::Classification::Precision,
+        Thot::Metric::Classification::F1,
+        Thot::Metric::Classification::Informedness});
+}
 ```
 
 
@@ -88,7 +105,7 @@ at::Tensor [validation_images, validation_labels] = Thot::Data::Manipulation::Fr
 
 std::tie(train_images, train_labels) = Thot::Data::Manipulation::Cutout(train_images, train_labels,{-1, -1}, {12, 12}, -1, 1.f, true, false);
 ```
-More information in [Thot::Data](sub/data/README.md)
+More information of [Data](sub/data/README.md)
 
 ## Training
 
@@ -99,7 +116,7 @@ splits, AMP, and other runtime settings.
 ```cpp
 model.train(train_images, train_labels, {.epoch=120, .batch_size=128, .test={x_val,y_val}});
 ```
-Full details of parameters and process in [Train](sub/training/README.md)
+Full details of parameters and process of [Train](sub/training/README.md)
 ## Evaluation and Metrics
 
 Post-training evaluation is performed with `model.evaluate`, which accepts the test
@@ -130,5 +147,32 @@ NB: Since `model.load()` read `architecture.json`, you don't need to re-code you
 model.save("PATH");
 model.load("PATH"+"/_Network_Name_");
 ```
-Details in: [Save&Load](sub/saveload/README.md)
+`model.save` generates a folder named after the model containing the `architecture.json` (graph, dimensions, optimizer metadata) and `parameters.binary` (learnable weights). Because `model.load` reads the JSON specification, you do not need to recreate the graph via `model.add`. Details live in [Save & Load](sub/saveload/README.md).
 
+## Latency Benchmarks
+
+Results below represent warm runs filtered with a Tukey 0.98 fence on the MNIST workload  
+(60k samples, 28×28 | epochs = 100, batch = 64).  
+Absolute latencies vary run-to-run, so the table is meant as a *relative* comparison of
+distribution shape (jitter) and throughput, not as a stopwatch benchmark.
+
+| Runner                   | Steps (filtered) | Mean (ms) |    Std |      CV |   P10 |   P50 |   P90 |   P98 |  Mode | Throughput (steps/s) |
+|--------------------------|-----------------:|----------:|--------:|--------:|------:|------:|------:|------:|------:|----------------------:|
+| **Thot — Prebuilt Train()** | 76 916 | **1.20268** | 0.00157 | **0.00131** | 1.20049 | 1.20302 | 1.20451 | 1.20537 | 1.20398 | **831.47** |
+| **Thot — Custom Train()**   | 91 027 | 1.33688 | 0.18792 | 0.14057 | 1.17145 | 1.23006 | 1.65251 | 1.72896 | 1.19031 | 748.01 |
+| **LibTorch Raw**            | 90 837 | 1.27572 | 0.18145 | 0.14224 | 1.12161 | 1.16910 | 1.59117 | 1.66006 | 1.13251 | 783.87 |
+
+- **CV** (coefficient of variation) = `Std / Mean`. Lower is less jitter.
+
+### Overhead (relative to mean latency)
+
+| Comparison                                      |       Value |
+|-------------------------------------------------|------------:|
+| **Thot** vs **LibTorch** Overhead                 |      -5.73% |
+| **Thot** Prebuilt vs **Thot** Custom Overhead     |     -10.04% |
+| **Thot** Custom vs **LibTorch** Overhead          |      +4.79% |
+
+> **Note on variability.** Results are relative. The robust takeaway is that Thot’s prebuilt Train() matches raw LibTorch in mean latency and throughput, without introducing material overhead.
+
+
+Source: [`test/speedtest.cpp`](../test/speedtest.cpp)

@@ -51,34 +51,125 @@ namespace LatencyUtils {
     struct StepLatencyStats {
         std::string title;
         double total_ms = 0.0;
-        double min_ms = std::numeric_limits<double>::max();
-        double max_ms = 0.0;
+        double min_ms   = std::numeric_limits<double>::max();
+        double max_ms   = 0.0;
         std::size_t steps = 0;
+
+        // Online central moments
+        double mean = 0.0;
+        double M2   = 0.0; // sum of squared deviations
+        double M3   = 0.0; // sum of cubed deviations
+
+        double median_ms = 0.0;
+        double p10_ms    = 0.0;
+        double p90_ms    = 0.0;
+        double p98_ms    = 0.0;
+        double mode_ms   = 0.0;
 
         void record(double ms, std::size_t count = 1) {
             if (count == 0) return;
+
+            for (std::size_t c = 0; c < count; ++c) {
+                double n1 = static_cast<double>(steps);
+                double n  = n1 + 1.0;
+
+                double delta    = ms - mean;
+                double delta_n  = delta / n;
+                double delta_n2 = delta_n * delta_n;
+                double term1    = delta * delta_n * n1;
+
+                // Pebay update for central moments (up to 3rd)
+                double newM3   = M3 + term1 * delta_n * (n1 - 1.0) - 3.0 * delta_n * M2;
+                double newM2   = M2 + term1;
+                double newMean = mean + delta_n;
+
+                mean = newMean;
+                M2   = newM2;
+                M3   = newM3;
+
+                ++steps;
+            }
+
             total_ms += ms * static_cast<double>(count);
             min_ms = std::min(min_ms, ms);
             max_ms = std::max(max_ms, ms);
-            steps += count;
         }
 
         double average_ms() const {
-            return steps == 0 ? 0.0 : total_ms / static_cast<double>(steps);
+            return steps == 0 ? 0.0 : mean;
+        }
+
+        double variance_ms() const {
+            if (steps < 2) return 0.0;
+            return M2 / static_cast<double>(steps - 1);
+        }
+
+        double std_ms() const {
+            return std::sqrt(variance_ms());
+        }
+
+        // Fisher's unbiased sample skewness
+        double skew() const {
+            if (steps < 3) return 0.0;
+
+            const double n  = static_cast<double>(steps);
+            const double m2 = M2 / n;
+            const double m3 = M3 / n;
+            if (m2 <= 0.0) return 0.0;
+
+            const double g1 = m3 / std::pow(m2, 1.5); // moment skewness
+            return std::sqrt(n * (n - 1.0)) / (n - 2.0) * g1;
+        }
+
+        double coeff_of_variation() const {
+            const double mu  = average_ms();
+            const double sig = std_ms();
+            if (mu == 0.0) return 0.0;
+            return sig / mu;
+        }
+
+        double steps_per_second() const {
+            const double mu = average_ms();
+            if (mu <= 0.0) return 0.0;
+            return 1000.0 / mu;
         }
     };
+
 
     void print_stats(const StepLatencyStats& stats) {
         const double min_ms = stats.steps == 0 ? 0.0 : stats.min_ms;
         const double max_ms = stats.steps == 0 ? 0.0 : stats.max_ms;
+        const double mu     = stats.average_ms();
+        const double std    = stats.std_ms();
+        const double skew   = stats.skew();
 
-        std::cout << stats.title << "\n"
-                  << "  Steps (after filters): " << stats.steps << "\n"
-                  << "  Avg latency: " << stats.average_ms() << " ms\n"
-                  << "  Min latency: " << min_ms << " ms\n"
-                  << "  Max latency: " << max_ms << " ms\n"
-                  << std::endl;
+        std::cout << "\n" << stats.title << "\n";
+        std::cout
+            << "  Steps (after filters): " << stats.steps << "\n"
+            << "  Avg latency:           " << mu   << " ms\n"
+            << "  Std latency:           " << std  << " ms\n"
+            << "  Skew latency:          " << skew << "\n";
+
+        if (stats.steps > 0) {
+            std::cout
+                << "  P10 / P50 / P90 / P98: "
+                << stats.p10_ms    << " / "
+                << stats.median_ms << " / "
+                << stats.p90_ms    << " / "
+                << stats.p98_ms    << " ms\n"
+                << "  Mode latency (hist):   " << stats.mode_ms << " ms\n"
+                << "  Coeff. of variation:   " << stats.coeff_of_variation() << "\n"
+                << "  Throughput:            " << stats.steps_per_second() << " steps/s\n";
+        }
+
+        std::cout
+            << "  ~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
+            << "  Min latency:            " << min_ms << " ms\n"
+            << "  Max latency:            " << max_ms << " ms\n"
+            << std::endl;
     }
+
+
 
 
     struct TukeyFence {
@@ -112,7 +203,57 @@ namespace LatencyUtils {
         return f;
     }
 
-    StepLatencyStats build_stats_from_samples(const std::string& title, const std::vector<double>& samples, std::size_t warmup_steps = 100, double tukey_k = 0.95) {
+    static double estimate_mode_from_sorted(const std::vector<double>& sorted) {
+        if (sorted.empty()) return 0.0;
+        if (sorted.size() == 1) return sorted[0];
+
+        const double minv = sorted.front();
+        const double maxv = sorted.back();
+        if (minv == maxv) return minv;
+
+        const std::size_t n = sorted.size();
+
+        const double q1  = quantile_linear(sorted, 0.25);
+        const double q3  = quantile_linear(sorted, 0.75);
+        const double iqr = q3 - q1;
+
+        // Freedman–Diaconis bin width
+        double bin_width = 0.0;
+        if (iqr > 0.0) {
+            bin_width = 2.0 * iqr * std::pow(static_cast<double>(n), -1.0 / 3.0);
+        }
+        if (bin_width <= 0.0) {
+            bin_width = (maxv - minv) / std::min<std::size_t>(n, 32);
+        }
+
+        std::size_t bin_count = static_cast<std::size_t>(std::ceil((maxv - minv) / bin_width));
+        bin_count = std::clamp<std::size_t>(bin_count, 4, 128);
+
+        std::vector<std::size_t> hist(bin_count, 0);
+        const double inv_width = static_cast<double>(bin_count) / (maxv - minv);
+
+        for (double v : sorted) {
+            std::size_t idx = static_cast<std::size_t>((v - minv) * inv_width);
+            if (idx >= bin_count) idx = bin_count - 1;
+            hist[idx]++;
+        }
+
+        std::size_t best_bin   = 0;
+        std::size_t best_count = hist[0];
+        for (std::size_t i = 1; i < bin_count; ++i) {
+            if (hist[i] > best_count) {
+                best_count = hist[i];
+                best_bin   = i;
+            }
+        }
+
+        const double width = (maxv - minv) / static_cast<double>(bin_count);
+        return minv + (static_cast<double>(best_bin) + 0.5) * width;
+    }
+
+
+
+    StepLatencyStats build_stats_from_samples(const std::string& title, const std::vector<double>& samples, std::size_t warmup_steps = 100, double tukey_k = 0.98) {
         StepLatencyStats stats{title};
 
         if (samples.size() <= warmup_steps)
@@ -125,25 +266,37 @@ namespace LatencyUtils {
             return stats;
         }
 
+        // For Tukey fence, we use a sorted copy of the tail
         std::vector<double> sorted = tail;
         std::sort(sorted.begin(), sorted.end());
 
         const TukeyFence fence = compute_tukey_fence(sorted, tukey_k);
 
+        // Keep only inliers and feed them to the online stats
+        std::vector<double> filtered;
+        filtered.reserve(sorted.size());
+
         for (double v : tail) {
             if (v < fence.lower || v > fence.upper)
                 continue;
             stats.record(v);
+            filtered.push_back(v);
+        }
+
+        if (!filtered.empty()) {
+            std::sort(filtered.begin(), filtered.end());
+            stats.median_ms = quantile_linear(filtered, 0.50);
+            stats.p10_ms    = quantile_linear(filtered, 0.10);
+            stats.p90_ms    = quantile_linear(filtered, 0.90);
+            stats.p98_ms    = quantile_linear(filtered, 0.98);
+            stats.mode_ms   = estimate_mode_from_sorted(filtered);
         }
 
         return stats;
     }
+
 }
-
-int main() {
-    Thot::Model model("SpeedTestMNIST");
-    model.use_cuda(torch::cuda::is_available());
-
+inline Thot::Loss::Details::CrossEntropyDescriptor set(Thot::Model& model) { // Used to reset learnable parameters between Thot PreBuild and Thot Custom
     model.add(Thot::Layer::Conv2d({.in_channels = 1,  .out_channels = 32,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Thot::Activation::ReLU, Thot::Initialization::HeUniform));
     model.add(Thot::Layer::Conv2d({.in_channels = 32, .out_channels = 32,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Thot::Activation::ReLU, Thot::Initialization::HeUniform));
     model.add(Thot::Layer::MaxPool2d({.kernel_size={2,2}, .stride={2,2}, .padding={0,0}}));
@@ -163,12 +316,16 @@ int main() {
     model.set_optimizer(Thot::Optimizer::SGD({.learning_rate = 1e-3}));
     const auto ce = Thot::Loss::CrossEntropy({.label_smoothing = 0.02f});
     model.set_loss(ce);
+    model.use_cuda(torch::cuda::is_available());
+    return ce;
+}
 
+
+int main() {
     auto [x1, y1, x2, y2] = Thot::Data::Load::MNIST("/home/moonfloww/Projects/DATASETS/MNIST", 1.f, 1.f, true);
-    auto [xvalid, yvalid] = Thot::Data::Manipulation::Fraction(x2, y2, 0.1f);
 
-    const int64_t epochs= 10;
-    const int64_t B= 128;
+    const int64_t epochs= 100;
+    const int64_t B= 64;
     const int64_t N= x1.size(0);
     Thot::Data::Check::Size(x1);
 
@@ -176,19 +333,21 @@ int main() {
     const std::size_t total_steps_estimate = static_cast<std::size_t>(epochs * steps_per_epoch);
 
     std::vector<double> thot_prebuilt_samples;
-    std::vector<double> thot_homemade_samples;
+    std::vector<double> thot_custom_samples;
     std::vector<double> libtorch_samples;
 
     thot_prebuilt_samples.reserve(total_steps_estimate);
-    thot_homemade_samples.reserve(total_steps_estimate);
+    thot_custom_samples.reserve(total_steps_estimate);
     libtorch_samples.reserve(total_steps_estimate);
 
-    // Thot (built-in train() + telemetry)
+    // Thot built-in train()
     std::cout << "training 100% Thot" << std::endl;
-    model.clear_training_telemetry();
-    model.train(x1, y1, {.epoch = epochs, .batch_size = B, .monitor = false, .enable_amp = true});
+    Thot::Model model1("");
+    set(model1); // define the network
+    model1.clear_training_telemetry(); // not necessary
+    model1.train(x1, y1, {.epoch = epochs, .batch_size = B, .monitor = false, .enable_amp = false});
 
-    const auto& telemetry = model.training_telemetry();
+    const auto& telemetry = model1.training_telemetry();
     for (const auto& epoch : telemetry.epochs()) {
         const double step_latency_sec = epoch.step_latency_value();
         if (step_latency_sec <= 0.0) {
@@ -214,22 +373,25 @@ int main() {
 
     // 50% Thot (manual training loop using Thot model
     std::cout << "training 50% Thot" << std::endl;
+    Thot::Model model2("");
+    const auto ce = set(model2); // define the network
+    model2.clear_training_telemetry(); // not necessary
     for (int64_t e = 0; e < epochs; ++e) {
         for (int64_t i = 0; i < N; i += B) { auto step_start = std::chrono::high_resolution_clock::now();
             const int64_t end = std::min(i + B, N);
 
-            auto inputs  = x1.index({torch::indexing::Slice(i, end)}).to(model.device());
-            auto targets = y1.index({torch::indexing::Slice(i, end)}).to(model.device());
+            auto inputs  = x1.index({torch::indexing::Slice(i, end)}).to(model2.device());
+            auto targets = y1.index({torch::indexing::Slice(i, end)}).to(model2.device());
 
-            model.zero_grad();
-            auto logits = model.forward(inputs);
+            model2.zero_grad();
+            auto logits = model2.forward(inputs);
             auto loss   = Thot::Loss::Details::compute(ce, logits, targets);
             loss.backward();
-            model.step();
+            model2.step();
 
             auto step_end = std::chrono::high_resolution_clock::now();
             double step_ms = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(step_end - step_start).count();
-            thot_homemade_samples.push_back(step_ms);
+            thot_custom_samples.push_back(step_ms);
         }
     }
 
@@ -269,16 +431,16 @@ int main() {
     std::cout << "\n\n\n";
 
     const LatencyUtils::StepLatencyStats thot_prebuilt_stats =
-        LatencyUtils::build_stats_from_samples("Thot Train() (telemetry, warmup+Tukey 0.95)", thot_prebuilt_samples, 100, 0.95);
+        LatencyUtils::build_stats_from_samples("Thot Train() (warmup+Tukey 0.98)", thot_prebuilt_samples, 200, 0.98);
 
-    const LatencyUtils::StepLatencyStats thot_homemade_stats =
-        LatencyUtils::build_stats_from_samples("Thot + homemade Train() (warmup+Tukey 0.95)", thot_homemade_samples, 100, 0.95);
+    const LatencyUtils::StepLatencyStats thot_custom_stats =
+        LatencyUtils::build_stats_from_samples("Thot + Custom Train() (warmup+Tukey 0.98)", thot_custom_samples, 200, 0.98);
 
     const LatencyUtils::StepLatencyStats libtorch_stats =
-        LatencyUtils::build_stats_from_samples("Libtorch Raw (warmup+Tukey 0.95)", libtorch_samples, 100, 0.95);
+        LatencyUtils::build_stats_from_samples("Libtorch Raw (warmup+Tukey 0.98)", libtorch_samples, 200, 0.98);
 
     print_stats(thot_prebuilt_stats);
-    print_stats(thot_homemade_stats);
+    print_stats(thot_custom_stats);
     print_stats(libtorch_stats);
 
     auto compute_overhead = [](double lhs, double rhs) {
@@ -287,12 +449,14 @@ int main() {
     };
 
     const double ThotPreBuild = thot_prebuilt_stats.average_ms();
-    const double ThotHomeMade = thot_homemade_stats.average_ms();
+    const double Thotcustom = thot_custom_stats.average_ms();
     const double LibTorchRaw  = libtorch_stats.average_ms();
 
-    std::cout << "Thot vs Libtorch Step Overhead: " << compute_overhead(ThotPreBuild, LibTorchRaw) << "%\n";
-    std::cout << "Thot PreBuild Step Overhead vs Homemade: " << compute_overhead(ThotPreBuild, ThotHomeMade) << "%\n";
-    std::cout << "Thot Homemade Step vs Libtorch Overhead: " << compute_overhead(ThotHomeMade, LibTorchRaw) << "%\n";
+
+    std::cout << "\n\nOverhead %" << std::endl;
+    std::cout << "   Thot vs Libtorch Overhead: " << compute_overhead(ThotPreBuild, LibTorchRaw) << "%\n";
+    std::cout << "   Thot PreBuild Train() vs Custom Train() Overhead: " << compute_overhead(ThotPreBuild, Thotcustom) << "%\n";
+    std::cout << "   Thot Custom Train() vs Libtorch Overhead: " << compute_overhead(Thotcustom, LibTorchRaw) << "%\n";
 
     return 0;
 }
