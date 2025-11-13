@@ -114,8 +114,16 @@ int main() {
 
     //100% Thot
     std::cout << "training 100% Thot" << std::endl;
+    model.clear_training_telemetry();//not necessary
     model.train(x1, y1, {.epoch=epochs, .batch_size = B,  .monitor = false, .enable_amp = true}); // .test = std::vector<at::Tensor>{xvalid, yvalid},
+    StepLatencyStats thot_prebuilt_stats{"Thot Train()"};
+    for (const auto& epoch : model.training_telemetry().epochs()) {
+        if (!epoch.step_latency.defined()) {
+            continue;
+        }
 
+        thot_prebuilt_stats.record(epoch.step_latency.materialize());
+    }
 
 
 
