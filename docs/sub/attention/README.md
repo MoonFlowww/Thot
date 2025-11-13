@@ -88,4 +88,4 @@ auto output = attention->forward(query, key, value, attn_mask, key_padding_mask)
 ```
 
 The transformer blocks in `Thot::Block::Transformer*` perform this mapping for
-you, but the descriptor and implementation are exposed for custom wiring.
+you, but the descriptor and implementation are exposed for custom wiring. [Docs/Block & Transformer](../block/README.md)

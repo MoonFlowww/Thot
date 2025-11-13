@@ -52,7 +52,7 @@ model.add(Thot::Block::Sequential({ /*vector field*/
     Thot::Layer::MaxPool2d({{2, 2}, {2, 2}})
 }));
 ```
-The framework ships with a rich catalog of layers (see in [Docs/Layers](sub/layer/README.md) or [Docs/Blocks](sub/block/README.md)). It will automatically link linearly every item's called via `.add()`. To rewire the network use `.links()` (see in [Links](sub/links/README.md)). Multi-head attention descriptors that power the transformer blocks are documented in [Attention](sub/attention/README.md).
+The framework ships with a rich catalog of layers (see in [Docs/Layers](sub/layer/README.md) or [Docs/Blocks](sub/block/README.md)). It will automatically link linearly every item's called via `.add()`. To rewire the network use `.links()` (see in [Docs/Links](sub/links/README.md)). Multi-head attention descriptors that power the transformer blocks are documented in [Docs/Attention](sub/attention/README.md).
 
 
 ## Configuring Optimization
