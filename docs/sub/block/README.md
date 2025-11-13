@@ -165,6 +165,6 @@ NLP tasks where quadratic attention would be prohibitive.
 
 ---
 
-All blocks emit descriptors compatible with [Links](../links/README.md), so you
+All blocks emit descriptors compatible with [Docs/Links](../links/README.md), so you
 can reroute skip connections or merge transformer branches with `Model::links`
 when building complex graphs.
