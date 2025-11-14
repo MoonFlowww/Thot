@@ -34,7 +34,7 @@ ECGDatasetSplit load_ptbxl_dataset(const std::string& root, bool low_res, float 
 }
 
 
-int tmain()
+int main()
 {
     Thot::Model model("PTBXL_ECG");
     constexpr bool load_existing_model = false;
@@ -42,8 +42,7 @@ int tmain()
     std::cout << "Cuda: " << use_cuda << std::endl;
     model.use_cuda(use_cuda);
 
-    const std::string dataset_root = "/home/moonfloww/Projects/DATASETS/ECG_ACC";
-    const auto dataset = load_ptbxl_dataset(dataset_root, true, 0.8f);
+    const auto dataset = load_ptbxl_dataset("/home/moonfloww/Projects/DATASETS/ECG_ACC", true, 0.8f);
 
 
     auto train_signals = dataset.train.signals.transpose(1, 2).contiguous();
@@ -61,52 +60,53 @@ int tmain()
     const int64_t steps_per_epoch = std::max<int64_t>(1, (train_signals.size(0) + batch_size - 1) / batch_size);
 
     Thot::Data::Check::Size(train_signals);
-    if (!load_existing_model) {
-
-        model.add(Thot::Layer::xLSTM({ .input_size = input_features, .hidden_size = 128, .num_layers = 2, .dropout = 0.1, .batch_first = true, .bidirectional = true }, Thot::Activation::Identity, Thot::Initialization::XavierUniform), "lstm");
-
-        model.add(Thot::Layer::Reduce({.op=Thot::Layer::ReduceOp::Max, .dims = {1}, .keep_dim=false}), "Reduc");
-
-        model.add(Thot::Layer::SoftDropout({ .probability = 0.5}), "SD1");
-        model.add(Thot::Layer::FC({ 256, 128, true }, Thot::Activation::SiLU, Thot::Initialization::HeNormal), "fc1");
-        model.add(Thot::Layer::HardDropout({ .probability = 0.5 }), "HD1");
-        model.add(Thot::Layer::FC({ 128, 5, true }, Thot::Activation::Identity, Thot::Initialization::HeNormal), "end");
-
-        model.links({
-            {Thot::Port::Input("@input"), Thot::Port::Module("lstm")},
-            {Thot::Port::Module("lstm"),   Thot::Port::Module("Reduc")},
-            {Thot::Port::Module("Reduc"),  Thot::Port::Module("SD1")},
-            {Thot::Port::Module("SD1"),    Thot::Port::Module("fc1")},
-            {Thot::Port::Module("fc1"),    Thot::Port::Module("HD1")},
-            {Thot::Port::Module("HD1"),    Thot::Port::Module("end")},
-            {Thot::Port::Module("end"),    Thot::Port::Output("@output")}
-        }, {.enable_graph_capture = true});
 
 
-        model.set_optimizer(
-        Thot::Optimizer::AdamW({.learning_rate = 2e-4, .weight_decay = 1e-4}),
-        Thot::LrScheduler::CosineAnnealing({
-            .T_max = static_cast<std::size_t>(epochs) * static_cast<std::size_t>(steps_per_epoch),
-            .eta_min = 1e-6,
-            .warmup_steps = static_cast<std::size_t>(steps_per_epoch),
-            .warmup_start_factor = 0.1
-        }));
+    model.add(Thot::Layer::xLSTM({ .input_size = input_features, .hidden_size = 128, .num_layers = 2, .dropout = 0.1, .batch_first = true, .bidirectional = true }, Thot::Activation::Identity, Thot::Initialization::XavierUniform), "lstm");
 
-        model.set_loss(Thot::Loss::CrossEntropy({.label_smoothing = 0.05f}));
-    }
+    model.add(Thot::Layer::Reduce({.op=Thot::Layer::ReduceOp::Max, .dims = {1}, .keep_dim=false}), "Reduc");
 
-    if (!load_existing_model)
-        model.train(train_signals, dataset.train.labels, {
-            .epoch = static_cast<std::size_t>(epochs),
-            .batch_size = static_cast<std::size_t>(batch_size),
-            .shuffle = true,
-            .buffer_vram = 0,
-            .restore_best_state = true,
-            .test = std::vector<at::Tensor>{validation_signals, dataset.validation.labels},
-            .graph_mode = Thot::GraphMode::Capture,
-            .enable_amp = true,
-            .memory_format = torch::MemoryFormat::Contiguous,
-        });
+    model.add(Thot::Layer::SoftDropout({ .probability = 0.5}), "SD1");
+    model.add(Thot::Layer::FC({ 256, 128, true }, Thot::Activation::SiLU, Thot::Initialization::HeNormal), "fc1");
+    model.add(Thot::Layer::HardDropout({ .probability = 0.5 }), "HD1");
+    model.add(Thot::Layer::FC({ 128, 5, true }, Thot::Activation::Identity, Thot::Initialization::HeNormal), "end");
+
+
+    model.links({
+        {Thot::Port::Module("@input"), Thot::Port::Module("lstm")},
+        {Thot::Port::Module("lstm"),   Thot::Port::Module("Reduc")},
+        {Thot::Port::Module("Reduc"),  Thot::Port::Module("SD1")},
+        {Thot::Port::Module("SD1"),    Thot::Port::Module("fc1")},
+        {Thot::Port::Module("fc1"),    Thot::Port::Module("HD1")},
+        {Thot::Port::Module("HD1"),    Thot::Port::Module("end")},
+        {Thot::Port::Module("end"),    Thot::Port::Module("@output")}
+    }, {.enable_graph_capture = true});
+
+
+    model.set_optimizer(
+    Thot::Optimizer::AdamW({.learning_rate = 2e-4, .weight_decay = 1e-4}),
+    Thot::LrScheduler::CosineAnnealing({
+        .T_max = static_cast<std::size_t>(epochs) * static_cast<std::size_t>(steps_per_epoch),
+        .eta_min = 1e-6,
+        .warmup_steps = static_cast<std::size_t>(steps_per_epoch),
+        .warmup_start_factor = 0.1
+    }));
+
+    model.set_loss(Thot::Loss::CrossEntropy({.label_smoothing = 0.05f}));
+
+
+
+    model.train(train_signals, dataset.train.labels, {
+        .epoch = static_cast<std::size_t>(epochs),
+        .batch_size = static_cast<std::size_t>(batch_size),
+        .shuffle = true,
+        .buffer_vram = 0,
+        .restore_best_state = true,
+        .test = std::vector<at::Tensor>{validation_signals, dataset.validation.labels},
+        .graph_mode = Thot::GraphMode::Capture,
+        .enable_amp = true,
+        .memory_format = torch::MemoryFormat::Contiguous,
+    });
     
 
     if (dataset.validation.signals.size(0) > 0) {

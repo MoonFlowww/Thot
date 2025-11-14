@@ -321,7 +321,7 @@ inline Thot::Loss::Details::CrossEntropyDescriptor set(Thot::Model& model) { // 
 }
 
 
-int main() {
+int _main() {
     auto [x1, y1, x2, y2] = Thot::Data::Load::MNIST("/home/moonfloww/Projects/DATASETS/MNIST", .1f, 1.f, true);
 
     const int64_t epochs= 10;
