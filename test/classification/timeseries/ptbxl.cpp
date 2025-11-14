@@ -9,6 +9,7 @@
 #include <optional>
 #include <regex>
 #include <string>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -44,8 +45,26 @@ int main() {
     const auto dataset = load_ptbxl_dataset("/home/moonfloww/Projects/DATASETS/ECG_ACC", true, 0.8f);
 
 
-    auto train_signals = dataset.train.signals.transpose(1, 2).contiguous();
-    auto validation_signals = dataset.validation.signals.transpose(1, 2).contiguous();
+    auto prepare_signals = [](torch::Tensor signals) {
+        if (!signals.defined()) {
+            return signals;
+        }
+
+        if (signals.dim() < 3) {
+            throw std::runtime_error("PTB-XL signals must be at least 3D (batch, channels, timesteps).");
+        }
+
+        auto prepared = signals.contiguous();
+        if (prepared.dim() == 3) {
+            // Loader returns [batch, leads, timesteps]; expose leads as channels for Conv2d layers
+            // by inserting a singleton spatial dimension.
+            prepared = prepared.unsqueeze(2);
+        }
+        return prepared;
+    };
+
+    auto train_signals = prepare_signals(dataset.train.signals);
+    auto validation_signals = prepare_signals(dataset.validation.signals);
 
     const int64_t input_features = train_signals.size(2);
     const int64_t sequence_length = train_signals.size(1);
