@@ -73,13 +73,13 @@ int main()
 
 
     model.links({
-        {Thot::Port::Module("@input"), Thot::Port::Module("lstm")},
+        {Thot::Port::Input("@input"), Thot::Port::Module("lstm")},
         {Thot::Port::Module("lstm"),   Thot::Port::Module("Reduc")},
         {Thot::Port::Module("Reduc"),  Thot::Port::Module("SD1")},
         {Thot::Port::Module("SD1"),    Thot::Port::Module("fc1")},
         {Thot::Port::Module("fc1"),    Thot::Port::Module("HD1")},
         {Thot::Port::Module("HD1"),    Thot::Port::Module("end")},
-        {Thot::Port::Module("end"),    Thot::Port::Module("@output")}
+        {Thot::Port::Module("end"),    Thot::Port::Output("@output")}
     }, {.enable_graph_capture = true});
 
 

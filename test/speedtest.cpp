@@ -316,7 +316,7 @@ inline Thot::Loss::Details::CrossEntropyDescriptor set(Thot::Model& model) { // 
     model.set_optimizer(Thot::Optimizer::SGD({.learning_rate = 1e-3}));
     const auto ce = Thot::Loss::CrossEntropy({.label_smoothing = 0.02f});
     model.set_loss(ce);
-    model.use_cuda(false);
+    model.use_cuda(torch::cuda::is_available());
     return ce;
 }
 
@@ -398,7 +398,7 @@ int _main() {
     //libtorch
     std::cout << "training 100% LibTorch" << std::endl;
 
-    torch::Device device = torch::kCPU;//torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
+    torch::Device device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
     Net net;
     net->to(device);
     torch::optim::SGD optimizer(net->parameters(), torch::optim::SGDOptions(1e-3));
