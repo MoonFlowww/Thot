@@ -296,6 +296,7 @@ namespace LatencyUtils {
     }
 
 }
+
 inline Thot::Loss::Details::CrossEntropyDescriptor set(Thot::Model& model) { // Used to reset learnable parameters between Thot PreBuild and Thot Custom
     model.add(Thot::Layer::Conv2d({.in_channels = 1,  .out_channels = 32,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Thot::Activation::ReLU, Thot::Initialization::HeUniform));
     model.add(Thot::Layer::Conv2d({.in_channels = 32, .out_channels = 32,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Thot::Activation::ReLU, Thot::Initialization::HeUniform));
@@ -345,7 +346,7 @@ int _main() {
     Thot::Model model1("");
     set(model1); // define the network
     model1.clear_training_telemetry(); // not necessary
-    model1.train(x1, y1, {.epoch = epochs, .batch_size = B, .monitor = false, .enable_amp = false});
+    model1.train(x1, y1, {.epoch = epochs, .batch_size = B, .monitor = false , .enable_amp = false});
 
     const auto& telemetry = model1.training_telemetry();
     for (const auto& epoch : telemetry.epochs()) {

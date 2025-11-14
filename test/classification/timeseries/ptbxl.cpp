@@ -34,8 +34,7 @@ ECGDatasetSplit load_ptbxl_dataset(const std::string& root, bool low_res, float 
 }
 
 
-int main()
-{
+int main() {
     Thot::Model model("PTBXL_ECG");
     constexpr bool load_existing_model = false;
     const bool use_cuda = torch::cuda::is_available();
@@ -62,25 +61,41 @@ int main()
     Thot::Data::Check::Size(train_signals);
 
 
-    model.add(Thot::Layer::xLSTM({ .input_size = input_features, .hidden_size = 128, .num_layers = 2, .dropout = 0.1, .batch_first = true, .bidirectional = true }, Thot::Activation::Identity, Thot::Initialization::XavierUniform), "lstm");
 
-    model.add(Thot::Layer::Reduce({.op=Thot::Layer::ReduceOp::Max, .dims = {1}, .keep_dim=false}), "Reduc");
+    model.add(Thot::Layer::Conv2d({
+            .in_channels= 12,.out_channels= 32, .kernel_size= {3, 3}, .stride= {1, 1}, .padding= {1, 1}, .dilation= {1, 1}, .groups= 1, .bias= false},
+            Thot::Activation::SiLU, Thot::Initialization::HeNormal), "conv1");
 
-    model.add(Thot::Layer::SoftDropout({ .probability = 0.5}), "SD1");
-    model.add(Thot::Layer::FC({ 256, 128, true }, Thot::Activation::SiLU, Thot::Initialization::HeNormal), "fc1");
+    model.add(Thot::Layer::Conv2d(
+            {.in_channels= 32, .out_channels= 64, .kernel_size= {3, 3}, .stride= {1, 1}, .padding= {2, 1}, .dilation= {2, 1}, .groups= 1, .bias= false},
+            Thot::Activation::SiLU, Thot::Initialization::HeNormal), "conv2");
+
+    model.add(Thot::Layer::Conv2d(
+        {.in_channels= 64, .out_channels = 64, .kernel_size= {3, 3}, .stride= {2, 1}, .padding= {1, 1}, .dilation= {1, 1}, .groups= 1, .bias= false},
+        Thot::Activation::SiLU, Thot::Initialization::HeNormal), "conv3");
+
+    model.add(Thot::Layer::Conv2d(
+        {.in_channels= 64, .out_channels= 128, .kernel_size= {3, 3}, .stride= {1, 1}, .padding= {4, 1}, .dilation= {4, 1}, .groups= 1, .bias= false},
+            Thot::Activation::SiLU, Thot::Initialization::HeNormal), "conv4");
+
+    model.add(Thot::Layer::Conv2d(
+        {.in_channels = 128, .out_channels = 128, .kernel_size  = {3, 3}, .stride = {2, 1}, .padding= {1, 1}, .dilation = {1, 1}, .groups = 1, .bias = false},
+        Thot::Activation::SiLU, Thot::Initialization::HeNormal), "conv5");
+
+    model.add(Thot::Layer::Reduce({ .op= Thot::Layer::ReduceOp::Mean, .dims= {1}, .keep_dim = false }), "flat");
+
+
+    model.add(Thot::Layer::xLSTM(
+        { .input_size   = 128, .hidden_size  = 128, .num_layers   = 2, .dropout      = 0.1, .batch_first  = true, .bidirectional = true },
+        Thot::Activation::Identity, Thot::Initialization::XavierUniform), "lstm");
+
+    model.add(Thot::Layer::Reduce({ .op= Thot::Layer::ReduceOp::Max, .dims= {1}, .keep_dim = false }), "Reduc");
+
+    model.add(Thot::Layer::SoftDropout({ .probability = 0.2 }), "SD1");
+    model.add(Thot::Layer::FC({256, 128, true}, Thot::Activation::SiLU, Thot::Initialization::HeNormal), "fc1");
+
     model.add(Thot::Layer::HardDropout({ .probability = 0.5 }), "HD1");
-    model.add(Thot::Layer::FC({ 128, 5, true }, Thot::Activation::Identity, Thot::Initialization::HeNormal), "end");
-
-
-    model.links({
-        {Thot::Port::Input("@input"), Thot::Port::Module("lstm")},
-        {Thot::Port::Module("lstm"),   Thot::Port::Module("Reduc")},
-        {Thot::Port::Module("Reduc"),  Thot::Port::Module("SD1")},
-        {Thot::Port::Module("SD1"),    Thot::Port::Module("fc1")},
-        {Thot::Port::Module("fc1"),    Thot::Port::Module("HD1")},
-        {Thot::Port::Module("HD1"),    Thot::Port::Module("end")},
-        {Thot::Port::Module("end"),    Thot::Port::Output("@output")}
-    }, {.enable_graph_capture = true});
+    model.add(Thot::Layer::FC({128, 5, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal), "end");
 
 
     model.set_optimizer(
@@ -103,7 +118,6 @@ int main()
         .buffer_vram = 0,
         .restore_best_state = true,
         .test = std::vector<at::Tensor>{validation_signals, dataset.validation.labels},
-        .graph_mode = Thot::GraphMode::Capture,
         .enable_amp = true,
         .memory_format = torch::MemoryFormat::Contiguous,
     });

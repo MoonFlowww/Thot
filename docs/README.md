@@ -152,9 +152,7 @@ model.load("PATH"+"/_Network_Name_");
 ## Latency Benchmarks
 
 Results below represent warm runs filtered with a Tukey 0.98 fence on the MNIST workload  
-(60k samples, 28×28 | epochs = 100, batch = 64).  
-Absolute latencies vary run-to-run, so the table is meant as a *relative* comparison of
-distribution shape (jitter) and throughput, not as a stopwatch benchmark.
+(60k samples, 28×28 | epochs = 100, batch = 64).
 
 | Runner                   | Steps (filtered) | Mean (ms) |    Std |      CV |   P10 |   P50 |   P90 |   P98 |  Mode | Throughput (steps/s) |
 |--------------------------|-----------------:|----------:|--------:|--------:|------:|------:|------:|------:|------:|----------------------:|
