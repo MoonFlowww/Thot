@@ -64,8 +64,16 @@ namespace {
 
             if (batches > 0)
                 accumulated_loss /= static_cast<double>(batches);
-            std::cout << "Epoch " << (epoch + 1) << "/" << options.epochs << " | [Loss] - Dice(" << accumulated_loss*options.dice_weight << ") + BCE(" << accumulated_loss*options.bce_weight <<") =" << accumulated_loss << std::endl;
+            std::cout << "Epoch " << (epoch + 1) << "/" << options.epochs
+                << " | [Loss] - Dice(" << accumulated_loss * options.dice_weight
+                << ") + BCE(" << accumulated_loss * options.bce_weight
+                << ") =" << accumulated_loss << std::endl;
         }
+
+        host_inputs = torch::Tensor();
+        host_targets = torch::Tensor();
+        pinned_inputs = Thot::AsyncPinnedTensor();
+        pinned_targets = Thot::AsyncPinnedTensor();
     }
 }
 
@@ -145,24 +153,74 @@ int main() {
 
     //Custom loop bcs we use dual-loss
     CustomTrainingOptions training_options{};
-    training_options.epochs = 200;
+    training_options.epochs = 10;
     training_options.batch_size = 8;
     training_options.dice_weight = 0.6;
     training_options.bce_weight = 0.4;
 
+    const auto total_training_samples = x1.size(0);
+    const auto steps_per_epoch = static_cast<std::size_t>((total_training_samples + training_options.batch_size - 1) / training_options.batch_size);
+    const auto total_training_steps = std::max<std::size_t>(1, training_options.epochs * std::max<std::size_t>(steps_per_epoch, 1));
+
+    model.set_loss(Thot::Loss::Dice());
+    model.set_optimizer(
+        Thot::Optimizer::AdamW({.learning_rate = 1e-4, .weight_decay = 1e-4}),
+        Thot::LrScheduler::CosineAnnealing({
+            .T_max = total_training_steps,
+            .eta_min = 1e-6,
+            .warmup_steps = std::min<std::size_t>(steps_per_epoch * 5, total_training_steps / 5),
+            .warmup_start_factor = 0.1,
+        }));
+
+    model.set_regularization({Thot::Regularization::SWAG({
+        .coefficient = 5e-4,
+        .variance_epsilon = 1e-6,
+        .start_step = static_cast<std::size_t>(0.8 * static_cast<double>(total_training_steps)),
+        .accumulation_stride = std::max<std::size_t>(1, steps_per_epoch),
+        .max_snapshots = 20,
+    })});
+
     model.use_cuda(torch::cuda::is_available());
     Train(model, x1, y1, training_options);
+
+    // Release training tensors before running evaluation to avoid holding on to
+    // large allocations alongside the validation set.
+    x1 = torch::Tensor();
+    y1 = torch::Tensor();
+#ifdef TORCH_CUDA_AVAILABLE
+    if (torch::cuda::is_available()) {
+        torch::cuda::synchronize();
+        torch::cuda::empty_cache();
+    }
+#endif
+
+    torch::NoGradGuard guard;
+    x2 = x2.contiguous();
+    y2 = y2.contiguous();
 
     model.evaluate(x2, y2, Thot::Evaluation::Classification, {
         Thot::Metric::Classification::Accuracy,
         Thot::Metric::Classification::Precision,
         Thot::Metric::Classification::Recall,
         Thot::Metric::Classification::JaccardIndexMicro,
-        Thot::Metric::Classification::HausdorffDistance,
-        Thot::Metric::Classification::BoundaryIoU,
+        //Thot::Metric::Classification::HausdorffDistance,
+        //Thot::Metric::Classification::BoundaryIoU,
     },
-    {.batch_size = 2});
+    {.batch_size = 8, .buffer_vram=2});
 
+    if (x2.size(0) > 0) {
+        // Regression check: ensure segmentation evaluation handles tiny batches with spatial logits.
+        const auto regression_batch = std::min<std::int64_t>(x2.size(0), static_cast<std::int64_t>(2));
+        auto regression_inputs = x2.narrow(0, 0, regression_batch).clone();
+        auto regression_targets = y2.narrow(0, 0, regression_batch).clone();
+        model.evaluate(regression_inputs, regression_targets, Thot::Evaluation::Classification, {
+            Thot::Metric::Classification::Accuracy,
+            Thot::Metric::Classification::Precision,
+            Thot::Metric::Classification::Recall,
+            Thot::Metric::Classification::JaccardIndexMicro,
+        },
+        {.batch_size = 1, .print_summary = false});
+    }
 
     return 0;
 }

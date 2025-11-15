@@ -328,13 +328,126 @@ static torch::Tensor stage_for_device(torch::Tensor tensor, const bool& device) 
     const bool non_blocking = device && host_tensor.is_pinned();
     return host_tensor.to(dev, host_tensor.scalar_type(), non_blocking);
 }
+struct ClassificationMetrics {
+    double precision = 0.0;
+    double true_positive_rate = 0.0;
+    double f1_score = 0.0;
+};
+
+static void print_metrics(const std::string& label, const ClassificationMetrics& metrics) {
+    std::cout << "  " << label << " Precision: " << metrics.precision
+              << "  TPR: " << metrics.true_positive_rate
+              << "  F1: " << metrics.f1_score << "\n";
+}
+
+static ClassificationMetrics compute_macro_metrics(const std::vector<int64_t>& tp,
+                                                   const std::vector<int64_t>& fp,
+                                                   const std::vector<int64_t>& fn) {
+    ClassificationMetrics metrics;
+    if (tp.empty()) {
+        return metrics;
+    }
+
+    double precision_sum = 0.0;
+    double recall_sum    = 0.0;
+    double f1_sum        = 0.0;
+    std::size_t counted_classes = 0;
+
+    for (std::size_t i = 0; i < tp.size(); ++i) {
+        const double tp_d = static_cast<double>(tp[i]);
+        const double fp_d = static_cast<double>(fp[i]);
+        const double fn_d = static_cast<double>(fn[i]);
+
+        const double denom_precision = tp_d + fp_d;
+        const double denom_recall    = tp_d + fn_d;
+
+        double precision = 0.0;
+        double recall    = 0.0;
+
+        if (denom_precision > 0.0)
+            precision = tp_d / denom_precision;
+        if (denom_recall > 0.0)
+            recall = tp_d / denom_recall;
+
+        double f1 = 0.0;
+        if (precision + recall > 0.0)
+            f1 = 2.0 * precision * recall / (precision + recall);
+
+        precision_sum += precision;
+        recall_sum    += recall;
+        f1_sum        += f1;
+        ++counted_classes;
+    }
+
+    if (counted_classes > 0) {
+        metrics.precision          = precision_sum / static_cast<double>(counted_classes);
+        metrics.true_positive_rate = recall_sum / static_cast<double>(counted_classes);
+        metrics.f1_score           = f1_sum / static_cast<double>(counted_classes);
+    }
+
+    return metrics;
+}
+
+template <typename ForwardFn>
+static ClassificationMetrics evaluate_classifier(ForwardFn&& forward_fn,
+                                                 const torch::Tensor& data,
+                                                 const torch::Tensor& labels,
+                                                 int64_t batch_size,
+                                                 bool use_cuda,
+                                                 int64_t num_classes) {
+    std::vector<int64_t> tp(num_classes, 0);
+    std::vector<int64_t> fp(num_classes, 0);
+    std::vector<int64_t> fn(num_classes, 0);
+
+    torch::NoGradGuard no_grad;
+    const int64_t total = data.size(0);
+
+    for (int64_t i = 0; i < total; i += batch_size) {
+        const int64_t end = std::min(i + batch_size, total);
+        auto inputs  = stage_for_device(data.index({torch::indexing::Slice(i, end)}), use_cuda);
+        auto targets = stage_for_device(labels.index({torch::indexing::Slice(i, end)}), use_cuda);
+
+        auto logits = forward_fn(inputs);
+        auto preds  = logits.argmax(1);
+
+        auto preds_cpu   = preds.to(torch::kCPU);
+        auto targets_cpu = targets.to(torch::kCPU);
+
+        const auto* preds_ptr   = preds_cpu.template data_ptr<int64_t>();
+        const auto* targets_ptr = targets_cpu.template data_ptr<int64_t>();
+        const int64_t local_size = preds_cpu.size(0);
+
+        for (int64_t j = 0; j < local_size; ++j) {
+            const int64_t pred   = preds_ptr[j];
+            const int64_t actual = targets_ptr[j];
+
+            if (actual >= 0 && actual < num_classes) {
+                if (pred == actual) {
+                    tp[actual]++;
+                } else {
+                    fn[actual]++;
+                }
+            }
+
+            if (pred >= 0 && pred < num_classes) {
+                if (pred != actual) {
+                    fp[pred]++;
+                }
+            }
+        }
+    }
+
+    return compute_macro_metrics(tp, fp, fn);
+}
 
 
-int xtmain() {
+
+int ssmain() {
     auto [x1, y1, x2, y2] = Thot::Data::Load::MNIST("/home/moonfloww/Projects/DATASETS/Image/MNIST", 1.f, 1.f, true);
     const bool IsCuda = torch::cuda::is_available();
-    const int64_t epochs= 100;
+    const int64_t epochs= 10;
     const int64_t B= 64;
+    const int64_t num_classes = 10;
     const int64_t N= x1.size(0);
     Thot::Data::Check::Size(x1);
 
@@ -348,6 +461,11 @@ int xtmain() {
     thot_prebuilt_samples.reserve(total_steps_estimate);
     thot_custom_samples.reserve(total_steps_estimate);
     libtorch_samples.reserve(total_steps_estimate);
+
+    ClassificationMetrics thot_prebuilt_metrics;
+    ClassificationMetrics thot_custom_metrics;
+    ClassificationMetrics libtorch_metrics;
+
 
     // Thot built-in train()
     std::cout << "training 100% Thot" << std::endl;
@@ -379,18 +497,24 @@ int xtmain() {
             thot_prebuilt_samples.push_back(step_latency_ms);
         }
     }
+    model1.eval();
+    thot_prebuilt_metrics = evaluate_classifier(
+        [&](const torch::Tensor& inputs) { return model1.forward(inputs); }, x2, y2, B, IsCuda, num_classes);
 
-    // 50% Thot (manual training loop using Thot model
+
+    // 50% Thot (manual training loop using Thot modelf
     std::cout << "training 50% Thot" << std::endl;
     Thot::Model model2("");
     const auto ce = set(model2, IsCuda); // define the network
     model2.clear_training_telemetry(); // not necessary
+    auto _x1 = x1;
+    auto _y1 = y1;
     for (int64_t e = 0; e < epochs; ++e) {
         for (int64_t i = 0; i < N; i += B) { auto step_start = std::chrono::high_resolution_clock::now();
             const int64_t end = std::min(i + B, N);
 
-            auto inputs  = stage_for_device(x1.index({torch::indexing::Slice(i, end)}), IsCuda);
-            auto targets = stage_for_device(y1.index({torch::indexing::Slice(i, end)}), IsCuda);
+            auto inputs  = stage_for_device(_x1.index({torch::indexing::Slice(i, end)}), IsCuda);
+            auto targets = stage_for_device(_y1.index({torch::indexing::Slice(i, end)}), IsCuda);
 
             model2.zero_grad();
             auto logits = model2.forward(inputs);
@@ -403,6 +527,10 @@ int xtmain() {
             thot_custom_samples.push_back(step_ms);
         }
     }
+    model2.eval();
+    thot_custom_metrics = evaluate_classifier(
+        [&](const torch::Tensor& inputs) { return model2.forward(inputs); }, x2, y2, B, IsCuda, num_classes);
+
 
     //libtorch
     std::cout << "training 100% LibTorch" << std::endl;
@@ -432,6 +560,10 @@ int xtmain() {
             libtorch_samples.push_back(step_ms);
         }
     }
+    net->eval();
+    libtorch_metrics = evaluate_classifier(
+        [&](const torch::Tensor& inputs) { return net->forward(inputs); }, x2, y2, B, IsCuda, num_classes);
+
 
     // Compute stats
     std::cout << "\n\n\n";
@@ -463,6 +595,12 @@ int xtmain() {
     std::cout << "   Thot vs Libtorch Overhead: " << compute_overhead(ThotPreBuild, LibTorchRaw) << "%\n";
     std::cout << "   Thot PreBuild Train() vs Custom Train() Overhead: " << compute_overhead(ThotPreBuild, Thotcustom) << "%\n";
     std::cout << "   Thot Custom Train() vs Libtorch Overhead: " << compute_overhead(Thotcustom, LibTorchRaw) << "%\n";
+
+
+    std::cout << "\nClassification Metrics (macro-averaged)\n";
+    print_metrics("Thot Train()", thot_prebuilt_metrics);
+    print_metrics("Thot Custom Train()", thot_custom_metrics);
+    print_metrics("LibTorch", libtorch_metrics);
 
     return 0;
 }

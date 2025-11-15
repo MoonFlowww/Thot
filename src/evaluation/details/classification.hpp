@@ -591,7 +591,7 @@ namespace Thot::Evaluation::Details::Classification {
             return report;
         }
 
-        const std::size_t total_samples = report.total_samples;
+        std::size_t total_samples = report.total_samples;
         const std::size_t batch_size = options.batch_size > 0 ? options.batch_size : total_samples;
 
         bool needs_probabilities = false;
@@ -710,6 +710,7 @@ namespace Thot::Evaluation::Details::Classification {
         std::size_t top3_hits = 0;
         std::size_t top5_hits = 0;
         std::size_t total_correct = 0;
+        std::size_t processed_samples = 0;
 
 
         double total_log_loss = 0.0;
@@ -812,8 +813,17 @@ namespace Thot::Evaluation::Details::Classification {
 
             if (logits.dim() == 1) {
                 logits = logits.unsqueeze(1);
-            } else if (logits.dim() > 2) {
-                logits = logits.reshape({logits.size(0), -1});
+            }
+
+            if (logits.dim() > 2) {
+                std::size_t spatial_elements = 1;
+                for (std::int64_t dim = 2; dim < logits.dim(); ++dim) {
+                    spatial_elements *= static_cast<std::size_t>(logits.size(dim));
+                }
+                const auto batch_dim = logits.size(0);
+                const auto channel_dim = logits.size(1);
+                logits = logits.flatten(2).transpose(1, 2)
+                               .reshape({batch_dim * static_cast<std::int64_t>(spatial_elements), channel_dim});
             }
 
             if (!logits.device().is_cpu()) {
@@ -852,9 +862,9 @@ namespace Thot::Evaluation::Details::Classification {
             if (needs_segmentation_metrics) {
                 segmentation_targets = target_cpu;
             }
-            const std::size_t current_batch = static_cast<std::size_t>(target_cpu.size(0));
 
             const std::size_t batch_classes = static_cast<std::size_t>(logits.size(1));
+            const std::size_t current_batch = static_cast<std::size_t>(logits.size(0));
             if (num_classes == 0) {
                 num_classes = batch_classes;
                 class_counts.assign(num_classes, {});
@@ -912,17 +922,24 @@ namespace Thot::Evaluation::Details::Classification {
             }
 
 
-            if (target_cpu.dim() > 1) {
-                if (target_cpu.size(1) == 1) {
-                    target_cpu = target_cpu.squeeze(1);
-                } else {
-                    target_cpu = target_cpu.reshape({target_cpu.size(0)});
-                }
+            if (target_cpu.dim() > 1 && target_cpu.size(1) == 1 && target_cpu.dim() == 2) {
+                target_cpu = target_cpu.squeeze(1);
             }
+
+            const auto expected_elements = static_cast<std::int64_t>(current_batch);
+            if (target_cpu.numel() != expected_elements) {
+                target_cpu = target_cpu.reshape({target_cpu.size(0), -1}).flatten(0, 1);
+            }
+            if (target_cpu.numel() != expected_elements) {
+                throw std::runtime_error("Evaluation targets and predictions must share the same number of elements as the logits batch.");
+            }
+
+            target_cpu = target_cpu.reshape({expected_elements}).contiguous();
 
             if (target_cpu.sizes() != predicted.sizes()) {
                 throw std::runtime_error("Evaluation targets and predictions must share the same leading shape.");
             }
+            processed_samples += current_batch;
             auto pred_accessor = predicted.template accessor<long, 1>();
             auto target_accessor = target_cpu.template accessor<long, 1>();
             torch::TensorAccessor<long, 2> topk_accessor{nullptr, nullptr, nullptr};
@@ -1117,6 +1134,12 @@ namespace Thot::Evaluation::Details::Classification {
         };
 
         model.stream_forward(inputs, targets, streaming_options, prepare_batch, process_batch);
+        total_samples = processed_samples;
+        report.total_samples = total_samples;
+        if (total_samples == 0) {
+            return report;
+        }
+
 
         const double total_samples_d = static_cast<double>(total_samples);
         for (auto& counts : class_counts) {
