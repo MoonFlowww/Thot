@@ -7,6 +7,5 @@
 #include "zscore.hpp"
 
 namespace Thot::Data::Transforms::Normalization {}
-namespace Thot::Data::Normalization = Thot::Data::Transforms::Normalization;
 
 #endif // THOT_DATA_TRANSFORMS_NORMALIZATION_REGISTRY_HPP

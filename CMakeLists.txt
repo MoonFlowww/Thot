@@ -162,9 +162,6 @@ add_executable(test_Thot test/classification/masks/dubai_segment.cpp #classifica
         src/layer/details/instancenorm.hpp
         src/data/details/repair.hpp
         src/plot/details/data.hpp
-        src/data/details/manipulation/normalization/zscore.hpp
-        src/data/details/manipulation/normalization/power.hpp
-        src/data/details/manipulation/normalization/ehlers.hpp
         src/plot/details/reliability/reliability_lime.hpp
         src/plot/details/reliability/reliability_gradcam.hpp
         test/speedtest.cpp

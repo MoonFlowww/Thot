@@ -27,7 +27,7 @@
 #include "augment/flip.hpp"
 #include "augment/grid_distortion.hpp"
 #include "augment/random_brightness_contrast.hpp"
-#include "augment/opt"
+#include "augment/optical_distortion.hpp"
 #include "augment/sun_angle_jitter.hpp"
 #include "normalization/registry.hpp"
 
