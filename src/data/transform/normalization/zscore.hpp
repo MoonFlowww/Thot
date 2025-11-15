@@ -1,11 +1,11 @@
-#ifndef THOT_ZSCORE_HPP
-#define THOT_ZSCORE_HPP
+#ifndef THOT_DATA_TRANSFORMS_NORMALIZATION_ZSCORE_HPP
+#define THOT_DATA_TRANSFORMS_NORMALIZATION_ZSCORE_HPP
 
 #include <torch/torch.h>
 #include <algorithm>
 #include "common.hpp"
 
-namespace Thot::Data::Normalization {
+namespace Thot::Data::Transforms::Normalization {
     namespace Options {
         struct ZscoreOptions {
             int64_t lag = 32;          // window size if forward_only
@@ -162,7 +162,7 @@ namespace Thot::Data::Normalization {
 
     inline at::Tensor StandardizeToTarget(const at::Tensor& x_in, const Options::StandardizeToTargetOptions opt) {
         using namespace Details;
-        auto z = Zscore(x_in, ::Thot::Data::Normalization::Options::ZscoreOptions{
+        auto z = Zscore(x_in, ::Thot::Data::Transforms::Normalization::Options::ZscoreOptions{
             .lag = opt.lag,
             .temporal_dim = opt.temporal_dim,
             .forward_only = opt.forward_only,
@@ -172,5 +172,4 @@ namespace Thot::Data::Normalization {
     }
 
 }
-
-#endif // THOT_ZSCORE_HPP
+#endif // THOT_DATA_TRANSFORMS_NORMALIZATION_ZSCORE_HPP

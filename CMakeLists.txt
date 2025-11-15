@@ -163,14 +163,28 @@ add_executable(test_Thot test/classification/masks/dubai_segment.cpp #classifica
         src/data/details/repair.hpp
         src/plot/details/data.hpp
         src/data/details/manipulation/normalization/zscore.hpp
-        src/data/details/manipulation/normalization/common.hpp
         src/data/details/manipulation/normalization/power.hpp
         src/data/details/manipulation/normalization/ehlers.hpp
         src/plot/details/reliability/reliability_lime.hpp
         src/plot/details/reliability/reliability_gradcam.hpp
         test/speedtest.cpp
-        src/data/details/manipulation/augment/augment.hpp
         src/data/details/load/types.hpp
         test/classification/masks/dubai_segment.cpp
+        src/data/transform/augment/atmospheric_drift.hpp
+        src/data/transform/augment/chromatic_aberration.hpp
+        src/data/transform/augment/clahe.hpp
+        src/data/transform/augment/cloud_occlusion.hpp
+        src/data/transform/augment/common.hpp
+        src/data/transform/augment/cutout.hpp
+        src/data/transform/augment/flip.hpp
+        src/data/transform/augment/grid_distortion.hpp
+        src/data/transform/augment/random_brightness_contrast.hpp
+        src/data/transform/augment/registry.hpp
+        src/data/transform/augment/sun_angle_jitter.hpp
+        src/data/transform/normalization/common.hpp
+        src/data/transform/normalization/ehlers.hpp
+        src/data/transform/normalization/power.hpp
+        src/data/transform/normalization/registry.hpp
+        src/data/transform/normalization/zscore.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot ${OpenCV_LIBS})

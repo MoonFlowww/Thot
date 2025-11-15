@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstddef>
 #include <initializer_list>
+#include <iostream>
 #include <optional>
 #include <random>
 #include <sstream>
@@ -14,211 +15,28 @@
 #include <utility>
 #include <vector>
 
+#include <torch/nn/functional.h>
 #include <torch/torch.h>
 
 
-#include "manipulation/normalization/ehlers.hpp"
-#include "manipulation/normalization/power.hpp"
-#include "manipulation/normalization/zscore.hpp"
+#include "../transforms/augmentation/registry.hpp"
+#include "../transforms/normalization/registry.hpp"
 
 namespace Thot::Data::Manipulation {
-    namespace Details {
-        inline bool augmentation_enabled(const std::optional<bool>& data_augment) {
-            return !(data_augment.has_value() && !data_augment.value());
-        }
+    using ::Thot::Data::Transforms::Augmentation::AtmosphericDrift;
+    using ::Thot::Data::Transforms::Augmentation::ChromaticAberration;
+    using ::Thot::Data::Transforms::Augmentation::CLAHE;
+    using ::Thot::Data::Transforms::Augmentation::CloudOcclusion;
+    using ::Thot::Data::Transforms::Augmentation::Cutout;
+    using ::Thot::Data::Transforms::Augmentation::Flip;
+    using ::Thot::Data::Transforms::Augmentation::GridDistortion;
+    using ::Thot::Data::Transforms::Augmentation::OpticalDistortion;
+    using ::Thot::Data::Transforms::Augmentation::RandomBrightnessContrast;
+    using ::Thot::Data::Transforms::Augmentation::SunAngleJitter;
 
-        inline double clamp_frequency(const std::optional<double>& frequency) {
-            if (!frequency.has_value())
-                return 1.0;
-            return std::clamp(frequency.value(), 0.0, 1.0);
-        }
+    namespace Normalization = ::Thot::Data::Transforms::Normalization;
 
-
-        inline torch::Tensor select_indices_by_frequency(int64_t batch_size, const std::optional<double>& frequency,
-                                                         const torch::Device& device) {
-            const auto long_options = torch::TensorOptions().dtype(torch::kLong).device(device);
-            if (batch_size <= 0) {
-                return torch::empty({0}, long_options);
-            }
-            const double f = clamp_frequency(frequency);
-            if (f <= 0.0) {
-                return torch::empty({0}, long_options);
-            }
-            if (f >= 1.0) {
-                return torch::arange(batch_size, long_options);
-            }
-            int64_t stride = static_cast<int64_t>(std::round(1.0 / f));
-            stride = std::max<int64_t>(1, stride);
-            return torch::arange(0,batch_size,stride, long_options);
-        }
-
-        inline int64_t axis_token_to_dim(const std::string& token, int64_t tensor_dim) {
-            if (token.empty()) {
-                throw std::invalid_argument("Flip axis tokens must not be empty.");
-            }
-
-            try {
-                std::size_t processed = 0;
-                const auto value = std::stoll(token, &processed, 10);
-                if (processed == token.size()) {
-                    auto normalized = value;
-                    if (normalized < 0) {
-                        normalized += tensor_dim;
-                    }
-                    if (normalized < 0 || normalized >= tensor_dim) {
-                        throw std::out_of_range("Flip axis index out of range.");
-                    }
-                    return normalized;
-                }
-            } catch (const std::invalid_argument&) {
-                // Continue below for named axes.
-            } catch (const std::out_of_range&) {
-                throw std::out_of_range("Flip axis index out of range.");
-            }
-
-            std::string lowered = token;
-            std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
-                return static_cast<char>(std::tolower(c));
-            });
-
-            int64_t offset = 0;
-            if (lowered == "x") {
-                offset = -1;
-            } else if (lowered == "y") {
-                offset = -2;
-            } else if (lowered == "z") {
-                offset = -3;
-            } else {
-                throw std::invalid_argument("Unsupported flip axis token: " + token);
-            }
-
-            const auto dim_index = tensor_dim + offset;
-            if (dim_index < 0 || dim_index >= tensor_dim) {
-                throw std::out_of_range("Flip axis token is incompatible with tensor rank.");
-            }
-
-            return dim_index;
-        }
-
-        inline std::vector<int64_t> parse_flip_axes(const std::vector<std::string>& axes, int64_t tensor_dim) {
-            std::vector<int64_t> dims;
-            dims.reserve(axes.size());
-            for (const auto& axis : axes) {
-                dims.push_back(axis_token_to_dim(axis, tensor_dim));
-            }
-            return dims;
-        }
-    }
-
-    inline std::pair<torch::Tensor, torch::Tensor> Flip(const torch::Tensor& tensor, const torch::Tensor& target, const std::vector<std::string>& axes,
-                                                        std::optional<double> frequency = 0.3, std::optional<bool> data_augment = true, bool show_progress = true) {
-        [[maybe_unused]] const bool show = show_progress;
-        if (!Details::augmentation_enabled(data_augment)) {
-            return {tensor, target};
-        }
-        if (!tensor.defined() || !target.defined() || tensor.dim() == 0 || target.dim() == 0) {
-            return {tensor, target};
-        }
-        if (tensor.size(0) != target.size(0)) {
-            throw std::invalid_argument("Inputs and targets must have matching batch dimensions for Flip augmentation.");
-        }
-        if (axes.empty()) {
-            return {tensor, target};
-        }
-
-        const auto dims = Details::parse_flip_axes(axes, tensor.dim());
-        if (dims.empty()) {
-            return {tensor, target};
-        }
-
-        auto selected_indices = Details::select_indices_by_frequency(tensor.size(0), frequency, tensor.device());
-        if (selected_indices.numel() == 0) {
-            return {tensor, target};
-        }
-
-        auto selected_inputs = tensor.index_select(0, selected_indices).clone();
-        auto target_indices = selected_indices.device() == target.device() ? selected_indices : selected_indices.to(target.device());
-        auto selected_targets = target.index_select(0, target_indices).clone();
-
-        auto flipped = selected_inputs.flip(dims);
-        auto augmented_inputs = torch::cat({tensor, flipped}, 0);
-        auto augmented_targets = torch::cat({target, selected_targets}, 0);
-        return {std::move(augmented_inputs), std::move(augmented_targets)};
-    }
-
-    inline std::pair<torch::Tensor, torch::Tensor> Cutout(const torch::Tensor& inputs, const torch::Tensor& targets,
-                                                      const std::vector<int64_t>& offsets, const std::vector<int64_t>& sizes,
-                                                      double fill_value = 0.0, std::optional<double> frequency = 0.3,
-                                                      std::optional<bool> data_augment = true, bool show_progress = true) {
-        [[maybe_unused]] const bool show = show_progress;
-        if (!Details::augmentation_enabled(data_augment)) {
-            return {inputs, targets};
-        }
-        if (!inputs.defined() || inputs.dim() < 2) {
-            return {inputs, targets};
-        }
-        if (inputs.size(0) != targets.size(0)) {
-            throw std::invalid_argument("Inputs and targets must have matching batch dimensions for Cutout augmentation.");
-        }
-
-        auto selected_indices = Details::select_indices_by_frequency(inputs.size(0), frequency, inputs.device());
-        if (selected_indices.numel() == 0) {
-            return {inputs, targets};
-        }
-
-        auto selected_inputs = inputs.index_select(0, selected_indices).clone();
-        auto target_indices = selected_indices.device() == targets.device() ? selected_indices : selected_indices.to(targets.device());
-        auto selected_targets = targets.index_select(0, target_indices).clone();
-
-        auto result = selected_inputs.clone();
-
-        const auto height_dim = result.dim() - 2;
-        const auto width_dim = result.dim() - 1;
-        const auto height = result.size(height_dim);
-        const auto width = result.size(width_dim);
-
-        auto y0 = offsets.size() > 0 ? offsets[0] : int64_t{0};
-        auto x0 = offsets.size() > 1 ? offsets[1] : int64_t{0};
-        auto h  = sizes.size()   > 0 ? sizes[0]   : height;
-        auto w  = sizes.size()   > 1 ? sizes[1]   : width;
-
-        y0 = std::clamp<int64_t>(y0, 0, height);
-        x0 = std::clamp<int64_t>(x0, 0, width);
-        h  = std::clamp<int64_t>(h,  0, height);
-        w  = std::clamp<int64_t>(w,  0, width);
-
-        static thread_local std::mt19937 rng{std::random_device{}()};
-
-        if (offsets.size() > 0 && offsets[0] < 0 && h <= height) {
-            std::uniform_int_distribution<int64_t> distribution(0, height - h);
-            y0 = distribution(rng);
-        }
-        if (offsets.size() > 1 && offsets[1] < 0 && w <= width) {
-            std::uniform_int_distribution<int64_t> distribution(0, width - w);
-            x0 = distribution(rng);
-        }
-
-        const auto y1 = std::min<int64_t>(height, y0 + h);
-        const auto x1 = std::min<int64_t>(width,  x0 + w);
-
-        if (y0 < y1 && x0 < x1) {
-            auto patch = result.slice(height_dim, y0, y1).slice(width_dim, x0, x1);
-            if (fill_value == -1.0) {
-                auto noise = torch::rand_like(patch);
-                patch.copy_(noise);
-            } else {
-                patch.fill_(fill_value);
-            }
-        }
-
-        auto augmented_inputs = torch::cat({inputs, result}, 0);
-        auto augmented_targets = torch::cat({targets, selected_targets}, 0);
-        return {std::move(augmented_inputs), std::move(augmented_targets)};
-    }
-
-    inline std::pair<torch::Tensor, torch::Tensor> Shuffle(const torch::Tensor& inputs,
-                                                           const torch::Tensor& targets,
-                                                           const std::optional<std::uint64_t>& seed = std::nullopt) {
+    inline std::pair<torch::Tensor, torch::Tensor> Shuffle(const torch::Tensor& inputs, const torch::Tensor& targets, const std::optional<std::uint64_t>& seed = std::nullopt) {
         if (inputs.dim() == 0 || targets.dim() == 0 || inputs.size(0) == 0) {
             return {inputs.clone(), targets.clone()};
         }
@@ -241,10 +59,7 @@ namespace Thot::Data::Manipulation {
         return {shuffled_inputs, shuffled_targets};
     }
 
-    inline std::pair<torch::Tensor, torch::Tensor> Fraction(const torch::Tensor& inputs,
-                                                            const torch::Tensor& targets,
-                                                            float fraction)
-    {
+    inline std::pair<torch::Tensor, torch::Tensor> Fraction(const torch::Tensor& inputs, const torch::Tensor& targets, float fraction) {
         if (!inputs.defined() || !targets.defined()) {
             throw std::invalid_argument("Fraction expects both input and target tensors to be defined.");
         }
@@ -301,7 +116,7 @@ namespace Thot::Data::Manipulation {
         auto tensor = input;
         bool had_batch = false;
         if (tensor.dim() == 3) {
-            tensor = tensor.unsqueeze(0); // [1, C, H, W]
+            tensor = tensor.unsqueeze(0);
             had_batch = true;
         }
 
@@ -319,7 +134,7 @@ namespace Thot::Data::Manipulation {
         }
         return grayscale;
     }
-#include "manipulation/augment/augment.hpp"
+
 }
 
 namespace Thot::Data::Check {
@@ -433,7 +248,7 @@ namespace Thot::Data::Check {
         return oss.str();
     }
 
-    inline std::vector<int> Size(const torch::Tensor&x, const std::string& title="Tensor Shape") {
+    inline std::vector<int> Size(const torch::Tensor& x, const std::string& title = "Tensor Shape") {
         at::IntArrayRef sizes = x.sizes();
         std::cout << title << ": (";
         for (size_t i = 0; i < sizes.size(); i++) {

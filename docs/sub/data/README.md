@@ -43,6 +43,9 @@ at the default (`false`) to receive CPU tensors.
   - `Type::ImageFolder{"images/", {.recursive = true}}` – walks folders of
     PNG/JPEG/JPG/BMP/TIFF/PPM/PGM/PBM files via OpenCV, converts them to
     `float32` tensors (optionally grayscale) and keeps a deterministic ordering.
+    The loader resolves the requested directory name anywhere beneath `root`, so
+    callers only need to provide the terminal folder (e.g., `"images"` or
+    `"train/images"`) even when the dataset adds intermediate layers.
   - `Type::GlobalParameters{.train_fraction = 0.8f, .test_fraction = 0.2f}` controls
     the split. Additional files (validation or hold-out) remain untouched if the
     provided fractions do not cover the full dataset.
