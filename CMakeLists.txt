@@ -37,7 +37,6 @@ add_library(Thot SHARED
         src/data/details/generation.hpp
         src/data/details/load/load.hpp
         src/data/transform/manipulation.hpp
-        src/data/details/dimreduction.hpp
         src/calibration/calibration.hpp
         src/block/block.hpp
         src/block/details/transformers/classic.hpp
@@ -184,5 +183,10 @@ add_executable(test_Thot test/classification/masks/dubai_segment.cpp #classifica
         src/data/transform/normalization/registry.hpp
         src/data/transform/normalization/zscore.hpp
         src/data/transform/augment/optical_distortion.hpp
+        src/data/transform/dimensionality_reduction.hpp
+        src/data/transform/dimensionality_reduction/common.hpp
+        src/data/transform/dimensionality_reduction/pca.hpp
+        src/data/transform/dimensionality_reduction/rpca.hpp
+        src/data/transform/dimensionality_reduction/registry.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot ${OpenCV_LIBS})

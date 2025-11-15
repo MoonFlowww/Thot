@@ -602,9 +602,7 @@ namespace Thot::Data::Load {
             return parts;
         }
 
-        inline std::filesystem::path resolve_image_directory(const std::filesystem::path& root,
-                                                              const std::filesystem::path& requested)
-        {
+        inline std::vector<std::filesystem::path> resolve_image_directory(const std::filesystem::path& root, const std::filesystem::path& requested) {
             namespace fs = std::filesystem;
 
             if (requested.empty()) {
@@ -613,14 +611,14 @@ namespace Thot::Data::Load {
 
             if (requested.is_absolute()) {
                 if (fs::exists(requested) && fs::is_directory(requested)) {
-                    return requested;
+                    return {requested};
                 }
                 throw std::runtime_error("Image folder not found: " + requested.string());
             }
 
             const fs::path direct = root / requested;
             if (fs::exists(direct) && fs::is_directory(direct)) {
-                return direct;
+                return {direct};
             }
 
             if (!fs::exists(root) || !fs::is_directory(root)) {
@@ -632,11 +630,9 @@ namespace Thot::Data::Load {
                 throw std::runtime_error("Image folder descriptor requires a valid directory suffix");
             }
 
-            fs::path best_match;
-            std::size_t best_extra_depth = std::numeric_limits<std::size_t>::max();
+            std::vector<fs::path> matches;
 
-            const auto options = fs::directory_options::skip_permission_denied;
-            for (fs::recursive_directory_iterator it(root, options), end; it != end; ++it) {
+            for (fs::recursive_directory_iterator it(root, fs::directory_options::skip_permission_denied), end; it != end; ++it) {
                 std::error_code ec;
                 if (!it->is_directory(ec) || ec) {
                     continue;
@@ -647,31 +643,27 @@ namespace Thot::Data::Load {
                     continue;
                 }
 
-                bool matches = true;
+                bool HaveMatchs = true;
                 for (std::size_t i = 0; i < requested_parts.size(); ++i) {
                     const auto& suffix_component = requested_parts[requested_parts.size() - 1 - i];
                     const auto& candidate_component = current_parts[current_parts.size() - 1 - i];
                     if (suffix_component != candidate_component) {
-                        matches = false;
+                        HaveMatchs = false;
                         break;
                     }
                 }
 
-                if (!matches) {
+                if (!HaveMatchs)
                     continue;
-                }
 
-                const auto extra_depth = current_parts.size() - requested_parts.size();
-                if (extra_depth < best_extra_depth ||
-                    (extra_depth == best_extra_depth &&
-                     (best_match.empty() || it->path().string() < best_match.string()))) {
-                    best_extra_depth = extra_depth;
-                    best_match = it->path();
-                }
+
+                matches.push_back(it->path());
             }
 
-            if (!best_match.empty()) {
-                return best_match;
+            if (!matches.empty()) {
+                std::sort(matches.begin(), matches.end());
+                matches.erase(std::unique(matches.begin(), matches.end()), matches.end());
+                return matches;
             }
 
             throw std::runtime_error("Image folder not found under root '" + root.string() +
@@ -712,10 +704,14 @@ namespace Thot::Data::Load {
         template <typename Descriptor>
         inline torch::Tensor load_image_folder_tensor(const std::filesystem::path& root, const Descriptor& descriptor) {
             namespace fs = std::filesystem;
-            const auto directory = resolve_image_directory(root, descriptor.directory);
-            const auto image_files = collect_image_files<Descriptor>(directory, descriptor.parameters.recursive);
+            const auto directories = resolve_image_directory(root, descriptor.directory);
+            std::vector<fs::path> image_files;
+            for (const auto& directory : directories) {
+                auto files = collect_image_files<Descriptor>(directory, descriptor.parameters.recursive);
+                image_files.insert(image_files.end(), files.begin(), files.end());
+            }
             if (image_files.empty()) {
-                throw std::runtime_error("Image folder contains no supported files: " + directory.string());
+                throw std::runtime_error("Image folders contain no supported files for pattern '" + descriptor.directory + "' under root '" + root.string() + "'");
             }
 
             std::vector<torch::Tensor> samples;
