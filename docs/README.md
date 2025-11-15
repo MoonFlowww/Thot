@@ -173,11 +173,11 @@ Two configurations are reported:
 
 #### Overhead (relative to mean latency, positive = slower than reference)
 
-| Comparison                                      |   Value |
-|-------------------------------------------------|--------:|
-| **Thot** vs **LibTorch** Overhead               |  -5.73% |
-| **Thot** Prebuilt vs **Thot** Custom Overhead   | -10.04% |
-| **Thot** Custom vs **LibTorch** Overhead        |  +4.79% |
+| Comparison                                    |   Value |
+|-----------------------------------------------|--------:|
+| **Thot** Prebuilt vs **LibTorch** Overhead    |  -5.73% |
+| **Thot** Prebuilt vs **Thot** Custom Overhead | -10.04% |
+| **Thot** Custom vs **LibTorch** Overhead      |  +4.79% |
 
 In this configuration, Thot’s prebuilt `Train()` benefits from async pinned memory while the other runners do not, so this setup is *favorable* to the prebuilt runner and mainly illustrates the impact of I/O configuration.
 
@@ -195,11 +195,11 @@ In this configuration, Thot’s prebuilt `Train()` benefits from async pinned me
 
 #### Overhead (relative to mean latency, positive = slower than reference)
 
-| Comparison                                      |   Value |
-|-------------------------------------------------|--------:|
-| **Thot** vs **LibTorch** Overhead               |  +3.54% |
-| **Thot** Prebuilt vs **Thot** Custom Overhead   |  +0.04% |
-| **Thot** Custom vs **LibTorch** Overhead        |  +3.50% |
+| Comparison                                    |   Value |
+|-----------------------------------------------|--------:|
+| **Thot** Prebuilt vs **LibTorch** Overhead    |  +3.54% |
+| **Thot** Prebuilt vs **Thot** Custom Overhead |  +0.04% |
+| **Thot** Custom vs **LibTorch** Overhead      |  +3.50% |
 
 With identical pinned-memory settings, Thot’s prebuilt `Train()` stays within a few percent of raw LibTorch in mean latency and throughput, while keeping jitter extremely low.
 
