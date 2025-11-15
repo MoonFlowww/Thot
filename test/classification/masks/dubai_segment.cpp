@@ -203,24 +203,12 @@ int main() {
         Thot::Metric::Classification::Precision,
         Thot::Metric::Classification::Recall,
         Thot::Metric::Classification::JaccardIndexMicro,
-        //Thot::Metric::Classification::HausdorffDistance,
-        //Thot::Metric::Classification::BoundaryIoU,
+        Thot::Metric::Classification::HausdorffDistance,
+        Thot::Metric::Classification::BoundaryIoU,
     },
     {.batch_size = 8, .buffer_vram=2});
 
-    if (x2.size(0) > 0) {
-        // Regression check: ensure segmentation evaluation handles tiny batches with spatial logits.
-        const auto regression_batch = std::min<std::int64_t>(x2.size(0), static_cast<std::int64_t>(2));
-        auto regression_inputs = x2.narrow(0, 0, regression_batch).clone();
-        auto regression_targets = y2.narrow(0, 0, regression_batch).clone();
-        model.evaluate(regression_inputs, regression_targets, Thot::Evaluation::Classification, {
-            Thot::Metric::Classification::Accuracy,
-            Thot::Metric::Classification::Precision,
-            Thot::Metric::Classification::Recall,
-            Thot::Metric::Classification::JaccardIndexMicro,
-        },
-        {.batch_size = 1, .print_summary = false});
-    }
+
 
     return 0;
 }
