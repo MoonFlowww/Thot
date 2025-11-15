@@ -11,20 +11,7 @@ namespace {
     };
 
     void Train(Thot::Model& model, torch::Tensor inputs, torch::Tensor targets, const CustomTrainingOptions& options) {
-        if (!model.has_optimizer()) {
-            throw std::logic_error("Custom training requires the model to have an optimizer configured.");
-        }
-        if (options.batch_size == 0) {
-            throw std::invalid_argument("Batch size must be greater than zero for custom training.");
-        }
-        if (!inputs.defined() || !targets.defined()) {
-            throw std::invalid_argument("Custom training requires defined inputs and targets.");
-        }
-
         const auto total_samples = inputs.size(0);
-        if (total_samples == 0) {
-            return;
-        }
 
         auto pinned_inputs = Thot::async_pin_memory(inputs.contiguous());
         auto pinned_targets = Thot::async_pin_memory(targets.contiguous());
@@ -77,14 +64,13 @@ namespace {
 
             if (batches > 0)
                 accumulated_loss /= static_cast<double>(batches);
-            std::cout << "Epoch " << (epoch + 1) << "/" << options.epochs << " - Dice+BCE Loss: " << accumulated_loss << std::endl;
+            std::cout << "Epoch " << (epoch + 1) << "/" << options.epochs << " | [Loss] - Dice(" << accumulated_loss*options.dice_weight << ") + BCE(" << accumulated_loss*options.bce_weight <<") =" << accumulated_loss << std::endl;
         }
     }
 }
 
 int main() {
     Thot::Model model("");
-    model.use_cuda(torch::cuda::is_available());
 
     auto [x1, y1, x2, y2] =
         Thot::Data::Load::Universal("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/",
