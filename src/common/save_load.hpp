@@ -2219,7 +2219,15 @@ namespace Thot::Common::SaveLoad {
                     tree.add_child("local", serialize_local_config(concrete.local));
                 } else if constexpr (std::is_same_v<DescriptorType, Layer::PatchUnembedDescriptor>) {
                     tree.put("type", "patchunembed");
-                    //TODO: impl Patch Unembed for serialization
+                    tree.put("options.channels", concrete.options.channels);
+                    tree.put("options.tokens_height", concrete.options.tokens_height);
+                    tree.put("options.tokens_width", concrete.options.tokens_width);
+                    tree.put("options.patch_size", concrete.options.patch_size);
+                    tree.put("options.target_height", concrete.options.target_height);
+                    tree.put("options.target_width", concrete.options.target_width);
+                    tree.put("options.align_corners", concrete.options.align_corners);
+                    tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
+                    tree.add_child("local", serialize_local_config(concrete.local));
                 } else {
                     static_assert(sizeof(DescriptorType) == 0, "Unsupported layer descriptor supplied.");
                 }
@@ -2434,6 +2442,19 @@ namespace Thot::Common::SaveLoad {
             descriptor.options.maximum_length = Detail::get_numeric<std::int64_t>(tree, "options.maximum_length", context);
             descriptor.activation = Detail::deserialize_activation_descriptor(tree.get_child("activation"), context);
             descriptor.initialization = Detail::deserialize_initialization_descriptor(tree.get_child("initialization"), context);
+            descriptor.local = deserialize_local_config(tree.get_child("local"), context);
+            return Layer::Descriptor{descriptor};
+        }
+        if (type == "patchunembed") {
+            Layer::Details::PatchUnembedDescriptor descriptor;
+            descriptor.options.channels = Detail::get_numeric<std::int64_t>(tree, "options.channels", context);
+            descriptor.options.tokens_height = Detail::get_numeric<std::int64_t>(tree, "options.tokens_height", context);
+            descriptor.options.tokens_width = Detail::get_numeric<std::int64_t>(tree, "options.tokens_width", context);
+            descriptor.options.patch_size = Detail::get_numeric<std::int64_t>(tree, "options.patch_size", context);
+            descriptor.options.target_height = Detail::get_numeric<std::int64_t>(tree, "options.target_height", context);
+            descriptor.options.target_width = Detail::get_numeric<std::int64_t>(tree, "options.target_width", context);
+            descriptor.options.align_corners = Detail::get_boolean(tree, "options.align_corners", context);
+            descriptor.activation = Detail::deserialize_activation_descriptor(tree.get_child("activation"), context);
             descriptor.local = deserialize_local_config(tree.get_child("local"), context);
             return Layer::Descriptor{descriptor};
         }
