@@ -13,38 +13,43 @@ namespace {
     }};
 
     torch::Tensor ConvertRgbMasksToOneHot(const torch::Tensor& masks) {
+        TORCH_CHECK(masks.dim() == 4, "Expected [B, 3, H, W]");
         TORCH_CHECK(masks.size(1) == 3, "RGB masks must have 3 channels");
 
-        auto uint8_masks = masks.mul(255.0).round().to(torch::kUInt8);
+        auto uint8_masks = masks.to(torch::kUInt8);  // [B, 3, H, W]
+        const auto B = uint8_masks.size(0);
+        const auto H = uint8_masks.size(2);
+        const auto W = uint8_masks.size(3);
+        const auto C = static_cast<std::int64_t>(kClassPalette.size());
 
-        const auto batch = uint8_masks.size(0);
-        const auto height = uint8_masks.size(2);
-        const auto width = uint8_masks.size(3);
+        auto masks_flat = uint8_masks.permute({0, 2, 3, 1})   // [B, H, W, 3]
+                                    .reshape({B * H * W, 3}); // [N, 3]
 
-        auto one_hot = torch::zeros({batch, static_cast<std::int64_t>(kClassPalette.size()), height, width},
-            masks.options().dtype(torch::kFloat));
-
-        for (std::size_t class_idx = 0; class_idx < kClassPalette.size(); ++class_idx) {
-            const auto& rgb = kClassPalette[class_idx];
-
-            std::vector<std::uint8_t> rgb_vec = {
-                static_cast<std::uint8_t>(rgb[0]),
-                static_cast<std::uint8_t>(rgb[1]),
-                static_cast<std::uint8_t>(rgb[2])
-            };
-
-            auto color = torch::tensor(
-                             rgb_vec,
-                             torch::TensorOptions().dtype(torch::kUInt8))
-                             .view({1, 3, 1, 1})
-                             .to(uint8_masks.device());
-
-            auto matches = torch::all(uint8_masks == color, 1);
-            one_hot.select(1, static_cast<std::int64_t>(class_idx)).copy_(matches.to(one_hot.dtype()));
+        std::vector<std::uint8_t> palette_vec;
+        palette_vec.reserve(C * 3);
+        for (const auto& rgb : kClassPalette) {
+            palette_vec.push_back(static_cast<std::uint8_t>(rgb[0]));
+            palette_vec.push_back(static_cast<std::uint8_t>(rgb[1]));
+            palette_vec.push_back(static_cast<std::uint8_t>(rgb[2]));
         }
+        auto palette = torch::tensor(palette_vec, torch::TensorOptions().dtype(torch::kUInt8))
+                           .view({C, 3})
+                           .to(uint8_masks.device());
+        auto masks_i16   = masks_flat.to(torch::kInt16).unsqueeze(1);
+        auto palette_i16 = palette.to(torch::kInt16).unsqueeze(0);
+
+        auto diff  = masks_i16 - palette_i16;
+        auto dist2 = diff.mul(diff).sum(-1);
+
+        auto min_idx = std::get<1>(dist2.min(1));
+        auto one_hot_flat = torch::nn::functional::one_hot(min_idx, C)
+                                .to(torch::kFloat32);
+
+        auto one_hot = one_hot_flat.view({B, H, W, C}).permute({0, 3, 1, 2});
 
         return one_hot;
     }
+
 
     struct CustomTrainingOptions {
         std::size_t epochs{20};
@@ -118,6 +123,34 @@ namespace {
         pinned_inputs = Thot::AsyncPinnedTensor();
         pinned_targets = Thot::AsyncPinnedTensor();
     }
+    torch::Tensor ColorizeClassMasks(const torch::Tensor& class_indices) {
+        TORCH_CHECK(class_indices.dim() == 3, "Expected [B, H, W] for class_indices");
+
+        const auto batch  = class_indices.size(0);
+        const auto height = class_indices.size(1);
+        const auto width  = class_indices.size(2);
+
+        auto options = torch::TensorOptions()
+                           .dtype(torch::kUInt8)
+                           .device(class_indices.device());
+
+        auto rgb = torch::zeros({batch, 3, height, width}, options);
+
+        for (std::size_t c = 0; c < kClassPalette.size(); ++c) {
+            const auto& color = kClassPalette[c];
+
+            // mask: [B, H, W], bool
+            auto mask = (class_indices == static_cast<std::int64_t>(c));
+
+            for (int ch = 0; ch < 3; ++ch) {
+                auto channel = rgb.select(1, ch); // [B, H, W]
+                channel.masked_fill_(mask, static_cast<std::uint8_t>(color[ch]));
+            }
+        }
+
+        return rgb.to(torch::kFloat32).div_(255.0f);
+    }
+
 }
 
 int main() {
@@ -125,8 +158,8 @@ int main() {
 
     auto [x1, y1, x2, y2] =
         Thot::Data::Load::Universal("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/",
-            Thot::Data::Type::JPG{"images", {.normalize = true, .pad_to_max_tile=true}},
-            Thot::Data::Type::PNG{"masks", {.normalize = true, .pad_to_max_tile=true}}, {.train_fraction = .8f, .test_fraction = .2f, .shuffle = true});
+            Thot::Data::Type::JPG{"images", {.grayscale = false, .normalize = true, .pad_to_max_tile=true}},
+            Thot::Data::Type::PNG{"masks", {.normalize = false, .pad_to_max_tile=true}}, {.train_fraction = .8f, .test_fraction = .2f, .shuffle = true});
 
     Thot::Data::Check::Size(x1, "Inputs Raw");
     Thot::Data::Check::Size(y1, "Outputs Raw");
@@ -135,20 +168,36 @@ int main() {
 
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::Flip(x1, y1, {.axes = {"x"}, .frequency = 1.f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::Flip(x1, y1, {.axes = {"y"}, .frequency = 0.5f, .data_augment = true});
+    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {75, 100}, 0, 1.f, true, false});
+    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {75, 100}, 0, 1.f, true, false});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::CLAHE(x1, y1, {.frequency = 1.f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::OpticalDistortion(x1, y1, {.frequency = 1.f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::AtmosphericDrift(x1, y1, {.frequency = 0.3f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::SunAngleJitter(x1, y1, {.frequency = 0.3f, .data_augment = true});
 
+    //Take random 9 samples
+    const auto n_samples = x1.size(0);
+    auto perm = torch::randperm(n_samples, torch::TensorOptions().dtype(torch::kLong));
+    auto rand9 = perm.narrow(0, 0, 2);
+    std::vector<std::size_t> idx; idx.reserve(rand9.size(0));
+    auto* data_ptr = rand9.data_ptr<int64_t>();
+    for (int i = 0; i < rand9.size(0); ++i)
+        idx.push_back(static_cast<std::size_t>(data_ptr[i]));
+
     Thot::Data::Check::Size(x1, "Inputs Augmented");
     Thot::Data::Check::Size(y1, "Targets Augmented");
-    (void)Thot::Plot::Data::Image(x1, {0, 24, 49, 74, 99, 124, 149});
-    (void)Thot::Plot::Data::Image(y1, {0, 24, 49, 74, 99, 124, 149});
+    Thot::Data::Check::Size(y2, "test Targets Augmented");
+
+    //(void)Thot::Plot::Data::Image(x1, idx);
+    (void)Thot::Plot::Data::Image(y1, idx);
+    //(void)Thot::Plot::Data::Image(y2, {0, 1});
+
 
     y1 = ConvertRgbMasksToOneHot(y1);
     y2 = ConvertRgbMasksToOneHot(y2);
 
     Thot::Data::Check::Size(y1, "Targets One-hot");
+
 
 
     const auto in_channels = x1.size(1);
@@ -199,7 +248,7 @@ int main() {
         Thot::Activation::Sigmoid));
 
     model.set_loss(Thot::Loss::Dice());
-    model.set_optimizer(Thot::Optimizer::AdamW({.learning_rate=1e-4}));
+    model.set_optimizer(Thot::Optimizer::AdamW({.learning_rate=1e-4, .weight_decay = 2e-4}));
 
 
     //Custom loop for dual-loss
@@ -246,7 +295,46 @@ int main() {
     },
     {.batch_size = 8, .buffer_vram=2});
 
+    {
+        model.eval();
 
+        const auto n_val = x2.size(0);
+        const auto num_samples_to_plot = std::min<std::int64_t>(4, n_val);
+        TORCH_CHECK(num_samples_to_plot > 0, "No validation samples available for plotting");
+
+        auto perm = torch::randperm(n_val, torch::TensorOptions().dtype(torch::kLong));
+        auto idx  = perm.narrow(0, 0, num_samples_to_plot); // [4]
+
+        // local indices 0..3 for plotting the small batch
+        std::vector<std::size_t> local_indices(static_cast<std::size_t>(num_samples_to_plot));
+        std::iota(local_indices.begin(), local_indices.end(), 0);
+
+        const auto device = model.device();
+
+        auto inputs_batch  = x2.index_select(0, idx).to(device);
+        auto targets_batch = y2.index_select(0, idx).to(device);
+
+        auto preds = model.forward(inputs_batch);
+
+        auto preds_cpu   = preds.detach().to(torch::kCPU);
+        auto targets_cpu = targets_batch.detach().to(torch::kCPU);
+
+        // From one-hot [B, C, H, W] → class indices [B, H, W]
+        auto pred_classes = preds_cpu.argmax(1);
+        auto target_classes = targets_cpu.argmax(1);
+
+        auto pred_rgb = ColorizeClassMasks(pred_classes).contiguous();
+        auto target_rgb = ColorizeClassMasks(target_classes);
+
+        Thot::Data::Check::Size(pred_rgb, "Test Target");
+        Thot::Data::Check::Size(target_rgb, "Test Output");
+        (void)Thot::Plot::Data::Image(target_rgb, local_indices); // Ground truth masks
+        (void)Thot::Plot::Data::Image(pred_rgb,   local_indices); // Predicted masks
+
+        // If you also want the input tiles next to them:
+        auto inputs_cpu = inputs_batch.detach().to(torch::kCPU);
+        (void)Thot::Plot::Data::Image(inputs_cpu, local_indices);
+    }
 
     return 0;
 }

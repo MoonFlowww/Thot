@@ -414,7 +414,6 @@ struct MatrixOptions {
         plotter.setMouse(false);
         plotter.command("unset key");
         plotter.command("set view map");
-        plotter.command("set size ratio -1");
         plotter.command("set tics scale 0");
         plotter.command("set colorbox");
 
@@ -650,6 +649,7 @@ struct MatrixOptions {
                 std::ostringstream yrange;
                 yrange << "set yrange [" << (height - 1) << ":0]";
                 plotter.command(yrange.str());
+                plotter.command("set size ratio -1");
 
                 plotter.defineDatablock(datablockId, Details::build_color_writer(prepared));
                 std::ostringstream plotCommand;
@@ -668,6 +668,7 @@ struct MatrixOptions {
                 std::ostringstream yrange;
                 yrange << "set yrange [" << (height - 1) << ":0]";
                 plotter.command(yrange.str());
+                plotter.command("set size ratio -1");
 
                 const auto minValue = prepared.min().item<double>();
                 const auto maxValue = prepared.max().item<double>();
