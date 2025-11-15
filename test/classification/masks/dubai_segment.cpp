@@ -1,7 +1,50 @@
 #include "../../../include/Thot.h"
-
+#include <array>
 
 namespace {
+
+    constexpr std::array<std::array<int, 3>, 6> kClassPalette{{
+        std::array<int, 3>{80, 227, 194},    // Water
+        std::array<int, 3>{245, 166, 35},    // Land (unpaved area)
+        std::array<int, 3>{222, 89, 127},    // Road
+        std::array<int, 3>{208, 2, 27},      // Building
+        std::array<int, 3>{65, 117, 5},      // Vegetation
+        std::array<int, 3>{155, 155, 155},   // Unlabeled
+    }};
+
+    torch::Tensor ConvertRgbMasksToOneHot(const torch::Tensor& masks) {
+        TORCH_CHECK(masks.size(1) == 3, "RGB masks must have 3 channels");
+
+        auto uint8_masks = masks.mul(255.0).round().to(torch::kUInt8);
+
+        const auto batch = uint8_masks.size(0);
+        const auto height = uint8_masks.size(2);
+        const auto width = uint8_masks.size(3);
+
+        auto one_hot = torch::zeros({batch, static_cast<std::int64_t>(kClassPalette.size()), height, width},
+            masks.options().dtype(torch::kFloat));
+
+        for (std::size_t class_idx = 0; class_idx < kClassPalette.size(); ++class_idx) {
+            const auto& rgb = kClassPalette[class_idx];
+
+            std::vector<std::uint8_t> rgb_vec = {
+                static_cast<std::uint8_t>(rgb[0]),
+                static_cast<std::uint8_t>(rgb[1]),
+                static_cast<std::uint8_t>(rgb[2])
+            };
+
+            auto color = torch::tensor(
+                             rgb_vec,
+                             torch::TensorOptions().dtype(torch::kUInt8))
+                             .view({1, 3, 1, 1})
+                             .to(uint8_masks.device());
+
+            auto matches = torch::all(uint8_masks == color, 1);
+            one_hot.select(1, static_cast<std::int64_t>(class_idx)).copy_(matches.to(one_hot.dtype()));
+        }
+
+        return one_hot;
+    }
 
     struct CustomTrainingOptions {
         std::size_t epochs{20};
@@ -65,9 +108,9 @@ namespace {
             if (batches > 0)
                 accumulated_loss /= static_cast<double>(batches);
             std::cout << "Epoch " << (epoch + 1) << "/" << options.epochs
-                << " | [Loss] - Dice(" << accumulated_loss * options.dice_weight
+                << " | [Loss]: Dice(" << accumulated_loss * options.dice_weight
                 << ") + BCE(" << accumulated_loss * options.bce_weight
-                << ") =" << accumulated_loss << std::endl;
+                << ") = " << accumulated_loss << std::endl;
         }
 
         host_inputs = torch::Tensor();
@@ -97,8 +140,13 @@ int main() {
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::AtmosphericDrift(x1, y1, {.frequency = 0.3f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::SunAngleJitter(x1, y1, {.frequency = 0.3f, .data_augment = true});
 
-    Thot::Data::Check::Size(x1, "Inputs Raw");
-    Thot::Data::Check::Size(y1, "Targets Raw");
+    Thot::Data::Check::Size(x1, "Inputs Augmented");
+    Thot::Data::Check::Size(y1, "Targets Augmented");
+
+    y1 = ConvertRgbMasksToOneHot(y1);
+    y2 = ConvertRgbMasksToOneHot(y2);
+
+    Thot::Data::Check::Size(y1, "Targets One-hot");
 
 
     const auto in_channels = x1.size(1);
@@ -151,12 +199,12 @@ int main() {
     model.set_optimizer(Thot::Optimizer::AdamW({.learning_rate=1e-4}));
 
 
-    //Custom loop bcs we use dual-loss
+    //Custom loop for dual-loss
     CustomTrainingOptions training_options{};
     training_options.epochs = 10;
     training_options.batch_size = 8;
     training_options.dice_weight = 0.6;
-    training_options.bce_weight = 0.4;
+    training_options.bce_weight = 1-training_options.dice_weight;
 
     const auto total_training_samples = x1.size(0);
     const auto steps_per_epoch = static_cast<std::size_t>((total_training_samples + training_options.batch_size - 1) / training_options.batch_size);
@@ -183,20 +231,7 @@ int main() {
     model.use_cuda(torch::cuda::is_available());
     Train(model, x1, y1, training_options);
 
-    // Release training tensors before running evaluation to avoid holding on to
-    // large allocations alongside the validation set.
-    x1 = torch::Tensor();
-    y1 = torch::Tensor();
-#ifdef TORCH_CUDA_AVAILABLE
-    if (torch::cuda::is_available()) {
-        torch::cuda::synchronize();
-        torch::cuda::empty_cache();
-    }
-#endif
-
     torch::NoGradGuard guard;
-    x2 = x2.contiguous();
-    y2 = y2.contiguous();
 
     model.evaluate(x2, y2, Thot::Evaluation::Classification, {
         Thot::Metric::Classification::Accuracy,
