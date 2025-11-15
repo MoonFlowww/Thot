@@ -723,6 +723,12 @@ namespace Thot::Data::Load {
 
             const auto load_flag = descriptor.parameters.grayscale ? cv::IMREAD_GRAYSCALE : cv::IMREAD_COLOR;
             std::optional<std::pair<int, int>> expected_hw;
+            int max_rows = 0;
+            int max_cols = 0;
+            std::vector<std::pair<int, int>> sample_hw;
+            if (descriptor.parameters.pad_to_max_tile) {
+                sample_hw.reserve(image_files.size());
+            }
             auto options = torch::TensorOptions().dtype(torch::kFloat32);
 
             for (const auto& file_path : image_files) {
@@ -731,10 +737,19 @@ namespace Thot::Data::Load {
                     throw std::runtime_error("Failed to decode image: " + file_path.string());
                 }
 
-                if (!expected_hw.has_value()) {
-                    expected_hw = {image.rows, image.cols};
-                } else if (image.rows != expected_hw->first || image.cols != expected_hw->second) {
-                    throw std::runtime_error("Image dimensions mismatch in folder: " + file_path.string());
+                if (descriptor.parameters.pad_to_max_tile) {
+                    max_rows = std::max(max_rows, image.rows);
+                    max_cols = std::max(max_cols, image.cols);
+                } else {
+                    if (!expected_hw.has_value()) {
+                        expected_hw = {image.rows, image.cols};
+                    } else if (image.rows != expected_hw->first || image.cols != expected_hw->second) {
+                        throw std::runtime_error("Image dimensions mismatch in folder: " + file_path.string());
+                    }
+                }
+
+                if (descriptor.parameters.pad_to_max_tile) {
+                    sample_hw.emplace_back(image.rows, image.cols);
                 }
 
                 cv::Mat image_float;
@@ -767,6 +782,34 @@ namespace Thot::Data::Load {
                 }
 
                 samples.push_back(std::move(tensor));
+            }
+            if (descriptor.parameters.pad_to_max_tile) {
+                using torch::indexing::Slice;
+                const auto target_rows = max_rows;
+                const auto target_cols = max_cols;
+                for (std::size_t i = 0; i < samples.size(); ++i) {
+                    const auto [rows, cols] = sample_hw[i];
+                    if (rows == target_rows && cols == target_cols) {
+                        continue;
+                    }
+
+                    auto target_shape = samples[i].sizes().vec();
+                    if (descriptor.parameters.channels_first) {
+                        target_shape[target_shape.size() - 2] = target_rows;
+                        target_shape[target_shape.size() - 1] = target_cols;
+                    } else {
+                        target_shape[0] = target_rows;
+                        target_shape[1] = target_cols;
+                    }
+
+                    auto padded = torch::zeros(target_shape, samples[i].options());
+                    if (descriptor.parameters.channels_first) {
+                        padded.index_put_({Slice(), Slice(0, rows), Slice(0, cols)}, samples[i]);
+                    } else {
+                        padded.index_put_({Slice(0, rows), Slice(0, cols), Slice()}, samples[i]);
+                    }
+                    samples[i] = std::move(padded);
+                }
             }
 
             return torch::stack(samples);

@@ -54,6 +54,7 @@ namespace Thot::Data::Type {
         bool grayscale = false;
         bool normalize = true;
         bool channels_first = true;
+        bool pad_to_max_tile = false;
     };
 
     struct PNG {
@@ -100,6 +101,7 @@ namespace Thot::Data::Type {
         float train_fraction = 0.8f;
         float test_fraction = 0.2f;
         bool shuffle = true;
+
     };
 }
 #endif //THOT_TYPES_HPP
