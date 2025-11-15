@@ -154,23 +154,58 @@ model.load("PATH"+"/_Network_Name_");
 Results below represent warm runs filtered with a Tukey 0.98 fence on the MNIST workload  
 (60k samples, 28×28 | epochs = 100, batch = 64).
 
-| Runner                   | Steps (filtered) | Mean (ms) |    Std |      CV |   P10 |   P50 |   P90 |   P98 |  Mode | Throughput (steps/s) |
-|--------------------------|-----------------:|----------:|--------:|--------:|------:|------:|------:|------:|------:|----------------------:|
-| **Thot — Prebuilt Train()** | 76 916 | **1.20268** | 0.00157 | **0.00131** | 1.20049 | 1.20302 | 1.20451 | 1.20537 | 1.20398 | **831.47** |
-| **Thot — Custom Train()**   | 91 027 | 1.33688 | 0.18792 | 0.14057 | 1.17145 | 1.23006 | 1.65251 | 1.72896 | 1.19031 | 748.01 |
-| **LibTorch Raw**            | 90 837 | 1.27572 | 0.18145 | 0.14224 | 1.12161 | 1.16910 | 1.59117 | 1.66006 | 1.13251 | 783.87 |
+Two configurations are reported:
 
-- **CV** (coefficient of variation) = `Std / Mean`. Lower is less jitter.
+1. **Mixed I/O:** async pinned memory enabled only in **Thot::Train()**.
+2. **Unified I/O:** async pinned memory enabled in **all** runners (Thot prebuilt, Thot custom, LibTorch).
 
-### Overhead (relative to mean latency)
+---
 
-| Comparison                                      |       Value |
-|-------------------------------------------------|------------:|
-| **Thot** vs **LibTorch** Overhead                 |      -5.73% |
-| **Thot** Prebuilt vs **Thot** Custom Overhead     |     -10.04% |
-| **Thot** Custom vs **LibTorch** Overhead          |      +4.79% |
+### 1) Mixed I/O — Async pinned memory only in `Thot::Train()`
 
-> **Note on variability.** Results are relative. The robust takeaway is that Thot’s prebuilt Train() matches raw LibTorch in mean latency and throughput, without introducing material overhead.
+| Runner                        | Steps (filtered) | Mean (ms) |    Std |      CV |    P10 |    P50 |    P90 |    P98 |   Mode | Throughput (steps/s) |
+|------------------------------|-----------------:|----------:|-------:|--------:|-------:|-------:|-------:|-------:|-------:|----------------------:|
+| **Thot — Prebuilt Train()**  |          76 916  | **1.20268** | 0.00157 | **0.00131** | 1.20049 | 1.20302 | 1.20451 | 1.20537 | 1.20398 | **831.47** |
+| **Thot — Custom Train()**    |          91 027  | 1.33688 | 0.18792 | 0.14057 | 1.17145 | 1.23006 | 1.65251 | 1.72896 | 1.19031 | 748.01 |
+| **LibTorch Raw**             |          90 837  | 1.27572 | 0.18145 | 0.14224 | 1.12161 | 1.16910 | 1.59117 | 1.66006 | 1.13251 | 783.87 |
 
+- **CV** (coefficient of variation) = `Std / Mean`. Lower = less jitter.
+
+#### Overhead (relative to mean latency, positive = slower than reference)
+
+| Comparison                                      |   Value |
+|-------------------------------------------------|--------:|
+| **Thot** vs **LibTorch** Overhead               |  -5.73% |
+| **Thot** Prebuilt vs **Thot** Custom Overhead   | -10.04% |
+| **Thot** Custom vs **LibTorch** Overhead        |  +4.79% |
+
+In this configuration, Thot’s prebuilt `Train()` benefits from async pinned memory while the other runners do not, so this setup is *favorable* to the prebuilt runner and mainly illustrates the impact of I/O configuration.
+
+---
+
+### 2) Unified I/O — Async pinned memory in all runners
+
+| Runner                        | Steps (filtered) | Mean (ms) |     Std |      CV |    P10 |    P50 |    P90 |    P98 |   Mode | Throughput (steps/s) |
+|------------------------------|-----------------:|----------:|--------:|--------:|-------:|-------:|-------:|-------:|-------:|----------------------:|
+| **Thot — Prebuilt Train()**  |          71 288  | 1.06486 | 0.00184 | 0.00172 | 1.06275 | 1.06475 | 1.06702 | 1.06889 | 1.06298 | 939.09 |
+| **Thot — Custom Train()**    |          75 622  | 1.06443 | 0.01764 | 0.01657 | 1.04117 | 1.06435 | 1.08850 | 1.10319 | 1.06208 | 939.47 |
+| **LibTorch Raw**             |          80 820  | **1.02841** | 0.00512 | 0.00498 | 1.02150 | 1.02813 | 1.03556 | 1.03934 | 1.02704 | **972.37** |
+
+- **CV** (coefficient of variation) = `Std / Mean`. Lower = less jitter.
+
+#### Overhead (relative to mean latency, positive = slower than reference)
+
+| Comparison                                      |   Value |
+|-------------------------------------------------|--------:|
+| **Thot** vs **LibTorch** Overhead               |  +3.54% |
+| **Thot** Prebuilt vs **Thot** Custom Overhead   |  +0.04% |
+| **Thot** Custom vs **LibTorch** Overhead        |  +3.50% |
+
+With identical pinned-memory settings, Thot’s prebuilt `Train()` stays within a few percent of raw LibTorch in mean latency and throughput, while keeping jitter extremely low.
+
+---
+
+> **Note on variability.** These numbers are **relative**, not absolute. Modern hardware is noisy: clocks, power limits, thermals and OS scheduling all drift, so repeated runs with identical settings produce slightly different latency distributions. The robust takeaway across both tables is that Thot’s wrapper adds at most a few percent overhead compared to raw LibTorch, and can even be faster under certain I/O configurations, while preserving very low jitter.
 
 Source: [`test/speedtest.cpp`](../test/speedtest.cpp)
+

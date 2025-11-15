@@ -297,7 +297,7 @@ namespace LatencyUtils {
 
 }
 
-inline Thot::Loss::Details::CrossEntropyDescriptor set(Thot::Model& model) { // Used to reset learnable parameters between Thot PreBuild and Thot Custom
+inline Thot::Loss::Details::CrossEntropyDescriptor set(Thot::Model& model, const bool&device) { // Used to reset learnable parameters between Thot PreBuild and Thot Custom
     model.add(Thot::Layer::Conv2d({.in_channels = 1,  .out_channels = 32,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Thot::Activation::ReLU, Thot::Initialization::HeUniform));
     model.add(Thot::Layer::Conv2d({.in_channels = 32, .out_channels = 32,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Thot::Activation::ReLU, Thot::Initialization::HeUniform));
     model.add(Thot::Layer::MaxPool2d({.kernel_size={2,2}, .stride={2,2}, .padding={0,0}}));
@@ -317,15 +317,23 @@ inline Thot::Loss::Details::CrossEntropyDescriptor set(Thot::Model& model) { // 
     model.set_optimizer(Thot::Optimizer::SGD({.learning_rate = 1e-3}));
     const auto ce = Thot::Loss::CrossEntropy({.label_smoothing = 0.02f});
     model.set_loss(ce);
-    model.use_cuda(torch::cuda::is_available());
+    model.use_cuda(device);
     return ce;
 }
 
 
-int _main() {
-    auto [x1, y1, x2, y2] = Thot::Data::Load::MNIST("/home/moonfloww/Projects/DATASETS/MNIST", .1f, 1.f, true);
+static torch::Tensor stage_for_device(torch::Tensor tensor, const bool& device) { const auto dev = device ? torch::kCUDA : torch::kCPU;
+    auto pinned = Thot::async_pin_memory(std::move(tensor));
+    auto host_tensor = pinned.materialize();
+    const bool non_blocking = device && host_tensor.is_pinned();
+    return host_tensor.to(dev, host_tensor.scalar_type(), non_blocking);
+}
 
-    const int64_t epochs= 10;
+
+int main() {
+    auto [x1, y1, x2, y2] = Thot::Data::Load::MNIST("/home/moonfloww/Projects/DATASETS/Image/MNIST", 1.f, 1.f, true);
+    const bool IsCuda = torch::cuda::is_available();
+    const int64_t epochs= 100;
     const int64_t B= 64;
     const int64_t N= x1.size(0);
     Thot::Data::Check::Size(x1);
@@ -344,7 +352,7 @@ int _main() {
     // Thot built-in train()
     std::cout << "training 100% Thot" << std::endl;
     Thot::Model model1("");
-    set(model1); // define the network
+    set(model1, IsCuda); // define the network
     model1.clear_training_telemetry(); // not necessary
     model1.train(x1, y1, {.epoch = epochs, .batch_size = B, .monitor = false , .enable_amp = false});
 
@@ -375,14 +383,14 @@ int _main() {
     // 50% Thot (manual training loop using Thot model
     std::cout << "training 50% Thot" << std::endl;
     Thot::Model model2("");
-    const auto ce = set(model2); // define the network
+    const auto ce = set(model2, IsCuda); // define the network
     model2.clear_training_telemetry(); // not necessary
     for (int64_t e = 0; e < epochs; ++e) {
         for (int64_t i = 0; i < N; i += B) { auto step_start = std::chrono::high_resolution_clock::now();
             const int64_t end = std::min(i + B, N);
 
-            auto inputs  = x1.index({torch::indexing::Slice(i, end)}).to(model2.device());
-            auto targets = y1.index({torch::indexing::Slice(i, end)}).to(model2.device());
+            auto inputs  = stage_for_device(x1.index({torch::indexing::Slice(i, end)}), IsCuda);
+            auto targets = stage_for_device(y1.index({torch::indexing::Slice(i, end)}), IsCuda);
 
             model2.zero_grad();
             auto logits = model2.forward(inputs);
@@ -399,7 +407,7 @@ int _main() {
     //libtorch
     std::cout << "training 100% LibTorch" << std::endl;
 
-    torch::Device device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
+    torch::Device device = IsCuda ? torch::kCUDA : torch::kCPU;
     Net net;
     net->to(device);
     torch::optim::SGD optimizer(net->parameters(), torch::optim::SGDOptions(1e-3));
@@ -410,8 +418,8 @@ int _main() {
         for (int64_t i = 0; i < N; i += B) { auto step_start = std::chrono::high_resolution_clock::now();
             const int64_t end = std::min(i + B, N);
 
-            auto inputs  = x1.index({torch::indexing::Slice(i, end)}).to(device);
-            auto targets = y1.index({torch::indexing::Slice(i, end)}).to(device);
+            auto inputs  = stage_for_device(x1.index({torch::indexing::Slice(i, end)}), IsCuda);
+            auto targets = stage_for_device(y1.index({torch::indexing::Slice(i, end)}), IsCuda);
 
             optimizer.zero_grad();
             auto logits = net->forward(inputs);

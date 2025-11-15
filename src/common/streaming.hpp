@@ -109,6 +109,80 @@ namespace Thot {
         DeferredHostTensor reference_targets{};
     };
 
+    struct AsyncPinnedTensor {
+        torch::Tensor tensor{};
+#ifdef TORCH_CUDA_AVAILABLE
+        mutable std::shared_ptr<at::cuda::CUDAEvent> ready_event{};
+#endif
+
+        [[nodiscard]] bool defined() const noexcept { return tensor.defined(); }
+
+        [[nodiscard]] bool is_ready() const
+        {
+#ifdef TORCH_CUDA_AVAILABLE
+            if (ready_event) {
+                if (!ready_event->query()) {
+                    return false;
+                }
+                ready_event.reset();
+            }
+#endif
+            return tensor.defined();
+        }
+
+        torch::Tensor materialize() const
+        {
+#ifdef TORCH_CUDA_AVAILABLE
+            if (ready_event) {
+                if (!ready_event->query()) {
+                    ready_event->synchronize();
+                }
+                ready_event.reset();
+            }
+#endif
+            return tensor;
+        }
+    };
+
+    inline AsyncPinnedTensor async_pin_memory(torch::Tensor tensor)
+    {
+        AsyncPinnedTensor pinned{};
+
+        if (!tensor.defined()) {
+            return pinned;
+        }
+
+        if (!tensor.device().is_cpu()) {
+            pinned.tensor = std::move(tensor);
+            return pinned;
+        }
+
+        if (tensor.is_pinned()) {
+            pinned.tensor = std::move(tensor);
+            return pinned;
+        }
+
+#ifdef TORCH_CUDA_AVAILABLE
+        if (torch::cuda::is_available()) {
+            const auto memory_format = tensor.suggest_memory_format();
+            auto options = tensor.options().device(torch::kCPU).pinned_memory(true);
+            auto host_copy = torch::empty(tensor.sizes(), options, memory_format);
+            const bool non_blocking = true;
+            auto stream = at::cuda::getCurrentCUDAStream();
+            host_copy.copy_(tensor, non_blocking);
+            auto event = std::make_shared<at::cuda::CUDAEvent>();
+            event->record(stream);
+            pinned.tensor = std::move(host_copy);
+            pinned.ready_event = std::move(event);
+            return pinned;
+        }
+#endif
+
+        pinned.tensor = tensor.pin_memory();
+        return pinned;
+    }
+
+
 }
 
 #endif  // THOT_COMMON_STREAMING_HPP

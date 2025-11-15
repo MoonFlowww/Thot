@@ -87,7 +87,21 @@ for (auto epoch = 0; epoch < max_epochs; ++epoch) {
     }
 }
 ```
+When your minibatches originate on the host, you can overlap page-locking with
+compute by calling `Thot::async_pin_memory` before transferring the tensors to
+the device:
 
+```cpp
+auto stage_for_device = [&](torch::Tensor tensor) {
+    auto pinned = Thot::async_pin_memory(std::move(tensor));
+    auto host   = pinned.materialize();
+    const bool non_blocking = model.device().is_cuda() && host.is_pinned();
+    return host.to(model.device(), host.scalar_type(), non_blocking);
+};
+
+auto inputs  = stage_for_device(minibatch_inputs);
+auto targets = stage_for_device(minibatch_targets);
+```
 - **Forward.** `model.forward` executes the compiled graph exactly as
   `Model::train` would; this keeps AMP, calibration hooks, and CUDA graph capture
   available when you enable them via `ForwardOptions`.

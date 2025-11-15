@@ -35,7 +35,7 @@ ECGDatasetSplit load_ptbxl_dataset(const std::string& root, bool low_res, float 
 }
 
 
-int main() {
+int _main() {
     Thot::Model model("PTBXL_ECG");
     const bool use_cuda = torch::cuda::is_available();
     std::cout << "Cuda: " << use_cuda << std::endl;
