@@ -12,7 +12,6 @@
 #include <tuple>
 #include <utility>
 #include <charconv>
-
 #include <vector>
 #include <optional>
 #include <regex>
@@ -22,6 +21,10 @@
 #include <unordered_map>
 
 #include <torch/torch.h>
+
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/imgcodecs.hpp>
 
 #include "../../../core.hpp"
 #include "types.hpp"
@@ -521,6 +524,114 @@ namespace Thot::Data::Load {
             auto tensor = torch::empty({sample_count, static_cast<long>(record_size)}, options);
             std::memcpy(tensor.data_ptr(), buffer.data(), buffer.size());
             return tensor;
+        }
+
+        inline bool has_supported_image_extension(const std::filesystem::path& path)
+        {
+            static const std::array<const char*, 9> extensions = {
+                ".png", ".jpeg", ".jpg", ".bmp", ".tiff", ".tif", ".ppm", ".pgm", ".pbm"
+            };
+
+            auto ext = path.extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            return std::any_of(extensions.begin(), extensions.end(), [&](const char* candidate) {
+                return ext == candidate;
+            });
+        }
+
+        inline std::vector<std::filesystem::path> collect_image_files(const std::filesystem::path& directory,
+                                                                      bool recursive)
+        {
+            namespace fs = std::filesystem;
+            std::vector<fs::path> files;
+            const auto add_if_supported = [&](const fs::path& candidate) {
+                if (fs::is_regular_file(candidate) && has_supported_image_extension(candidate)) {
+                    files.push_back(candidate);
+                }
+            };
+
+            if (!fs::exists(directory)) {
+                throw std::runtime_error("Image folder not found: " + directory.string());
+            }
+
+            if (recursive) {
+                for (const auto& entry : fs::recursive_directory_iterator(directory)) {
+                    add_if_supported(entry.path());
+                }
+            } else {
+                for (const auto& entry : fs::directory_iterator(directory)) {
+                    add_if_supported(entry.path());
+                }
+            }
+
+            std::sort(files.begin(), files.end());
+            return files;
+        }
+
+        inline torch::Tensor load_image_folder_tensor(const std::filesystem::path& root,
+                                                      const Type::ImageFolder& descriptor)
+        {
+            namespace fs = std::filesystem;
+            const auto directory = root / descriptor.directory;
+            const auto image_files = collect_image_files(directory, descriptor.parameters.recursive);
+            if (image_files.empty()) {
+                throw std::runtime_error("Image folder contains no supported files: " + directory.string());
+            }
+
+            std::vector<torch::Tensor> samples;
+            samples.reserve(image_files.size());
+
+            const auto load_flag = descriptor.parameters.grayscale ? cv::IMREAD_GRAYSCALE : cv::IMREAD_COLOR;
+            std::optional<std::pair<int, int>> expected_hw;
+            auto options = torch::TensorOptions().dtype(torch::kFloat32);
+
+            for (const auto& file_path : image_files) {
+                cv::Mat image = cv::imread(file_path.string(), load_flag);
+                if (image.empty()) {
+                    throw std::runtime_error("Failed to decode image: " + file_path.string());
+                }
+
+                if (!expected_hw.has_value()) {
+                    expected_hw = {image.rows, image.cols};
+                } else if (image.rows != expected_hw->first || image.cols != expected_hw->second) {
+                    throw std::runtime_error("Image dimensions mismatch in folder: " + file_path.string());
+                }
+
+                cv::Mat image_float;
+                const double scale = descriptor.parameters.normalize ? (1.0 / 255.0) : 1.0;
+                image.convertTo(image_float, CV_32F, scale);
+
+                if (!descriptor.parameters.grayscale) {
+                    cv::cvtColor(image_float, image_float, cv::COLOR_BGR2RGB);
+                }
+
+                torch::Tensor tensor;
+                if (descriptor.parameters.grayscale) {
+                    tensor = torch::from_blob(image_float.data,
+                                              {image_float.rows, image_float.cols},
+                                              options)
+                                  .clone();
+                    if (descriptor.parameters.channels_first) {
+                        tensor = tensor.unsqueeze(0);
+                    } else {
+                        tensor = tensor.unsqueeze(2);
+                    }
+                } else {
+                    tensor = torch::from_blob(image_float.data,
+                                              {image_float.rows, image_float.cols, 3},
+                                              options)
+                                  .clone();
+                    if (descriptor.parameters.channels_first) {
+                        tensor = tensor.permute({2, 0, 1});
+                    }
+                }
+
+                samples.push_back(std::move(tensor));
+            }
+
+            return torch::stack(samples);
         }
 
 
@@ -1237,6 +1348,11 @@ namespace Thot::Data::Load {
     template <>
     inline torch::Tensor load_descriptor_tensor<Type::Binary>(const std::filesystem::path& root, const Type::Binary& descriptor) {
         return Details::load_binary_tensor(root, descriptor);
+    }
+
+    template <>
+    inline torch::Tensor load_descriptor_tensor<Type::ImageFolder>(const std::filesystem::path& root, const Type::ImageFolder& descriptor) {
+        return Details::load_image_folder_tensor(root, descriptor);
     }
 
     template <bool BufferVRAM = false, class DevicePolicyT = Core::DevicePolicy<BufferVRAM>, class InputDescriptorT, class TargetDescriptorT>

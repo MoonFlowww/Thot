@@ -330,7 +330,7 @@ static torch::Tensor stage_for_device(torch::Tensor tensor, const bool& device) 
 }
 
 
-int main() {
+int xtmain() {
     auto [x1, y1, x2, y2] = Thot::Data::Load::MNIST("/home/moonfloww/Projects/DATASETS/Image/MNIST", 1.f, 1.f, true);
     const bool IsCuda = torch::cuda::is_available();
     const int64_t epochs= 100;

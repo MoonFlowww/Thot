@@ -14,6 +14,8 @@ endif()
 
 find_package(Torch REQUIRED)
 find_package(Boost REQUIRED COMPONENTS filesystem)
+find_package(OpenCV REQUIRED COMPONENTS core imgcodecs imgproc)
+
 
 add_library(Thot SHARED
         src/Thot.cpp
@@ -91,12 +93,11 @@ add_library(Thot SHARED
         src/optimizer/registry.hpp)
 
 
+target_link_libraries(Thot "${TORCH_LIBRARIES}" Boost::filesystem ${OpenCV_LIBS})
+target_include_directories(Thot PUBLIC ${CMAKE_SOURCE_DIR}/include ${TORCH_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS})
 
-target_link_libraries(Thot "${TORCH_LIBRARIES}" Boost::filesystem)
-target_include_directories(Thot PUBLIC ${CMAKE_SOURCE_DIR}/include ${TORCH_INCLUDE_DIRS})
-
-#Test---------------
-add_executable(test_Thot test/speedtest.cpp #classification/timeseries/ptbxl.cpp #regression/timeseries/etth.cpp #images/cifar10.cpp
+#Test
+add_executable(test_Thot test/classification/masks/dubai_segment.cpp #classification/timeseries/ptbxl.cpp #regression/timeseries/etth.cpp #images/cifar10.cpp
         src/block/details/blocks/residual.hpp
         src/block/details/blocks/sequential.hpp
         src/lrscheduler/details/common.hpp
@@ -170,5 +171,6 @@ add_executable(test_Thot test/speedtest.cpp #classification/timeseries/ptbxl.cpp
         test/speedtest.cpp
         src/data/details/manipulation/augment/augment.hpp
         src/data/details/load/types.hpp
+        test/classification/masks/dubai_segment.cpp
 )
-target_link_libraries(test_Thot PRIVATE Thot)
+target_link_libraries(test_Thot PRIVATE Thot ${OpenCV_LIBS})

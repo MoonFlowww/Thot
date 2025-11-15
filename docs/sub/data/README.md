@@ -40,6 +40,9 @@ at the default (`false`) to receive CPU tensors.
   - `Type::Binary{"records.bin", {.type = BinaryDataType::Float32,
     .record_size = 8}}` – reinterpret `.bin` payloads into fixed-size float
     records with optional endianness controls.
+  - `Type::ImageFolder{"images/", {.recursive = true}}` – walks folders of
+    PNG/JPEG/JPG/BMP/TIFF/PPM/PGM/PBM files via OpenCV, converts them to
+    `float32` tensors (optionally grayscale) and keeps a deterministic ordering.
   - `Type::GlobalParameters{.train_fraction = 0.8f, .test_fraction = 0.2f}` controls
     the split. Additional files (validation or hold-out) remain untouched if the
     provided fractions do not cover the full dataset.

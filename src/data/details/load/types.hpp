@@ -1,9 +1,7 @@
 #ifndef THOT_TYPES_HPP
 #define THOT_TYPES_HPP
 #include <cstddef>
-#include <cstdint>
 #include <string>
-#include <utility>
 #include <vector>
 
 namespace Thot::Data::Type {
@@ -49,6 +47,18 @@ namespace Thot::Data::Type {
     struct Binary {
         std::string file;
         BinaryParameters parameters{};
+    };
+
+    struct ImageFolderParameters {
+        bool recursive = false;
+        bool grayscale = false;
+        bool normalize = true;
+        bool channels_first = true;
+    };
+
+    struct ImageFolder {
+        std::string directory;
+        ImageFolderParameters parameters{};
     };
 
     struct GlobalParameters {
