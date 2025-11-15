@@ -7,6 +7,10 @@ int main() {
     model.use_cuda(torch::cuda::is_available());
 
     auto [x1, y1, x2, y2] =
-        Thot::Data::Load::Universal("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages", Thot::Data::Type::ImageFolder("images", {}), Thot::Data::Type::ImageFolder("masks", {}));
+        Thot::Data::Load::Universal(
+    "/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages",
+    Thot::Data::Type::PNG{"images", {}},
+    Thot::Data::Type::PNG{"masks", {}});
+
     return 0;
 }

@@ -4,7 +4,7 @@
 #include "details/dimreduction.hpp"
 #include "details/generation.hpp"
 #include "details/load/load.hpp"
-#include "details/manipulation.hpp"
+#include "transform/manipulation.hpp"
 #include "details/repair.hpp"
 
 #endif //THOT_DATA_HPP

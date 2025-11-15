@@ -40,9 +40,14 @@ at the default (`false`) to receive CPU tensors.
   - `Type::Binary{"records.bin", {.type = BinaryDataType::Float32,
     .record_size = 8}}` – reinterpret `.bin` payloads into fixed-size float
     records with optional endianness controls.
-  - `Type::ImageFolder{"images/", {.recursive = true}}` – walks folders of
-    PNG/JPEG/JPG/BMP/TIFF/PPM/PGM/PBM files via OpenCV, converts them to
-    `float32` tensors (optionally grayscale) and keeps a deterministic ordering.
+  - `Type::PNG{"images/", {.recursive = true}}`, `Type::JPEG{...}`,
+    `Type::JPG{...}`, `Type::BMP{...}`, `Type::TIFF{...}`, `Type::PPM{...}`,
+    `Type::PGM{...}`, and `Type::PBM{...}` – walk folders of the selected image
+    format via OpenCV, convert files to `float32` tensors (optionally grayscale),
+    and keep a deterministic ordering. Each descriptor resolves the requested
+    directory name anywhere beneath `root`, so callers only need to provide the
+    terminal folder (e.g., `"images"` or `"train/images"`) even when the dataset
+    adds intermediate layers.
     The loader resolves the requested directory name anywhere beneath `root`, so
     callers only need to provide the terminal folder (e.g., `"images"` or
     `"train/images"`) even when the dataset adds intermediate layers.

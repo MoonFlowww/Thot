@@ -15,12 +15,21 @@
 #include <utility>
 #include <vector>
 
-#include <torch/nn/functional.h>
 #include <torch/torch.h>
+#include <torch/nn/functional.h>
 
 
-#include "../transforms/augmentation/registry.hpp"
-#include "../transforms/normalization/registry.hpp"
+#include "augment/atmospheric_drift.hpp"
+#include "augment/chromatic_aberration.hpp"
+#include "augment/clahe.hpp"
+#include "augment/cloud_occlusion.hpp"
+#include "augment/cutout.hpp"
+#include "augment/flip.hpp"
+#include "augment/grid_distortion.hpp"
+#include "augment/random_brightness_contrast.hpp"
+#include "augment/opt"
+#include "augment/sun_angle_jitter.hpp"
+#include "normalization/registry.hpp"
 
 namespace Thot::Data::Manipulation {
     using ::Thot::Data::Transforms::Augmentation::AtmosphericDrift;

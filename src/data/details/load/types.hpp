@@ -49,16 +49,51 @@ namespace Thot::Data::Type {
         BinaryParameters parameters{};
     };
 
-    struct ImageFolderParameters {
+    struct ImageParameters {
         bool recursive = false;
         bool grayscale = false;
         bool normalize = true;
         bool channels_first = true;
     };
 
-    struct ImageFolder {
+    struct PNG {
         std::string directory;
-        ImageFolderParameters parameters{};
+        ImageParameters parameters{};
+    };
+
+    struct JPEG {
+        std::string directory;
+        ImageParameters parameters{};
+    };
+
+    struct JPG {
+        std::string directory;
+        ImageParameters parameters{};
+    };
+
+    struct BMP {
+        std::string directory;
+        ImageParameters parameters{};
+    };
+
+    struct TIFF {
+        std::string directory;
+        ImageParameters parameters{};
+    };
+
+    struct PPM {
+        std::string directory;
+        ImageParameters parameters{};
+    };
+
+    struct PGM {
+        std::string directory;
+        ImageParameters parameters{};
+    };
+
+    struct PBM {
+        std::string directory;
+        ImageParameters parameters{};
     };
 
     struct GlobalParameters {

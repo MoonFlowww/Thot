@@ -19,6 +19,9 @@
 #include <sstream>
 #include <type_traits>
 #include <unordered_map>
+#include <limits>
+#include <system_error>
+
 
 #include <torch/torch.h>
 
@@ -526,20 +529,156 @@ namespace Thot::Data::Load {
             return tensor;
         }
 
-        inline bool has_supported_image_extension(const std::filesystem::path& path)
+        template <typename Descriptor>
+                struct ImageDescriptorTraits {
+            static_assert(!std::is_same_v<Descriptor, Descriptor>,
+                          "Image descriptor missing trait specialisation");
+        };
+
+        template <>
+        struct ImageDescriptorTraits<Type::PNG> {
+            inline static constexpr std::array<const char*, 1> extensions = {".png"};
+        };
+
+        template <>
+        struct ImageDescriptorTraits<Type::JPEG> {
+            inline static constexpr std::array<const char*, 2> extensions = {".jpeg", ".jpg"};
+        };
+
+        template <>
+        struct ImageDescriptorTraits<Type::JPG> {
+            inline static constexpr std::array<const char*, 2> extensions = {".jpg", ".jpeg"};
+        };
+
+        template <>
+        struct ImageDescriptorTraits<Type::BMP> {
+            inline static constexpr std::array<const char*, 1> extensions = {".bmp"};
+        };
+
+        template <>
+        struct ImageDescriptorTraits<Type::TIFF> {
+            inline static constexpr std::array<const char*, 2> extensions = {".tiff", ".tif"};
+        };
+
+        template <>
+        struct ImageDescriptorTraits<Type::PPM> {
+            inline static constexpr std::array<const char*, 1> extensions = {".ppm"};
+        };
+
+        template <>
+        struct ImageDescriptorTraits<Type::PGM> {
+            inline static constexpr std::array<const char*, 1> extensions = {".pgm"};
+        };
+
+        template <>
+        struct ImageDescriptorTraits<Type::PBM> {
+            inline static constexpr std::array<const char*, 1> extensions = {".pbm"};
+        };
+
+        template <typename Descriptor>
+        inline bool has_allowed_image_extension(const std::filesystem::path& path)
         {
-            static const std::array<const char*, 9> extensions = {
-                ".png", ".jpeg", ".jpg", ".bmp", ".tiff", ".tif", ".ppm", ".pgm", ".pbm"
-            };
 
             auto ext = path.extension().string();
             std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
                 return static_cast<char>(std::tolower(c));
             });
-            return std::any_of(extensions.begin(), extensions.end(), [&](const char* candidate) {
+            const auto& allowed = ImageDescriptorTraits<Descriptor>::extensions;
+            return std::any_of(allowed.begin(), allowed.end(), [&](const char* candidate) {
                 return ext == candidate;
             });
         }
+        inline std::vector<std::string> normalised_path_parts(const std::filesystem::path& value)
+        {
+            std::vector<std::string> parts;
+            auto normalised = value.lexically_normal();
+            for (const auto& component : normalised) {
+                const auto token = component.string();
+                if (token.empty() || token == "." || token == "/" || token == "\\") {
+                    continue;
+                }
+                parts.push_back(token);
+            }
+            return parts;
+        }
+
+        inline std::filesystem::path resolve_image_directory(const std::filesystem::path& root,
+                                                              const std::filesystem::path& requested)
+        {
+            namespace fs = std::filesystem;
+
+            if (requested.empty()) {
+                throw std::runtime_error("Image folder descriptor requires a directory name");
+            }
+
+            if (requested.is_absolute()) {
+                if (fs::exists(requested) && fs::is_directory(requested)) {
+                    return requested;
+                }
+                throw std::runtime_error("Image folder not found: " + requested.string());
+            }
+
+            const fs::path direct = root / requested;
+            if (fs::exists(direct) && fs::is_directory(direct)) {
+                return direct;
+            }
+
+            if (!fs::exists(root) || !fs::is_directory(root)) {
+                throw std::runtime_error("Image folder root not found: " + root.string());
+            }
+
+            const auto requested_parts = normalised_path_parts(requested);
+            if (requested_parts.empty()) {
+                throw std::runtime_error("Image folder descriptor requires a valid directory suffix");
+            }
+
+            fs::path best_match;
+            std::size_t best_extra_depth = std::numeric_limits<std::size_t>::max();
+
+            const auto options = fs::directory_options::skip_permission_denied;
+            for (fs::recursive_directory_iterator it(root, options), end; it != end; ++it) {
+                std::error_code ec;
+                if (!it->is_directory(ec) || ec) {
+                    continue;
+                }
+
+                const auto current_parts = normalised_path_parts(it->path());
+                if (current_parts.size() < requested_parts.size()) {
+                    continue;
+                }
+
+                bool matches = true;
+                for (std::size_t i = 0; i < requested_parts.size(); ++i) {
+                    const auto& suffix_component = requested_parts[requested_parts.size() - 1 - i];
+                    const auto& candidate_component = current_parts[current_parts.size() - 1 - i];
+                    if (suffix_component != candidate_component) {
+                        matches = false;
+                        break;
+                    }
+                }
+
+                if (!matches) {
+                    continue;
+                }
+
+                const auto extra_depth = current_parts.size() - requested_parts.size();
+                if (extra_depth < best_extra_depth ||
+                    (extra_depth == best_extra_depth &&
+                     (best_match.empty() || it->path().string() < best_match.string()))) {
+                    best_extra_depth = extra_depth;
+                    best_match = it->path();
+                }
+            }
+
+            if (!best_match.empty()) {
+                return best_match;
+            }
+
+            throw std::runtime_error("Image folder not found under root '" + root.string() +
+                                     "' for pattern '" + requested.string() + "'");
+        }
+
+        template <typename Descriptor>
 
         inline std::vector<std::filesystem::path> collect_image_files(const std::filesystem::path& directory,
                                                                       bool recursive)
@@ -547,7 +686,7 @@ namespace Thot::Data::Load {
             namespace fs = std::filesystem;
             std::vector<fs::path> files;
             const auto add_if_supported = [&](const fs::path& candidate) {
-                if (fs::is_regular_file(candidate) && has_supported_image_extension(candidate)) {
+                if (fs::is_regular_file(candidate) && has_allowed_image_extension<Descriptor>(candidate)) {
                     files.push_back(candidate);
                 }
             };
@@ -570,12 +709,11 @@ namespace Thot::Data::Load {
             return files;
         }
 
-        inline torch::Tensor load_image_folder_tensor(const std::filesystem::path& root,
-                                                      const Type::ImageFolder& descriptor)
-        {
+        template <typename Descriptor>
+        inline torch::Tensor load_image_folder_tensor(const std::filesystem::path& root, const Descriptor& descriptor) {
             namespace fs = std::filesystem;
-            const auto directory = root / descriptor.directory;
-            const auto image_files = collect_image_files(directory, descriptor.parameters.recursive);
+            const auto directory = resolve_image_directory(root, descriptor.directory);
+            const auto image_files = collect_image_files<Descriptor>(directory, descriptor.parameters.recursive);
             if (image_files.empty()) {
                 throw std::runtime_error("Image folder contains no supported files: " + directory.string());
             }
@@ -1351,7 +1489,42 @@ namespace Thot::Data::Load {
     }
 
     template <>
-    inline torch::Tensor load_descriptor_tensor<Type::ImageFolder>(const std::filesystem::path& root, const Type::ImageFolder& descriptor) {
+    inline torch::Tensor load_descriptor_tensor<Type::PNG>(const std::filesystem::path& root, const Type::PNG& descriptor) {
+        return Details::load_image_folder_tensor(root, descriptor);
+    }
+
+    template <>
+    inline torch::Tensor load_descriptor_tensor<Type::JPEG>(const std::filesystem::path& root, const Type::JPEG& descriptor) {
+        return Details::load_image_folder_tensor(root, descriptor);
+    }
+
+    template <>
+    inline torch::Tensor load_descriptor_tensor<Type::JPG>(const std::filesystem::path& root, const Type::JPG& descriptor) {
+        return Details::load_image_folder_tensor(root, descriptor);
+    }
+
+    template <>
+    inline torch::Tensor load_descriptor_tensor<Type::BMP>(const std::filesystem::path& root, const Type::BMP& descriptor) {
+        return Details::load_image_folder_tensor(root, descriptor);
+    }
+
+    template <>
+    inline torch::Tensor load_descriptor_tensor<Type::TIFF>(const std::filesystem::path& root, const Type::TIFF& descriptor) {
+        return Details::load_image_folder_tensor(root, descriptor);
+    }
+
+    template <>
+    inline torch::Tensor load_descriptor_tensor<Type::PPM>(const std::filesystem::path& root, const Type::PPM& descriptor) {
+        return Details::load_image_folder_tensor(root, descriptor);
+    }
+
+    template <>
+    inline torch::Tensor load_descriptor_tensor<Type::PGM>(const std::filesystem::path& root, const Type::PGM& descriptor) {
+        return Details::load_image_folder_tensor(root, descriptor);
+    }
+
+    template <>
+    inline torch::Tensor load_descriptor_tensor<Type::PBM>(const std::filesystem::path& root, const Type::PBM& descriptor) {
         return Details::load_image_folder_tensor(root, descriptor);
     }
 
