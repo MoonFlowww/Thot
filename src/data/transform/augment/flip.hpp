@@ -110,8 +110,17 @@ namespace Thot::Data::Transforms::Augmentation {
         auto selected_targets = target.index_select(0, target_indices).clone();
 
         auto flipped = selected_inputs.flip(dims);
+        std::vector<int64_t> target_dims;
+        target_dims.reserve(dims.size());
+        const auto target_rank = selected_targets.dim();
+        for (const auto dim : dims) {
+            if (dim < target_rank && selected_targets.size(dim) == tensor.size(dim)) {
+                target_dims.push_back(dim);
+            }
+        }
+        auto flipped_targets = target_dims.empty() ? selected_targets : selected_targets.flip(target_dims);
         auto augmented_inputs = torch::cat({tensor, flipped}, 0);
-        auto augmented_targets = torch::cat({target, selected_targets}, 0);
+        auto augmented_targets = torch::cat({target, flipped_targets}, 0);
         return {std::move(augmented_inputs), std::move(augmented_targets)};
     }
 }

@@ -129,6 +129,43 @@ namespace Thot::Data::Transforms::Augmentation::Details {
         options = options.padding_mode(torch::kReflection);
         return grid_sample(image, grid, options);
     }
+    inline std::optional<torch::Tensor> maybe_warp_targets_with_grid(const torch::Tensor& targets,
+                                                                     const torch::Tensor& grid) {
+        if (!targets.defined() || grid.dim() != 4) {
+            return std::nullopt;
+        }
+
+        auto rank = targets.dim();
+        if (rank < 3) {
+            return std::nullopt;
+        }
+
+        bool added_channel_dim = false;
+        auto working = targets;
+        if (rank == 3) {
+            working = working.unsqueeze(1);
+            added_channel_dim = true;
+        } else if (rank != 4) {
+            return std::nullopt;
+        }
+
+        const auto target_height = working.size(-2);
+        const auto target_width = working.size(-1);
+        if (target_height != grid.size(1) || target_width != grid.size(2)) {
+            return std::nullopt;
+        }
+
+        auto float_targets = ensure_float_tensor(working);
+        auto warped = grid_sample_image(float_targets, grid);
+        if (added_channel_dim) {
+            warped = warped.squeeze(1);
+        }
+        if (warped.scalar_type() != targets.scalar_type()) {
+            warped = warped.to(targets.scalar_type());
+        }
+
+        return warped;
+    }
 }
 
 #endif // THOT_DATA_TRANSFORMS_AUGMENTATION_COMMON_HPP

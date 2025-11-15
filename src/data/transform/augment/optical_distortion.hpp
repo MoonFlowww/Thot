@@ -49,7 +49,9 @@ namespace Thot::Data::Transforms::Augmentation {
         const auto [min_value, max_value] = Details::infer_tensor_bounds(selection->inputs);
         warped = Details::clamp_to_range(warped, min_value, max_value);
         warped = warped.to(selection->inputs.scalar_type());
-        return Details::finalize_augmentation(inputs, targets, std::move(warped), std::move(selection->targets));
+        auto warped_targets = Details::maybe_warp_targets_with_grid(selection->targets, distorted_grid);
+        auto augmented_targets = warped_targets.has_value() ? std::move(*warped_targets) : std::move(selection->targets);
+        return Details::finalize_augmentation(inputs, targets, std::move(warped), std::move(augmented_targets));
     }
 }
 

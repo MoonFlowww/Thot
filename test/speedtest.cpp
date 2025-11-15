@@ -507,14 +507,12 @@ int ssmain() {
     Thot::Model model2("");
     const auto ce = set(model2, IsCuda); // define the network
     model2.clear_training_telemetry(); // not necessary
-    auto _x1 = x1;
-    auto _y1 = y1;
     for (int64_t e = 0; e < epochs; ++e) {
         for (int64_t i = 0; i < N; i += B) { auto step_start = std::chrono::high_resolution_clock::now();
             const int64_t end = std::min(i + B, N);
 
-            auto inputs  = stage_for_device(_x1.index({torch::indexing::Slice(i, end)}), IsCuda);
-            auto targets = stage_for_device(_y1.index({torch::indexing::Slice(i, end)}), IsCuda);
+            auto inputs  = stage_for_device(x1.index({torch::indexing::Slice(i, end)}), IsCuda);
+            auto targets = stage_for_device(y1.index({torch::indexing::Slice(i, end)}), IsCuda);
 
             model2.zero_grad();
             auto logits = model2.forward(inputs);

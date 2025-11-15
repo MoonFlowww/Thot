@@ -135,13 +135,15 @@ int main() {
 
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::Flip(x1, y1, {.axes = {"x"}, .frequency = 1.f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::Flip(x1, y1, {.axes = {"y"}, .frequency = 0.5f, .data_augment = true});
-    std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::CLAHE(x1, y1, {.frequency = 0.5f, .data_augment = true});
-    std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::OpticalDistortion(x1, y1, {.frequency = 0.3f, .data_augment = true});
+    std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::CLAHE(x1, y1, {.frequency = 1.f, .data_augment = true});
+    std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::OpticalDistortion(x1, y1, {.frequency = 1.f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::AtmosphericDrift(x1, y1, {.frequency = 0.3f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::SunAngleJitter(x1, y1, {.frequency = 0.3f, .data_augment = true});
 
     Thot::Data::Check::Size(x1, "Inputs Augmented");
     Thot::Data::Check::Size(y1, "Targets Augmented");
+    (void)Thot::Plot::Data::Image(x1, {0, 24, 49, 74, 99, 124, 149});
+    (void)Thot::Plot::Data::Image(y1, {0, 24, 49, 74, 99, 124, 149});
 
     y1 = ConvertRgbMasksToOneHot(y1);
     y2 = ConvertRgbMasksToOneHot(y2);
@@ -160,7 +162,7 @@ int main() {
     vit_options.layers = 8;
     vit_options.embed_dim = 384;
     vit_options.attention.num_heads = 6;
-    vit_options.attention.dropout = 0.1;
+    vit_options.attention.dropout = 0.3;
     vit_options.attention.batch_first = true;
     vit_options.attention.variant = Thot::Attention::Variant::Full;
     vit_options.feed_forward.mlp_ratio = 4.0;
@@ -172,12 +174,12 @@ int main() {
     vit_options.patch_embedding.patch_size = 16;
     vit_options.patch_embedding.add_class_token = false;
     vit_options.patch_embedding.normalize = true;
-    vit_options.patch_embedding.dropout = 0.1;
+    vit_options.patch_embedding.dropout = 0.2;
     vit_options.positional_encoding.type = Thot::Layer::Details::PositionalEncodingType::Learned;
-    vit_options.positional_encoding.dropout = 0.1;
-    vit_options.residual_dropout = 0.1;
-    vit_options.attention_dropout = 0.1;
-    vit_options.feed_forward_dropout = 0.1;
+    vit_options.positional_encoding.dropout = 0.2;
+    vit_options.residual_dropout = 0.2;
+    vit_options.attention_dropout = 0.2;
+    vit_options.feed_forward_dropout = 0.2;
     vit_options.pre_norm = true;
     vit_options.final_layer_norm = true;
 
@@ -188,6 +190,7 @@ int main() {
     const auto patch_area = patch_size * patch_size;
     const auto patch_projection_dim = mask_channels * patch_area;
 
+    //model.add(Thot::Layer::SoftDropout({.probability = 0.5, .noise_mean = 0.2, .noise_std = 1, .noise_type = Thot::Layer::SoftDropoutOptions::NoiseType::InterleavedGradientNoise}));
     model.add(Thot::Block::Transformer::Vision::Encoder(vit_options));
     model.add(Thot::Layer::HardDropout({ .probability = 0.1 }));
     model.add(Thot::Layer::FC({vit_options.embed_dim, patch_projection_dim, true}, Thot::Activation::Identity, Thot::Initialization::XavierUniform));
@@ -201,8 +204,8 @@ int main() {
 
     //Custom loop for dual-loss
     CustomTrainingOptions training_options{};
-    training_options.epochs = 10;
-    training_options.batch_size = 8;
+    training_options.epochs = 100;
+    training_options.batch_size = 16;
     training_options.dice_weight = 0.6;
     training_options.bce_weight = 1-training_options.dice_weight;
 

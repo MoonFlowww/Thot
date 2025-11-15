@@ -2371,6 +2371,9 @@ namespace Thot::Common::SaveLoad {
             descriptor.options.inplace = Detail::get_boolean(tree, "options.inplace", context);
             descriptor.options.noise_mean = Detail::get_numeric<double>(tree, "options.noise_mean", context);
             descriptor.options.noise_std = Detail::get_numeric<double>(tree, "options.noise_std", context);
+            if (const auto noise_type = tree.get_optional<std::string>("options.noise_type")) {
+                descriptor.options.noise_type = Detail::soft_dropout_noise_type_from_string(*noise_type);
+            }
             descriptor.activation = Detail::deserialize_activation_descriptor(tree.get_child("activation"), context);
             descriptor.local = deserialize_local_config(tree.get_child("local"), context);
             return Layer::Descriptor{descriptor};
