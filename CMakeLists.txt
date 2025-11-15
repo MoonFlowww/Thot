@@ -188,5 +188,6 @@ add_executable(test_Thot test/classification/masks/dubai_segment.cpp #classifica
         src/data/transform/dimensionality_reduction/pca.hpp
         src/data/transform/dimensionality_reduction/rpca.hpp
         src/data/transform/dimensionality_reduction/registry.hpp
+        src/layer/details/patch_unembed.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot ${OpenCV_LIBS})

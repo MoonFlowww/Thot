@@ -2217,6 +2217,9 @@ namespace Thot::Common::SaveLoad {
                     tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
                     tree.add_child("initialization", Detail::serialize_initialization_descriptor(concrete.initialization));
                     tree.add_child("local", serialize_local_config(concrete.local));
+                } else if constexpr (std::is_same_v<DescriptorType, Layer::PatchUnembedDescriptor>) {
+                    tree.put("type", "patchunembed");
+                    //TODO: impl Patch Unembed for serialization
                 } else {
                     static_assert(sizeof(DescriptorType) == 0, "Unsupported layer descriptor supplied.");
                 }
