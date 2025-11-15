@@ -12,6 +12,16 @@
 #include "common.hpp"
 
 namespace Thot::Data::Transforms::Augmentation {
+    namespace Options {
+        struct CLAHEOptions {
+            int64_t histogram_bins = 256;
+            double clip_limit = 0.01;
+            std::pair<int64_t, int64_t> tile_grid = {8, 8};
+            std::optional<double> frequency = 0.3;
+            std::optional<bool> data_augment = true;
+            bool show_progress = true;
+        };
+    }
     namespace Details {
         inline torch::Tensor apply_clahe_tile(const torch::Tensor& tile, int64_t bins, double clip_limit) {
             auto cpu_tile = tile.to(torch::kCPU).contiguous();
@@ -66,17 +76,9 @@ namespace Thot::Data::Transforms::Augmentation {
         }
     }
 
-    inline std::pair<torch::Tensor, torch::Tensor> CLAHE(
-        const torch::Tensor& inputs,
-        const torch::Tensor& targets,
-        int64_t histogram_bins = 256,
-        double clip_limit = 0.01,
-        std::pair<int64_t, int64_t> tile_grid = {8, 8},
-        std::optional<double> frequency = 0.3,
-        std::optional<bool> data_augment = true,
-        bool show_progress = true) {
-        [[maybe_unused]] const bool show = show_progress;
-        auto selection = Details::select_augmented_subset(inputs, targets, frequency, data_augment);
+    inline std::pair<torch::Tensor, torch::Tensor> CLAHE(const torch::Tensor& inputs, const torch::Tensor& targets, Options::CLAHEOptions opt) {
+        [[maybe_unused]] const bool show = opt.show_progress;
+        auto selection = Details::select_augmented_subset(inputs, targets, opt.frequency, opt.data_augment);
         if (!selection.has_value() || selection->inputs.dim() < 3) {
             return {inputs, targets};
         }
@@ -90,8 +92,8 @@ namespace Thot::Data::Transforms::Augmentation {
         const auto width = normalized.size(normalized.dim() - 1);
 
         auto result = normalized.clone();
-        const int64_t rows = std::max<int64_t>(1, tile_grid.first);
-        const int64_t cols = std::max<int64_t>(1, tile_grid.second);
+        const int64_t rows = std::max<int64_t>(1, opt.tile_grid.first);
+        const int64_t cols = std::max<int64_t>(1, opt.tile_grid.second);
         const int64_t tile_h = std::max<int64_t>(1, height / rows);
         const int64_t tile_w = std::max<int64_t>(1, width / cols);
 
@@ -105,7 +107,7 @@ namespace Thot::Data::Transforms::Augmentation {
                         const int64_t x0 = col * tile_w;
                         const int64_t x1 = col + 1 == cols ? width : std::min<int64_t>(width, x0 + tile_w);
                         auto tile = channel.slice(-2, y0, y1).slice(-1, x0, x1);
-                        auto equalized = Details::apply_clahe_tile(tile, histogram_bins, clip_limit);
+                        auto equalized = Details::apply_clahe_tile(tile, opt.histogram_bins, opt.clip_limit);
                         channel.slice(-2, y0, y1).slice(-1, x0, x1).copy_(equalized);
                     }
                 }

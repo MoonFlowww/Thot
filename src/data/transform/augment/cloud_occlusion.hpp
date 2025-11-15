@@ -11,18 +11,20 @@
 #include "common.hpp"
 
 namespace Thot::Data::Transforms::Augmentation {
-    inline std::pair<torch::Tensor, torch::Tensor> CloudOcclusion(
-        const torch::Tensor& inputs,
-        const torch::Tensor& targets,
-        int64_t max_clouds = 4,
-        double coverage = 0.35,
-        double softness = 6.0,
-        std::array<double, 3> cloud_color = {1.0, 1.0, 1.0},
-        std::optional<double> frequency = 0.3,
-        std::optional<bool> data_augment = true,
-        bool show_progress = true) {
-        [[maybe_unused]] const bool show = show_progress;
-        auto selection = Details::select_augmented_subset(inputs, targets, frequency, data_augment);
+    namespace Options {
+        struct CloudOcclusionOptions {
+            int64_t max_clouds = 4;
+            double coverage = 0.35;
+            double softness = 6.0;
+            std::array<double, 3> cloud_color = {1.0, 1.0, 1.0};
+            std::optional<double> frequency = 0.3;
+            std::optional<bool> data_augment = true;
+            bool show_progress = true;
+        };
+    }
+    inline std::pair<torch::Tensor, torch::Tensor> CloudOcclusion(const torch::Tensor& inputs, const torch::Tensor& targets, Options::CloudOcclusionOptions opt) {
+        [[maybe_unused]] const bool show = opt.show_progress;
+        auto selection = Details::select_augmented_subset(inputs, targets, opt.frequency, opt.data_augment);
         if (!selection.has_value() || selection->inputs.dim() < 4) {
             return {inputs, targets};
         }
@@ -43,23 +45,23 @@ namespace Thot::Data::Transforms::Augmentation {
 
         for (int64_t n = 0; n < batch; ++n) {
             auto sample_mask = mask[n][0];
-            const int clouds = std::max<int>(1, static_cast<int>(std::round(dist01(rng) * max_clouds)));
+            const int clouds = std::max<int>(1, static_cast<int>(std::round(dist01(rng) * opt.max_clouds)));
             for (int i = 0; i < clouds; ++i) {
                 const double cx = dist01(rng);
                 const double cy = dist01(rng);
                 const double rx = 0.1 + dist01(rng) * 0.4;
                 const double ry = 0.1 + dist01(rng) * 0.4;
-                const double alpha = coverage * dist01(rng);
+                const double alpha = opt.coverage * dist01(rng);
                 auto distance = torch::pow((x_coords - cx) / rx, 2) + torch::pow((y_coords - cy) / ry, 2);
-                auto contribution = torch::exp(-distance * softness);
+                auto contribution = torch::exp(-distance * opt.softness);
                 sample_mask = torch::minimum(sample_mask, 1.0 - alpha * contribution);
             }
             mask[n][0].copy_(sample_mask);
         }
 
-        std::vector<double> color_vec(channels, cloud_color[0]);
-        for (int64_t c = 0; c < channels && c < static_cast<int64_t>(cloud_color.size()); ++c) {
-            color_vec[c] = cloud_color[c];
+        std::vector<double> color_vec(channels, opt.cloud_color[0]);
+        for (int64_t c = 0; c < channels && c < static_cast<int64_t>(opt.cloud_color.size()); ++c) {
+            color_vec[c] = opt.cloud_color[c];
         }
         auto color = torch::tensor(color_vec, options).view({1, channels, 1, 1});
         auto occluded = float_inputs * mask + color * (1.0 - mask);

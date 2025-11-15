@@ -11,17 +11,19 @@
 #include "common.hpp"
 
 namespace Thot::Data::Transforms::Augmentation {
-    inline std::pair<torch::Tensor, torch::Tensor> AtmosphericDrift(
-        const torch::Tensor& inputs,
-        const torch::Tensor& targets,
-        std::array<double, 3> atmospheric_color = {0.9, 0.95, 1.0},
-        std::pair<double, double> strength = {0.05, 0.2},
-        std::pair<double, double> drift = {0.0, 0.25},
-        std::optional<double> frequency = 0.3,
-        std::optional<bool> data_augment = true,
-        bool show_progress = true) {
-        [[maybe_unused]] const bool show = show_progress;
-        auto selection = Details::select_augmented_subset(inputs, targets, frequency, data_augment);
+    namespace Options {
+        struct AtmosphericDriftOptions {
+            std::array<double, 3> atmospheric_color = {0.9, 0.95, 1.0};
+            std::pair<double, double> strength = {0.05, 0.2};
+            std::pair<double, double> drift = {0.0, 0.25};
+            std::optional<double> frequency = 0.3;
+            std::optional<bool> data_augment = true;
+            bool show_progress = true;
+        };
+    }
+    inline std::pair<torch::Tensor, torch::Tensor> AtmosphericDrift(const torch::Tensor& inputs, const torch::Tensor& targets, Options::AtmosphericDriftOptions opt) {
+        [[maybe_unused]] const bool show = opt.show_progress;
+        auto selection = Details::select_augmented_subset(inputs, targets, opt.frequency, opt.data_augment);
         if (!selection.has_value() || selection->inputs.dim() < 4) {
             return {inputs, targets};
         }
@@ -33,17 +35,17 @@ namespace Thot::Data::Transforms::Augmentation {
         auto options = float_inputs.options();
 
         auto haze_strength = torch::empty({batch, 1, 1, 1}, options)
-            .uniform_(strength.first, strength.second);
+            .uniform_(opt.strength.first, opt.strength.second);
         auto drift_strength = torch::empty({batch, 1, 1, 1}, options)
-            .uniform_(drift.first, drift.second);
+            .uniform_(opt.drift.first, opt.drift.second);
 
         auto gradient = torch::linspace(0.0, 1.0, height, options).view({1, 1, height, 1});
         auto drift_map = gradient * drift_strength;
         auto haze_map = torch::clamp(haze_strength + drift_map, 0.0, 1.0);
 
-        std::vector<double> color_vec(channels, atmospheric_color[0]);
-        for (int64_t c = 0; c < channels && c < static_cast<int64_t>(atmospheric_color.size()); ++c) {
-            color_vec[c] = atmospheric_color[c];
+        std::vector<double> color_vec(channels, opt.atmospheric_color[0]);
+        for (int64_t c = 0; c < channels && c < static_cast<int64_t>(opt.atmospheric_color.size()); ++c) {
+            color_vec[c] = opt.atmospheric_color[c];
         }
         auto color = torch::tensor(color_vec, options).view({1, channels, 1, 1});
 

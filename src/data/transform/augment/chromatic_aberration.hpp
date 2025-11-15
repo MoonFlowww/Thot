@@ -10,15 +10,19 @@
 #include "common.hpp"
 
 namespace Thot::Data::Transforms::Augmentation {
+    namespace Options {
+         struct ChromaticAberrationOptions {
+             double max_shift_pixels = 2.0;
+             std::optional<double> frequency = 0.3;
+             std::optional<bool> data_augment = true;
+             bool show_progress = true;
+         };
+    }
     inline std::pair<torch::Tensor, torch::Tensor> ChromaticAberration(
         const torch::Tensor& inputs,
-        const torch::Tensor& targets,
-        double max_shift_pixels = 2.0,
-        std::optional<double> frequency = 0.3,
-        std::optional<bool> data_augment = true,
-        bool show_progress = true) {
-        [[maybe_unused]] const bool show = show_progress;
-        auto selection = Details::select_augmented_subset(inputs, targets, frequency, data_augment);
+        const torch::Tensor& targets, Options::ChromaticAberrationOptions opt) {
+        [[maybe_unused]] const bool show = opt.show_progress;
+        auto selection = Details::select_augmented_subset(inputs, targets, opt.frequency, opt.data_augment);
         if (!selection.has_value() || selection->inputs.dim() < 4 || selection->inputs.size(1) < 3) {
             return {inputs, targets};
         }
@@ -31,8 +35,8 @@ namespace Thot::Data::Transforms::Augmentation {
         auto options = float_inputs.options();
 
         auto base_grid = Details::identity_grid(height, width, float_inputs.device());
-        const double norm_shift_x = max_shift_pixels * 2.0 / std::max<int64_t>(1, width - 1);
-        const double norm_shift_y = max_shift_pixels * 2.0 / std::max<int64_t>(1, height - 1);
+        const double norm_shift_x = opt.max_shift_pixels * 2.0 / std::max<int64_t>(1, width - 1);
+        const double norm_shift_y = opt.max_shift_pixels * 2.0 / std::max<int64_t>(1, height - 1);
 
         std::vector<torch::Tensor> warped_channels;
         warped_channels.reserve(channels);

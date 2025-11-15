@@ -9,16 +9,20 @@
 #include "common.hpp"
 
 namespace Thot::Data::Transforms::Augmentation {
+    namespace Options {
+        struct OpticalDistortionOptions {
+            std::pair<double, double> k1_range = {-0.1, 0.1};
+            std::pair<double, double> k2_range = {-0.05, 0.05};
+            std::optional<double> frequency = 0.3;
+            std::optional<bool> data_augment = true;
+            bool show_progress = true;
+        };
+    }
     inline std::pair<torch::Tensor, torch::Tensor> OpticalDistortion(
         const torch::Tensor& inputs,
-        const torch::Tensor& targets,
-        std::pair<double, double> k1_range = {-0.1, 0.1},
-        std::pair<double, double> k2_range = {-0.05, 0.05},
-        std::optional<double> frequency = 0.3,
-        std::optional<bool> data_augment = true,
-        bool show_progress = true) {
-        [[maybe_unused]] const bool show = show_progress;
-        auto selection = Details::select_augmented_subset(inputs, targets, frequency, data_augment);
+        const torch::Tensor& targets, Options::OpticalDistortionOptions opt) {
+        [[maybe_unused]] const bool show = opt.show_progress;
+        auto selection = Details::select_augmented_subset(inputs, targets, opt.frequency, opt.data_augment);
         if (!selection.has_value() || selection->inputs.dim() < 4) {
             return {inputs, targets};
         }
@@ -33,8 +37,8 @@ namespace Thot::Data::Transforms::Augmentation {
             .unsqueeze(0)
             .repeat({batch, 1, 1, 1});
         auto options = torch::TensorOptions().dtype(torch::kFloat32).device(device);
-        auto k1 = torch::empty({batch, 1, 1}, options).uniform_(k1_range.first, k1_range.second);
-        auto k2 = torch::empty({batch, 1, 1}, options).uniform_(k2_range.first, k2_range.second);
+        auto k1 = torch::empty({batch, 1, 1}, options).uniform_(opt.k1_range.first, opt.k1_range.second);
+        auto k2 = torch::empty({batch, 1, 1}, options).uniform_(opt.k2_range.first, opt.k2_range.second);
 
         auto x = base_grid.select(-1, 0);
         auto y = base_grid.select(-1, 1);

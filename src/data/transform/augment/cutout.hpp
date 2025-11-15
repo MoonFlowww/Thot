@@ -14,17 +14,19 @@
 #include "common.hpp"
 
 namespace Thot::Data::Transforms::Augmentation {
-    inline std::pair<torch::Tensor, torch::Tensor> Cutout(
-        const torch::Tensor& inputs,
-        const torch::Tensor& targets,
-        const std::vector<int64_t>& offsets,
-        const std::vector<int64_t>& sizes,
-        double fill_value = 0.0,
-        std::optional<double> frequency = 0.3,
-        std::optional<bool> data_augment = true,
-        bool show_progress = true) {
-        [[maybe_unused]] const bool show = show_progress;
-        if (!Details::augmentation_enabled(data_augment)) {
+    namespace Options {
+        struct CutoutOptions {
+            const std::vector<int64_t>& offsets;
+            const std::vector<int64_t>& sizes;
+            double fill_value = 0.0;
+            std::optional<double> frequency = 0.3;
+            std::optional<bool> data_augment = true;
+            bool show_progress = true;
+        };
+    }
+    inline std::pair<torch::Tensor, torch::Tensor> Cutout(const torch::Tensor& inputs, const torch::Tensor& targets, Options::CutoutOptions opt) {
+        [[maybe_unused]] const bool show = opt.show_progress;
+        if (!Details::augmentation_enabled(opt.data_augment)) {
             return {inputs, targets};
         }
         if (!inputs.defined() || inputs.dim() < 2) {
@@ -34,7 +36,7 @@ namespace Thot::Data::Transforms::Augmentation {
             throw std::invalid_argument("Inputs and targets must have matching batch dimensions for Cutout augmentation.");
         }
 
-        auto selected_indices = Details::select_indices_by_frequency(inputs.size(0), frequency, inputs.device());
+        auto selected_indices = Details::select_indices_by_frequency(inputs.size(0), opt.frequency, inputs.device());
         if (selected_indices.numel() == 0) {
             return {inputs, targets};
         }
@@ -50,10 +52,10 @@ namespace Thot::Data::Transforms::Augmentation {
         const auto height = result.size(height_dim);
         const auto width = result.size(width_dim);
 
-        auto y0 = offsets.size() > 0 ? offsets[0] : int64_t{0};
-        auto x0 = offsets.size() > 1 ? offsets[1] : int64_t{0};
-        auto h  = sizes.size()   > 0 ? sizes[0]   : height;
-        auto w  = sizes.size()   > 1 ? sizes[1]   : width;
+        auto y0 = opt.offsets.size() > 0 ? opt.offsets[0] : int64_t{0};
+        auto x0 = opt.offsets.size() > 1 ? opt.offsets[1] : int64_t{0};
+        auto h  = opt.sizes.size()   > 0 ? opt.sizes[0]   : height;
+        auto w  = opt.sizes.size()   > 1 ? opt.sizes[1]   : width;
 
         y0 = std::clamp<int64_t>(y0, 0, height);
         x0 = std::clamp<int64_t>(x0, 0, width);
@@ -62,11 +64,11 @@ namespace Thot::Data::Transforms::Augmentation {
 
         static thread_local std::mt19937 rng{std::random_device{}()};
 
-        if (offsets.size() > 0 && offsets[0] < 0 && h <= height) {
+        if (opt.offsets.size() > 0 && opt.offsets[0] < 0 && h <= height) {
             std::uniform_int_distribution<int64_t> distribution(0, height - h);
             y0 = distribution(rng);
         }
-        if (offsets.size() > 1 && offsets[1] < 0 && w <= width) {
+        if (opt.offsets.size() > 1 && opt.offsets[1] < 0 && w <= width) {
             std::uniform_int_distribution<int64_t> distribution(0, width - w);
             x0 = distribution(rng);
         }
@@ -76,11 +78,11 @@ namespace Thot::Data::Transforms::Augmentation {
 
         if (y0 < y1 && x0 < x1) {
             auto patch = result.slice(height_dim, y0, y1).slice(width_dim, x0, x1);
-            if (fill_value == -1.0) {
+            if (opt.fill_value == -1.0) {
                 auto noise = torch::rand_like(patch);
                 patch.copy_(noise);
             } else {
-                patch.fill_(fill_value);
+                patch.fill_(opt.fill_value);
             }
         }
 

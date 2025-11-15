@@ -11,16 +11,18 @@
 #include "common.hpp"
 
 namespace Thot::Data::Transforms::Augmentation {
-    inline std::pair<torch::Tensor, torch::Tensor> GridDistortion(
-        const torch::Tensor& inputs,
-        const torch::Tensor& targets,
-        double distort_limit = 0.08,
-        int64_t control_points = 5,
-        std::optional<double> frequency = 0.3,
-        std::optional<bool> data_augment = true,
-        bool show_progress = true) {
-        [[maybe_unused]] const bool show = show_progress;
-        auto selection = Details::select_augmented_subset(inputs, targets, frequency, data_augment);
+    namespace Options {
+        struct GridDistortionOptions {
+            double distort_limit = 0.08;
+            int64_t control_points = 5;
+            std::optional<double> frequency = 0.3;
+            std::optional<bool> data_augment = true;
+            bool show_progress = true;
+        };
+    }
+    inline std::pair<torch::Tensor, torch::Tensor> GridDistortion(const torch::Tensor& inputs, const torch::Tensor& targets, Options::GridDistortionOptions opt) {
+        [[maybe_unused]] const bool show = opt.show_progress;
+        auto selection = Details::select_augmented_subset(inputs, targets, opt.frequency, opt.data_augment);
         if (!selection.has_value() || selection->inputs.dim() < 4) {
             return {inputs, targets};
         }
@@ -33,8 +35,8 @@ namespace Thot::Data::Transforms::Augmentation {
 
         auto base_grid = Details::identity_grid(height, width, device);
         auto options = torch::TensorOptions().dtype(torch::kFloat32).device(device);
-        auto offsets = torch::empty({1, 2, control_points, control_points}, options)
-            .uniform_(-distort_limit, distort_limit);
+        auto offsets = torch::empty({1, 2, opt.control_points, opt.control_points}, options)
+            .uniform_(-opt.distort_limit, opt.distort_limit);
         auto upsampled = torch::nn::functional::interpolate(
             offsets,
             torch::nn::functional::InterpolateFuncOptions()

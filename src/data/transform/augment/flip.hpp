@@ -12,6 +12,14 @@
 #include "common.hpp"
 
 namespace Thot::Data::Transforms::Augmentation {
+    namespace Options {
+        struct FlipOptions {
+            const std::vector<std::string>& axes;
+            std::optional<double> frequency = 0.3;
+            std::optional<bool> data_augment = true;
+            bool show_progress = true;
+        };
+    }
     namespace Details {
         inline int64_t axis_token_to_dim(const std::string& token, int64_t tensor_dim) {
             if (token.empty()) {
@@ -72,13 +80,9 @@ namespace Thot::Data::Transforms::Augmentation {
 
     inline std::pair<torch::Tensor, torch::Tensor> Flip(
         const torch::Tensor& tensor,
-        const torch::Tensor& target,
-        const std::vector<std::string>& axes,
-        std::optional<double> frequency = 0.3,
-        std::optional<bool> data_augment = true,
-        bool show_progress = true) {
-        [[maybe_unused]] const bool show = show_progress;
-        if (!Details::augmentation_enabled(data_augment)) {
+        const torch::Tensor& target, Options::FlipOptions opt) {
+        [[maybe_unused]] const bool show = opt.show_progress;
+        if (!Details::augmentation_enabled(opt.data_augment)) {
             return {tensor, target};
         }
         if (!tensor.defined() || !target.defined() || tensor.dim() == 0 || target.dim() == 0) {
@@ -87,16 +91,16 @@ namespace Thot::Data::Transforms::Augmentation {
         if (tensor.size(0) != target.size(0)) {
             throw std::invalid_argument("Inputs and targets must have matching batch dimensions for Flip augmentation.");
         }
-        if (axes.empty()) {
+        if (opt.axes.empty()) {
             return {tensor, target};
         }
 
-        const auto dims = Details::parse_flip_axes(axes, tensor.dim());
+        const auto dims = Details::parse_flip_axes(opt.axes, tensor.dim());
         if (dims.empty()) {
             return {tensor, target};
         }
 
-        auto selected_indices = Details::select_indices_by_frequency(tensor.size(0), frequency, tensor.device());
+        auto selected_indices = Details::select_indices_by_frequency(tensor.size(0), opt.frequency, tensor.device());
         if (selected_indices.numel() == 0) {
             return {tensor, target};
         }
