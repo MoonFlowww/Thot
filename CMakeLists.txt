@@ -35,7 +35,7 @@ add_library(Thot SHARED
         src/evaluation/details/timeserie.hpp
         src/data/data.hpp
         src/data/details/generation.hpp
-        src/data/details/load/load.hpp
+        src/data/load/load.hpp
         src/data/transform/manipulation.hpp
         src/calibration/calibration.hpp
         src/block/block.hpp
@@ -164,7 +164,7 @@ add_executable(test_Thot test/classification/masks/dubai_segment.cpp #classifica
         src/plot/details/reliability/reliability_lime.hpp
         src/plot/details/reliability/reliability_gradcam.hpp
         test/speedtest.cpp
-        src/data/details/load/types.hpp
+        src/data/load/types.hpp
         test/classification/masks/dubai_segment.cpp
         src/data/transform/augment/atmospheric_drift.hpp
         src/data/transform/augment/chromatic_aberration.hpp

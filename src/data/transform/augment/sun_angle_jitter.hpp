@@ -31,8 +31,10 @@ namespace Thot::Data::Transforms::Augmentation {
 
         auto float_inputs = Details::ensure_float_tensor(selection->inputs);
         const auto batch = float_inputs.size(0);
-        const auto height = float_inputs.size(2);
-        const auto width = float_inputs.size(3);
+        const auto tensor_rank = float_inputs.dim();
+        const auto height = float_inputs.size(tensor_rank - 2);
+        const auto width = float_inputs.size(tensor_rank - 1);
+        const bool channels_first = tensor_rank >= 4 && float_inputs.size(1) != height;
         auto options = float_inputs.options();
 
         auto base_grid = Details::identity_grid(height, width, float_inputs.device()).unsqueeze(0);
@@ -44,9 +46,11 @@ namespace Thot::Data::Transforms::Augmentation {
         auto min_vals = mask.amin({1, 2, 3}, true);
         auto max_vals = mask.amax({1, 2, 3}, true);
         mask = (mask - min_vals) / (max_vals - min_vals + 1e-6);
-        auto strengths = torch::empty({batch, 1, 1, 1}, options)
-            .uniform_(opt.shadow_strength.first, opt.shadow_strength.second);
+        auto strengths = torch::empty({batch, 1, 1, 1}, options).uniform_(opt.shadow_strength.first, opt.shadow_strength.second);
         auto attenuation = 1.0 - mask * strengths;
+        if (channels_first)
+            attenuation = attenuation.permute({0, 3, 1, 2});
+
         auto adjusted = float_inputs * attenuation;
         const auto [min_value, max_value] = Details::infer_tensor_bounds(selection->inputs);
         adjusted = Details::clamp_to_range(adjusted, min_value, max_value);

@@ -14,13 +14,15 @@ int main() {
 
     //797 × 644 pixel
 
-    Thot::Data::Transforms::Augmentation::Flip(x1, y1, {.axes = {"x"}, .frequency = 1.f, .data_augment = true});
-    Thot::Data::Transforms::Augmentation::Flip(x1, y1, {.axes = {"y"}, .frequency = 0.5f, .data_augment = true});
-    Thot::Data::Transforms::Augmentation::CLAHE(x1, y1, {.frequency = 0.2f, .data_augment = true});
-    Thot::Data::Transforms::Augmentation::OpticalDistortion(x1, y1, {.frequency = 0.15f, .data_augment = true});
-    Thot::Data::Transforms::Augmentation::AtmosphericDrift(x1, y1, {.frequency = 0.1f, .data_augment = true});
-    Thot::Data::Transforms::Augmentation::SunAngleJitter(x1, y1, {.frequency = 0.1f, .data_augment = true});
+    std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::Flip(x1, y1, {.axes = {"x"}, .frequency = 1.f, .data_augment = true});
+    std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::Flip(x1, y1, {.axes = {"y"}, .frequency = 0.5f, .data_augment = true});
+    std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::CLAHE(x1, y1, {.frequency = 0.5f, .data_augment = true});
+    std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::OpticalDistortion(x1, y1, {.frequency = 0.3f, .data_augment = true});
+    std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::AtmosphericDrift(x1, y1, {.frequency = 0.3f, .data_augment = true});
+    std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::SunAngleJitter(x1, y1, {.frequency = 0.3f, .data_augment = true});
 
+    Thot::Data::Check::Size(x1, "Inputs Raw");
+    Thot::Data::Check::Size(y1, "Outputs Raw");
 
     return 0;
 }
