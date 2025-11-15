@@ -186,7 +186,7 @@ int main() {
 
     Thot::Data::Check::Size(x1, "Inputs Augmented");
     Thot::Data::Check::Size(y1, "Targets Augmented");
-    Thot::Data::Check::Size(y2, "test Targets Augmented");
+    Thot::Data::Check::Size(y2, "test Targets");
 
     //(void)Thot::Plot::Data::Image(x1, idx);
     (void)Thot::Plot::Data::Image(y1, idx);
