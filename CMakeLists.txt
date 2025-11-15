@@ -33,7 +33,7 @@ add_library(Thot SHARED
         src/evaluation/details/timeserie.hpp
         src/data/data.hpp
         src/data/details/generation.hpp
-        src/data/details/load.hpp
+        src/data/details/load/load.hpp
         src/data/details/manipulation.hpp
         src/data/details/dimreduction.hpp
         src/calibration/calibration.hpp
@@ -169,5 +169,6 @@ add_executable(test_Thot test/classification/timeseries/ptbxl.cpp #regression/ti
         src/plot/details/reliability/reliability_gradcam.hpp
         test/speedtest.cpp
         src/data/details/manipulation/augment/augment.hpp
+        src/data/details/load/types.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)

@@ -27,6 +27,22 @@ at the default (`false`) to receive CPU tensors.
   – Handles the PTB-XL ECG archive, resolving `.hea/.dat` pairs, mapping SCP
   statements to the five superclasses, and optionally constructing multilabel
   targets with configurable thresholds.
+- **`Load::Universal(root, Descriptor inputs, Descriptor outputs, Global)`** –
+  Instantiates descriptor-driven readers for CSV/txt/bin sources, stacks
+  tensors, optionally shuffles them, then
+  applies the requested `Type::GlobalParameters` split.
+  - `Thot::Data::Type` exposes a collection of declarative descriptors so the
+      universal loader can reason about heterogeneous sources:
+  - `Type::CSV{"dataset.csv", {.columns = {"x0", "x1"}}}` – pick specific
+    columns by header (or index) and stream them as `float32` features.
+  - `Type::Text{"sentences.txt", {.lowercase = true}}` – treat each line as a
+    padded ASCII sequence for NLP-style preprocessing.
+  - `Type::Binary{"records.bin", {.type = BinaryDataType::Float32,
+    .record_size = 8}}` – reinterpret `.bin` payloads into fixed-size float
+    records with optional endianness controls.
+  - `Type::GlobalParameters{.train_fraction = 0.8f, .test_fraction = 0.2f}` controls
+    the split. Additional files (validation or hold-out) remain untouched if the
+    provided fractions do not cover the full dataset.
 
 All loaders guard against missing files and mismatch between data/label counts,
 throwing detailed exceptions when directories are incomplete.

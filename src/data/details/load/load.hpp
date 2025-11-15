@@ -16,13 +16,15 @@
 #include <vector>
 #include <optional>
 #include <regex>
+#include <numeric>
 #include <sstream>
+#include <type_traits>
 #include <unordered_map>
 
 #include <torch/torch.h>
 
-#include "../../core.hpp"
-
+#include "../../../core.hpp"
+#include "types.hpp"
 namespace Thot::Data::Load {
     namespace Details {
         inline std::string trim_copy(const std::string& value)
@@ -231,6 +233,297 @@ namespace Thot::Data::Load {
             }
         }
 
+        inline std::string lowercase(std::string value)
+        {
+            std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            return value;
+        }
+
+        inline std::vector<std::size_t> resolve_csv_indices(const std::vector<std::string>& header,
+                                                            const Type::CSVParameters& parameters)
+        {
+            std::vector<std::size_t> indices;
+            if (parameters.columns.empty()) {
+                indices.resize(header.size());
+                std::iota(indices.begin(), indices.end(), 0);
+                return indices;
+            }
+
+            const auto mapping = header_index_map(header);
+            for (const auto& column : parameters.columns) {
+                auto it = mapping.find(trim_copy(column));
+                if (it == mapping.end()) {
+                    throw std::runtime_error("CSV column not found: " + column);
+                }
+                indices.push_back(it->second);
+            }
+            return indices;
+        }
+
+        inline std::vector<std::size_t> resolve_csv_indices(std::size_t column_count,
+                                                            const Type::CSVParameters& parameters)
+        {
+            std::vector<std::size_t> indices;
+            if (parameters.columns.empty()) {
+                indices.resize(column_count);
+                std::iota(indices.begin(), indices.end(), 0);
+                return indices;
+            }
+
+            indices.reserve(parameters.columns.size());
+            for (const auto& column : parameters.columns) {
+                std::size_t index = 0;
+                auto [ptr, ec] = std::from_chars(column.data(), column.data() + column.size(), index);
+                if (ec != std::errc() || ptr != column.data() + column.size()) {
+                    throw std::runtime_error("CSV descriptor requested column '" + column + "' without header support");
+                }
+                if (index >= column_count) {
+                    throw std::runtime_error("CSV column index out of range: " + column);
+                }
+                indices.push_back(index);
+            }
+            return indices;
+        }
+
+        inline torch::Tensor load_csv_tensor(const std::filesystem::path& root,
+                                             const Type::CSV& descriptor)
+        {
+            const auto file_path = root / descriptor.file;
+            std::ifstream file(file_path);
+            if (!file) {
+                throw std::runtime_error("Failed to open CSV file: " + file_path.string());
+            }
+
+            std::vector<std::size_t> column_indices;
+            std::vector<float> buffer;
+            buffer.reserve(1024);
+            std::size_t column_count = 0;
+
+            auto finalise_tensor = [&](std::size_t rows) {
+                if (rows == 0 || column_indices.empty()) {
+                    return torch::empty({0, 0}, torch::kFloat32);
+                }
+                auto tensor = torch::from_blob(buffer.data(),
+                                               {static_cast<long>(rows), static_cast<long>(column_indices.size())},
+                                               torch::TensorOptions().dtype(torch::kFloat32))
+                                  .clone();
+                return tensor;
+            };
+
+            std::string line;
+            std::size_t rows = 0;
+
+            if (descriptor.parameters.has_header) {
+                if (!std::getline(file, line)) {
+                    return torch::empty({0, 0}, torch::kFloat32);
+                }
+                line = strip_utf8_bom(line);
+                auto header_tokens = split_csv_line(line, descriptor.parameters.delimiter);
+                column_count = header_tokens.size();
+                column_indices = resolve_csv_indices(header_tokens, descriptor.parameters);
+            }
+
+            while (std::getline(file, line)) {
+                if (line.empty()) {
+                    continue;
+                }
+
+                auto tokens = split_csv_line(line, descriptor.parameters.delimiter);
+                if (!descriptor.parameters.has_header) {
+                    if (column_indices.empty()) {
+                        column_count = tokens.size();
+                        column_indices = resolve_csv_indices(column_count, descriptor.parameters);
+                    }
+                }
+
+                if (tokens.size() < column_indices.size()) {
+                    continue;
+                }
+
+                for (const auto index : column_indices) {
+                    if (index >= tokens.size()) {
+                        throw std::runtime_error("CSV column index out of range for row " + std::to_string(rows));
+                    }
+                    const auto maybe_value = parse_float(tokens[index]);
+                    if (!maybe_value.has_value()) {
+                        throw std::runtime_error("CSV row contains non-numeric value at column " + std::to_string(index));
+                    }
+                    buffer.push_back(static_cast<float>(*maybe_value));
+                }
+
+                ++rows;
+            }
+
+            if (rows == 0) {
+                return torch::empty({0, static_cast<long>(column_indices.size())}, torch::kFloat32);
+            }
+
+            return finalise_tensor(rows);
+        }
+
+        inline std::string normalise_line(std::string value, const Type::TextParameters& parameters)
+        {
+            if (parameters.trim_whitespace) {
+                value = trim_copy(value);
+            }
+            if (parameters.lowercase) {
+                value = lowercase(value);
+            }
+            return value;
+        }
+
+        inline torch::Tensor load_text_tensor(const std::filesystem::path& root,
+                                              const Type::Text& descriptor)
+        {
+            const auto file_path = root / descriptor.file;
+            std::ifstream file(file_path);
+            if (!file) {
+                throw std::runtime_error("Failed to open text file: " + file_path.string());
+            }
+
+            std::vector<std::string> lines;
+            lines.reserve(1024);
+            std::size_t max_length = 0;
+            std::string line;
+            while (std::getline(file, line)) {
+                auto processed = normalise_line(line, descriptor.parameters);
+                if (processed.empty() && !descriptor.parameters.keep_empty_lines) {
+                    continue;
+                }
+                max_length = std::max(max_length, processed.size());
+                lines.push_back(std::move(processed));
+            }
+
+            if (lines.empty()) {
+                return torch::empty({0, 0}, torch::kInt64);
+            }
+
+            auto tensor = torch::zeros({static_cast<long>(lines.size()), static_cast<long>(max_length)}, torch::kInt64);
+            auto accessor = tensor.accessor<int64_t, 2>();
+            for (std::size_t row = 0; row < lines.size(); ++row) {
+                const auto& current = lines[row];
+                for (std::size_t col = 0; col < current.size(); ++col) {
+                    accessor[row][col] = static_cast<int64_t>(static_cast<unsigned char>(current[col]));
+                }
+            }
+            return tensor;
+        }
+
+        inline std::size_t binary_type_width(Type::BinaryDataType type)
+        {
+            switch (type) {
+                case Type::BinaryDataType::Int8:
+                case Type::BinaryDataType::UInt8:
+                    return 1;
+                case Type::BinaryDataType::Int16:
+                case Type::BinaryDataType::UInt16:
+                    return 2;
+                case Type::BinaryDataType::Int32:
+                case Type::BinaryDataType::UInt32:
+                case Type::BinaryDataType::Float32:
+                    return 4;
+                case Type::BinaryDataType::Float64:
+                    return 8;
+            }
+            return 1;
+        }
+
+        inline torch::ScalarType binary_type_to_scalar(Type::BinaryDataType type)
+        {
+            switch (type) {
+                case Type::BinaryDataType::Int8:
+                    return torch::kInt8;
+                case Type::BinaryDataType::UInt8:
+                    return torch::kUInt8;
+                case Type::BinaryDataType::Int16:
+                    return torch::kInt16;
+                case Type::BinaryDataType::UInt16:
+                    return torch::kUInt16;
+                case Type::BinaryDataType::Int32:
+                    return torch::kInt32;
+                case Type::BinaryDataType::UInt32:
+                    return torch::kUInt32;
+                case Type::BinaryDataType::Float32:
+                    return torch::kFloat32;
+                case Type::BinaryDataType::Float64:
+                    return torch::kFloat64;
+            }
+            return torch::kUInt8;
+        }
+
+        inline void byteswap_scalar(void* data, std::size_t width)
+        {
+            auto* bytes = static_cast<std::uint8_t*>(data);
+            for (std::size_t i = 0; i < width / 2; ++i) {
+                std::swap(bytes[i], bytes[width - 1 - i]);
+            }
+        }
+
+        inline void maybe_byteswap_buffer(std::vector<std::uint8_t>& buffer,
+                                          std::size_t width,
+                                          bool little_endian)
+        {
+            const bool host_little_endian = [] {
+                constexpr std::uint16_t value = 0x0102;
+                return *(reinterpret_cast<const std::uint8_t*>(&value) + 1) == 0x02;
+            }();
+
+            if (host_little_endian == little_endian || width == 1) {
+                return;
+            }
+
+            for (std::size_t offset = 0; offset + width <= buffer.size(); offset += width) {
+                byteswap_scalar(buffer.data() + offset, width);
+            }
+        }
+
+        inline torch::Tensor load_binary_tensor(const std::filesystem::path& root,
+                                                const Type::Binary& descriptor)
+        {
+            const auto file_path = root / descriptor.file;
+            std::ifstream file(file_path, std::ios::binary);
+            if (!file) {
+                throw std::runtime_error("Failed to open binary file: " + file_path.string());
+            }
+
+            file.seekg(0, std::ios::end);
+            const auto file_size = static_cast<std::size_t>(file.tellg());
+            file.seekg(0, std::ios::beg);
+
+            if (file_size == 0) {
+                return torch::empty({0}, binary_type_to_scalar(descriptor.parameters.type));
+            }
+
+            std::vector<std::uint8_t> buffer(file_size);
+            if (!file.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(buffer.size()))) {
+                throw std::runtime_error("Failed to read binary file: " + file_path.string());
+            }
+
+            const auto scalar_width = binary_type_width(descriptor.parameters.type);
+            if (scalar_width == 0 || file_size % scalar_width != 0) {
+                throw std::runtime_error("Binary file size is not a multiple of scalar width: " + file_path.string());
+            }
+
+            maybe_byteswap_buffer(buffer, scalar_width, descriptor.parameters.little_endian);
+
+            std::size_t record_size = descriptor.parameters.record_size == 0
+                ? 1
+                : descriptor.parameters.record_size;
+            const std::size_t scalar_count = buffer.size() / scalar_width;
+            if (scalar_count % record_size != 0) {
+                throw std::runtime_error("Binary descriptor record size does not divide stream: " + file_path.string());
+            }
+
+            const auto sample_count = static_cast<long>(scalar_count / record_size);
+            const auto options = torch::TensorOptions().dtype(binary_type_to_scalar(descriptor.parameters.type));
+            auto tensor = torch::empty({sample_count, static_cast<long>(record_size)}, options);
+            std::memcpy(tensor.data_ptr(), buffer.data(), buffer.size());
+            return tensor;
+        }
+
+
 
 
         inline std::unordered_map<std::string, std::string> load_scp_superclass_map(
@@ -290,89 +583,89 @@ namespace Thot::Data::Load {
             const std::string& scp_codes_field,
             const std::unordered_map<std::string, std::string>& scp_to_superclass)
 
-{
-    static const std::regex code_weight_regex(R"((["'])([^"']+)\1\s*:\s*([0-9]*\.?[0-9]+))");
-    std::unordered_map<std::string, float> superclass_votes;
+        {
+            static const std::regex code_weight_regex(R"((["'])([^"']+)\1\s*:\s*([0-9]*\.?[0-9]+))");
+            std::unordered_map<std::string, float> superclass_votes;
 
-    // Fallback heuristic: infer superclass from common PTB-XL code patterns when mapping is missing.
-    auto infer_superclass = [](const std::string& raw)->std::string {
-        std::string s; s.reserve(raw.size());
-        for (char c : raw) s.push_back(std::toupper(static_cast<unsigned char>(c)));
-        auto contains = [&](const char* pat){ return s.find(pat) != std::string::npos; };
-        auto starts_with = [&](const char* pat){ return s.rfind(pat, 0) == 0; };
+            // Fallback heuristic: infer superclass from common PTB-XL code patterns when mapping is missing.
+            auto infer_superclass = [](const std::string& raw)->std::string {
+                std::string s; s.reserve(raw.size());
+                for (char c : raw) s.push_back(std::toupper(static_cast<unsigned char>(c)));
+                auto contains = [&](const char* pat){ return s.find(pat) != std::string::npos; };
+                auto starts_with = [&](const char* pat){ return s.rfind(pat, 0) == 0; };
 
-        if (s == "NORM" || s == "NORMAL") return "NORM";
+                if (s == "NORM" || s == "NORMAL") return "NORM";
 
-        // Myocardial infarction
-        if (s == "MI" || contains("INFAR") || contains("MI")) return "MI";
+                // Myocardial infarction
+                if (s == "MI" || contains("INFAR") || contains("MI")) return "MI";
 
-        // ST/T changes
-        if (s == "STTC" || starts_with("ST") || contains("STD") || contains("STE") || contains("NST")
-            || contains("TINV") || contains("TWA"))
-            return "STTC";
+                // ST/T changes
+                if (s == "STTC" || starts_with("ST") || contains("STD") || contains("STE") || contains("NST")
+                    || contains("TINV") || contains("TWA"))
+                    return "STTC";
 
-        // Conduction disturbances
-        if (contains("BBB") || contains("AVB") || s == "LAFB" || s == "LAHB" || s == "LPFB"
-            || s == "IVCD" || s == "WPW" || contains("BIFASC") || contains("TRIFASC"))
-            return "CD";
+                // Conduction disturbances
+                if (contains("BBB") || contains("AVB") || s == "LAFB" || s == "LAHB" || s == "LPFB"
+                    || s == "IVCD" || s == "WPW" || contains("BIFASC") || contains("TRIFASC"))
+                    return "CD";
 
-        // Hypertrophy
-        if (s == "HYP" || contains("LVH") || contains("RVH"))
-            return "HYP";
+                // Hypertrophy
+                if (s == "HYP" || contains("LVH") || contains("RVH"))
+                    return "HYP";
 
-        return "";
-    };
+                return "";
+            };
 
-    // First pass: parse explicit weights from scp_codes
-    bool any_match = false;
-    for (std::sregex_iterator match(scp_codes_field.begin(), scp_codes_field.end(), code_weight_regex);
-         match != std::sregex_iterator();
-         ++match) {
-        any_match = true;
-        const auto scp_code_raw = (*match)[2].str();
-        const auto weight_token = (*match)[3].str();
+            // First pass: parse explicit weights from scp_codes
+            bool any_match = false;
+            for (std::sregex_iterator match(scp_codes_field.begin(), scp_codes_field.end(), code_weight_regex);
+                 match != std::sregex_iterator();
+                 ++match) {
+                any_match = true;
+                const auto scp_code_raw = (*match)[2].str();
+                const auto weight_token = (*match)[3].str();
 
-        // Try mapping via scp_statements, fallback to heuristic
-        auto it = scp_to_superclass.find(scp_code_raw);
-        if (it == scp_to_superclass.end()) {
-            std::string up = scp_code_raw; for (auto &c : up) c = std::toupper(static_cast<unsigned char>(c));
-            it = scp_to_superclass.find(up);
-        }
-        std::string superclass = (it != scp_to_superclass.end()) ? it->second : infer_superclass(scp_code_raw);
-        if (superclass.empty()) continue;
+                // Try mapping via scp_statements, fallback to heuristic
+                auto it = scp_to_superclass.find(scp_code_raw);
+                if (it == scp_to_superclass.end()) {
+                    std::string up = scp_code_raw; for (auto &c : up) c = std::toupper(static_cast<unsigned char>(c));
+                    it = scp_to_superclass.find(up);
+                }
+                std::string superclass = (it != scp_to_superclass.end()) ? it->second : infer_superclass(scp_code_raw);
+                if (superclass.empty()) continue;
 
-        float w = 0.f;
-        try {
-            w = std::stof(weight_token);
-        } catch (...) {
-            w = 0.f;
-        }
-        // Treat zero/unknown as presence vote to avoid dropping rows
-        if (!(w > 0.f)) w = 1.0f;
+                float w = 0.f;
+                try {
+                    w = std::stof(weight_token);
+                } catch (...) {
+                    w = 0.f;
+                }
+                // Treat zero/unknown as presence vote to avoid dropping rows
+                if (!(w > 0.f)) w = 1.0f;
 
-        superclass_votes[superclass] += w;
-    }
+                superclass_votes[superclass] += w;
+                 }
 
-    // If regex failed entirely (e.g., different formatting), try a ultra-simple fallback:
-    if (!any_match) {
-        // Look for quoted tokens (keys) without requiring weights
-        static const std::regex key_only(R"((["'])([^"']+)\1)");
-        for (std::sregex_iterator m(scp_codes_field.begin(), scp_codes_field.end(), key_only);
-             m != std::sregex_iterator(); ++m) {
-            const auto scp_code_raw = (*m)[2].str();
-            auto it = scp_to_superclass.find(scp_code_raw);
-            if (it == scp_to_superclass.end()) {
-                std::string up = scp_code_raw; for (auto &c : up) c = std::toupper(static_cast<unsigned char>(c));
-                it = scp_to_superclass.find(up);
+            // If regex failed entirely (e.g., different formatting), try a ultra-simple fallback:
+            if (!any_match) {
+                // Look for quoted tokens (keys) without requiring weights
+                static const std::regex key_only(R"((["'])([^"']+)\1)");
+                for (std::sregex_iterator m(scp_codes_field.begin(), scp_codes_field.end(), key_only);
+                     m != std::sregex_iterator(); ++m) {
+                    const auto scp_code_raw = (*m)[2].str();
+                    auto it = scp_to_superclass.find(scp_code_raw);
+                    if (it == scp_to_superclass.end()) {
+                        std::string up = scp_code_raw; for (auto &c : up) c = std::toupper(static_cast<unsigned char>(c));
+                        it = scp_to_superclass.find(up);
+                    }
+                    std::string superclass = (it != scp_to_superclass.end()) ? it->second : infer_superclass(scp_code_raw);
+                    if (superclass.empty()) continue;
+                    superclass_votes[superclass] += 1.0f;
+                     }
             }
-            std::string superclass = (it != scp_to_superclass.end()) ? it->second : infer_superclass(scp_code_raw);
-            if (superclass.empty()) continue;
-            superclass_votes[superclass] += 1.0f;
-        }
-    }
 
-    return superclass_votes;
-}
+            return superclass_votes;
+        }
 
 
         inline std::optional<std::int64_t> select_superclass_label(
@@ -923,6 +1216,116 @@ namespace Thot::Data::Load {
 
         return {train_inputs, train_targets, test_inputs, test_targets};
     }
+
+
+    template <typename Descriptor>
+    inline torch::Tensor load_descriptor_tensor(const std::filesystem::path&, const Descriptor&) {
+        static_assert(sizeof(Descriptor) == 0, "Universal loader received an unsupported descriptor type");
+        return {};
+    }
+
+    template <>
+    inline torch::Tensor load_descriptor_tensor<Type::CSV>(const std::filesystem::path& root, const Type::CSV& descriptor) {
+        return Details::load_csv_tensor(root, descriptor);
+    }
+
+    template <>
+    inline torch::Tensor load_descriptor_tensor<Type::Text>(const std::filesystem::path& root, const Type::Text& descriptor) {
+        return Details::load_text_tensor(root, descriptor);
+    }
+
+    template <>
+    inline torch::Tensor load_descriptor_tensor<Type::Binary>(const std::filesystem::path& root, const Type::Binary& descriptor) {
+        return Details::load_binary_tensor(root, descriptor);
+    }
+
+    template <bool BufferVRAM = false, class DevicePolicyT = Core::DevicePolicy<BufferVRAM>, class InputDescriptorT, class TargetDescriptorT>
+    [[nodiscard]] inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+    Universal(const std::string& root,
+              const InputDescriptorT& input_descriptor,
+              const TargetDescriptorT& target_descriptor,
+              Type::GlobalParameters global = {})
+    {
+        namespace fs = std::filesystem;
+
+        if (global.train_fraction < 0.0f || global.test_fraction < 0.0f) {
+            throw std::runtime_error("Universal loader requires non-negative fractions");
+        }
+
+        if ((global.train_fraction + global.test_fraction) > 1.0f + 1e-5f) {
+            throw std::runtime_error("Universal loader fractions must sum to <= 1");
+        }
+
+        const fs::path root_path(root);
+        auto inputs_tensor = load_descriptor_tensor(root_path, input_descriptor);
+        auto targets_tensor = load_descriptor_tensor(root_path, target_descriptor);
+
+        if (inputs_tensor.dim() == 0 || targets_tensor.dim() == 0) {
+            throw std::runtime_error("Universal loader descriptors must expose at least one dimension");
+        }
+
+        if (inputs_tensor.size(0) != targets_tensor.size(0)) {
+            throw std::runtime_error("Universal loader descriptors produced mismatched sample counts");
+        }
+
+        if (global.shuffle && inputs_tensor.size(0) > 1) {
+            auto permutation = torch::randperm(inputs_tensor.size(0), torch::TensorOptions().dtype(torch::kLong));
+            inputs_tensor = inputs_tensor.index_select(0, permutation);
+            targets_tensor = targets_tensor.index_select(0, permutation);
+        }
+
+        const auto total = static_cast<std::int64_t>(inputs_tensor.size(0));
+        const auto train_fraction = std::clamp(global.train_fraction, 0.0f, 1.0f);
+        const auto test_fraction = std::clamp(global.test_fraction, 0.0f, 1.0f);
+
+        auto train_count = std::clamp<std::int64_t>(
+            static_cast<std::int64_t>(std::llround(train_fraction * static_cast<float>(total))),
+            std::int64_t{0},
+            total);
+
+        auto remaining = total - train_count;
+        auto test_count = std::clamp<std::int64_t>(
+            static_cast<std::int64_t>(std::llround(test_fraction * static_cast<float>(total))),
+            std::int64_t{0},
+            remaining);
+
+        auto empty_input_shape = inputs_tensor.sizes().vec();
+        empty_input_shape[0] = 0;
+        auto empty_target_shape = targets_tensor.sizes().vec();
+        empty_target_shape[0] = 0;
+
+        torch::Tensor train_inputs;
+        torch::Tensor train_targets;
+        torch::Tensor test_inputs;
+        torch::Tensor test_targets;
+
+        if (train_count > 0) {
+            train_inputs = inputs_tensor.narrow(0, 0, train_count).clone();
+            train_targets = targets_tensor.narrow(0, 0, train_count).clone();
+        } else {
+            train_inputs = torch::empty(empty_input_shape, inputs_tensor.options());
+            train_targets = torch::empty(empty_target_shape, targets_tensor.options());
+        }
+
+        if (test_count > 0) {
+            test_inputs = inputs_tensor.narrow(0, train_count, test_count).clone();
+            test_targets = targets_tensor.narrow(0, train_count, test_count).clone();
+        } else {
+            test_inputs = torch::empty(empty_input_shape, inputs_tensor.options());
+            test_targets = torch::empty(empty_target_shape, targets_tensor.options());
+        }
+
+        if constexpr (BufferVRAM) {
+            const auto device = DevicePolicyT::select();
+            train_inputs = train_inputs.to(device);
+            train_targets = train_targets.to(device);
+            test_inputs = test_inputs.to(device);
+            test_targets = test_targets.to(device);
+        }
+
+        return {train_inputs, train_targets, test_inputs, test_targets};
+    }
+
 
     template <bool BufferVRAM = false, class DevicePolicyT = Core::DevicePolicy<BufferVRAM>>
     [[nodiscard]] inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>

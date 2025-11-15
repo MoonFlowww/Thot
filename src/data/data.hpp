@@ -3,7 +3,7 @@
 // This file is an factory, must exempt it from any logical-code. For functions look into "/details"
 #include "details/dimreduction.hpp"
 #include "details/generation.hpp"
-#include "details/load.hpp"
+#include "details/load/load.hpp"
 #include "details/manipulation.hpp"
 #include "details/repair.hpp"
 
