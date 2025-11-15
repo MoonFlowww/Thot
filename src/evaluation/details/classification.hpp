@@ -133,6 +133,8 @@ namespace Thot::Evaluation::Details::Classification {
                 case MetricKind::AUPRC: return "AUPRC";
                 case MetricKind::AUPRG: return "AUPRG";
                 case MetricKind::GiniCoefficient: return "Gini coefficient";
+                case MetricKind::HausdorffDistance: return "Hausdorff distance";
+                case MetricKind::BoundaryIoU: return "Boundary IoU";
             }
             return "Metric";
         }
@@ -407,7 +409,145 @@ namespace Thot::Evaluation::Details::Classification {
             return {beta1, beta0};
         }
 
-        using Thot::Plot::Details::compute_kolmogorov_smirnov;
+        using Thot::Plot::Details::compute_kolmogorov_smirnov; // TODO: KS
+        inline torch::Tensor squeeze_spatial(torch::Tensor tensor) {
+            if (!tensor.defined()) {
+                return tensor;
+            }
+            tensor = tensor.squeeze();
+            while (tensor.dim() > 2) {
+                if (tensor.size(0) == 1) {
+                    tensor = tensor.squeeze(0);
+                } else {
+                    tensor = std::get<0>(tensor.max(0, /*keepdim=*/false));
+                }
+            }
+            if (tensor.dim() < 2) {
+                if (tensor.numel() == 0) {
+                    return {};
+                }
+                tensor = tensor.reshape({1, tensor.numel()});
+            }
+            return tensor.contiguous();
+        }
+
+        inline torch::Tensor binarize_mask(torch::Tensor tensor, double threshold) {
+            if (!tensor.defined()) {
+                return tensor;
+            }
+            if (tensor.dtype() != torch::kDouble) {
+                tensor = tensor.to(torch::kDouble);
+            }
+            return tensor.ge(threshold).to(torch::kUInt8).contiguous();
+        }
+
+        inline torch::Tensor compute_boundary(torch::Tensor binary_mask) {
+            if (!binary_mask.defined()) {
+                return binary_mask;
+            }
+            const auto height = binary_mask.size(0);
+            const auto width = binary_mask.size(1);
+            auto boundary = torch::zeros_like(binary_mask, torch::kUInt8);
+            auto src = binary_mask.accessor<std::uint8_t, 2>();
+            auto dst = boundary.accessor<std::uint8_t, 2>();
+            for (std::int64_t y = 0; y < height; ++y) {
+                for (std::int64_t x = 0; x < width; ++x) {
+                    if (!src[y][x]) {
+                        continue;
+                    }
+                    bool full_neighbourhood = true;
+                    for (std::int64_t dy = -1; dy <= 1 && full_neighbourhood; ++dy) {
+                        for (std::int64_t dx = -1; dx <= 1; ++dx) {
+                            const auto ny = y + dy;
+                            const auto nx = x + dx;
+                            if (ny < 0 || ny >= height || nx < 0 || nx >= width) {
+                                full_neighbourhood = false;
+                                break;
+                            }
+                            if (!src[ny][nx]) {
+                                full_neighbourhood = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (!full_neighbourhood) {
+                        dst[y][x] = 1;
+                    }
+                }
+            }
+            return boundary;
+        }
+
+        inline torch::Tensor dilate_mask(const torch::Tensor& mask, std::int64_t radius) {
+            if (!mask.defined()) {
+                return mask;
+            }
+            if (radius <= 0) {
+                return mask.clone();
+            }
+            auto dilated = torch::zeros_like(mask, torch::kUInt8);
+            const auto height = mask.size(0);
+            const auto width = mask.size(1);
+            auto src = mask.accessor<std::uint8_t, 2>();
+            auto dst = dilated.accessor<std::uint8_t, 2>();
+            for (std::int64_t y = 0; y < height; ++y) {
+                for (std::int64_t x = 0; x < width; ++x) {
+                    if (!src[y][x]) {
+                        continue;
+                    }
+                    const auto y_min = std::max<std::int64_t>(0, y - radius);
+                    const auto y_max = std::min<std::int64_t>(height - 1, y + radius);
+                    const auto x_min = std::max<std::int64_t>(0, x - radius);
+                    const auto x_max = std::min<std::int64_t>(width - 1, x + radius);
+                    for (std::int64_t ny = y_min; ny <= y_max; ++ny) {
+                        for (std::int64_t nx = x_min; nx <= x_max; ++nx) {
+                            dst[ny][nx] = 1;
+                        }
+                    }
+                }
+            }
+            return dilated;
+        }
+
+        inline double compute_boundary_iou(torch::Tensor pred_mask, torch::Tensor target_mask, double threshold) {
+            auto pred_binary = compute_boundary(binarize_mask(pred_mask, threshold));
+            auto target_binary = compute_boundary(binarize_mask(target_mask, threshold));
+            const auto pred_count = pred_binary.sum().item<std::int64_t>();
+            const auto target_count = target_binary.sum().item<std::int64_t>();
+            if (pred_count == 0 && target_count == 0) {
+                return 1.0;
+            }
+            const double height = static_cast<double>(pred_binary.size(0));
+            const double width = static_cast<double>(pred_binary.size(1));
+            const auto radius = std::max<std::int64_t>(1, static_cast<std::int64_t>(std::round(0.02 * std::hypot(height, width))));
+            auto pred_dilated = dilate_mask(pred_binary, radius);
+            auto target_dilated = dilate_mask(target_binary, radius);
+            auto intersection = (pred_dilated & target_dilated).to(torch::kInt64).sum().item<double>();
+            auto uni = (pred_dilated | target_dilated).to(torch::kInt64).sum().item<double>();
+            if (uni <= 0.0) {
+                return std::numeric_limits<double>::quiet_NaN();
+            }
+            return intersection / uni;
+        }
+
+        inline double compute_hausdorff_distance(torch::Tensor pred_mask, torch::Tensor target_mask, double threshold) {
+            auto pred_binary = compute_boundary(binarize_mask(pred_mask, threshold));
+            auto target_binary = compute_boundary(binarize_mask(target_mask, threshold));
+            auto pred_points = torch::nonzero(pred_binary);
+            auto target_points = torch::nonzero(target_binary);
+            if (pred_points.size(0) == 0 || target_points.size(0) == 0) {
+                return std::numeric_limits<double>::quiet_NaN();
+            }
+            pred_points = pred_points.to(torch::kDouble);
+            target_points = target_points.to(torch::kDouble);
+            auto distances = torch::cdist(pred_points, target_points, 2);
+            if (!distances.defined() || distances.numel() == 0) {
+                return std::numeric_limits<double>::quiet_NaN();
+            }
+            const double directed_pred = std::get<0>(distances.min(1, /*keepdim=*/false)).max().item<double>();
+            const double directed_target = std::get<0>(distances.min(0, /*keepdim=*/false)).max().item<double>();
+            return std::max(directed_pred, directed_target);
+        }
     }
 
     template <class Container>
@@ -465,6 +605,9 @@ namespace Thot::Evaluation::Details::Classification {
         bool needs_top5 = false;
         bool needs_calibration_coefficients = false;
         bool needs_ks = false;
+        bool needs_segmentation_metrics = false;
+        bool needs_hausdorff = false;
+        bool needs_boundary_iou = false;
 
         for (auto kind : metric_order) {
             switch (kind) {
@@ -510,6 +653,14 @@ namespace Thot::Evaluation::Details::Classification {
                     break;
                 case MetricKind::SubsetAccuracy:
                     needs_probabilities = true;
+                    break;
+                case MetricKind::HausdorffDistance:
+                    needs_segmentation_metrics = true;
+                    needs_hausdorff = true;
+                    break;
+                case MetricKind::BoundaryIoU:
+                    needs_segmentation_metrics = true;
+                    needs_boundary_iou = true;
                     break;
                 case MetricKind::Top3Accuracy:
                 case MetricKind::Top3Error:
@@ -563,6 +714,11 @@ namespace Thot::Evaluation::Details::Classification {
 
         double total_log_loss = 0.0;
         double total_brier = 0.0;
+
+        double hausdorff_sum = 0.0;
+        std::size_t hausdorff_count = 0;
+        double boundary_iou_sum = 0.0;
+        std::size_t boundary_iou_count = 0;
 
         const auto device = model.device();
         const bool non_blocking_transfers = device.is_cuda();
@@ -647,7 +803,12 @@ namespace Thot::Evaluation::Details::Classification {
                 return;
             }
 
-            auto logits = logits_tensor.detach();
+            torch::Tensor segmentation_predictions;
+            if (needs_segmentation_metrics) {
+                segmentation_predictions = logits_tensor.detach();
+            }
+
+            auto logits = needs_segmentation_metrics ? segmentation_predictions : logits_tensor.detach();
 
             if (logits.dim() == 1) {
                 logits = logits.unsqueeze(1);
@@ -687,7 +848,10 @@ namespace Thot::Evaluation::Details::Classification {
                     target_cpu = target_cpu.to(torch::kCPU, target_cpu.scalar_type(), /*non_blocking=*/false);
                 }
             }
-
+            torch::Tensor segmentation_targets;
+            if (needs_segmentation_metrics) {
+                segmentation_targets = target_cpu;
+            }
             const std::size_t current_batch = static_cast<std::size_t>(target_cpu.size(0));
 
             const std::size_t batch_classes = static_cast<std::size_t>(logits.size(1));
@@ -894,6 +1058,58 @@ namespace Thot::Evaluation::Details::Classification {
                     }
                 }
             }
+            if (needs_segmentation_metrics) {
+                auto seg_preds = segmentation_predictions;
+                auto seg_targets = segmentation_targets;
+                if (!seg_preds.device().is_cpu()) {
+                    if (non_blocking_transfers) {
+                        auto deferred = Thot::DeferredHostTensor::from_tensor(seg_preds, /*non_blocking=*/true);
+                        seg_preds = deferred.materialize();
+                    } else {
+                        seg_preds = seg_preds.to(torch::kCPU, seg_preds.scalar_type(), /*non_blocking=*/false);
+                    }
+                }
+                if (!seg_targets.device().is_cpu()) {
+                    if (non_blocking_transfers) {
+                        auto deferred = Thot::DeferredHostTensor::from_tensor(seg_targets, /*non_blocking=*/true);
+                        seg_targets = deferred.materialize();
+                    } else {
+                        seg_targets = seg_targets.to(torch::kCPU, seg_targets.scalar_type(), /*non_blocking=*/false);
+                    }
+                }
+                seg_preds = seg_preds.to(torch::kDouble).contiguous();
+                seg_targets = seg_targets.to(torch::kDouble).contiguous();
+                if (seg_preds.sizes() != seg_targets.sizes()) {
+                    throw std::runtime_error("Segmentation metrics require prediction and target tensors to match in shape.");
+                }
+                const auto sample_count = seg_preds.size(0);
+                for (std::int64_t sample_idx = 0; sample_idx < sample_count; ++sample_idx) {
+                    auto pred_sample = detail::squeeze_spatial(seg_preds[sample_idx]);
+                    auto target_sample = detail::squeeze_spatial(seg_targets[sample_idx]);
+                    if (!pred_sample.defined() || !target_sample.defined()) {
+                        continue;
+                    }
+                    if (pred_sample.sizes() != target_sample.sizes()) {
+                        continue;
+                    }
+                    if (needs_hausdorff) {
+                        const double distance = detail::compute_hausdorff_distance(pred_sample, target_sample, 0.5);
+                        if (std::isfinite(distance)) {
+                            hausdorff_sum += distance;
+                            hausdorff_count += 1;
+                        }
+                    }
+                    if (needs_boundary_iou) {
+                        const double biou = detail::compute_boundary_iou(pred_sample, target_sample, 0.5);
+                        if (std::isfinite(biou)) {
+                            boundary_iou_sum += biou;
+                            boundary_iou_count += 1;
+                        }
+                    }
+                }
+                segmentation_predictions = torch::Tensor{};
+                segmentation_targets = torch::Tensor{};
+            }
             logits = torch::Tensor{};
             probabilities = torch::Tensor{};
             predicted = torch::Tensor{};
@@ -994,14 +1210,12 @@ namespace Thot::Evaluation::Details::Classification {
         }
         const double global_kappa = detail::safe_div(accuracy_global - pe, 1.0 - pe);
 
-        const double log_loss_global = needs_log_loss ? detail::safe_div(total_log_loss, total_samples_d)
-                                                      : std::numeric_limits<double>::quiet_NaN();
-        const double brier_global = needs_brier ? detail::safe_div(total_brier, total_samples_d)
-                                                : std::numeric_limits<double>::quiet_NaN();
-        const double coverage_error = needs_rank_metrics ? detail::safe_div(coverage_sum, total_samples_d)
-                                                         : std::numeric_limits<double>::quiet_NaN();
-        const double lrap = needs_rank_metrics ? detail::safe_div(lrap_sum, total_samples_d)
-                                               : std::numeric_limits<double>::quiet_NaN();
+        const double log_loss_global = needs_log_loss ? detail::safe_div(total_log_loss, total_samples_d) : std::numeric_limits<double>::quiet_NaN();
+        const double brier_global = needs_brier ? detail::safe_div(total_brier, total_samples_d) : std::numeric_limits<double>::quiet_NaN();
+        const double hausdorff_mean = hausdorff_count > 0 ? (hausdorff_sum / static_cast<double>(hausdorff_count)) : std::numeric_limits<double>::quiet_NaN();
+        const double boundary_iou_mean = boundary_iou_count > 0 ? (boundary_iou_sum / static_cast<double>(boundary_iou_count)) : std::numeric_limits<double>::quiet_NaN();
+        const double coverage_error = needs_rank_metrics ? detail::safe_div(coverage_sum, total_samples_d) : std::numeric_limits<double>::quiet_NaN();
+        const double lrap = needs_rank_metrics ? detail::safe_div(lrap_sum, total_samples_d) : std::numeric_limits<double>::quiet_NaN();
         const double subset_accuracy = top1_accuracy;
 
         const double jaccard_micro = detail::compute_jaccard_micro(total_correct, total_fp, total_fn);
@@ -1301,6 +1515,14 @@ namespace Thot::Evaluation::Details::Classification {
                 case MetricKind::MaximumCalibrationError:
                     macro = global_mce;
                     weighted = global_mce;
+                    break;
+                case MetricKind::HausdorffDistance:
+                    macro = hausdorff_mean;
+                    weighted = hausdorff_mean;
+                    break;
+                case MetricKind::BoundaryIoU:
+                    macro = boundary_iou_mean;
+                    weighted = boundary_iou_mean;
                     break;
                 case MetricKind::CalibrationSlope:
                     macro = cal_slope;

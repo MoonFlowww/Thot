@@ -3,6 +3,7 @@
 #include "reduction.hpp"
 
 namespace Thot::Loss::Details {
+
     inline torch::Tensor apply_reduction_weighted(torch::Tensor loss, const torch::Tensor& weight, Reduction reduction) {
         auto w = weight.to(loss.options()).expand_as(loss);
 

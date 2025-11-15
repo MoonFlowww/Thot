@@ -1527,7 +1527,10 @@ namespace Thot {
                 std::is_same<Decayed, Loss::Details::MAEDescriptor>,
                 std::is_same<Decayed, Loss::Details::MarginRankingDescriptor>,
                 std::is_same<Decayed, Loss::Details::NegativeLogLikelihoodDescriptor>,
-                std::is_same<Decayed, Loss::Details::SmoothL1Descriptor>>;
+                std::is_same<Decayed, Loss::Details::SmoothL1Descriptor>,
+                std::is_same<Decayed, Loss::Details::DiceDescriptor>,
+                std::is_same<Decayed, Loss::Details::TverskyDescriptor>,
+                std::is_same<Decayed, Loss::Details::LovaszSoftmaxDescriptor>>;
             static_assert(kSupported, "Unsupported loss descriptor type provided to Model::set_loss.");
 
             loss_descriptor_ = LossDescriptor{std::in_place_type<Decayed>, std::move(descriptor)};

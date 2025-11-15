@@ -1,5 +1,87 @@
 #include "../../../include/Thot.h"
 
+
+namespace {
+
+    struct CustomTrainingOptions {
+        std::size_t epochs{20};
+        std::size_t batch_size{8};
+        double dice_weight{0.7};
+        double bce_weight{0.3};
+    };
+
+    void Train(Thot::Model& model, torch::Tensor inputs, torch::Tensor targets, const CustomTrainingOptions& options) {
+        if (!model.has_optimizer()) {
+            throw std::logic_error("Custom training requires the model to have an optimizer configured.");
+        }
+        if (options.batch_size == 0) {
+            throw std::invalid_argument("Batch size must be greater than zero for custom training.");
+        }
+        if (!inputs.defined() || !targets.defined()) {
+            throw std::invalid_argument("Custom training requires defined inputs and targets.");
+        }
+
+        const auto total_samples = inputs.size(0);
+        if (total_samples == 0) {
+            return;
+        }
+
+        auto pinned_inputs = Thot::async_pin_memory(inputs.contiguous());
+        auto pinned_targets = Thot::async_pin_memory(targets.contiguous());
+        auto host_inputs = pinned_inputs.materialize();
+        auto host_targets = pinned_targets.materialize();
+
+        const auto device = model.device();
+        const auto batch_size = static_cast<std::int64_t>(options.batch_size);
+
+        auto dice_descriptor = Thot::Loss::Dice();
+
+        model.train();
+
+        for (std::size_t epoch = 0; epoch < options.epochs; ++epoch) {
+            double accumulated_loss = 0.0;
+            std::size_t batches = 0;
+
+            for (std::int64_t offset = 0; offset < total_samples; offset += batch_size) {
+                const auto remaining = total_samples - offset;
+                const auto current_batch = std::min<std::int64_t>(batch_size, remaining);
+                if (current_batch <= 0) {
+                    break;
+                }
+
+                auto batch_inputs = host_inputs.narrow(0, offset, current_batch)
+                    .to(device, host_inputs.scalar_type(), /*non_blocking=*/true);
+                auto batch_targets = host_targets.narrow(0, offset, current_batch)
+                    .to(device, host_targets.scalar_type(), /*non_blocking=*/true);
+
+                model.zero_grad();
+                auto predictions = model.forward(batch_inputs);
+                batch_targets = batch_targets.to(predictions.scalar_type());
+
+                auto dice_loss = Thot::Loss::Details::compute(dice_descriptor, predictions, batch_targets);
+
+                auto clamped_predictions = predictions.clamp(1e-7, 1.0 - 1e-7);
+                auto bce_loss = torch::nn::functional::binary_cross_entropy(
+                    clamped_predictions,
+                    batch_targets,
+                    torch::nn::functional::BinaryCrossEntropyFuncOptions().reduction(torch::kMean));
+
+                auto total_loss = dice_loss.mul(options.dice_weight) + bce_loss.mul(options.bce_weight);
+
+                total_loss.backward();
+                model.step();
+
+                accumulated_loss += total_loss.detach().item<double>();
+                ++batches;
+            }
+
+            if (batches > 0)
+                accumulated_loss /= static_cast<double>(batches);
+            std::cout << "Epoch " << (epoch + 1) << "/" << options.epochs << " - Dice+BCE Loss: " << accumulated_loss << std::endl;
+        }
+    }
+}
+
 int main() {
     Thot::Model model("");
     model.use_cuda(torch::cuda::is_available());
@@ -69,11 +151,31 @@ int main() {
     model.add(Thot::Layer::FC({vit_options.embed_dim, patch_projection_dim, true}, Thot::Activation::Identity, Thot::Initialization::XavierUniform));
     model.add(Thot::Layer::PatchUnembed(
 {.channels = mask_channels, .tokens_height = tokens_h, .tokens_width = tokens_w, .patch_size = patch_size, .target_height = mask_height, .target_width = mask_width, .align_corners = false },
-            Thot::Activation::Sigmoid));
+        Thot::Activation::Sigmoid));
 
-    model.set_loss(Thot::Loss::MSE());
+    model.set_loss(Thot::Loss::Dice());
     model.set_optimizer(Thot::Optimizer::AdamW({.learning_rate=1e-4}));
-    model.train(x1, y1, {.epoch = 20, .batch_size=8, .shuffle = true, .restore_best_state=true, .enable_amp = true});
+
+
+    //Custom loop bcs we use dual-loss
+    CustomTrainingOptions training_options{};
+    training_options.epochs = 20;
+    training_options.batch_size = 8;
+    training_options.dice_weight = 0.6;
+    training_options.bce_weight = 0.4;
+
+    Train(model, x1, y1, training_options);
+
+    model.evaluate(x2, y2, Thot::Evaluation::Classification, {
+        Thot::Metric::Classification::Accuracy,
+        Thot::Metric::Classification::Precision,
+        Thot::Metric::Classification::Recall,
+        Thot::Metric::Classification::JaccardIndexMicro,
+        Thot::Metric::Classification::HausdorffDistance,
+        Thot::Metric::Classification::BoundaryIoU,
+    },
+    {.batch_size = 2});
+
 
     return 0;
 }

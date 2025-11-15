@@ -15,6 +15,9 @@
 #include "details/kl.hpp"
 #include "details/cosine_embedding.hpp"
 #include "details/margin_ranking.hpp"
+#include "details/dice.hpp"
+#include "details/tversky.hpp"
+#include "details/lovasz_softmax.hpp"
 
 namespace Thot::Loss {
     using Reduction = Details::Reduction;
@@ -28,7 +31,10 @@ namespace Thot::Loss {
         Details::MAEDescriptor,
         Details::MarginRankingDescriptor,
         Details::NegativeLogLikelihoodDescriptor,
-        Details::SmoothL1Descriptor>;
+        Details::SmoothL1Descriptor,
+        Details::DiceDescriptor,
+        Details::TverskyDescriptor,
+        Details::LovaszSoftmaxDescriptor>;
 
 
     [[nodiscard]] constexpr auto MSE(const Details::MSEOptions& options = {}) noexcept -> Details::MSEDescriptor {
@@ -65,6 +71,17 @@ namespace Thot::Loss {
     }
 
     [[nodiscard]] constexpr auto MarginRanking(const Details::MarginRankingOptions& options = {}) noexcept -> Details::MarginRankingDescriptor {
+        return {options};
+    }
+    [[nodiscard]] constexpr auto Dice(const Details::DiceOptions& options = {}) noexcept -> Details::DiceDescriptor {
+        return {options};
+    }
+
+    [[nodiscard]] constexpr auto Tversky(const Details::TverskyOptions& options = {}) noexcept -> Details::TverskyDescriptor {
+        return {options};
+    }
+
+    [[nodiscard]] constexpr auto LovaszSoftmax(const Details::LovaszSoftmaxOptions& options = {}) noexcept -> Details::LovaszSoftmaxDescriptor {
         return {options};
     }
 }

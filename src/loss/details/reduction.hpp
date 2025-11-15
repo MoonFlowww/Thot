@@ -22,7 +22,17 @@ namespace Thot::Loss::Details {
             default:              return RT{torch::kMean};
         }
     }
-
+    inline torch::Tensor apply_reduction(torch::Tensor loss, Reduction reduction) { // Non-torch base
+        switch (reduction) {
+            case Reduction::None:
+                return loss;
+            case Reduction::Sum:
+                return loss.sum();
+            case Reduction::Mean:
+            default:
+                return loss.mean();
+        }
+    }
     template <typename Options>
     inline typename Options::reduction_t to_torch_reduction(const Options&, Reduction r) {
         return to_torch_reduction<Options>(r);

@@ -56,6 +56,8 @@ namespace Thot::Metric::Classification {
         AUPRC,
         AUPRG,
         GiniCoefficient,
+        HausdorffDistance,
+        BoundaryIoU,
     };
 
     struct Descriptor {
@@ -110,13 +112,15 @@ namespace Thot::Metric::Classification {
     inline constexpr Descriptor HosmerLemeshowPValue{Kind::HosmerLemeshowPValue};
     inline constexpr Descriptor KolmogorovSmirnovStatistic{Kind::KolmogorovSmirnovStatistic};
     inline constexpr Descriptor CohensKappa{Kind::CohensKappa};
-inline constexpr Descriptor ConfusionEntropy{Kind::ConfusionEntropy};
+    inline constexpr Descriptor ConfusionEntropy{Kind::ConfusionEntropy};
     inline constexpr Descriptor CoverageError{Kind::CoverageError};
     inline constexpr Descriptor LabelRankingAveragePrecision{Kind::LabelRankingAveragePrecision};
     inline constexpr Descriptor SubsetAccuracy{Kind::SubsetAccuracy};
     inline constexpr Descriptor AUPRC{Kind::AUPRC};
     inline constexpr Descriptor AUPRG{Kind::AUPRG};
     inline constexpr Descriptor GiniCoefficient{Kind::GiniCoefficient};
+    inline constexpr Descriptor HausdorffDistance{Kind::HausdorffDistance};
+    inline constexpr Descriptor BoundaryIoU{Kind::BoundaryIoU};
 }
 
 namespace Thot::Metric::Timeseries {

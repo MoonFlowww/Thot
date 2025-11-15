@@ -1869,29 +1869,48 @@ namespace Thot::Common::SaveLoad {
                     tree.put("type", "nll");
                     tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
                     tree.put("options.use_weight", options.use_weight);
-                    if (options.ignore_index.has_value()) {
+                    if (options.ignore_index.has_value())
                         tree.put("options.ignore_index", options.ignore_index.value());
-                    }
                 } else if constexpr (std::is_same_v<DescriptorType, Loss::Details::SmoothL1Descriptor>) {
                     tree.put("type", "smooth_l1");
                     tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
                     tree.put("options.use_weight", options.use_weight);
                     tree.put("options.beta", options.beta);
                 } else if constexpr (std::is_same_v<DescriptorType, Loss::Details::KLDivDescriptor>) {
-                    tree.put("type", "smooth_l1");
+                    tree.put("type", "kl");
                     tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
                     tree.put("options.log_target", options.log_target);
                     tree.put("options.use_batch_mean", options.use_batch_mean);
                     tree.put("options.log_softmax_dim", options.log_softmax_dim);
                     tree.put("options.prediction_is_log", options.prediction_is_log);
                 } else if constexpr (std::is_same_v<DescriptorType, Loss::Details::MarginRankingDescriptor>) {
-                    tree.put("type", "smooth_l1");
+                    tree.put("type", "margin_ranking");
                     tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
-                    tree.put("options.use_weight", options.margin);
+                    tree.put("options.margin", options.margin);
                 } else if constexpr (std::is_same_v<DescriptorType, Loss::Details::CosineEmbeddingDescriptor>) {
-                    tree.put("type", "smooth_l1");
+                    tree.put("type", "cosine_embedding");
                     tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
-                    tree.put("options.use_weight", options.margin);
+                    tree.put("options.margin", options.margin);
+                } else if constexpr (std::is_same_v<DescriptorType, Loss::Details::DiceDescriptor>) {
+                    tree.put("type", "dice");
+                    tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
+                    tree.put("options.smooth", options.smooth);
+                    tree.put("options.exponent", options.exponent);
+                    tree.put("options.clamp_predictions", options.clamp_predictions);
+                } else if constexpr (std::is_same_v<DescriptorType, Loss::Details::LovaszSoftmaxDescriptor>) {
+                    tree.put("type", "lovasz_softmax");
+                    tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
+                    tree.put("options.per_image", options.per_image);
+                    tree.put("options.ignore_index", options.ignore_index);
+                    tree.put("options.apply_softmax", options.apply_softmax);
+                    tree.put("options.include_background", options.include_background);
+                    tree.put("options.only_present_classes", options.only_present_classes);
+                } else if constexpr (std::is_same_v<DescriptorType, Loss::Details::TverskyDescriptor>) {
+                    tree.put("type", "tversky");
+                    tree.put("options.reduction", Detail::loss_reduction_to_string(options.reduction));
+                    tree.put("options.alpha", options.alpha);
+                    tree.put("options.beta", options.beta);
+                    tree.put("options.smooth", options.smooth);
                 } else {
                     static_assert(sizeof(DescriptorType) == 0, "Unsupported loss descriptor supplied.");
                 }
