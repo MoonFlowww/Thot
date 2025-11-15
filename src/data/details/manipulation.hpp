@@ -319,6 +319,7 @@ namespace Thot::Data::Manipulation {
         }
         return grayscale;
     }
+#include "manipulation/augment/augment.hpp"
 }
 
 namespace Thot::Data::Check {

@@ -168,5 +168,6 @@ add_executable(test_Thot test/classification/timeseries/ptbxl.cpp #regression/ti
         src/plot/details/reliability/reliability_lime.hpp
         src/plot/details/reliability/reliability_gradcam.hpp
         test/speedtest.cpp
+        src/data/details/manipulation/augment/augment.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot)

@@ -415,7 +415,7 @@ int _main() {
 
             optimizer.zero_grad();
             auto logits = net->forward(inputs);
-            auto loss   = criterion(logits, targets);
+            auto loss= criterion(logits, targets);
             loss.backward();
             optimizer.step();
 

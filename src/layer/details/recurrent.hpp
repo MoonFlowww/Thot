@@ -19,15 +19,6 @@
 #include "../../initialization/initialization.hpp"
 #include "../registry.hpp"
 
-// NOTE:
-// This header provides thin descriptors for recurrent layers and a custom xLSTM
-// wrapper that stays binary-compatible with LibTorch/cuDNN. It fixes earlier
-// compile issues by:
-//  - placing class definitions inside the correct namespace
-//  - ensuring helper functions are members (not free functions-with-const)
-//  - using torch::cuda::cudnn_is_available() instead of at::hasCUDNN()
-//  - making xLSTMImpl::forward return a Tensor to match our "take_recurrent_output"
-//    adapter used by the Registry binding.
 
 namespace Thot::Layer::Details {
 
@@ -236,20 +227,28 @@ namespace Thot::Layer::Details {
                 const int64_t num_dir = options_.bidirectional ? 2 : 1;
                 const int64_t H = options_.hidden_size;
                 const int64_t fourH = 4 * H;
+
+                // Grab the parameter dictionary once so any pointers we take remain valid
+                auto named_params = lstm_->named_parameters(/*recurse=*/false);
+
                 for (int64_t layer = 0; layer < options_.num_layers; ++layer) {
                     for (int64_t dir = 0; dir < num_dir; ++dir) {
                         const std::string suffix = std::to_string(layer) + (dir == 0 ? "" : "_reverse");
-                        auto* p_bias_ih = lstm_->named_parameters().find("bias_ih_l" + suffix);
-                        auto* p_bias_hh = lstm_->named_parameters().find("bias_hh_l" + suffix);
-                        if (!p_bias_ih || !p_bias_hh) continue;
+                        const auto ih_name = "bias_ih_l" + suffix;
+                        const auto hh_name = "bias_hh_l" + suffix;
 
-                        auto bias_ih = *p_bias_ih;
-                        auto bias_hh = *p_bias_hh;
-                        if (bias_ih.numel() != fourH || bias_hh.numel() != fourH) continue;
+                        auto* bias_ih = named_params.find(ih_name);
+                        auto* bias_hh = named_params.find(hh_name);
+                        if (!bias_ih || !bias_hh) {
+                            continue;
+                        }
 
-                        // gate order in PyTorch: i, f, g, o
-                        bias_ih.narrow(0, H, H).fill_(value);
-                        bias_hh.narrow(0, H, H).fill_(0.0); // keep hh forget bias neutral
+                        if (bias_ih->numel() != fourH || bias_hh->numel() != fourH) {
+                            continue;
+                        }
+
+                        bias_ih->narrow(0, H, H).fill_(value);
+                        bias_hh->narrow(0, H, H).fill_(0.0); // keep hh forget bias neutral
                     }
                 }
             }
