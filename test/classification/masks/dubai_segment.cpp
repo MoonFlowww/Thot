@@ -145,11 +145,12 @@ int main() {
 
     //Custom loop bcs we use dual-loss
     CustomTrainingOptions training_options{};
-    training_options.epochs = 20;
+    training_options.epochs = 200;
     training_options.batch_size = 8;
     training_options.dice_weight = 0.6;
     training_options.bce_weight = 0.4;
 
+    model.use_cuda(torch::cuda::is_available());
     Train(model, x1, y1, training_options);
 
     model.evaluate(x2, y2, Thot::Evaluation::Classification, {
