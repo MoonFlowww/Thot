@@ -825,6 +825,11 @@ namespace Thot::Evaluation::Details::Classification {
                 logits = logits.flatten(2).transpose(1, 2)
                                .reshape({batch_dim * static_cast<std::int64_t>(spatial_elements), channel_dim});
             }
+            if (logits.size(1) == 1) {
+                auto zeros = torch::zeros_like(logits);
+                logits = torch::cat({zeros, logits}, 1);
+            }
+
 
             if (!logits.device().is_cpu()) {
                 if (non_blocking_transfers) {
@@ -1100,14 +1105,14 @@ namespace Thot::Evaluation::Details::Classification {
                     throw std::runtime_error("Segmentation metrics require prediction and target tensors to match in shape.");
                 }
                 const auto sample_count = seg_preds.size(0);
-                for (std::int64_t sample_idx = 0; sample_idx < sample_count; ++sample_idx) {
-                    auto pred_sample = detail::squeeze_spatial(seg_preds[sample_idx]);
-                    auto target_sample = detail::squeeze_spatial(seg_targets[sample_idx]);
+                auto accumulate_segmentation_metrics = [&](torch::Tensor pred_mask, torch::Tensor target_mask) {
+                    auto pred_sample = detail::squeeze_spatial(std::move(pred_mask));
+                    auto target_sample = detail::squeeze_spatial(std::move(target_mask));
                     if (!pred_sample.defined() || !target_sample.defined()) {
-                        continue;
+                        return;
                     }
                     if (pred_sample.sizes() != target_sample.sizes()) {
-                        continue;
+                        return;
                     }
                     if (needs_hausdorff) {
                         const double distance = detail::compute_hausdorff_distance(pred_sample, target_sample, 0.5);
@@ -1122,6 +1127,23 @@ namespace Thot::Evaluation::Details::Classification {
                             boundary_iou_sum += biou;
                             boundary_iou_count += 1;
                         }
+                    }
+                };
+
+                for (std::int64_t sample_idx = 0; sample_idx < sample_count; ++sample_idx) {
+                    auto pred_sample = seg_preds[sample_idx];
+                    auto target_sample = seg_targets[sample_idx];
+                    if (!pred_sample.defined() || !target_sample.defined()) {
+                        continue;
+                    }
+
+                    if (pred_sample.dim() > 2 && target_sample.dim() > 2 && pred_sample.size(0) == target_sample.size(0)) {
+                        const auto channels = pred_sample.size(0);
+                        for (std::int64_t channel = 0; channel < channels; ++channel) {
+                            accumulate_segmentation_metrics(pred_sample.select(0, channel), target_sample.select(0, channel));
+                        }
+                    } else {
+                        accumulate_segmentation_metrics(pred_sample, target_sample);
                     }
                 }
                 segmentation_predictions = torch::Tensor{};
