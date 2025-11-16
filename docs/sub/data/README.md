@@ -69,6 +69,31 @@ deterministic by accepting optional seeds where appropriate.
 - **`Cutout`** – Stochastically masks rectangular patches, either with random
   noise or a constant fill value, and concatenates the augmented samples to the
   original batch.
+  - **`AtmosphericDrift`** – Injects height-dependent haze gradients with a user
+  supplied atmospheric color. `strength`, `drift`, and optional `frequency`
+  fields control how pronounced the effect is and how often it is applied to the
+  batch.
+- **`ChromaticAberration`** – Randomly shifts each channel by up to
+  `max_shift_pixels` to simulate lens misalignment. The helper relies on grid
+  sampling so tensors keep their original dtype/range.
+- **`CLAHE`** – Performs contrast-limited adaptive histogram equalisation over
+  a configurable tile grid (`histogram_bins`, `clip_limit`, `tile_grid`). Handy
+  for boosting details on X-ray or satellite imagery.
+- **`CloudOcclusion`** – Paints soft, perlin-noise-like blobs across the frame
+  to mimic satellite clouds. Controls exist for occlusion density, softness, and
+  per-sample application frequency.
+- **`GridDistortion` / `OpticalDistortion`** – Warp inputs via cubic lattices or
+  radial distortion coefficients. Both honour shared random seeds so paired label
+  tensors stay aligned.
+- **`RandomBrightnessContrast`** – Offsets and scales pixel intensities inside a
+  bounded range. Useful for low-light robustness without introducing colour
+  casts.
+- **`SunAngleJitter`** – Projects synthetic shadows/highlights over outdoor
+  datasets by perturbing the virtual sun azimuth/elevation. Tweak `angle_range`
+  and `intensity` to match your scene.
+- Grid- and optical-distortion helpers accept the same `frequency`/`data_augment`
+  toggles as `Cutout`, so you can choose whether they operate on pure training
+  batches or also touch evaluation data.
 - **`Shuffle` / `Fraction`** – Shuffle pairs of tensors with a shared
   permutation, or extract a fraction of the leading samples while keeping the
   original order intact.
@@ -76,6 +101,21 @@ deterministic by accepting optional seeds where appropriate.
   scale-factor semantics.
 - **`Grayscale`** – Converts RGB tensors to single-channel luminance using
   configurable weights.
+
+
+### Formatting & resampling
+
+The `Thot::Data::Transform::Format` namespace surfaces two convenience wrappers
+that mirror the new `Layer::Upsample/Downsample` descriptors but can be used on
+raw tensors:
+
+- **`Format::Upscale`** – Accepts `ScaleOptions` (`targetsize`, `showprogress`)
+  and resizes spatial dimensions while preserving dtype. When `targetsize` is
+  omitted the helper simply ensures the tensor is `float32` for downstream
+  processing.
+- **`Format::Downscale`** – Uses the same options and bilinear interpolation to
+  shrink tensors, making it easy to create low-resolution views for multi-scale
+  training pipelines.
 
 ### Normalisation pipelines
 
@@ -86,6 +126,11 @@ layouts so the temporal dimension is processed correctly:
 - `RobustZscore` uses median/MAD estimates for outlier-resistant scaling.
 - `Demean` subtracts running or global means without touching variance.
 - `StandardizeToTarget` re-scales any series to a desired mean/std pair.
+- `FisherTransform` / `InverseFisher` convert bounded oscillators into unbounded
+  values (and back) to stabilise financial/cyclical signals before feeding them
+  to models.
+- `BoxCox`, `YeoJohnson`, and `SignedPower` add power-transform flavours that
+  normalise skewed marginals while keeping the code path differentiable.
 
 ## Dimensionality Reduction
 

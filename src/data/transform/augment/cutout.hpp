@@ -79,71 +79,108 @@ namespace Thot::Data::Transforms::Augmentation {
 
         const bool requires_toroidal = random_y || random_x;
 
-        if (!requires_toroidal) {
-            const auto y1 = std::min<int64_t>(height, y0 + h);
-            const auto x1 = std::min<int64_t>(width,  x0 + w);
+        const auto batch_size = result.size(0);
 
-            if (y0 < y1 && x0 < x1) {
-                auto patch = result.slice(height_dim, y0, y1).slice(width_dim, x0, x1);
-                if (opt.fill_value == -1.0) {
-                    auto noise = torch::randn_like(patch);
-                    patch.copy_(noise);
-                } else {
-                    patch.fill_(opt.fill_value);
-                }
+        auto random_color_like = [](const torch::Tensor& tensor, int64_t height_dimension, int64_t width_dimension) {
+            auto color_shape = tensor.sizes().vec();
+            if (height_dimension >= 0 && height_dimension < static_cast<int64_t>(color_shape.size())) {
+                color_shape[static_cast<std::size_t>(height_dimension)] = 1;
             }
-        } else {
+            if (width_dimension >= 0 && width_dimension < static_cast<int64_t>(color_shape.size())) {
+                color_shape[static_cast<std::size_t>(width_dimension)] = 1;
+            }
+            auto color = torch::rand(color_shape, tensor.options());
+            return color.expand(tensor.sizes());
+        };
+
+        std::uniform_int_distribution<int64_t> y_distribution(0, std::max<int64_t>(height - 1, 0));
+        std::uniform_int_distribution<int64_t> x_distribution(0, std::max<int64_t>(width - 1, 0));
+
+        for (int64_t sample_idx = 0; sample_idx < batch_size; ++sample_idx) {
+            auto sample = result.select(0, sample_idx);
+            const auto sample_height_dim = sample.dim() - 2;
+            const auto sample_width_dim = sample.dim() - 1;
+
+            auto sample_y0 = random_y && height > 0 ? y_distribution(rng) : y0;
+            auto sample_x0 = random_x && width > 0 ? x_distribution(rng) : x0;
+
+            if (!requires_toroidal) {
+                const auto y1 = std::min<int64_t>(height, sample_y0 + h);
+                const auto x1 = std::min<int64_t>(width,  sample_x0 + w);
+
+                if (sample_y0 < y1 && sample_x0 < x1) {
+                    auto patch = sample.slice(sample_height_dim, sample_y0, y1).slice(sample_width_dim, sample_x0, x1);
+                    if (opt.fill_value == -1.0) {
+                        auto color = random_color_like(patch, sample_height_dim, sample_width_dim);
+                        patch.copy_(color);
+                    } else {
+                        patch.fill_(opt.fill_value);
+                    }
+                }
+                continue;
+            }
             auto effective_h = std::min<int64_t>(h, height);
             auto effective_w = std::min<int64_t>(w, width);
 
             if (!random_y) {
-                effective_h = std::min<int64_t>(effective_h, height - y0);
+                effective_h = std::min<int64_t>(effective_h, height - sample_y0);
             }
             if (!random_x) {
-                effective_w = std::min<int64_t>(effective_w, width - x0);
+                effective_w = std::min<int64_t>(effective_w, width - sample_x0);
             }
 
-            if (effective_h > 0 && effective_w > 0) {
-                std::vector<int64_t> y_coords(static_cast<std::size_t>(effective_h));
-                std::vector<int64_t> x_coords(static_cast<std::size_t>(effective_w));
+            if (effective_h <= 0 || effective_w <= 0) {
+                continue;
+            }
 
-                for (int64_t i = 0; i < effective_h; ++i) {
-                    auto pos = y0 + i;
-                    if (random_y) {
-                        pos %= height;
-                    }
-                    y_coords[static_cast<std::size_t>(i)] = pos;
-                }
-                for (int64_t i = 0; i < effective_w; ++i) {
-                    auto pos = x0 + i;
-                    if (random_x) {
-                        pos %= width;
-                    }
-                    x_coords[static_cast<std::size_t>(i)] = pos;
-                }
+            std::vector<int64_t> y_coords(static_cast<std::size_t>(effective_h));
+            std::vector<int64_t> x_coords(static_cast<std::size_t>(effective_w));
 
-                auto options = torch::TensorOptions().dtype(torch::kLong).device(result.device());
-                auto options_bool = torch::TensorOptions().dtype(torch::kBool).device(result.device());
-                auto mask = torch::zeros({height, width}, options_bool);
-                auto y_tensor = torch::tensor(y_coords, options);
-                auto x_tensor = torch::tensor(x_coords, options);
-
-                if (y_tensor.numel() > 0 && x_tensor.numel() > 0) {
-                    mask.index_put_({y_tensor.unsqueeze(-1), x_tensor.unsqueeze(0)}, true);
-
-                    auto mask_view_shape = std::vector<int64_t>(result.dim(), 1);
-                    mask_view_shape[height_dim] = height;
-                    mask_view_shape[width_dim] = width;
-
-                    auto mask_expanded = mask.view(mask_view_shape).expand(result.sizes());
-
-                    if (opt.fill_value == -1.0) {
-                        auto noise = torch::randn_like(result);
-                        result = torch::where(mask_expanded, noise, result);
-                    } else {
-                        result.masked_fill_(mask_expanded, opt.fill_value);
+            for (int64_t i = 0; i < effective_h; ++i) {
+                auto pos = sample_y0 + i;
+                if (random_y) {
+                    pos %= height;
+                    if (pos < 0) {
+                        pos += height;
                     }
                 }
+                y_coords[static_cast<std::size_t>(i)] = pos;
+            }
+            for (int64_t i = 0; i < effective_w; ++i) {
+                auto pos = sample_x0 + i;
+                if (random_x) {
+                    pos %= width;
+                    if (pos < 0) {
+                        pos += width;
+                    }
+
+                }
+                x_coords[static_cast<std::size_t>(i)] = pos;
+            }
+            auto options = torch::TensorOptions().dtype(torch::kLong).device(sample.device());
+            auto options_bool = torch::TensorOptions().dtype(torch::kBool).device(sample.device());
+            auto mask = torch::zeros({height, width}, options_bool);
+            auto y_tensor = torch::tensor(y_coords, options);
+            auto x_tensor = torch::tensor(x_coords, options);;
+
+            if (y_tensor.numel() == 0 || x_tensor.numel() == 0) {
+                continue;
+            }
+
+            mask.index_put_({y_tensor.unsqueeze(-1), x_tensor.unsqueeze(0)}, true);
+
+            auto mask_view_shape = std::vector<int64_t>(sample.dim(), 1);
+            mask_view_shape[static_cast<std::size_t>(sample_height_dim)] = height;
+            mask_view_shape[static_cast<std::size_t>(sample_width_dim)] = width;
+
+            auto mask_expanded = mask.view(mask_view_shape).expand(sample.sizes());
+
+            if (opt.fill_value == -1.0) {
+                auto color = random_color_like(sample, sample_height_dim, sample_width_dim);
+                auto updated = torch::where(mask_expanded, color, sample);
+                sample.copy_(updated);
+            } else {
+                sample.masked_fill_(mask_expanded, opt.fill_value);
             }
         }
 

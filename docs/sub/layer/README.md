@@ -167,6 +167,37 @@ LibTorch pooling module.
 - `end_dim` *(int64, default: `-1`)* – last dimension to flatten. Accepts
   negative indexing relative to the tensor rank.
 
+## Resizing
+
+Both resizing helpers wrap `torch::nn::functional::interpolate` so that spatial
+changes participate in the same activation/initialization plumbing as the rest
+of the graph. They are particularly handy when you need to harmonize feature map
+resolutions inside multi-branch CNNs or ViT-style backbones without switching to
+custom blocks.
+
+### `Thot::Layer::Upsample(...)`
+*Options type:* `UpsampleOptions`
+- `scale` *(vector<double>, default: `{2.0, 2.0}`)* – multiplicative factors per
+  spatial dimension. Provide as many entries as there are spatial axes.
+- `mode` *(enum, default: `Nearest`)* – interpolation kernel. Accepts
+  `Nearest`, `Bilinear`, or `Bicubic`.
+- `align_corners` *(bool, default: `false`)* – mirror LibTorch's
+  `align_corners` switch for bilinear/bicubic kernels.
+- `recompute_scale_factor` *(bool, default: `false`)* – instruct LibTorch to
+  recompute scaling each forward pass instead of caching derived sizes.
+
+### `Thot::Layer::Downsample(...)`
+*Options type:* `DownsampleOptions`
+- `scale` *(vector<double>, default: `{2.0, 2.0}`)* – ratio between the input
+  and desired output. Values are inverted internally so `2.0` halves the spatial
+  extent.
+- `mode` *(enum, default: `Nearest`)* – same kernels as `Upsample` (`Nearest`,
+  `Bilinear`, `Bicubic`).
+- `align_corners` *(bool, default: `false`)* – forwarded to `interpolate` for
+  bilinear/bicubic operations.
+- `recompute_scale_factor` *(bool, default: `false`)* – re-evaluate derived
+  sizes on every call.
+- 
 ## Sequence Models
 
 All recurrent descriptors accept the usual activation/initialization overrides
@@ -252,6 +283,26 @@ compatibility.
   dimensions.
 - `keep_dim` *(bool, default: `false`)* – keep reduced axes with size one when
   set to `true`.
+
+## Vision Utilities
+
+### `Thot::Layer::PatchUnembed(...)`
+*Options type:* `PatchUnembedOptions`
+- `channels` *(int64, default: `1`)* – number of channels represented by each
+  token.
+- `tokens_height` / `tokens_width` *(int64)* – grid layout that the flattened
+  ViT tokens came from. Both must be positive.
+- `patch_size` *(int64, default: `1`)* – spatial patch edge length used during
+  embedding. Determines how tokens are reshaped back into feature maps.
+- `target_height` / `target_width` *(int64, default: `-1` → disabled)* – optional
+  spatial resize that is applied after reconstruction. When set, bilinear
+  interpolation is used to match the requested resolution.
+- `align_corners` *(bool, default: `false`)* – forwarded to the interpolation
+  step when `target_*` overrides are active.
+
+Use this layer to project token sequences back into `(B, C, H, W)` tensors after
+attention stacks so that convolutional heads or detection decoders can consume
+them.
 
 ---
 Every layer descriptor returned by these helpers can be passed to

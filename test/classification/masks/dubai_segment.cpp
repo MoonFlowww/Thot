@@ -166,7 +166,7 @@ int main() {
     Thot::Model model("");
 
     auto [x1, y1, x2, y2] =
-        Thot::Data::Load::Universal("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/",
+        Thot::Data::Load::Universal("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/",
             Thot::Data::Type::JPG{"images", {.grayscale = false, .normalize = false, .pad_to_max_tile=true, .color_order = "RGB"}},
             Thot::Data::Type::PNG{"masks", {.normalize = false, .pad_to_max_tile=true, .color_order = "RGB"}}, {.train_fraction = .8f, .test_fraction = .2f, .shuffle = true});
 
@@ -182,8 +182,8 @@ int main() {
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::Flip(x1, y1, {.axes = {"x"}, .frequency = 1.f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::Flip(x1, y1, {.axes = {"y"}, .frequency = 0.5f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, 0, 1.f, true, false});
-    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, 0, 1.f, false, false});
-    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, 0, 1.f, false, false});
+    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, -1, 1.f, false, false});
+    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, -1, 1.f, false, false});
     std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, 0, 1.f, false, false});
     std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, 0, 1.f, false, false});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::CLAHE(x1, y1, {.frequency = 1.f, .data_augment = true});
@@ -249,7 +249,7 @@ int main() {
 
     //Custom loop for dual-loss
     CustomTrainingOptions training_options{};
-    training_options.epochs = 15;
+    training_options.epochs = 100;
     training_options.batch_size = 16;
     training_options.dice_weight = 0.6;
     training_options.bce_weight = 1-training_options.dice_weight;
@@ -262,7 +262,7 @@ int main() {
     model.set_optimizer(
         Thot::Optimizer::AdamW({.learning_rate = 1e-4, .weight_decay = 1e-4}),
         Thot::LrScheduler::CosineAnnealing({
-            .T_max = total_training_steps,
+            .T_max = (total_training_steps),
             .eta_min = 1e-6,
             .warmup_steps = std::min<std::size_t>(steps_per_epoch * 5, total_training_steps / 5),
             .warmup_start_factor = 0.1,
@@ -271,7 +271,7 @@ int main() {
     model.set_regularization({Thot::Regularization::SWAG({
         .coefficient = 5e-4,
         .variance_epsilon = 1e-6,
-        .start_step = static_cast<std::size_t>(0.8 * static_cast<double>(total_training_steps)),
+        .start_step = static_cast<std::size_t>(0.65 * static_cast<double>(total_training_steps)),
         .accumulation_stride = std::max<std::size_t>(1, steps_per_epoch),
         .max_snapshots = 20,
     })});

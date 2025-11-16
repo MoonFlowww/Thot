@@ -32,6 +32,7 @@
 
 #include "../../core.hpp"
 #include "types.hpp"
+#include "../transform/format/format.hpp"
 namespace Thot::Data::Load {
     namespace Details {
         inline std::string trim_copy(const std::string& value)
