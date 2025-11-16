@@ -70,15 +70,14 @@ namespace Thot::Data::Transforms::Format {
             throw std::invalid_argument("Format::Upscale expects a defined tensor.");
         }
         if (tensor.numel() == 0) {
-            return Details::clone_as_dtype(tensor, torch::kUInt8);
+            return Details::clone_as_dtype(tensor, tensor.scalar_type());
         }
 
         auto float_tensor = Details::to_float32(tensor);
         if (requested_size.has_value()) {
             float_tensor = Details::resize_spatial(float_tensor, *requested_size);
         }
-        auto scaled = float_tensor.mul(255.0f).clamp(0.0f, 255.0f).round();
-        return scaled.to(tensor.options().dtype(torch::kUInt8));
+        return Details::clone_as_dtype(float_tensor, tensor.scalar_type());
     }
 
     inline torch::Tensor Downscale(const torch::Tensor& tensor, Options::DownscaleOptions options = {}) {
@@ -88,7 +87,7 @@ namespace Thot::Data::Transforms::Format {
             throw std::invalid_argument("Format::Downscale expects a defined tensor.");
         }
         if (tensor.numel() == 0) {
-            return Details::to_float32(tensor);
+            return Details::clone_as_dtype(tensor, tensor.scalar_type());
         }
 
         auto float_tensor = Details::to_float32(tensor);
@@ -96,7 +95,7 @@ namespace Thot::Data::Transforms::Format {
             float_tensor = Details::resize_spatial(float_tensor, *requested_size);
         }
 
-        return float_tensor / 255.0f;
+        return Details::clone_as_dtype(float_tensor, tensor.scalar_type());
     }
 }
 

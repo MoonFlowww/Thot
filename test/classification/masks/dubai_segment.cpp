@@ -174,9 +174,9 @@ int main() {
     Thot::Data::Check::Size(y1, "Outputs Raw");
     (void)Thot::Plot::Data::Image(x1, {0});
     x1 = Thot::Data::Transform::Format::Downscale(x1, {.targetsize = std::array<int64_t, 2>{256, 256}});
-    y1 = Thot::Data::Transform::Format::Downscale(y1, {.targetsize = std::array<int64_t, 2>{256, 256}});
+    y1 = Thot::Data::Transform::Format::Downscale(y1, {.targetsize = std::array<int64_t, 2>{128, 128}});
     x2 = Thot::Data::Transform::Format::Downscale(x2, {.targetsize = std::array<int64_t, 2>{256, 256}});
-    y2 = Thot::Data::Transform::Format::Downscale(y2, {.targetsize = std::array<int64_t, 2>{256, 256}});
+    y2 = Thot::Data::Transform::Format::Downscale(y2, {.targetsize = std::array<int64_t, 2>{128, 128}});
     Thot::Data::Check::Size(x1, "Inputs Resized");
     Thot::Data::Check::Size(y1, "Outputs Resized");
     (void)Thot::Plot::Data::Image(x1, {0});
@@ -184,7 +184,10 @@ int main() {
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::Flip(x1, y1, {.axes = {"x"}, .frequency = 1.f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::Flip(x1, y1, {.axes = {"y"}, .frequency = 0.5f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, 0, 1.f, true, false});
-    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, 0, 1.f, true, false});
+    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, 0, 1.f, false, false});
+    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, 0, 1.f, false, false});
+    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, 0, 1.f, false, false});
+    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, 0, 1.f, false, false});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::CLAHE(x1, y1, {.frequency = 1.f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::OpticalDistortion(x1, y1, {.frequency = 1.f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::AtmosphericDrift(x1, y1, {.frequency = 0.3f, .data_augment = true});
