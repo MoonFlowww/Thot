@@ -16,14 +16,13 @@ namespace {
         TORCH_CHECK(masks.dim() == 4, "Expected [B, 3, H, W]");
         TORCH_CHECK(masks.size(1) == 3, "RGB masks must have 3 channels");
 
-        auto uint8_masks = masks.to(torch::kUInt8);  // [B, 3, H, W]
+        auto uint8_masks = masks.to(torch::kUInt8);
         const auto B = uint8_masks.size(0);
         const auto H = uint8_masks.size(2);
         const auto W = uint8_masks.size(3);
         const auto C = static_cast<std::int64_t>(kClassPalette.size());
 
-        auto masks_flat = uint8_masks.permute({0, 2, 3, 1})   // [B, H, W, 3]
-                                    .reshape({B * H * W, 3}); // [N, 3]
+        auto masks_flat = uint8_masks.permute({0, 2, 3, 1}).reshape({B * H * W, 3});
 
         std::vector<std::uint8_t> palette_vec;
         palette_vec.reserve(C * 3);
@@ -130,9 +129,7 @@ namespace {
         const auto height = class_indices.size(1);
         const auto width  = class_indices.size(2);
 
-        auto options = torch::TensorOptions()
-                           .dtype(torch::kUInt8)
-                           .device(class_indices.device());
+        auto options = torch::TensorOptions().dtype(torch::kUInt8).device(class_indices.device());
 
         auto rgb = torch::zeros({batch, 3, height, width}, options);
 
@@ -158,18 +155,22 @@ int main() {
 
     auto [x1, y1, x2, y2] =
         Thot::Data::Load::Universal("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/",
-            Thot::Data::Type::JPG{"images", {.grayscale = false, .normalize = true, .pad_to_max_tile=true}},
-            Thot::Data::Type::PNG{"masks", {.normalize = false, .pad_to_max_tile=true}}, {.train_fraction = .8f, .test_fraction = .2f, .shuffle = true});
+            Thot::Data::Type::JPG{"images", {.grayscale = false, .normalize = true, .pad_to_max_tile=true, .color_order = "RGB"}},
+            Thot::Data::Type::PNG{"masks", {.normalize = false, .pad_to_max_tile=true, .color_order = "RGB"}}, {.train_fraction = .8f, .test_fraction = .2f, .shuffle = true});
 
     Thot::Data::Check::Size(x1, "Inputs Raw");
     Thot::Data::Check::Size(y1, "Outputs Raw");
-
-    //797 × 644 pixel
+    x1 = Thot::Data::Transform::Format::Downscale(x1, {.targetsize = std::array<int64_t, 2>{256, 256}});
+    y1 = Thot::Data::Transform::Format::Downscale(y1, {.targetsize = std::array<int64_t, 2>{256, 256}});
+    x2 = Thot::Data::Transform::Format::Downscale(x2, {.targetsize = std::array<int64_t, 2>{256, 256}});
+    y2 = Thot::Data::Transform::Format::Downscale(y2, {.targetsize = std::array<int64_t, 2>{256, 256}});
+    Thot::Data::Check::Size(x1, "Inputs Resized");
+    Thot::Data::Check::Size(y1, "Outputs Resized");
 
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::Flip(x1, y1, {.axes = {"x"}, .frequency = 1.f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::Flip(x1, y1, {.axes = {"y"}, .frequency = 0.5f, .data_augment = true});
-    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {75, 100}, 0, 1.f, true, false});
-    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {75, 100}, 0, 1.f, true, false});
+    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, 0, 1.f, true, false});
+    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, 0, 1.f, true, false});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::CLAHE(x1, y1, {.frequency = 1.f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::OpticalDistortion(x1, y1, {.frequency = 1.f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::AtmosphericDrift(x1, y1, {.frequency = 0.3f, .data_augment = true});
@@ -178,7 +179,7 @@ int main() {
     //Take random 9 samples
     const auto n_samples = x1.size(0);
     auto perm = torch::randperm(n_samples, torch::TensorOptions().dtype(torch::kLong));
-    auto rand9 = perm.narrow(0, 0, 2);
+    auto rand9 = perm.narrow(0, 0, 9);
     std::vector<std::size_t> idx; idx.reserve(rand9.size(0));
     auto* data_ptr = rand9.data_ptr<int64_t>();
     for (int i = 0; i < rand9.size(0); ++i)

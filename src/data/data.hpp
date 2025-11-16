@@ -6,4 +6,5 @@
 #include "transform/manipulation.hpp"
 #include "details/repair.hpp"
 #include "transform/dimensionality_reduction.hpp"
+#include "transform/format/format.hpp"
 #endif //THOT_DATA_HPP

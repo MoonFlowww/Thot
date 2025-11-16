@@ -55,6 +55,7 @@ namespace Thot::Data::Type {
         bool normalize = true;
         bool channels_first = true;
         bool pad_to_max_tile = false;
+        std::string color_order = "RGB";
     };
 
     struct PNG {

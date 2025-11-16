@@ -13,6 +13,7 @@
 #include <utility>
 #include <charconv>
 #include <vector>
+
 #include <optional>
 #include <regex>
 #include <numeric>
@@ -727,6 +728,55 @@ namespace Thot::Data::Load {
             }
             auto options = torch::TensorOptions().dtype(torch::kFloat32);
 
+            struct ColorOrderResolution {
+                std::array<int, 3> channel_map{}; // maps destination channels to BGR input indices
+                std::string normalized;
+            };
+
+            auto resolve_color_order = [](const std::string& configured) {
+                ColorOrderResolution result{};
+                result.normalized = configured.empty() ? std::string{"RGB"} : configured;
+                std::transform(result.normalized.begin(), result.normalized.end(), result.normalized.begin(),
+                               [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+
+                if (result.normalized.size() != 3) {
+                    throw std::runtime_error("Image color order must contain exactly the letters R, G, and B once each ("
+                                             "received '" + result.normalized + "').");
+                }
+
+                auto letter_index = [](char c) -> int {
+                    if (c == 'R') return 0;
+                    if (c == 'G') return 1;
+                    if (c == 'B') return 2;
+                    return -1;
+                };
+                auto bgr_source_index = [](char c) -> int {
+                    switch (c) {
+                        case 'B': return 0;
+                        case 'G': return 1;
+                        case 'R': return 2;
+                        default: throw std::runtime_error("Unsupported image color order letter.");
+                    }
+                };
+
+                std::array<bool, 3> seen_letters{false, false, false};
+                for (std::size_t i = 0; i < result.normalized.size(); ++i) {
+                    const char channel = result.normalized[i];
+                    const int idx = letter_index(channel);
+                    if (idx < 0 || seen_letters[idx]) {
+                        throw std::runtime_error("Image color order must be a permutation of 'R', 'G', 'B' (received '"
+                                                 + result.normalized + "').");
+                    }
+                    seen_letters[idx] = true;
+                    result.channel_map[i] = bgr_source_index(channel);
+                }
+                return result;
+            };
+
+            const auto color_order = resolve_color_order(descriptor.parameters.color_order);
+            const bool needs_channel_reorder = !descriptor.parameters.grayscale &&
+                                               color_order.channel_map != std::array<int, 3>{0, 1, 2};
+
             for (const auto& file_path : image_files) {
                 cv::Mat image = cv::imread(file_path.string(), load_flag);
                 if (image.empty()) {
@@ -752,8 +802,15 @@ namespace Thot::Data::Load {
                 const double scale = descriptor.parameters.normalize ? (1.0 / 255.0) : 1.0;
                 image.convertTo(image_float, CV_32F, scale);
 
-                if (!descriptor.parameters.grayscale) {
-                    cv::cvtColor(image_float, image_float, cv::COLOR_BGR2RGB);
+                if (needs_channel_reorder) {
+                    cv::Mat reordered(image_float.size(), image_float.type());
+                    const int from_to[] = {
+                        color_order.channel_map[0], 0,
+                        color_order.channel_map[1], 1,
+                        color_order.channel_map[2], 2
+                    };
+                    cv::mixChannels(&image_float, 1, &reordered, 1, from_to, 3);
+                    image_float = reordered;
                 }
 
                 torch::Tensor tensor;
