@@ -167,19 +167,17 @@ int main() {
 
     auto [x1, y1, x2, y2] =
         Thot::Data::Load::Universal("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/",
-            Thot::Data::Type::JPG{"images", {.grayscale = false, .normalize = true, .pad_to_max_tile=true, .color_order = "RGB"}},
+            Thot::Data::Type::JPG{"images", {.grayscale = false, .normalize = false, .pad_to_max_tile=true, .color_order = "RGB"}},
             Thot::Data::Type::PNG{"masks", {.normalize = false, .pad_to_max_tile=true, .color_order = "RGB"}}, {.train_fraction = .8f, .test_fraction = .2f, .shuffle = true});
 
     Thot::Data::Check::Size(x1, "Inputs Raw");
     Thot::Data::Check::Size(y1, "Outputs Raw");
-    (void)Thot::Plot::Data::Image(x1, {0});
     x1 = Thot::Data::Transform::Format::Downscale(x1, {.targetsize = std::array<int64_t, 2>{256, 256}});
-    y1 = Thot::Data::Transform::Format::Downscale(y1, {.targetsize = std::array<int64_t, 2>{128, 128}});
+    y1 = Thot::Data::Transform::Format::Downscale(y1, {.targetsize = std::array<int64_t, 2>{256, 256}});
     x2 = Thot::Data::Transform::Format::Downscale(x2, {.targetsize = std::array<int64_t, 2>{256, 256}});
-    y2 = Thot::Data::Transform::Format::Downscale(y2, {.targetsize = std::array<int64_t, 2>{128, 128}});
+    y2 = Thot::Data::Transform::Format::Downscale(y2, {.targetsize = std::array<int64_t, 2>{256, 256}});
     Thot::Data::Check::Size(x1, "Inputs Resized");
     Thot::Data::Check::Size(y1, "Outputs Resized");
-    (void)Thot::Plot::Data::Image(x1, {0});
 
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::Flip(x1, y1, {.axes = {"x"}, .frequency = 1.f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Transforms::Augmentation::Flip(x1, y1, {.axes = {"y"}, .frequency = 0.5f, .data_augment = true});
@@ -217,53 +215,33 @@ int main() {
     Thot::Data::Check::Size(y1, "Targets One-hot");
 
 
+    auto block = [&](int in_c, int out_c) {
+        return Thot::Block::Sequential({
+            Thot::Layer::Conv2d({in_c, out_c, {3,3}, {1,1}, {1,1}}, Thot::Activation::SiLU),
+            Thot::Layer::Conv2d({out_c, out_c, {3,3}, {1,1}, {1,1}}, Thot::Activation::SiLU),
+        });
+    };
 
-    const auto in_channels = x1.size(1);
-    const auto image_height = x1.size(2);
-    const auto image_width = x1.size(3);
-    const auto mask_channels = y1.size(1);
-    const auto mask_height = y1.size(2);
-    const auto mask_width = y1.size(3);
+    auto upblock = [&](int in_c, int out_c) {
+        return Thot::Block::Sequential({
+            Thot::Layer::Upsample({.scale = {2,2}, .mode = Thot::UpsampleMode::Bilinear}),
+            Thot::Layer::Conv2d({in_c, out_c, {3,3}, {1,1}, {1,1}}, Thot::Activation::SiLU),
+        });
+    };
 
-    Thot::Block::Transformer::Vision::EncoderOptions vit_options{};
-    vit_options.layers = 8;
-    vit_options.embed_dim = 384;
-    vit_options.attention.num_heads = 6;
-    vit_options.attention.dropout = 0.3;
-    vit_options.attention.batch_first = true;
-    vit_options.attention.variant = Thot::Attention::Variant::Full;
-    vit_options.feed_forward.mlp_ratio = 4.0;
-    vit_options.feed_forward.activation = Thot::Activation::GeLU;
-    vit_options.feed_forward.bias = true;
-    vit_options.layer_norm.eps = 1e-6;
-    vit_options.patch_embedding.in_channels = in_channels;
-    vit_options.patch_embedding.embed_dim = vit_options.embed_dim;
-    vit_options.patch_embedding.patch_size = 16;
-    vit_options.patch_embedding.add_class_token = false;
-    vit_options.patch_embedding.normalize = true;
-    vit_options.patch_embedding.dropout = 0.2;
-    vit_options.positional_encoding.type = Thot::Layer::Details::PositionalEncodingType::Learned;
-    vit_options.positional_encoding.dropout = 0.2;
-    vit_options.residual_dropout = 0.2;
-    vit_options.attention_dropout = 0.2;
-    vit_options.feed_forward_dropout = 0.2;
-    vit_options.pre_norm = true;
-    vit_options.final_layer_norm = true;
+    model.add(block(3, 64), "enc1");
+    model.add(Thot::Layer::MaxPool2d({{2,2},{2,2}}));
 
+    model.add(block(64, 64), "enc2");
+    model.add(Thot::Layer::MaxPool2d({{2,2},{2,2}}));
 
-    const auto patch_size = vit_options.patch_embedding.patch_size;
-    const auto tokens_h = (image_height - patch_size) / patch_size + 1;
-    const auto tokens_w = (image_width - patch_size) / patch_size + 1;
-    const auto patch_area = patch_size * patch_size;
-    const auto patch_projection_dim = mask_channels * patch_area;
+    model.add(upblock(64, 64), "dec1");
+    model.add(block(64, 64), "dec_block1");
 
-    //model.add(Thot::Layer::SoftDropout({.probability = 0.5, .noise_mean = 0.2, .noise_std = 1, .noise_type = Thot::Layer::SoftDropoutOptions::NoiseType::InterleavedGradientNoise}));
-    model.add(Thot::Block::Transformer::Vision::Encoder(vit_options));
-    model.add(Thot::Layer::HardDropout({ .probability = 0.1 }));
-    model.add(Thot::Layer::FC({vit_options.embed_dim, patch_projection_dim, true}, Thot::Activation::Identity, Thot::Initialization::XavierUniform));
-    model.add(Thot::Layer::PatchUnembed(
-{.channels = mask_channels, .tokens_height = tokens_h, .tokens_width = tokens_w, .patch_size = patch_size, .target_height = mask_height, .target_width = mask_width, .align_corners = false },
-        Thot::Activation::Sigmoid));
+    model.add(upblock(64, 32), "dec2");
+    model.add(block(32, 32), "dec_block2");
+
+    model.add(Thot::Layer::Conv2d({32, 6, {1,1}, {1,1}, {0,0}}, Thot::Activation::Identity));
 
     model.set_loss(Thot::Loss::Dice());
     model.set_optimizer(Thot::Optimizer::AdamW({.learning_rate=1e-4, .weight_decay = 2e-4}));
@@ -323,7 +301,6 @@ int main() {
         auto perm = torch::randperm(n_val, torch::TensorOptions().dtype(torch::kLong));
         auto idx  = perm.narrow(0, 0, num_samples_to_plot); // [4]
 
-        // local indices 0..3 for plotting the small batch
         std::vector<std::size_t> local_indices(static_cast<std::size_t>(num_samples_to_plot));
         std::iota(local_indices.begin(), local_indices.end(), 0);
 
@@ -337,7 +314,6 @@ int main() {
         auto preds_cpu   = preds.detach().to(torch::kCPU);
         auto targets_cpu = targets_batch.detach().to(torch::kCPU);
 
-        // From one-hot [B, C, H, W] → class indices [B, H, W]
         auto pred_classes = preds_cpu.argmax(1);
         auto target_classes = targets_cpu.argmax(1);
 
@@ -346,12 +322,8 @@ int main() {
 
         Thot::Data::Check::Size(pred_rgb, "Test Target");
         Thot::Data::Check::Size(target_rgb, "Test Output");
-        (void)Thot::Plot::Data::Image(target_rgb, local_indices); // Ground truth masks
-        (void)Thot::Plot::Data::Image(pred_rgb,   local_indices); // Predicted masks
-
-        // If you also want the input tiles next to them:
-        auto inputs_cpu = inputs_batch.detach().to(torch::kCPU);
-        (void)Thot::Plot::Data::Image(inputs_cpu, local_indices);
+        (void)Thot::Plot::Data::Image(target_rgb, local_indices);
+        (void)Thot::Plot::Data::Image(pred_rgb,   local_indices);
     }
 
     return 0;

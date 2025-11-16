@@ -193,5 +193,6 @@ add_executable(test_Thot test/classification/masks/dubai_segment.cpp #classifica
         src/loss/details/lovasz_softmax.hpp
         src/loss/details/tversky.hpp
         src/data/transform/format/format.hpp
+        src/layer/details/resizing.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot ${OpenCV_LIBS})

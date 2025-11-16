@@ -16,6 +16,8 @@
 #include "details/pooling.hpp"
 #include "details/recurrent.hpp"
 #include "details/patch_unembed.hpp"
+#include "details/resizing.hpp"
+
 #include "registry.hpp"
 
 namespace Thot::Layer {
@@ -50,6 +52,12 @@ namespace Thot::Layer {
 
     using FlattenOptions = Details::FlattenOptions;
     using FlattenDescriptor = Details::FlattenDescriptor;
+
+    using UpsampleOptions = Details::UpsampleOptions;
+    using UpsampleDescriptor = Details::UpsampleDescriptor;
+
+    using DownsampleOptions = Details::DownsampleOptions;
+    using DownsampleDescriptor = Details::DownsampleDescriptor;
 
     using RNNOptions = Details::RNNOptions;
     using RNNDescriptor = Details::RNNDescriptor;
@@ -92,7 +100,9 @@ namespace Thot::Layer {
                                     GRUDescriptor,
                                     S4Descriptor,
                                     ReduceDescriptor,
-                                    PatchUnembedDescriptor>;
+                                    PatchUnembedDescriptor,
+                                    UpsampleDescriptor,
+                                    DownsampleDescriptor>;
 
     [[nodiscard]] inline auto FC(const FCOptions& options,
                                  ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
@@ -204,6 +214,14 @@ namespace Thot::Layer {
 
     [[nodiscard]] inline auto Flatten(const FlattenOptions& options = {},
                                       ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,  ::Thot::LocalConfig local = {}) -> FlattenDescriptor {
+        return {options, activation, std::move(local)};
+    }
+
+    [[nodiscard]] inline auto Upsample(const UpsampleOptions& options = {}, ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity, ::Thot::LocalConfig local = {}) -> UpsampleDescriptor {
+        return {options, activation, std::move(local)};
+    }
+
+    [[nodiscard]] inline auto Downsample(const DownsampleOptions& options = {}, ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity, ::Thot::LocalConfig local = {}) -> DownsampleDescriptor {
         return {options, activation, std::move(local)};
     }
 

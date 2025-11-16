@@ -1267,6 +1267,47 @@ namespace Thot::Common::SaveLoad {
             message << "Unknown pooling variant '" << value << "'.";
             throw std::runtime_error(message.str());
         }
+        inline std::string upsample_mode_to_string(::Thot::UpsampleMode mode)
+        {
+            switch (mode) {
+                case ::Thot::UpsampleMode::Bilinear: return "bilinear";
+                case ::Thot::UpsampleMode::Bicubic: return "bicubic";
+                case ::Thot::UpsampleMode::Nearest:
+                default: return "nearest";
+            }
+        }
+
+        inline ::Thot::UpsampleMode upsample_mode_from_string(const std::string& value, const std::string& context)
+        {
+            const auto lowered = to_lower(value);
+            if (lowered == "nearest") return ::Thot::UpsampleMode::Nearest;
+            if (lowered == "bilinear") return ::Thot::UpsampleMode::Bilinear;
+            if (lowered == "bicubic") return ::Thot::UpsampleMode::Bicubic;
+            std::ostringstream message;
+            message << "Unknown upsample mode '" << value << "' in " << context;
+            throw std::runtime_error(message.str());
+        }
+
+        inline std::string downsample_mode_to_string(::Thot::DownsampleMode mode)
+        {
+            switch (mode) {
+                case ::Thot::DownsampleMode::Bilinear: return "bilinear";
+                case ::Thot::DownsampleMode::Bicubic: return "bicubic";
+                case ::Thot::DownsampleMode::Nearest:
+                default: return "nearest";
+            }
+        }
+
+        inline ::Thot::DownsampleMode downsample_mode_from_string(const std::string& value, const std::string& context)
+        {
+            const auto lowered = to_lower(value);
+            if (lowered == "nearest") return ::Thot::DownsampleMode::Nearest;
+            if (lowered == "bilinear") return ::Thot::DownsampleMode::Bilinear;
+            if (lowered == "bicubic") return ::Thot::DownsampleMode::Bicubic;
+            std::ostringstream message;
+            message << "Unknown downsample mode '" << value << "' in " << context;
+            throw std::runtime_error(message.str());
+        }
 
         inline std::string manifold_kind_to_string(Optimizer::Details::ManifoldKind kind)
         {
@@ -2170,6 +2211,22 @@ namespace Thot::Common::SaveLoad {
                     tree.put("options.end_dim", concrete.options.end_dim);
                     tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
                     tree.add_child("local", serialize_local_config(concrete.local));
+                } else if constexpr (std::is_same_v<DescriptorType, Layer::UpsampleDescriptor>) {
+                    tree.put("type", "upsample");
+                    tree.add_child("options.scale", Detail::write_array(concrete.options.scale));
+                    tree.put("options.mode", Detail::upsample_mode_to_string(concrete.options.mode));
+                    tree.put("options.align_corners", concrete.options.align_corners);
+                    tree.put("options.recompute_scale_factor", concrete.options.recompute_scale_factor);
+                    tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
+                    tree.add_child("local", serialize_local_config(concrete.local));
+                } else if constexpr (std::is_same_v<DescriptorType, Layer::DownsampleDescriptor>) {
+                    tree.put("type", "downsample");
+                    tree.add_child("options.scale", Detail::write_array(concrete.options.scale));
+                    tree.put("options.mode", Detail::downsample_mode_to_string(concrete.options.mode));
+                    tree.put("options.align_corners", concrete.options.align_corners);
+                    tree.put("options.recompute_scale_factor", concrete.options.recompute_scale_factor);
+                    tree.add_child("activation", Detail::serialize_activation_descriptor(concrete.activation));
+                    tree.add_child("local", serialize_local_config(concrete.local));
                 } else if constexpr (std::is_same_v<DescriptorType, Layer::ReduceDescriptor>) {
                     tree.put("type", "reduce");
                     tree.put("options.op", Detail::reduce_op_to_string(concrete.options.op));
@@ -2382,6 +2439,26 @@ namespace Thot::Common::SaveLoad {
             Layer::Details::FlattenDescriptor descriptor;
             descriptor.options.start_dim = Detail::get_numeric<std::int64_t>(tree, "options.start_dim", context);
             descriptor.options.end_dim = Detail::get_numeric<std::int64_t>(tree, "options.end_dim", context);
+            descriptor.activation = Detail::deserialize_activation_descriptor(tree.get_child("activation"), context);
+            descriptor.local = deserialize_local_config(tree.get_child("local"), context);
+            return Layer::Descriptor{descriptor};
+        }
+        if (type == "upsample") {
+            Layer::Details::UpsampleDescriptor descriptor;
+            descriptor.options.scale = Detail::read_array<double>(tree.get_child("options.scale"), context);
+            descriptor.options.mode = Detail::upsample_mode_from_string(Detail::get_string(tree, "options.mode", context), context);
+            descriptor.options.align_corners = Detail::get_boolean(tree, "options.align_corners", context);
+            descriptor.options.recompute_scale_factor = Detail::get_boolean(tree, "options.recompute_scale_factor", context);
+            descriptor.activation = Detail::deserialize_activation_descriptor(tree.get_child("activation"), context);
+            descriptor.local = deserialize_local_config(tree.get_child("local"), context);
+            return Layer::Descriptor{descriptor};
+        }
+        if (type == "downsample") {
+            Layer::Details::DownsampleDescriptor descriptor;
+            descriptor.options.scale = Detail::read_array<double>(tree.get_child("options.scale"), context);
+            descriptor.options.mode = Detail::downsample_mode_from_string(Detail::get_string(tree, "options.mode", context), context);
+            descriptor.options.align_corners = Detail::get_boolean(tree, "options.align_corners", context);
+            descriptor.options.recompute_scale_factor = Detail::get_boolean(tree, "options.recompute_scale_factor", context);
             descriptor.activation = Detail::deserialize_activation_descriptor(tree.get_child("activation"), context);
             descriptor.local = deserialize_local_config(tree.get_child("local"), context);
             return Layer::Descriptor{descriptor};
