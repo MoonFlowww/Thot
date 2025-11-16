@@ -253,7 +253,7 @@ int main() {
 
     //Custom loop for dual-loss
     CustomTrainingOptions training_options{};
-    training_options.epochs = 100;
+    training_options.epochs = 15;
     training_options.batch_size = 16;
     training_options.dice_weight = 0.6;
     training_options.bce_weight = 1-training_options.dice_weight;
