@@ -4,8 +4,10 @@
 #include <array>
 #include <optional>
 #include <stdexcept>
+#include <vector>
 
 #include <torch/torch.h>
+#include <torch/nn/functional.h>
 
 namespace Thot::Data::Transforms::Format {
     namespace Options {
@@ -29,6 +31,36 @@ namespace Thot::Data::Transforms::Format {
         inline torch::Tensor clone_as_dtype(const torch::Tensor& tensor, torch::Dtype dtype) {
             return tensor.to(tensor.options().dtype(dtype));
         }
+        inline torch::Tensor resize_spatial(const torch::Tensor& tensor, const std::array<int64_t, 2>& target_size) {
+            if (tensor.dim() < 3) {
+                throw std::invalid_argument("Format::resize_spatial expects a tensor with at least 3 dimensions (C, H, W).");
+            }
+
+            if (target_size[0] <= 0 || target_size[1] <= 0) {
+                throw std::invalid_argument("Format::resize_spatial expects positive target dimensions.");
+            }
+
+            auto working = tensor;
+            bool added_batch_dim = false;
+            if (working.dim() == 3) {
+                working = working.unsqueeze(0);
+                added_batch_dim = true;
+            } else if (working.dim() != 4) {
+                throw std::invalid_argument("Format::resize_spatial currently supports tensors with 3 or 4 dimensions.");
+            }
+
+            auto options = torch::nn::functional::InterpolateFuncOptions()
+                                .mode(torch::kBilinear)
+                                .align_corners(false)
+                                .size(std::vector<int64_t>{target_size[0], target_size[1]});
+
+            auto resized = torch::nn::functional::interpolate(working, options);
+            if (added_batch_dim) {
+                resized = resized.squeeze(0);
+            }
+
+            return resized;
+        }
     }
 
     inline torch::Tensor Upscale(const torch::Tensor& tensor, Options::UpscaleOptions options = {}) {
@@ -42,6 +74,9 @@ namespace Thot::Data::Transforms::Format {
         }
 
         auto float_tensor = Details::to_float32(tensor);
+        if (requested_size.has_value()) {
+            float_tensor = Details::resize_spatial(float_tensor, *requested_size);
+        }
         auto scaled = float_tensor.mul(255.0f).clamp(0.0f, 255.0f).round();
         return scaled.to(tensor.options().dtype(torch::kUInt8));
     }
@@ -57,6 +92,10 @@ namespace Thot::Data::Transforms::Format {
         }
 
         auto float_tensor = Details::to_float32(tensor);
+        if (requested_size.has_value()) {
+            float_tensor = Details::resize_spatial(float_tensor, *requested_size);
+        }
+
         return float_tensor / 255.0f;
     }
 }
