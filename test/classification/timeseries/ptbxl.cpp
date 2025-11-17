@@ -130,7 +130,8 @@ int main() {
     const int64_t latent_dim = leads * 2; // Vm + W per lead
     const int64_t param_dim = 4;
     const int64_t num_classes = dataset.train.labels.max().item<int64_t>() + 1;
-    Thot::Data::Check::Size(train_signals);
+    Thot::Data::Check::Size(train_signals, "Signals");
+    Thot::Data::Check::Size(dataset.train.labels, "Label dims");
 
 
     model.add(Thot::Layer::Conv2d({
@@ -229,6 +230,18 @@ int main() {
         const auto val_loss = run_epoch(validation_signals, dataset.validation.labels, false);
         std::cout << "[Epoch " << (epoch + 1) << "/" << epochs << "] train=" << train_loss << " val=" << val_loss << std::endl;
     }
+
+    std::vector<Thot::Metric::Classification::Descriptor> metrics;
+
+
+    std::cout << "\nRunning evaluation..." << std::endl;
+    model.evaluate(validation_signals, dataset.validation.labels, Thot::Evaluation::Classification, {
+        Thot::Metric::Classification::Accuracy,
+        Thot::Metric::Classification::F1,
+        Thot::Metric::Classification::Precision,
+        Thot::Metric::Classification::Recall,
+        Thot::Metric::Classification::AUCROC,
+        }, {.batch_size=static_cast<std::size_t>(batch_size), .buffer_vram=1});
 
     return 0;
 }
