@@ -109,11 +109,11 @@ The `Thot::Data::Transform::Format` namespace surfaces two convenience wrappers
 that mirror the new `Layer::Upsample/Downsample` descriptors but can be used on
 raw tensors:
 
-- **`Format::Upscale`** – Accepts `ScaleOptions` (`targetsize`, `showprogress`)
-  and resizes spatial dimensions while preserving dtype. When `targetsize` is
+- **`Format::Upsample`** – Accepts `ScaleOptions` (`size`, `showprogress`)
+  and resizes spatial dimensions while preserving dtype. When `size` is
   omitted the helper simply ensures the tensor is `float32` for downstream
   processing.
-- **`Format::Downscale`** – Uses the same options and bilinear interpolation to
+- **`Format::Downsample`** – Uses the same options and bilinear interpolation to
   shrink tensors, making it easy to create low-resolution views for multi-scale
   training pipelines.
 

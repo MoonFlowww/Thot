@@ -12,12 +12,12 @@
 namespace Thot::Data::Transform::Format {
     namespace Options {
         struct ScaleOptions {
-            std::optional<std::array<int64_t, 2>> targetsize{};
+            std::optional<std::vector<int>> size{};
             bool showprogress = false;
         };
 
-        using UpscaleOptions = ScaleOptions;
-        using DownscaleOptions = ScaleOptions;
+        using UpsampleOptions = ScaleOptions;
+        using DownsampleOptions = ScaleOptions;
     }
 
     namespace Details {
@@ -31,15 +31,15 @@ namespace Thot::Data::Transform::Format {
         inline torch::Tensor clone_as_dtype(const torch::Tensor& tensor, torch::Dtype dtype) {
             return tensor.to(tensor.options().dtype(dtype));
         }
-        inline torch::Tensor resize_spatial(const torch::Tensor& tensor, const std::array<int64_t, 2>& target_size) {
-            if (tensor.dim() < 3) {
+        inline torch::Tensor resize_spatial(const torch::Tensor& tensor, const std::vector<int>& target_size) {
+            if (tensor.dim() < 3)
                 throw std::invalid_argument("Format::resize_spatial expects a tensor with at least 3 dimensions (C, H, W).");
-            }
-
-            if (target_size[0] <= 0 || target_size[1] <= 0) {
+            if (target_size[0] <= 0 || target_size[1] <= 0)
                 throw std::invalid_argument("Format::resize_spatial expects positive target dimensions.");
-            }
+            if (target_size.size() != 2)
+                throw std::invalid_argument("Format::resize_spatial expects exactly two target dimensions.");
 
+            
             auto working = tensor;
             bool added_batch_dim = false;
             if (working.dim() == 3) {
@@ -63,11 +63,11 @@ namespace Thot::Data::Transform::Format {
         }
     }
 
-    inline torch::Tensor Upscale(const torch::Tensor& tensor, Options::UpscaleOptions options = {}) {
-        [[maybe_unused]] const auto requested_size = options.targetsize;
+    inline torch::Tensor Upsample(const torch::Tensor& tensor, Options::UpsampleOptions options = {}) {
+        [[maybe_unused]] const auto requested_size = options.size;
         [[maybe_unused]] const bool show_progress = options.showprogress;
         if (!tensor.defined()) {
-            throw std::invalid_argument("Format::Upscale expects a defined tensor.");
+            throw std::invalid_argument("Format::Upsample expects a defined tensor.");
         }
         if (tensor.numel() == 0) {
             return Details::clone_as_dtype(tensor, tensor.scalar_type());
@@ -80,11 +80,11 @@ namespace Thot::Data::Transform::Format {
         return Details::clone_as_dtype(float_tensor, tensor.scalar_type());
     }
 
-    inline torch::Tensor Downscale(const torch::Tensor& tensor, Options::DownscaleOptions options = {}) {
-        [[maybe_unused]] const auto requested_size = options.targetsize;
+    inline torch::Tensor Downsample(const torch::Tensor& tensor, Options::DownsampleOptions options = {}) {
+        [[maybe_unused]] const auto requested_size = options.size;
         [[maybe_unused]] const bool show_progress = options.showprogress;
         if (!tensor.defined()) {
-            throw std::invalid_argument("Format::Downscale expects a defined tensor.");
+            throw std::invalid_argument("Format::Downsample expects a defined tensor.");
         }
         if (tensor.numel() == 0) {
             return Details::clone_as_dtype(tensor, tensor.scalar_type());
