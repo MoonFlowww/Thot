@@ -98,7 +98,6 @@ namespace {
 int main() {
     Thot::Model model("PTBXL_ECG");
     const bool use_cuda = torch::cuda::is_available();
-    model.use_cuda(use_cuda);
 
     const auto dataset = load_ptbxl_dataset("/home/moonfloww/Projects/DATASETS/Timeserie/ECG_ACC", true, 0.8f);
 
@@ -120,7 +119,7 @@ int main() {
     auto validation_signals = prepare_signals(dataset.validation.signals);
 
     const int64_t input_features = train_signals.size(2);
-    const int64_t leads = train_signals.size(3) > 1 ? train_signals.size(3) : 12;
+    const int64_t leads = train_signals.size(1) > 1 ? train_signals.size(1) : 12;
     if (input_features <= 0) {
         std::cerr << "Dataset signals must have positive length and feature size." << std::endl;
         return 1;
@@ -177,7 +176,7 @@ int main() {
     Thot::Data::Transform::Normalization::Zscore(validation_signals, {.lag=30, .forward_only=true});
     Thot::Data::Check::Size(train_signals, "Zscore");
 
-const auto device = model.device();
+    const auto device = model.device();
 
     auto to_device = [&device](const torch::Tensor& tensor) {
         if (!tensor.defined()) return tensor;
@@ -226,6 +225,8 @@ const auto device = model.device();
 
         return running_loss / std::max<int64_t>(1, batches);
     };
+
+    model.use_cuda(use_cuda);
 
     for (int64_t epoch = 0; epoch < epochs; ++epoch) {
         const auto train_loss = run_epoch(train_signals, dataset.train.labels, true);
