@@ -12,6 +12,8 @@
 #include <stdexcept>
 #include <utility>
 #include <vector>
+#include <random>
+
 
 #include <torch/torch.h>
 #include <torch/nn/functional.h>
@@ -31,63 +33,76 @@ namespace {
         ECGDataset train;
         ECGDataset validation;
     };
-    std::vector<StratifiedFold> make_stratified_kfold(const torch::Tensor& labels, std::int64_t n_splits, bool shuffle = true, std::uint64_t seed = 42) {
+
+    struct StratifiedFold {
+        torch::Tensor train_indices;
+        torch::Tensor val_indices;
+    };
+    std::vector<StratifiedFold> make_stratified_kfold(const torch::Tensor& labels, std::int64_t n_splits, bool shuffle = true, unsigned long long seed = 42ULL) {
         TORCH_CHECK(labels.dim() == 1, "labels must be a 1D tensor");
+
+        // Work on CPU, int64 labels
         auto labels_cpu = labels.to(torch::kCPU, torch::kLong);
-        const auto N = labels_cpu.size(0);
+        const int64_t N = labels_cpu.size(0);
 
-        // unique sorted class labels
-        auto uniques = std::get<0>(labels_cpu.unique(/*sorted=*/true));
-        const auto n_classes = uniques.size(0);
+        // Copy labels to a std::vector<int64_t>
+        std::vector<int64_t> labels_vec(N);
+        const auto* lbl_ptr = labels_cpu.data_ptr<int64_t>();
+        for (int64_t i = 0; i < N; ++i) {
+            labels_vec[i] = lbl_ptr[i];
+        }
 
-        // for each fold, list of sample indices
-        std::vector<std::vector<std::int64_t>> fold_indices(n_splits);
+        // Compute unique class values manually
+        std::vector<int64_t> classes = labels_vec;
+        std::sort(classes.begin(), classes.end());
+        classes.erase(std::unique(classes.begin(), classes.end()), classes.end());
+        const int64_t n_classes = static_cast<int64_t>(classes.size());
+
+        // For each fold, we keep the list of indices assigned to that fold
+        std::vector<std::vector<int64_t>> fold_indices(n_splits);
 
         std::mt19937_64 rng(seed);
 
-        for (std::int64_t ci = 0; ci < n_classes; ++ci) {
-            auto cls = uniques[ci].item<std::int64_t>();
+        for (int64_t ci = 0; ci < n_classes; ++ci) {
+            const int64_t cls = classes[ci];
 
-            auto mask = (labels_cpu == cls);              // [N]
-            auto idx  = mask.nonzero().squeeze(1);        // [n_c]
-
-            // dump to std::vector for shuffling
-            std::vector<std::int64_t> class_idx(idx.size(0));
-            auto acc = idx.accessor<std::int64_t, 1>();
-            for (std::int64_t i = 0; i < idx.size(0); ++i) {
-                class_idx[i] = acc[i];
+            // Collect indices belonging to this class
+            std::vector<int64_t> class_idx;
+            class_idx.reserve(N);
+            for (int64_t i = 0; i < N; ++i) {
+                if (labels_vec[i] == cls) {
+                    class_idx.push_back(i);
+                }
             }
 
             if (shuffle) {
                 std::shuffle(class_idx.begin(), class_idx.end(), rng);
             }
 
-            // round-robin assignment of this class’s indices to folds
+            // Round-robin assign this class' samples to folds
             for (std::size_t j = 0; j < class_idx.size(); ++j) {
                 const std::size_t fold_id = j % static_cast<std::size_t>(n_splits);
                 fold_indices[fold_id].push_back(class_idx[j]);
             }
         }
 
-        // Build train/val tensors per fold
-        std::vector<std::int64_t> all_indices(N);
-        std::iota(all_indices.begin(), all_indices.end(), 0);
-
+        // Build train/val tensors for each fold
         std::vector<StratifiedFold> folds;
         folds.reserve(n_splits);
 
-        for (std::int64_t k = 0; k < n_splits; ++k) {
-            auto& val_vec = fold_indices[k];
+        for (int64_t k = 0; k < n_splits; ++k) {
+            const auto& val_vec = fold_indices[k];
 
-            // mark val indices
+            // Mark validation indices
             std::vector<char> is_val(N, 0);
             for (auto idx : val_vec) {
                 is_val[idx] = 1;
             }
 
-            std::vector<std::int64_t> train_vec;
-            train_vec.reserve(N - val_vec.size());
-            for (auto idx : all_indices) {
+            // Everything else goes to train
+            std::vector<int64_t> train_vec;
+            train_vec.reserve(N - static_cast<int64_t>(val_vec.size()));
+            for (int64_t idx = 0; idx < N; ++idx) {
                 if (!is_val[idx]) {
                     train_vec.push_back(idx);
                 }
