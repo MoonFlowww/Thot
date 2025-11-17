@@ -119,7 +119,7 @@ state-space backbone (convolution kernel size, state dimension, activation), and
 dropout applied both after SSM updates and dense projections. Use this for long
 sequence modelling with linear-time scaling.
 
-### EBT (Encoder Balanced Transformer)
+### EBT (Energy Based Transformer)
 
 `Transformer::EBT::Encoder/Decoder` add reversible residual links and balanced
 branch widths. Options expand upon the classic transformer by letting you tune
