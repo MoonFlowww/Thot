@@ -875,7 +875,7 @@ namespace Thot::Data::Load {
 
                         auto [working, was_permuted] = to_channels_first(samples[i]);
                         Thot::Data::Transform::Format::Options::ScaleOptions options;
-                        options.size = target_size;
+                        options.size = std::vector<int>{static_cast<int>((*target_size)[0]), static_cast<int>((*target_size)[1])};
                         if (needs_downscale && !needs_upscale) {
                             working = Thot::Data::Transform::Format::Downsample(working, options);
                         } else if (needs_upscale && !needs_downscale) {
@@ -920,7 +920,7 @@ namespace Thot::Data::Load {
                 auto apply_resize = [&](auto resize_fn) {
                     auto [working, permuted] = to_channels_first(batch);
                     Thot::Data::Transform::Format::Options::ScaleOptions options;
-                    options.size = target_size;
+                    options.size = std::vector<int>{static_cast<int>(target_size[0]), static_cast<int>(target_size[1])};
                     working = resize_fn(working, options);
                     batch = restore_layout(working, permuted);
                 };

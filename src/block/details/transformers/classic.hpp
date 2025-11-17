@@ -587,8 +587,7 @@ namespace Thot::Block::Details::Transformer::Classic {
 
                 auto residual = output;
                 auto self_norm = norm1_->forward(residual);
-                auto self_attention = self_attention_->forward(
-                    self_norm, self_norm, self_norm, tgt_mask, tgt_key_padding_mask);
+                auto self_attention = ::Thot::Attention::Details::forward_attention(self_attention_, self_norm, self_norm, self_norm, tgt_mask, tgt_key_padding_mask);
                 if (self_attention_dropout_.forward) {
                     self_attention = self_attention_dropout_.forward(std::move(self_attention));
                     self_attention = ::Thot::Activation::Details::apply(
@@ -599,8 +598,7 @@ namespace Thot::Block::Details::Transformer::Classic {
                 if (memory.defined()) {
                     residual = output;
                     auto cross_norm = norm2_->forward(output);
-                    auto cross_attention = cross_attention_->forward(
-                        cross_norm, memory, memory, memory_mask, memory_key_padding_mask);
+                    auto cross_attention = ::Thot::Attention::Details::forward_attention(cross_attention_, cross_norm, memory, memory, memory_mask, memory_key_padding_mask);
                     if (cross_attention_dropout_.forward) {
                         cross_attention = cross_attention_dropout_.forward(std::move(cross_attention));
                         cross_attention = ::Thot::Activation::Details::apply(
@@ -632,8 +630,8 @@ namespace Thot::Block::Details::Transformer::Classic {
         private:
             std::int64_t embed_dim_{};
             LayerNormOptions layer_norm_options_{};
-            ::Thot::Attention::Details::MultiHeadAttention self_attention_{nullptr};
-            ::Thot::Attention::Details::MultiHeadAttention cross_attention_{nullptr};
+            ::Thot::Attention::Details::AttentionModule self_attention_{};
+            ::Thot::Attention::Details::AttentionModule cross_attention_{};
             torch::nn::LayerNorm norm1_{nullptr};
             torch::nn::LayerNorm norm2_{nullptr};
             torch::nn::LayerNorm norm3_{nullptr};
