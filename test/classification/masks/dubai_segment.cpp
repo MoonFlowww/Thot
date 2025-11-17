@@ -160,7 +160,7 @@ namespace {
 }
 
 
-int main() {
+int _main() {
     Thot::Model model("");
 
     auto [x1, y1, x2, y2] =
