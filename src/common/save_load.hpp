@@ -2068,6 +2068,16 @@ namespace Thot::Common::SaveLoad {
                     tree.put("options.add_zero_attn", options.add_zero_attn);
                     tree.put("options.batch_first", options.batch_first);
                     tree.put("options.variant", Detail::attention_variant_to_string(options.variant));
+                } else if constexpr (std::is_same_v<DescriptorType, Attention::MultiHeadLatentDescriptor>) {
+                    const auto& options = concrete.options;
+                    tree.put("type", "multi_head_latent");
+                    tree.put("options.embed_dim", options.embed_dim);
+                    tree.put("options.num_heads", options.num_heads);
+                    tree.put("options.latent_dim", options.latent_dim);
+                    tree.put("options.dropout", options.dropout);
+                    tree.put("options.bias", options.bias);
+                    tree.put("options.batch_first", options.batch_first);
+                    tree.put("options.variant", Detail::attention_variant_to_string(options.variant));
                 } else {
                     static_assert(sizeof(DescriptorType) == 0, "Unsupported attention descriptor supplied.");
                 }
@@ -2078,21 +2088,32 @@ namespace Thot::Common::SaveLoad {
 
     inline Attention::Descriptor deserialize_attention(const PropertyTree& tree, const std::string& context) {
         const auto type = Detail::to_lower(Detail::get_string(tree, "type", context));
-        if (type != "multi_head") {
-            std::ostringstream message;
-            message << "Unsupported attention descriptor '" << type << "' in " << context;
-            throw std::runtime_error(message.str());
+        if (type == "multi_head") {
+            Attention::MultiHeadOptions options;
+            options.embed_dim = Detail::get_numeric<std::int64_t>(tree, "options.embed_dim", context);
+            options.num_heads = Detail::get_numeric<std::int64_t>(tree, "options.num_heads", context);
+            options.dropout = Detail::get_numeric<double>(tree, "options.dropout", context);
+            options.bias = Detail::get_boolean(tree, "options.bias", context);
+            options.add_bias_kv = Detail::get_boolean(tree, "options.add_bias_kv", context);
+            options.add_zero_attn = Detail::get_boolean(tree, "options.add_zero_attn", context);
+            options.batch_first = Detail::get_boolean(tree, "options.batch_first", context);
+            options.variant = Detail::attention_variant_from_string(Detail::get_string(tree, "options.variant", context));
+            return Attention::Descriptor{Attention::MultiHeadDescriptor{options}};
         }
-        Attention::MultiHeadOptions options;
-        options.embed_dim = Detail::get_numeric<std::int64_t>(tree, "options.embed_dim", context);
-        options.num_heads = Detail::get_numeric<std::int64_t>(tree, "options.num_heads", context);
-        options.dropout = Detail::get_numeric<double>(tree, "options.dropout", context);
-        options.bias = Detail::get_boolean(tree, "options.bias", context);
-        options.add_bias_kv = Detail::get_boolean(tree, "options.add_bias_kv", context);
-        options.add_zero_attn = Detail::get_boolean(tree, "options.add_zero_attn", context);
-        options.batch_first = Detail::get_boolean(tree, "options.batch_first", context);
-        options.variant = Detail::attention_variant_from_string(Detail::get_string(tree, "options.variant", context));
-        return Attention::Descriptor{Attention::MultiHeadDescriptor{options}};
+        if (type == "multi_head_latent") {
+            Attention::MultiHeadLatentOptions options;
+            options.embed_dim = Detail::get_numeric<std::int64_t>(tree, "options.embed_dim", context);
+            options.num_heads = Detail::get_numeric<std::int64_t>(tree, "options.num_heads", context);
+            options.latent_dim = Detail::get_numeric<std::int64_t>(tree, "options.latent_dim", context);
+            options.dropout = Detail::get_numeric<double>(tree, "options.dropout", context);
+            options.bias = Detail::get_boolean(tree, "options.bias", context);
+            options.batch_first = Detail::get_boolean(tree, "options.batch_first", context);
+            options.variant = Detail::attention_variant_from_string(Detail::get_string(tree, "options.variant", context));
+            return Attention::Descriptor{Attention::MultiHeadLatentDescriptor{options}};
+        }
+        std::ostringstream message;
+        message << "Unsupported attention descriptor '" << type << "' in " << context;
+        throw std::runtime_error(message.str());
     }
 
     inline PropertyTree serialize_layer_descriptor(const Layer::Descriptor& descriptor)

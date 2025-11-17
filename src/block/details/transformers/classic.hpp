@@ -22,6 +22,7 @@
 #include "../../../activation/activation.hpp"
 #include "../../../activation/apply.hpp"
 #include "../../../attention/details/head.hpp"
+#include "../../../attention/details/latent.hpp"
 #include "../../../attention/attention.hpp"
 #include "../../../initialization/initialization.hpp"
 #include "../../../layer/details/positional_encoding.hpp"
@@ -416,6 +417,16 @@ namespace Thot::Block::Details::Transformer::Classic {
                             attention_options.variant = attention_descriptor.options.variant;
                             return register_module("self_attention",
                                                    ::Thot::Attention::Details::MultiHeadAttention(attention_options));
+                        } else if constexpr (std::is_same_v<Descriptor, ::Thot::Attention::MultiHeadLatentDescriptor>) {
+                            ::Thot::Attention::Details::MultiHeadLatentAttentionOptions attention_options{};
+                            attention_options.embed_dim = attention_descriptor.options.embed_dim;
+                            attention_options.num_heads = attention_descriptor.options.num_heads;
+                            attention_options.latent_dim = attention_descriptor.options.latent_dim;
+                            attention_options.dropout = attention_descriptor.options.dropout;
+                            attention_options.bias = attention_descriptor.options.bias;
+                            attention_options.batch_first = attention_descriptor.options.batch_first;
+                            attention_options.variant = attention_descriptor.options.variant;
+                            return register_module("self_attention", ::Thot::Attention::Details::MultiHeadLatentAttention(attention_options));
                         } else {
                             throw std::invalid_argument("Unsupported attention descriptor provided to transformer encoder layer.");
                         }
@@ -577,8 +588,17 @@ namespace Thot::Block::Details::Transformer::Classic {
                             attention_options.bias = attention_descriptor.options.bias;
                             attention_options.batch_first = attention_descriptor.options.batch_first;
                             attention_options.variant = attention_descriptor.options.variant;
-                            return register_module("self_attention",
-                                                   ::Thot::Attention::Details::MultiHeadAttention(attention_options));
+                            return register_module("self_attention", ::Thot::Attention::Details::MultiHeadAttention(attention_options));
+                        } else if constexpr (std::is_same_v<Descriptor, ::Thot::Attention::MultiHeadLatentDescriptor>) {
+                            ::Thot::Attention::Details::MultiHeadLatentAttentionOptions attention_options{};
+                            attention_options.embed_dim = attention_descriptor.options.embed_dim;
+                            attention_options.num_heads = attention_descriptor.options.num_heads;
+                            attention_options.latent_dim = attention_descriptor.options.latent_dim;
+                            attention_options.dropout = attention_descriptor.options.dropout;
+                            attention_options.bias = attention_descriptor.options.bias;
+                            attention_options.batch_first = attention_descriptor.options.batch_first;
+                            attention_options.variant = attention_descriptor.options.variant;
+                            return register_module("self_attention", ::Thot::Attention::Details::MultiHeadLatentAttention(attention_options));
                         } else {
                             throw std::invalid_argument(
                                 "Unsupported attention descriptor provided to transformer decoder layer.");
@@ -599,6 +619,16 @@ namespace Thot::Block::Details::Transformer::Classic {
                             attention_options.variant = attention_descriptor.options.variant;
                             return register_module("cross_attention",
                                                    ::Thot::Attention::Details::MultiHeadAttention(attention_options));
+                        } else if constexpr (std::is_same_v<Descriptor, ::Thot::Attention::MultiHeadLatentDescriptor>) {
+                            ::Thot::Attention::Details::MultiHeadLatentAttentionOptions attention_options{};
+                            attention_options.embed_dim = attention_descriptor.options.embed_dim;
+                            attention_options.num_heads = attention_descriptor.options.num_heads;
+                            attention_options.latent_dim = attention_descriptor.options.latent_dim;
+                            attention_options.dropout = attention_descriptor.options.dropout;
+                            attention_options.bias = attention_descriptor.options.bias;
+                            attention_options.batch_first = attention_descriptor.options.batch_first;
+                            attention_options.variant = attention_descriptor.options.variant;
+                            return register_module("cross_attention", ::Thot::Attention::Details::MultiHeadLatentAttention(attention_options));
                         } else {
                             throw std::invalid_argument(
                                 "Unsupported attention descriptor provided to transformer decoder layer.");

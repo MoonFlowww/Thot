@@ -26,11 +26,27 @@ namespace Thot::Attention {
         MultiHeadOptions options{};
     };
 
-    using Descriptor = std::variant<MultiHeadDescriptor>;
+    struct MultiHeadLatentOptions {
+        std::int64_t embed_dim{};
+        std::int64_t num_heads{1};
+        std::int64_t latent_dim{128};
+        double dropout{0.0};
+        bool bias{true};
+        bool batch_first{true};
+        Variant variant{Variant::Full};
+    };
 
-    [[nodiscard]] inline auto MultiHead(const MultiHeadOptions& options) -> Descriptor
-    {
+    struct MultiHeadLatentDescriptor {
+        MultiHeadLatentOptions options{};
+    };
+
+    using Descriptor = std::variant<MultiHeadDescriptor, MultiHeadLatentDescriptor>;
+
+    [[nodiscard]] inline auto MultiHead(const MultiHeadOptions& options) -> Descriptor {
         return Descriptor{MultiHeadDescriptor{options}};
+    }
+    [[nodiscard]] inline auto MultiHeadLatent(const MultiHeadLatentOptions& options) -> Descriptor {
+        return Descriptor{MultiHeadLatentDescriptor{options}};
     }
 }
 
