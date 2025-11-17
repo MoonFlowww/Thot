@@ -868,10 +868,30 @@ namespace Thot::Evaluation::Details::Classification {
                 segmentation_targets = target_cpu;
             }
 
+            std::optional<std::size_t> inferred_classes;
+            if (target_cpu.defined() && target_cpu.numel() > 0) {
+                auto flattened = target_cpu.reshape({-1});
+                if (flattened.dtype() != torch::kLong) {
+                    flattened = flattened.to(torch::kLong);
+                }
+
+                const auto max_label = flattened.max().item<long>();
+                if (max_label >= 0) {
+                    inferred_classes = static_cast<std::size_t>(max_label) + 1;
+                }
+            }
+
+
             const std::size_t batch_classes = static_cast<std::size_t>(logits.size(1));
             const std::size_t current_batch = static_cast<std::size_t>(logits.size(0));
+
+            if (inferred_classes && batch_classes > *inferred_classes && *inferred_classes > 0) {
+                const auto start = static_cast<long>(batch_classes - *inferred_classes);
+                logits = logits.slice(/*dim=*/1, start, logits.size(1));
+            }
+            const auto effective_classes = static_cast<std::size_t>(logits.size(1));
             if (num_classes == 0) {
-                num_classes = batch_classes;
+                num_classes = effective_classes;
                 class_counts.assign(num_classes, {});
                 class_labels.resize(num_classes);
                 std::iota(class_labels.begin(), class_labels.end(), 0);
@@ -893,7 +913,7 @@ namespace Thot::Evaluation::Details::Classification {
                         curve.scores.reserve(total_samples);
                         curve.labels.reserve(total_samples);
                     }
-                } else if (num_classes != batch_classes) {
+                } else if (num_classes != effective_classes) {
                     throw std::runtime_error("Inconsistent number of classes encountered during evaluation.");
                 }
             }
@@ -1781,7 +1801,7 @@ namespace Thot::Evaluation::Details::Classification {
             };
 
             stream << '\n' << top << '\n';
-            print_row("Per-class metrics", std::vector<std::string>(num_classes));
+            print_row("Per-class", std::vector<std::string>(num_classes));
             stream << mid << '\n';
             print_row("Metric", headers);
             stream << mid << '\n';

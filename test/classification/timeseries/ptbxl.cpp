@@ -31,6 +31,76 @@ namespace {
         ECGDataset train;
         ECGDataset validation;
     };
+    std::vector<StratifiedFold> make_stratified_kfold(const torch::Tensor& labels, std::int64_t n_splits, bool shuffle = true, std::uint64_t seed = 42) {
+        TORCH_CHECK(labels.dim() == 1, "labels must be a 1D tensor");
+        auto labels_cpu = labels.to(torch::kCPU, torch::kLong);
+        const auto N = labels_cpu.size(0);
+
+        // unique sorted class labels
+        auto uniques = std::get<0>(labels_cpu.unique(/*sorted=*/true));
+        const auto n_classes = uniques.size(0);
+
+        // for each fold, list of sample indices
+        std::vector<std::vector<std::int64_t>> fold_indices(n_splits);
+
+        std::mt19937_64 rng(seed);
+
+        for (std::int64_t ci = 0; ci < n_classes; ++ci) {
+            auto cls = uniques[ci].item<std::int64_t>();
+
+            auto mask = (labels_cpu == cls);              // [N]
+            auto idx  = mask.nonzero().squeeze(1);        // [n_c]
+
+            // dump to std::vector for shuffling
+            std::vector<std::int64_t> class_idx(idx.size(0));
+            auto acc = idx.accessor<std::int64_t, 1>();
+            for (std::int64_t i = 0; i < idx.size(0); ++i) {
+                class_idx[i] = acc[i];
+            }
+
+            if (shuffle) {
+                std::shuffle(class_idx.begin(), class_idx.end(), rng);
+            }
+
+            // round-robin assignment of this class’s indices to folds
+            for (std::size_t j = 0; j < class_idx.size(); ++j) {
+                const std::size_t fold_id = j % static_cast<std::size_t>(n_splits);
+                fold_indices[fold_id].push_back(class_idx[j]);
+            }
+        }
+
+        // Build train/val tensors per fold
+        std::vector<std::int64_t> all_indices(N);
+        std::iota(all_indices.begin(), all_indices.end(), 0);
+
+        std::vector<StratifiedFold> folds;
+        folds.reserve(n_splits);
+
+        for (std::int64_t k = 0; k < n_splits; ++k) {
+            auto& val_vec = fold_indices[k];
+
+            // mark val indices
+            std::vector<char> is_val(N, 0);
+            for (auto idx : val_vec) {
+                is_val[idx] = 1;
+            }
+
+            std::vector<std::int64_t> train_vec;
+            train_vec.reserve(N - val_vec.size());
+            for (auto idx : all_indices) {
+                if (!is_val[idx]) {
+                    train_vec.push_back(idx);
+                }
+            }
+
+            auto train_idx_tensor = torch::tensor(train_vec, torch::TensorOptions().dtype(torch::kLong));
+            auto val_idx_tensor   = torch::tensor(val_vec,   torch::TensorOptions().dtype(torch::kLong));
+
+            folds.push_back({std::move(train_idx_tensor), std::move(val_idx_tensor)});
+        }
+
+        return folds;
+    }
 
 
     ECGDatasetSplit load_ptbxl_dataset(const std::string& root, bool low_res, float train_split) {
@@ -126,12 +196,21 @@ int main() {
     }
 
     const int64_t batch_size = 32;
-    const int64_t epochs = 5;
+    const int64_t epochs = 20;
+    constexpr int64_t kFolds = 5;
     const int64_t latent_dim = leads * 2; // Vm + W per lead
     const int64_t param_dim = 4;
     const int64_t num_classes = dataset.train.labels.max().item<int64_t>() + 1;
     Thot::Data::Check::Size(train_signals, "Signals");
     Thot::Data::Check::Size(dataset.train.labels, "Label dims");
+
+    std::unordered_set<long> seen;
+
+    for (int64_t i = 0; i < dataset.validation.labels.size(0); ++i) {
+        long label = dataset.train.labels[i].item<long>();
+        if (seen.insert(label).second)
+            std::cout << label << std::endl;
+    }
 
 
     model.add(Thot::Layer::Conv2d({
@@ -180,6 +259,8 @@ int main() {
     model.use_cuda(use_cuda);
     const auto device = model.device();
 
+    auto folds = make_stratified_kfold(dataset.train.labels, kFolds, /*shuffle=*/true, /*seed=*/42);
+
     auto to_device = [&device](const torch::Tensor& tensor) {
         if (!tensor.defined()) return tensor;
         const bool non_blocking = device.is_cuda() && tensor.is_pinned();
@@ -193,20 +274,26 @@ int main() {
 
         for (int64_t i = 0; i < batches; ++i) {
             const int64_t start = i * batch_size;
-            const int64_t end = std::min(start + batch_size, inputs.size(0));
-            auto pinned_inputs = async_pinn_memory(inputs.index({torch::indexing::Slice(start, end)}).contiguous());
-            auto pinned_targets = async_pinn_memory(targets.index({torch::indexing::Slice(start, end)}).contiguous());
-            auto host_inputs = pinned_inputs.materialize();
-            auto host_targets = pinned_targets.materialize();
+            const int64_t end   = std::min(start + batch_size, inputs.size(0));
 
-            auto device_inputs = to_device(host_inputs);
+            auto pinned_inputs  = async_pinn_memory(inputs.index({torch::indexing::Slice(start, end)}).contiguous());
+            auto pinned_targets = async_pinn_memory(targets.index({torch::indexing::Slice(start, end)}).contiguous());
+            auto host_inputs    = pinned_inputs.materialize();
+            auto host_targets   = pinned_targets.materialize();
+
+            auto device_inputs  = to_device(host_inputs);
             auto device_targets = to_device(host_targets).to(torch::kLong);
 
-            auto artifacts = forward_physics_informed(model, device_inputs, latent_dim, param_dim, num_classes, leads);
-            auto cls_loss = torch::nn::functional::cross_entropy(artifacts.logits, device_targets, torch::nn::functional::CrossEntropyFuncOptions().label_smoothing(0.05));
-            auto physics_loss = artifacts.physics_residual.pow(2).mean();
+            auto artifacts      = forward_physics_informed(model, device_inputs, latent_dim, param_dim, num_classes, leads);
+
+            auto cls_loss       = torch::nn::functional::cross_entropy(
+                artifacts.logits,
+                device_targets,
+                torch::nn::functional::CrossEntropyFuncOptions().label_smoothing(0.05)
+            );
+            auto physics_loss   = artifacts.physics_residual.pow(2).mean();
             auto param_sparsity = artifacts.inferred_params.abs().mean();
-            auto loss = cls_loss + 0.1 * physics_loss + 0.01 * param_sparsity;
+            auto loss           = cls_loss + 0.1 * physics_loss + 0.01 * param_sparsity;
 
             if (training) {
                 optimizer.zero_grad();
@@ -225,10 +312,44 @@ int main() {
         return running_loss / std::max<int64_t>(1, batches);
     };
 
-    for (int64_t epoch = 0; epoch < epochs; ++epoch) {
-        const auto train_loss = run_epoch(train_signals, dataset.train.labels, true);
-        const auto val_loss = run_epoch(validation_signals, dataset.validation.labels, false);
-        std::cout << "[Epoch " << (epoch + 1) << "/" << epochs << "] train=" << train_loss << " val=" << val_loss << std::endl;
+    for (int64_t fold = 0; fold < kFolds; ++fold) {
+        const auto& f = folds[fold];
+        std::cout << "\n========== Fold " << (fold + 1) << "/" << kFolds << " ==========\n";
+
+        auto x_train = train_signals.index_select(0, f.train_indices);
+        auto y_train = dataset.train.labels.index_select(0, f.train_indices);
+
+        auto x_val   = train_signals.index_select(0, f.val_indices);
+        auto y_val   = dataset.train.labels.index_select(0, f.val_indices);
+
+        Thot::Data::Check::Size(x_train, "Fold train signals");
+        Thot::Data::Check::Size(y_train, "Fold train labels");
+        Thot::Data::Check::Size(x_val,   "Fold val signals");
+        Thot::Data::Check::Size(y_val,   "Fold val labels");
+
+        for (int64_t epoch = 0; epoch < epochs; ++epoch) {
+            const auto train_loss = run_epoch(x_train, y_train, true);
+            const auto val_loss   = run_epoch(x_val,   y_val,   false);
+
+            std::cout << "[Fold " << (fold + 1) << "/" << kFolds
+                      << " | Epoch " << (epoch + 1) << "/" << epochs
+                      << "] train=" << train_loss
+                      << " val="   << val_loss  << std::endl;
+        }
+
+        std::cout << "\nFold " << (fold + 1) << " evaluation..." << std::endl;
+        model.evaluate(
+            x_val, y_val,
+            Thot::Evaluation::Classification,
+            {
+                Thot::Metric::Classification::Accuracy,
+                Thot::Metric::Classification::F1,
+                Thot::Metric::Classification::Precision,
+                Thot::Metric::Classification::Recall,
+                Thot::Metric::Classification::AUCROC,
+            },
+            {.batch_size = static_cast<std::size_t>(batch_size), .buffer_vram = 1, .print_per_class=false}
+        ); std::cout << "\n" << std::endl;
     }
 
     std::vector<Thot::Metric::Classification::Descriptor> metrics;

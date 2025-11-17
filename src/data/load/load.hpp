@@ -1936,6 +1936,7 @@ namespace Thot::Data::Load {
             } else {
                 label = Details::select_superclass_label(votes, class_to_index);
                 if (!label) continue;
+
                 rows_with_label += 1;
             }
 
