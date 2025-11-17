@@ -118,7 +118,7 @@ int main() {
     auto train_signals = prepare_signals(dataset.train.signals);
     auto validation_signals = prepare_signals(dataset.validation.signals);
 
-    const int64_t input_features = train_signals.size(2);
+    const int64_t input_features = train_signals.size(3);
     const int64_t leads = train_signals.size(1) > 1 ? train_signals.size(1) : 12;
     if (input_features <= 0) {
         std::cerr << "Dataset signals must have positive length and feature size." << std::endl;
@@ -176,6 +176,7 @@ int main() {
     Thot::Data::Transform::Normalization::Zscore(validation_signals, {.lag=30, .forward_only=true});
     Thot::Data::Check::Size(train_signals, "Zscore");
 
+    model.use_cuda(use_cuda);
     const auto device = model.device();
 
     auto to_device = [&device](const torch::Tensor& tensor) {
@@ -192,11 +193,8 @@ int main() {
         for (int64_t i = 0; i < batches; ++i) {
             const int64_t start = i * batch_size;
             const int64_t end = std::min(start + batch_size, inputs.size(0));
-            auto batch_inputs = inputs.index({torch::indexing::Slice(start, end)});
-            auto batch_targets = targets.index({torch::indexing::Slice(start, end)});
-
-            auto pinned_inputs = async_pinn_memory(batch_inputs.contiguous());
-            auto pinned_targets = async_pinn_memory(batch_targets.contiguous());
+            auto pinned_inputs = async_pinn_memory(inputs.index({torch::indexing::Slice(start, end)}).contiguous());
+            auto pinned_targets = async_pinn_memory(targets.index({torch::indexing::Slice(start, end)}).contiguous());
             auto host_inputs = pinned_inputs.materialize();
             auto host_targets = pinned_targets.materialize();
 
@@ -225,8 +223,6 @@ int main() {
 
         return running_loss / std::max<int64_t>(1, batches);
     };
-
-    model.use_cuda(use_cuda);
 
     for (int64_t epoch = 0; epoch < epochs; ++epoch) {
         const auto train_loss = run_epoch(train_signals, dataset.train.labels, true);
