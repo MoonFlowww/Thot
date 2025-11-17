@@ -1,5 +1,5 @@
-#ifndef THOT_DATA_TRANSFORMS_AUGMENTATION_COMMON_HPP
-#define THOT_DATA_TRANSFORMS_AUGMENTATION_COMMON_HPP
+#ifndef THOT_DATA_TRANSFORM_AUGMENTATION_COMMON_HPP
+#define THOT_DATA_TRANSFORM_AUGMENTATION_COMMON_HPP
 
 #include <algorithm>
 #include <cmath>
@@ -11,7 +11,7 @@
 #include <torch/nn/functional.h>
 #include <torch/torch.h>
 
-namespace Thot::Data::Transforms::Augmentation::Details {
+namespace Thot::Data::Transform::Augmentation::Details {
     inline bool augmentation_enabled(const std::optional<bool>& data_augment) {
         return !(data_augment.has_value() && !data_augment.value());
     }
@@ -168,4 +168,4 @@ namespace Thot::Data::Transforms::Augmentation::Details {
     }
 }
 
-#endif // THOT_DATA_TRANSFORMS_AUGMENTATION_COMMON_HPP
+#endif // THOT_DATA_TRANSFORM_AUGMENTATION_COMMON_HPP

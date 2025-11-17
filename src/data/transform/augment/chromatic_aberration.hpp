@@ -1,5 +1,5 @@
-#ifndef THOT_DATA_TRANSFORMS_AUGMENTATION_CHROMATIC_ABERRATION_HPP
-#define THOT_DATA_TRANSFORMS_AUGMENTATION_CHROMATIC_ABERRATION_HPP
+#ifndef THOT_DATA_TRANSFORM_AUGMENTATION_CHROMATIC_ABERRATION_HPP
+#define THOT_DATA_TRANSFORM_AUGMENTATION_CHROMATIC_ABERRATION_HPP
 
 #include <cstdint>
 #include <optional>
@@ -9,7 +9,7 @@
 
 #include "common.hpp"
 
-namespace Thot::Data::Transforms::Augmentation {
+namespace Thot::Data::Transform::Augmentation {
     namespace Options {
          struct ChromaticAberrationOptions {
              double max_shift_pixels = 2.0;
@@ -62,4 +62,4 @@ namespace Thot::Data::Transforms::Augmentation {
     }
 }
 
-#endif // THOT_DATA_TRANSFORMS_AUGMENTATION_CHROMATIC_ABERRATION_HPP
+#endif // THOT_DATA_TRANSFORM_AUGMENTATION_CHROMATIC_ABERRATION_HPP

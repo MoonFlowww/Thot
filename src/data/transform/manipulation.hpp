@@ -32,18 +32,18 @@
 #include "normalization/registry.hpp"
 
 namespace Thot::Data::Manipulation {
-    using ::Thot::Data::Transforms::Augmentation::AtmosphericDrift;
-    using ::Thot::Data::Transforms::Augmentation::ChromaticAberration;
-    using ::Thot::Data::Transforms::Augmentation::CLAHE;
-    using ::Thot::Data::Transforms::Augmentation::CloudOcclusion;
-    using ::Thot::Data::Transforms::Augmentation::Cutout;
-    using ::Thot::Data::Transforms::Augmentation::Flip;
-    using ::Thot::Data::Transforms::Augmentation::GridDistortion;
-    using ::Thot::Data::Transforms::Augmentation::OpticalDistortion;
-    using ::Thot::Data::Transforms::Augmentation::RandomBrightnessContrast;
-    using ::Thot::Data::Transforms::Augmentation::SunAngleJitter;
+    using ::Thot::Data::Transform::Augmentation::AtmosphericDrift;
+    using ::Thot::Data::Transform::Augmentation::ChromaticAberration;
+    using ::Thot::Data::Transform::Augmentation::CLAHE;
+    using ::Thot::Data::Transform::Augmentation::CloudOcclusion;
+    using ::Thot::Data::Transform::Augmentation::Cutout;
+    using ::Thot::Data::Transform::Augmentation::Flip;
+    using ::Thot::Data::Transform::Augmentation::GridDistortion;
+    using ::Thot::Data::Transform::Augmentation::OpticalDistortion;
+    using ::Thot::Data::Transform::Augmentation::RandomBrightnessContrast;
+    using ::Thot::Data::Transform::Augmentation::SunAngleJitter;
 
-    namespace Normalization = ::Thot::Data::Transforms::Normalization;
+    namespace Normalization = ::Thot::Data::Transform::Normalization;
 
     inline std::pair<torch::Tensor, torch::Tensor> Shuffle(const torch::Tensor& inputs, const torch::Tensor& targets, const std::optional<std::uint64_t>& seed = std::nullopt) {
         if (inputs.dim() == 0 || targets.dim() == 0 || inputs.size(0) == 0) {

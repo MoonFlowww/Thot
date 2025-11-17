@@ -3,8 +3,17 @@
 #include <cstddef>
 #include <string>
 #include <vector>
+#include <array>
+#include <cstdint>
+#include <optional>
 
 namespace Thot::Data::Type {
+    enum class ImageRescaleMode {
+        None,
+        Downscale,
+        Upscale
+    };
+
     struct CSVParameters {
         bool has_header = true;
         char delimiter = ',';
@@ -54,8 +63,11 @@ namespace Thot::Data::Type {
         bool grayscale = false;
         bool normalize = true;
         bool channels_first = true;
-        bool pad_to_max_tile = false;
+        bool size_to_max_tile = false;
+        std::optional<std::array<int64_t, 2>> size{};
         std::string color_order = "RGB";
+        std::optional<std::array<int64_t, 2>> rescale_to{};
+        ImageRescaleMode rescale_mode = ImageRescaleMode::None;
     };
 
     struct PNG {

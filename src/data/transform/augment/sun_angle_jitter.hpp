@@ -1,5 +1,5 @@
-#ifndef THOT_DATA_TRANSFORMS_AUGMENTATION_SUN_ANGLE_JITTER_HPP
-#define THOT_DATA_TRANSFORMS_AUGMENTATION_SUN_ANGLE_JITTER_HPP
+#ifndef THOT_DATA_TRANSFORM_AUGMENTATION_SUN_ANGLE_JITTER_HPP
+#define THOT_DATA_TRANSFORM_AUGMENTATION_SUN_ANGLE_JITTER_HPP
 
 #include <cmath>
 #include <optional>
@@ -9,7 +9,7 @@
 
 #include "common.hpp"
 
-namespace Thot::Data::Transforms::Augmentation {
+namespace Thot::Data::Transform::Augmentation {
     namespace Options {
         struct SunAngleJitterOptions {
             double base_angle_degrees = 45.0;
@@ -59,4 +59,4 @@ namespace Thot::Data::Transforms::Augmentation {
     }
 }
 
-#endif // THOT_DATA_TRANSFORMS_AUGMENTATION_SUN_ANGLE_JITTER_HPP
+#endif // THOT_DATA_TRANSFORM_AUGMENTATION_SUN_ANGLE_JITTER_HPP

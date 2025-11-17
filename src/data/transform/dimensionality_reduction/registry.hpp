@@ -1,8 +1,8 @@
-#ifndef THOT_DATA_TRANSFORMS_REGISTRY_HPP
-#define THOT_DATA_TRANSFORMS_REGISTRY_HPP
+#ifndef THOT_DATA_TRANSFORM_REGISTRY_HPP
+#define THOT_DATA_TRANSFORM_REGISTRY_HPP
 
 #include "dimensionality_reduction.hpp"
 
-namespace Thot::Data::Transforms {}
+namespace Thot::Data::Transform {}
 
-#endif // THOT_DATA_TRANSFORMS_REGISTRY_HPP
+#endif // THOT_DATA_TRANSFORM_REGISTRY_HPP

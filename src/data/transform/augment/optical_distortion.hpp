@@ -1,5 +1,5 @@
-#ifndef THOT_DATA_TRANSFORMS_AUGMENTATION_OPTICAL_DISTORTION_HPP
-#define THOT_DATA_TRANSFORMS_AUGMENTATION_OPTICAL_DISTORTION_HPP
+#ifndef THOT_DATA_TRANSFORM_AUGMENTATION_OPTICAL_DISTORTION_HPP
+#define THOT_DATA_TRANSFORM_AUGMENTATION_OPTICAL_DISTORTION_HPP
 
 #include <optional>
 #include <utility>
@@ -8,7 +8,7 @@
 
 #include "common.hpp"
 
-namespace Thot::Data::Transforms::Augmentation {
+namespace Thot::Data::Transform::Augmentation {
     namespace Options {
         struct OpticalDistortionOptions {
             std::pair<double, double> k1_range = {-0.1, 0.1};
@@ -55,4 +55,4 @@ namespace Thot::Data::Transforms::Augmentation {
     }
 }
 
-#endif // THOT_DATA_TRANSFORMS_AUGMENTATION_OPTICAL_DISTORTION_HPP
+#endif // THOT_DATA_TRANSFORM_AUGMENTATION_OPTICAL_DISTORTION_HPP

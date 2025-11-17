@@ -1,5 +1,5 @@
-#ifndef THOT_DATA_TRANSFORMS_FORMAT_HPP
-#define THOT_DATA_TRANSFORMS_FORMAT_HPP
+#ifndef THOT_DATA_TRANSFORM_FORMAT_HPP
+#define THOT_DATA_TRANSFORM_FORMAT_HPP
 
 #include <array>
 #include <optional>
@@ -9,7 +9,7 @@
 #include <torch/torch.h>
 #include <torch/nn/functional.h>
 
-namespace Thot::Data::Transforms::Format {
+namespace Thot::Data::Transform::Format {
     namespace Options {
         struct ScaleOptions {
             std::optional<std::array<int64_t, 2>> targetsize{};
@@ -99,8 +99,4 @@ namespace Thot::Data::Transforms::Format {
     }
 }
 
-namespace Thot::Data::Transform {
-    namespace Format = ::Thot::Data::Transforms::Format;
-}
-
-#endif // THOT_DATA_TRANSFORMS_FORMAT_HPP
+#endif // THOT_DATA_TRANSFORM_FORMAT_HPP

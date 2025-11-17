@@ -1,11 +1,11 @@
-#ifndef THOT_DATA_TRANSFORMS_NORMALIZATION_POWER_HPP
-#define THOT_DATA_TRANSFORMS_NORMALIZATION_POWER_HPP
+#ifndef THOT_DATA_TRANSFORM_NORMALIZATION_POWER_HPP
+#define THOT_DATA_TRANSFORM_NORMALIZATION_POWER_HPP
 
 #include <torch/torch.h>
 #include <cmath>
 #include "common.hpp"
 
-namespace Thot::Data::Transforms::Normalization {
+namespace Thot::Data::Transform::Normalization {
 
     namespace Options{
         struct BoxCoxOptions {
@@ -55,4 +55,4 @@ namespace Thot::Data::Transforms::Normalization {
 
 }
 
-#endif // THOT_DATA_TRANSFORMS_NORMALIZATION_POWER_HPP
+#endif // THOT_DATA_TRANSFORM_NORMALIZATION_POWER_HPP

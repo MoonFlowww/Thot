@@ -1,5 +1,5 @@
-#ifndef THOT_DATA_TRANSFORMS_DIMENSIONALITY_REDUCTION_COMMON_HPP
-#define THOT_DATA_TRANSFORMS_DIMENSIONALITY_REDUCTION_COMMON_HPP
+#ifndef THOT_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_COMMON_HPP
+#define THOT_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_COMMON_HPP
 
 #include <cmath>
 #include <cstddef>
@@ -7,7 +7,7 @@
 
 #include <torch/torch.h>
 
-namespace Thot::Data::Transforms::DimensionalityReduction {
+namespace Thot::Data::Transform::DimensionalityReduction {
     namespace Details {
         inline torch::Tensor shrinkage(const torch::Tensor& tensor, double tau) {
             if (tau <= 0.0) {
@@ -40,4 +40,4 @@ namespace Thot::Data::Transforms::DimensionalityReduction {
     }
 }
 
-#endif // THOT_DATA_TRANSFORMS_DIMENSIONALITY_REDUCTION_COMMON_HPP
+#endif // THOT_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_COMMON_HPP

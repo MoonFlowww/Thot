@@ -122,8 +122,8 @@ namespace {
 
             std::cout << "Epoch " << (epoch + 1) << "/" << options.epochs
                       << " | [Loss]: Dice(" << accumulated_dice  << ")"
-                      << " + BCE("        << accumulated_bce   << ")"
-                      << " = "            << accumulated_total << std::endl;
+                      << " + BCE(" << accumulated_bce   << ")"
+                      << " = " << accumulated_total << std::endl;
         }
 
         host_inputs    = torch::Tensor();
@@ -140,9 +140,7 @@ namespace {
         const auto H = class_indices.size(1);
         const auto W = class_indices.size(2);
 
-        auto options = torch::TensorOptions()
-                           .dtype(torch::kUInt8)
-                           .device(class_indices.device());
+        auto options = torch::TensorOptions().dtype(torch::kUInt8).device(class_indices.device());
 
         auto rgb = torch::zeros({B, 3, H, W}, options);
 
@@ -166,16 +164,16 @@ int main() {
     Thot::Model model("");
 
     auto [x1, y1, x2, y2] =
-        Thot::Data::Load::Universal("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/",
-            Thot::Data::Type::JPG{"images", {.grayscale = false, .normalize = false, .pad_to_max_tile=true, .color_order = "RGB"}},
-            Thot::Data::Type::PNG{"masks", {.normalize = false, .pad_to_max_tile=true, .color_order = "RGB"}}, {.train_fraction = .8f, .test_fraction = .2f, .shuffle = true});
+        Thot::Data::Load::Universal("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 3/",
+        Thot::Data::Type::JPG{"images", {.grayscale = false, .normalize = false, .size_to_max_tile=false, .size=std::array<long,2>{256, 256}, .color_order = "RGB"}},
+        Thot::Data::Type::PNG{"masks", {.normalize = false, .size=std::array<long,2>{256, 256}, .color_order = "RGB"}}, {.train_fraction = .8f, .test_fraction = .2f, .shuffle = true});
 
     Thot::Data::Check::Size(x1, "Inputs Raw");
     Thot::Data::Check::Size(y1, "Outputs Raw");
-    x1 = Thot::Data::Transform::Format::Downscale(x1, {.targetsize = std::array<int64_t, 2>{256, 256}});
-    y1 = Thot::Data::Transform::Format::Downscale(y1, {.targetsize = std::array<int64_t, 2>{256, 256}});
-    x2 = Thot::Data::Transform::Format::Downscale(x2, {.targetsize = std::array<int64_t, 2>{256, 256}});
-    y2 = Thot::Data::Transform::Format::Downscale(y2, {.targetsize = std::array<int64_t, 2>{256, 256}});
+    //x1 = Thot::Data::Transform::Format::Downscale(x1, {.targetsize = std::array<int64_t, 2>{256, 256}});
+    //y1 = Thot::Data::Transform::Format::Downscale(y1, {.targetsize = std::array<int64_t, 2>{256, 256}});
+    //x2 = Thot::Data::Transform::Format::Downscale(x2, {.targetsize = std::array<int64_t, 2>{256, 256}});
+    //y2 = Thot::Data::Transform::Format::Downscale(y2, {.targetsize = std::array<int64_t, 2>{256, 256}});
     Thot::Data::Check::Size(x1, "Inputs Resized");
     Thot::Data::Check::Size(y1, "Outputs Resized");
 
@@ -250,7 +248,7 @@ int main() {
     //Custom loop for dual-loss
     CustomTrainingOptions training_options{};
     training_options.epochs = 100;
-    training_options.batch_size = 16;
+    training_options.batch_size = 12;
     training_options.dice_weight = 0.6;
     training_options.bce_weight = 1-training_options.dice_weight;
 

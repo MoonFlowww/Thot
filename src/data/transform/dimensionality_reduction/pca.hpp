@@ -1,5 +1,5 @@
-#ifndef THOT_DATA_TRANSFORMS_DIMENSIONALITY_REDUCTION_PCA_HPP
-#define THOT_DATA_TRANSFORMS_DIMENSIONALITY_REDUCTION_PCA_HPP
+#ifndef THOT_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_PCA_HPP
+#define THOT_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_PCA_HPP
 
 #include <algorithm>
 #include <cstddef>
@@ -11,7 +11,7 @@
 #include "common.hpp"
 #include "../../../core.hpp"
 
-namespace Thot::Data::Transforms::DimensionalityReduction {
+namespace Thot::Data::Transform::DimensionalityReduction {
     struct PCAResult {
         torch::Tensor components;
         torch::Tensor explained_variance;
@@ -107,4 +107,4 @@ namespace Thot::Data::Transforms::DimensionalityReduction {
     }
 }
 
-#endif // THOT_DATA_TRANSFORMS_DIMENSIONALITY_REDUCTION_PCA_HPP
+#endif // THOT_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_PCA_HPP
