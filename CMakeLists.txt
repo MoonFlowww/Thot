@@ -195,5 +195,6 @@ add_executable(test_Thot test/classification/masks/dubai_segment.cpp #classifica
         src/data/transform/format/format.hpp
         src/layer/details/resizing.hpp
         src/attention/details/latent.hpp
+        src/attention/builder.hpp
 )
 target_link_libraries(test_Thot PRIVATE Thot ${OpenCV_LIBS})

@@ -162,7 +162,7 @@ namespace Thot::Data::Transform::Normalization {
 
     inline at::Tensor StandardizeToTarget(const at::Tensor& x_in, const Options::StandardizeToTargetOptions opt) {
         using namespace Details;
-        auto z = Zscore(x_in, Options::ZscoreOptions{
+        auto z = Zscore(x_in, ::Thot::Data::Transform::Normalization::Options::ZscoreOptions{
             .lag = opt.lag,
             .temporal_dim = opt.temporal_dim,
             .forward_only = opt.forward_only,

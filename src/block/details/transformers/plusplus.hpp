@@ -19,7 +19,7 @@
 
 #include "../../../activation/activation.hpp"
 #include "../../../activation/apply.hpp"
-#include "../../../attention/details/head.hpp"
+#include "../../../attention/builder.hpp"
 #include "../../../attention/attention.hpp"
 #include "../../../initialization/initialization.hpp"
 #include "../../../layer/details/positional_encoding.hpp"
@@ -452,27 +452,7 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
                         "Hybrid attention requires a positive embedding dimension.");
                 }
 
-                attention_ = std::visit(
-                    [&](auto&& attention_descriptor) {
-                        using Descriptor = std::decay_t<decltype(attention_descriptor)>;
-                        if constexpr (std::is_same_v<Descriptor,
-                                                     ::Thot::Attention::MultiHeadDescriptor>) {
-                            ::Thot::Attention::Details::MultiHeadAttentionOptions attention_options{};
-                            attention_options.embed_dim = attention_descriptor.options.embed_dim;
-                            attention_options.num_heads = attention_descriptor.options.num_heads;
-                            attention_options.dropout = attention_descriptor.options.dropout;
-                            attention_options.bias = attention_descriptor.options.bias;
-                            attention_options.batch_first = attention_descriptor.options.batch_first;
-                            attention_options.variant = attention_descriptor.options.variant;
-                            return register_module(
-                                "self_attention",
-                                ::Thot::Attention::Details::MultiHeadAttention(attention_options));
-                        } else {
-                            throw std::invalid_argument(
-                                "Unsupported attention descriptor provided to hybrid attention.");
-                        }
-                    },
-                    std::move(descriptor.attention));
+                attention_ = ::Thot::Attention::Details::register_attention(*this, "self_attention", std::move(descriptor.attention));
 
                 if (use_convolution_) {
                     if (descriptor.convolution_kernel_size <= 0) {
@@ -500,13 +480,8 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
                 }
             }
 
-            torch::Tensor forward(const torch::Tensor& query,
-                                  const torch::Tensor& key,
-                                  const torch::Tensor& value,
-                                  const torch::Tensor& attn_mask,
-                                  const torch::Tensor& key_padding_mask)
-            {
-                auto attention = attention_->forward(query, key, value, attn_mask, key_padding_mask);
+            torch::Tensor forward(const torch::Tensor& query, const torch::Tensor& key, const torch::Tensor& value, const torch::Tensor& attn_mask, const torch::Tensor& key_padding_mask) {
+                auto attention = ::Thot::Attention::Details::forward_attention(attention_, query, key, value, attn_mask, key_padding_mask);
 
                 if (use_convolution_ && convolution_) {
                     auto context = query.transpose(1, 2);
@@ -528,7 +503,7 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
 
         private:
             bool use_convolution_{false};
-            ::Thot::Attention::Details::MultiHeadAttention attention_{nullptr};
+            ::Thot::Attention::Details::AttentionModule attention_{};
             torch::nn::Conv1d convolution_{nullptr};
             torch::nn::Dropout convolution_dropout_{nullptr};
             torch::Tensor conv_alpha_{};
@@ -719,27 +694,7 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
                     "self_attention",
                     HybridAttention(std::move(descriptor.self_attention), embed_dim_));
 
-                cross_attention_ = std::visit(
-                    [&](auto&& attention_descriptor) {
-                        using Descriptor = std::decay_t<decltype(attention_descriptor)>;
-                        if constexpr (std::is_same_v<Descriptor,
-                                                     ::Thot::Attention::MultiHeadDescriptor>) {
-                            ::Thot::Attention::Details::MultiHeadAttentionOptions attention_options{};
-                            attention_options.embed_dim = attention_descriptor.options.embed_dim;
-                            attention_options.num_heads = attention_descriptor.options.num_heads;
-                            attention_options.dropout = attention_descriptor.options.dropout;
-                            attention_options.bias = attention_descriptor.options.bias;
-                            attention_options.batch_first = attention_descriptor.options.batch_first;
-                            attention_options.variant = attention_descriptor.options.variant;
-                            return register_module(
-                                "cross_attention",
-                                ::Thot::Attention::Details::MultiHeadAttention(attention_options));
-                        } else {
-                            throw std::invalid_argument(
-                                "Unsupported attention descriptor provided to transformer decoder layer.");
-                        }
-                    },
-                    std::move(descriptor.cross_attention));
+                cross_attention_ = ::Thot::Attention::Details::register_attention(*this, "cross_attention", std::move(descriptor.cross_attention));
 
                 std::size_t module_index = 0;
                 auto register_layer = [&](::Thot::Layer::Descriptor layer_descriptor) {
@@ -785,8 +740,7 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
 
                 residual = output;
                 auto cross_input = norm2_->forward(output);
-                auto cross_attention = cross_attention_->forward(
-                    cross_input, memory, memory, memory_mask, memory_key_padding_mask);
+                auto cross_attention = ::Thot::Attention::Details::forward_attention(cross_attention_, cross_input, memory, memory, memory_mask, memory_key_padding_mask);
                 if (cross_attention_dropout_.forward) {
                     cross_attention = cross_attention_dropout_.forward(std::move(cross_attention));
                     cross_attention = ::Thot::Activation::Details::apply(
@@ -818,7 +772,7 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
             std::int64_t embed_dim_{};
             LayerNormOptions layer_norm_options_{};
             HybridAttention self_attention_{nullptr};
-            ::Thot::Attention::Details::MultiHeadAttention cross_attention_{nullptr};
+            ::Thot::Attention::Details::AttentionModule cross_attention_{};
             torch::nn::LayerNorm norm1_{nullptr};
             torch::nn::LayerNorm norm2_{nullptr};
             torch::nn::LayerNorm norm3_{nullptr};

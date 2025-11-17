@@ -744,7 +744,7 @@ namespace Thot::Data::Load {
 
                 if (result.normalized.size() != 3) {
                     throw std::runtime_error("Image color order must contain exactly the letters R, G, and B once each ("
-                                             "received '" + result.normalized + "').");
+                        "received '" + result.normalized + "').");
                 }
 
                 auto letter_index = [](char c) -> int {
@@ -816,20 +816,14 @@ namespace Thot::Data::Load {
 
                 torch::Tensor tensor;
                 if (descriptor.parameters.grayscale) {
-                    tensor = torch::from_blob(image_float.data,
-                                              {image_float.rows, image_float.cols},
-                                              options)
-                                  .clone();
+                    tensor = torch::from_blob(image_float.data, {image_float.rows, image_float.cols}, options).clone();
                     if (descriptor.parameters.channels_first) {
                         tensor = tensor.unsqueeze(0);
                     } else {
                         tensor = tensor.unsqueeze(2);
                     }
                 } else {
-                    tensor = torch::from_blob(image_float.data,
-                                              {image_float.rows, image_float.cols, 3},
-                                              options)
-                                  .clone();
+                    tensor = torch::from_blob(image_float.data, {image_float.rows, image_float.cols, 3}, options).clone();
                     if (descriptor.parameters.channels_first) {
                         tensor = tensor.permute({2, 0, 1});
                     }
@@ -880,17 +874,17 @@ namespace Thot::Data::Load {
                         const bool needs_upscale = rows < (*target_size)[0] || cols < (*target_size)[1];
 
                         auto [working, was_permuted] = to_channels_first(samples[i]);
-                        Thot::Data::Transforms::Format::Options::ScaleOptions options;
-                        options.targetsize = target_size;
+                        Thot::Data::Transform::Format::Options::ScaleOptions options;
+                        options.size = target_size;
                         if (needs_downscale && !needs_upscale) {
-                            working = Thot::Data::Transform::Format::Downscale(working, options);
+                            working = Thot::Data::Transform::Format::Downsample(working, options);
                         } else if (needs_upscale && !needs_downscale) {
-                            working = Thot::Data::Transform::Format::Upscale(working, options);
+                            working = Thot::Data::Transform::Format::Upsample(working, options);
                         } else if (needs_downscale) {
                             // Mixed dimensions larger/smaller: treat as downscale to avoid overshooting.
-                            working = Thot::Data::Transform::Format::Downscale(working, options);
+                            working = Thot::Data::Transform::Format::Downsample(working, options);
                         } else if (needs_upscale) {
-                            working = Thot::Data::Transform::Format::Upscale(working, options);
+                            working = Thot::Data::Transform::Format::Upsample(working, options);
                         }
 
                         samples[i] = restore_layout(working, was_permuted);
@@ -900,8 +894,7 @@ namespace Thot::Data::Load {
 
             auto batch = torch::stack(samples);
 
-            const bool needs_rescale = image_params.rescale_mode != Type::ImageRescaleMode::None &&
-                                       image_params.rescale_to.has_value();
+            const bool needs_rescale = image_params.rescale_mode != Type::ImageRescaleMode::None && image_params.rescale_to.has_value();
 
             if (needs_rescale) {
                 const auto target_size = *image_params.rescale_to;
@@ -926,8 +919,8 @@ namespace Thot::Data::Load {
 
                 auto apply_resize = [&](auto resize_fn) {
                     auto [working, permuted] = to_channels_first(batch);
-                    Thot::Data::Transforms::Format::Options::ScaleOptions options;
-                    options.targetsize = target_size;
+                    Thot::Data::Transform::Format::Options::ScaleOptions options;
+                    options.size = target_size;
                     working = resize_fn(working, options);
                     batch = restore_layout(working, permuted);
                 };
@@ -935,16 +928,16 @@ namespace Thot::Data::Load {
                 switch (image_params.rescale_mode) {
                     case Type::ImageRescaleMode::Downscale:
                         apply_resize([](const torch::Tensor& tensor,
-                                        const Thot::Data::Transforms::Format::Options::ScaleOptions& options) {
-                            Thot::Data::Transforms::Format::Options::DownscaleOptions downscale_options = options;
-                            return Thot::Data::Transform::Format::Downscale(tensor, downscale_options);
+                                        const Thot::Data::Transform::Format::Options::ScaleOptions& options) {
+                            Thot::Data::Transform::Format::Options::DownsampleOptions downscale_options = options;
+                            return Thot::Data::Transform::Format::Downsample(tensor, downscale_options);
                         });
                         break;
                     case Type::ImageRescaleMode::Upscale:
                         apply_resize([](const torch::Tensor& tensor,
-                                        const Thot::Data::Transforms::Format::Options::ScaleOptions& options) {
-                            Thot::Data::Transforms::Format::Options::UpscaleOptions upscale_options = options;
-                            return Thot::Data::Transform::Format::Upscale(tensor, upscale_options);
+                                        const Thot::Data::Transform::Format::Options::ScaleOptions& options) {
+                            Thot::Data::Transform::Format::Options::UpsampleOptions upscale_options = options;
+                            return Thot::Data::Transform::Format::Upsample(tensor, upscale_options);
                         });
                         break;
                     default:

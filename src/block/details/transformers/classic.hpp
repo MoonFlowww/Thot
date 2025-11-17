@@ -21,8 +21,7 @@
 
 #include "../../../activation/activation.hpp"
 #include "../../../activation/apply.hpp"
-#include "../../../attention/details/head.hpp"
-#include "../../../attention/details/latent.hpp"
+#include "../../../attention/builder.hpp"
 #include "../../../attention/attention.hpp"
 #include "../../../initialization/initialization.hpp"
 #include "../../../layer/details/positional_encoding.hpp"
@@ -404,34 +403,7 @@ namespace Thot::Block::Details::Transformer::Classic {
                 norm1_ = register_module("norm1", torch::nn::LayerNorm(norm_options));
                 norm2_ = register_module("norm2", torch::nn::LayerNorm(norm_options));
 
-                attention_ = std::visit(
-                    [&](auto&& attention_descriptor) {
-                        using Descriptor = std::decay_t<decltype(attention_descriptor)>;
-                        if constexpr (std::is_same_v<Descriptor, ::Thot::Attention::MultiHeadDescriptor>) {
-                            ::Thot::Attention::Details::MultiHeadAttentionOptions attention_options{};
-                            attention_options.embed_dim = attention_descriptor.options.embed_dim;
-                            attention_options.num_heads = attention_descriptor.options.num_heads;
-                            attention_options.dropout = attention_descriptor.options.dropout;
-                            attention_options.bias = attention_descriptor.options.bias;
-                            attention_options.batch_first = attention_descriptor.options.batch_first;
-                            attention_options.variant = attention_descriptor.options.variant;
-                            return register_module("self_attention",
-                                                   ::Thot::Attention::Details::MultiHeadAttention(attention_options));
-                        } else if constexpr (std::is_same_v<Descriptor, ::Thot::Attention::MultiHeadLatentDescriptor>) {
-                            ::Thot::Attention::Details::MultiHeadLatentAttentionOptions attention_options{};
-                            attention_options.embed_dim = attention_descriptor.options.embed_dim;
-                            attention_options.num_heads = attention_descriptor.options.num_heads;
-                            attention_options.latent_dim = attention_descriptor.options.latent_dim;
-                            attention_options.dropout = attention_descriptor.options.dropout;
-                            attention_options.bias = attention_descriptor.options.bias;
-                            attention_options.batch_first = attention_descriptor.options.batch_first;
-                            attention_options.variant = attention_descriptor.options.variant;
-                            return register_module("self_attention", ::Thot::Attention::Details::MultiHeadLatentAttention(attention_options));
-                        } else {
-                            throw std::invalid_argument("Unsupported attention descriptor provided to transformer encoder layer.");
-                        }
-                    },
-                    std::move(descriptor.attention));
+                attention_ = ::Thot::Attention::Details::register_attention(*this, "self_attention", std::move(descriptor.attention));
 
                 std::size_t module_index = 0;
                 auto register_layer = [&](::Thot::Layer::Descriptor layer_descriptor) {
@@ -462,7 +434,7 @@ namespace Thot::Block::Details::Transformer::Classic {
 
                 auto residual = output;
                 auto normalised = norm1_->forward(residual);
-                auto attention = attention_->forward(normalised, normalised, normalised, attn_mask, key_padding_mask);
+                auto attention = ::Thot::Attention::Details::forward_attention(attention_, normalised, normalised, normalised, attn_mask, key_padding_mask);
                 if (attention_dropout_.forward) {
                     attention = attention_dropout_.forward(std::move(attention));
                     attention = ::Thot::Activation::Details::apply(attention_dropout_.activation, std::move(attention));
@@ -491,7 +463,7 @@ namespace Thot::Block::Details::Transformer::Classic {
         private:
             std::int64_t embed_dim_{};
             LayerNormOptions layer_norm_options_{};
-            ::Thot::Attention::Details::MultiHeadAttention attention_{nullptr};
+            ::Thot::Attention::Details::AttentionModule attention_{};
             torch::nn::LayerNorm norm1_{nullptr};
             torch::nn::LayerNorm norm2_{nullptr};
             ::Thot::Layer::Details::RegisteredLayer attention_dropout_{};
@@ -577,64 +549,9 @@ namespace Thot::Block::Details::Transformer::Classic {
                 norm2_ = register_module("norm2", torch::nn::LayerNorm(norm_options));
                 norm3_ = register_module("norm3", torch::nn::LayerNorm(norm_options));
 
-                self_attention_ = std::visit(
-                    [&](auto&& attention_descriptor) {
-                        using Descriptor = std::decay_t<decltype(attention_descriptor)>;
-                        if constexpr (std::is_same_v<Descriptor, ::Thot::Attention::MultiHeadDescriptor>) {
-                            ::Thot::Attention::Details::MultiHeadAttentionOptions attention_options{};
-                            attention_options.embed_dim = attention_descriptor.options.embed_dim;
-                            attention_options.num_heads = attention_descriptor.options.num_heads;
-                            attention_options.dropout = attention_descriptor.options.dropout;
-                            attention_options.bias = attention_descriptor.options.bias;
-                            attention_options.batch_first = attention_descriptor.options.batch_first;
-                            attention_options.variant = attention_descriptor.options.variant;
-                            return register_module("self_attention", ::Thot::Attention::Details::MultiHeadAttention(attention_options));
-                        } else if constexpr (std::is_same_v<Descriptor, ::Thot::Attention::MultiHeadLatentDescriptor>) {
-                            ::Thot::Attention::Details::MultiHeadLatentAttentionOptions attention_options{};
-                            attention_options.embed_dim = attention_descriptor.options.embed_dim;
-                            attention_options.num_heads = attention_descriptor.options.num_heads;
-                            attention_options.latent_dim = attention_descriptor.options.latent_dim;
-                            attention_options.dropout = attention_descriptor.options.dropout;
-                            attention_options.bias = attention_descriptor.options.bias;
-                            attention_options.batch_first = attention_descriptor.options.batch_first;
-                            attention_options.variant = attention_descriptor.options.variant;
-                            return register_module("self_attention", ::Thot::Attention::Details::MultiHeadLatentAttention(attention_options));
-                        } else {
-                            throw std::invalid_argument(
-                                "Unsupported attention descriptor provided to transformer decoder layer.");
-                        }
-                    },
-                    std::move(descriptor.self_attention));
+                self_attention_ = ::Thot::Attention::Details::register_attention(*this, "self_attention", std::move(descriptor.self_attention));
 
-                cross_attention_ = std::visit(
-                    [&](auto&& attention_descriptor) {
-                        using Descriptor = std::decay_t<decltype(attention_descriptor)>;
-                        if constexpr (std::is_same_v<Descriptor, ::Thot::Attention::MultiHeadDescriptor>) {
-                            ::Thot::Attention::Details::MultiHeadAttentionOptions attention_options{};
-                            attention_options.embed_dim = attention_descriptor.options.embed_dim;
-                            attention_options.num_heads = attention_descriptor.options.num_heads;
-                            attention_options.dropout = attention_descriptor.options.dropout;
-                            attention_options.bias = attention_descriptor.options.bias;
-                            attention_options.batch_first = attention_descriptor.options.batch_first;
-                            attention_options.variant = attention_descriptor.options.variant;
-                            return register_module("cross_attention",
-                                                   ::Thot::Attention::Details::MultiHeadAttention(attention_options));
-                        } else if constexpr (std::is_same_v<Descriptor, ::Thot::Attention::MultiHeadLatentDescriptor>) {
-                            ::Thot::Attention::Details::MultiHeadLatentAttentionOptions attention_options{};
-                            attention_options.embed_dim = attention_descriptor.options.embed_dim;
-                            attention_options.num_heads = attention_descriptor.options.num_heads;
-                            attention_options.latent_dim = attention_descriptor.options.latent_dim;
-                            attention_options.dropout = attention_descriptor.options.dropout;
-                            attention_options.bias = attention_descriptor.options.bias;
-                            attention_options.batch_first = attention_descriptor.options.batch_first;
-                            attention_options.variant = attention_descriptor.options.variant;
-                            return register_module("cross_attention", ::Thot::Attention::Details::MultiHeadLatentAttention(attention_options));
-                        } else {
-                            throw std::invalid_argument(
-                                "Unsupported attention descriptor provided to transformer decoder layer.");
-                        }
-                    },
-                    std::move(descriptor.cross_attention));
+                cross_attention_ = ::Thot::Attention::Details::register_attention(*this, "cross_attention", std::move(descriptor.cross_attention));
 
                 std::size_t module_index = 0;
                 auto register_layer = [&](::Thot::Layer::Descriptor layer_descriptor) {
