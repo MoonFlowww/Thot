@@ -11,7 +11,7 @@
 
 namespace Thot::Attention::Details {
     struct MultiHeadAttentionOptions {
-        std::int64_t embed_dim{};
+        std::int64_t embed_dim{1};
         std::int64_t num_heads{1};
         double dropout{0.0};
         bool bias{true};
@@ -21,9 +21,8 @@ namespace Thot::Attention::Details {
 
     class MultiHeadAttentionImpl : public torch::nn::Module {
     public:
-        explicit MultiHeadAttentionImpl(MultiHeadAttentionOptions options)
-            : options_(std::move(options))
-        {
+        MultiHeadAttentionImpl() : MultiHeadAttentionImpl(MultiHeadAttentionOptions{}) {}
+        explicit MultiHeadAttentionImpl(MultiHeadAttentionOptions options) : options_(std::move(options)) {
             if (options_.num_heads <= 0) {
                 throw std::invalid_argument("Multi-head attention requires a positive number of heads.");
             }
