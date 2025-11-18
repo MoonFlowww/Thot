@@ -7,8 +7,8 @@ int main() {
     model.use_cuda(torch::cuda::is_available());
 
     model.add(Thot::Layer::Flatten());
-    model.add(Thot::Layer::FC({.in_features=3*28*28, .out_features=3*8*8}, Thot::Activation::GeLU, Thot::Initialization::HeUniform));
-    model.add(Thot::Layer::FC({.in_features=3*8*8, .out_features=8*8}, Thot::Activation::GeLU, Thot::Initialization::HeUniform));
+    model.add(Thot::Layer::FC({.in_features=28*28, .out_features=8*8}, Thot::Activation::GeLU, Thot::Initialization::HeUniform));
+    model.add(Thot::Layer::FC({.in_features=8*8, .out_features=8*8}, Thot::Activation::GeLU, Thot::Initialization::HeUniform));
     model.add(Thot::Layer::FC({.in_features=8*8, .out_features=10}, Thot::Activation::Identity, Thot::Initialization::HeUniform));
 
     model.to(device);
