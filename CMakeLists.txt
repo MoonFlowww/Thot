@@ -96,7 +96,7 @@ target_link_libraries(Thot "${TORCH_LIBRARIES}" Boost::filesystem ${OpenCV_LIBS}
 target_include_directories(Thot PUBLIC ${CMAKE_SOURCE_DIR}/include ${TORCH_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS})
 
 #Test
-add_executable(test_Thot test/ntk_test.cpp #classification/timeseries/ptbxl.cpp #regression/timeseries/etth.cpp #images/cifar10.cpp
+add_executable(test_Thot  #classification/timeseries/ptbxl.cpp #regression/timeseries/etth.cpp #images/cifar10.cpp
         src/block/details/blocks/residual.hpp
         src/block/details/blocks/sequential.hpp
         src/lrscheduler/details/common.hpp
@@ -201,6 +201,5 @@ add_executable(test_Thot test/ntk_test.cpp #classification/timeseries/ptbxl.cpp 
         src/solver/solver.hpp
         src/solver/details/sde.hpp
         src/solver/details/ode.hpp
-        test/ntk_test.cpp
 )
 target_link_libraries(test_Thot PRIVATE Thot ${OpenCV_LIBS})

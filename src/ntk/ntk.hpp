@@ -349,6 +349,7 @@ namespace Thot::NTK {
         };
 
         torch::Tensor features = grad_matrix;
+
         torch::Tensor kernel;
         torch::Tensor c_matrix;
         torch::Tensor w_inv;
@@ -582,11 +583,7 @@ namespace Thot::NTK {
                 within_values.push_back(mean_sub);
             }
 
-            std::vector<int64_t> all_indices(num_samples);
-            std::iota(all_indices.begin(), all_indices.end(), 0);
-            auto all_idx_tensor = torch::tensor(all_indices, torch::TensorOptions().dtype(torch::kLong));
-            auto full_matrix = kernel.index({all_idx_tensor, all_idx_tensor});
-            auto between_mask = torch::zeros_like(full_matrix, torch::TensorOptions().dtype(torch::kBool));
+            auto between_mask = torch::zeros_like(kernel, torch::TensorOptions().dtype(torch::kBool));
 
             for (const auto& [label_i, idxs_i] : by_class) {
                 for (const auto& [label_j, idxs_j] : by_class) {
@@ -599,7 +596,9 @@ namespace Thot::NTK {
                 }
             }
 
-            auto between = full_matrix.masked_select(between_mask);
+            auto between = kernel.masked_select(between_mask);
+
+
             if (between.numel() > 0) {
                 stats.between_class_mean = between.mean().template item<double>();
                 stats.between_class_std = detail::compute_std(between);
