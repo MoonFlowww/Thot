@@ -92,6 +92,8 @@
 #include "regularization/apply.hpp"
 #include "calibration/calibration.hpp"
 #include "solver/solver.hpp"
+#include "training/kfold.hpp"
+
 namespace Thot {
     template <class... Ts>
     struct Overloaded : Ts... {

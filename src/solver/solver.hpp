@@ -73,7 +73,7 @@ namespace Thot::Solver {
         Runtime() = default;
         explicit Runtime(Descriptor descriptor_) : descriptor(std::move(descriptor_)) {}
 
-        [[nodiscard]] torch::Tensor integrate(torch::Tensor state, const BaseStep& base_step) const;
+        [[nodiscard]] inline torch::Tensor integrate(torch::Tensor state, const BaseStep& base_step) const;
     };
 
 }

@@ -126,6 +126,8 @@ namespace Thot::NTK {
     };
 
     namespace detail {
+        template <typename T>
+        struct dependent_false : std::false_type {};
         inline torch::Tensor flatten_grads(const std::vector<torch::Tensor>& grads) {
             if (grads.empty()) {
                 return torch::zeros({0}, torch::TensorOptions().dtype(torch::kFloat32));
@@ -150,7 +152,7 @@ namespace Thot::NTK {
             }
             auto mean = values.mean();
             auto var = (values - mean).pow(2).mean();
-            return var.item<double>() > 0.0 ? std::sqrt(var.item<double>()) : 0.0;
+            return var.template item<double>() > 0.0 ? std::sqrt(var.template item<double>()) : 0.0;
         }
 
         inline double percentile(std::vector<double> values, double p) {
@@ -256,16 +258,45 @@ namespace Thot::NTK {
         stats.normalized_diag = options.normalize_diag;
         stats.sample_indices = sample_indices;
 
-        auto& module_ref = [&]() -> torch::nn::Module& {
-            if constexpr (std::is_pointer_v<std::decay_t<Model>>) {
+        using ModelT = std::decay_t<Model>;
+        using ModuleType = std::conditional_t<std::is_pointer_v<ModelT>, std::remove_pointer_t<ModelT>, ModelT>;
+
+        auto& module_ref = [&]() -> ModuleType& {
+            if constexpr (std::is_pointer_v<ModelT>) {
                 return *model;
             } else {
                 return model;
             }
         }();
+        auto fetch_parameters = [&](auto& mod) {
+            if constexpr (requires { mod.parameters(); }) {
+                return mod.parameters();
+            } else if constexpr (requires { (*mod).parameters(); }) {
+                return (*mod).parameters();
+            } else {
+                static_assert(detail::dependent_false<std::decay_t<decltype(mod)>>::value,
+                              "Model must expose parameters() or operator->().parameters()");
+            }
+        };
+
+        auto call_forward = [&](auto& mod, const torch::Tensor& input) {
+            if constexpr (requires { mod.forward(input); }) {
+                return mod.forward(input);
+            } else if constexpr (requires { (*mod).forward(input); }) {
+                return (*mod).forward(input);
+            } else if constexpr (requires { mod(input); }) {
+                return mod(input);
+            } else if constexpr (requires { (*mod)(input); }) {
+                return (*mod)(input);
+            } else {
+                static_assert(detail::dependent_false<std::decay_t<decltype(mod)>>::value,
+                              "Model must provide a forward method or call operator");
+            }
+        };
+
 
         std::vector<torch::Tensor> params;
-        for (const auto& p : module_ref.parameters()) {
+        for (const auto& p : fetch_parameters(module_ref)) {
             if (p.requires_grad()) {
                 params.push_back(p);
                 stats.n_params_effective += p.numel();
@@ -276,7 +307,7 @@ namespace Thot::NTK {
         flattened_grads.reserve(num_samples);
         for (int64_t i = 0; i < num_samples; ++i) {
             auto sample = inputs[i];
-            auto output = module_ref.forward(sample.unsqueeze(0));
+            auto output = call_forward(module_ref, sample.unsqueeze(0));
             torch::Tensor scalar_output = output;
             if (output.defined() && output.numel() > 1) {
                 switch (options.output_mode) {
@@ -381,23 +412,23 @@ namespace Thot::NTK {
         }
 
         if (kernel.defined()) {
-            stats.trace = kernel.diag().sum().item<double>();
-            stats.frobenius_norm = kernel.norm().item<double>();
-            stats.max_abs_entry = kernel.abs().max().item<double>();
-            stats.symmetry_error_max = (kernel - kernel.transpose(0, 1)).abs().max().item<double>();
+            stats.trace = kernel.diag().sum().template item<double>();
+            stats.frobenius_norm = kernel.norm().template item<double>();
+            stats.max_abs_entry = kernel.abs().max().template item<double>();
+            stats.symmetry_error_max = (kernel - kernel.transpose(0, 1)).abs().max().template item<double>();
         } else {
-            stats.trace = diag_estimate.sum().item<double>();
+            stats.trace = diag_estimate.sum().template item<double>();
 
             const auto hv_samples = std::max<int64_t>(1, std::min<int64_t>(options.operator_iterations, num_samples));
             double hv_accum = 0.0;
             for (int64_t i = 0; i < hv_samples; ++i) {
                 auto r = torch::randn({num_samples, 1}, features.options());
                 auto hv = matvec(r);
-                hv_accum += torch::matmul(r.transpose(0, 1), hv).item<double>();
+                hv_accum += torch::matmul(r.transpose(0, 1), hv).template item<double>();
             }
             hv_accum /= static_cast<double>(hv_samples);
             stats.frobenius_norm = std::sqrt(std::max(hv_accum, 0.0));
-            stats.max_abs_entry = diag_estimate.max().item<double>();
+            stats.max_abs_entry = diag_estimate.max().template item<double>();
             stats.symmetry_error_max = 0.0;
         }
 
@@ -406,10 +437,10 @@ namespace Thot::NTK {
                 auto kernel_cpu = kernel.to(torch::kCPU, /*non_blocking=*/true).to(torch::kFloat64);
                 auto eig = torch::linalg_eigh(kernel_cpu);
                 auto eigenvalues = std::get<0>(eig);
-                stats.rank_estimate = torch::linalg_matrix_rank(kernel_cpu).item<int64_t>();
+                stats.rank_estimate = torch::linalg_matrix_rank(kernel_cpu).template item<int64_t>();
                 const auto eigen_vec = eigenvalues.contiguous();
                 std::vector<double> eigen_list(eigen_vec.numel());
-                std::memcpy(eigen_list.data(), eigen_vec.data_ptr<double>(), eigen_vec.numel() * sizeof(double));
+                std::memcpy(eigen_list.data(), eigen_vec.template data_ptr<double>(), eigen_vec.numel() * sizeof(double));
 
                 if (!eigen_list.empty()) {
                     std::sort(eigen_list.begin(), eigen_list.end(), std::greater<>());
@@ -457,7 +488,7 @@ namespace Thot::NTK {
                     double lambda = 0.0;
                     for (int64_t i = 0; i < iters; ++i) {
                         auto mv = matvec(v);
-                        lambda = (v.transpose(0, 1).matmul(mv)).item<double>() / (v.transpose(0, 1).matmul(v)).item<double>();
+                        lambda = (v.transpose(0, 1).matmul(mv)).template item<double>() / (v.transpose(0, 1).matmul(v)).template item<double>();
                         v = mv / mv.norm();
                     }
                     return lambda;
@@ -474,9 +505,9 @@ namespace Thot::NTK {
                         if (q_prev.defined()) {
                             z = z - betas.back() * q_prev;
                         }
-                        const double alpha = (q.transpose(0, 1).matmul(z)).item<double>();
+                        const double alpha = (q.transpose(0, 1).matmul(z)).template item<double>();
                         z = z - alpha * q;
-                        const double beta = z.norm().item<double>();
+                        const double beta = z.norm().template item<double>();
                         alphas.push_back(alpha);
                         if (beta < 1e-10) {
                             break;
@@ -506,7 +537,7 @@ namespace Thot::NTK {
                     auto eigs = lanczos(std::min<int64_t>(options.top_k_eigs, num_samples));
                     auto eig_list = eigs.contiguous();
                     stats.top_eigenvalues.resize(eig_list.numel());
-                    std::memcpy(stats.top_eigenvalues.data(), eig_list.data_ptr<double>(), eig_list.numel() * sizeof(double));
+                    std::memcpy(stats.top_eigenvalues.data(), eig_list.template data_ptr<double>(), eig_list.numel() * sizeof(double));
                     std::sort(stats.top_eigenvalues.begin(), stats.top_eigenvalues.end(), std::greater<>());
                     stats.lambda_max = !stats.top_eigenvalues.empty() ? stats.top_eigenvalues.front() : stats.lambda_max;
                 }
@@ -515,14 +546,14 @@ namespace Thot::NTK {
         }
 
         auto diag = kernel.defined() ? kernel.diag() : diag_estimate;
-        stats.diag_mean = diag.mean().item<double>();
+        stats.diag_mean = diag.mean().template item<double>();
         stats.diag_std = detail::compute_std(diag);
 
         if (kernel.defined()) {
             auto mask = torch::ones_like(kernel, torch::TensorOptions().dtype(torch::kBool));
             mask.diagonal().fill_(false);
             auto offdiag = kernel.masked_select(mask);
-            stats.offdiag_mean = offdiag.numel() > 0 ? offdiag.mean().item<double>() : 0.0;
+            stats.offdiag_mean = offdiag.numel() > 0 ? offdiag.mean().template item<double>() : 0.0;
             stats.offdiag_std = offdiag.numel() > 0 ? detail::compute_std(offdiag) : 0.0;
         } else {
             stats.offdiag_mean = 0.0;
@@ -533,7 +564,7 @@ namespace Thot::NTK {
             auto labels = targets.flatten().to(torch::kCPU, /*non_blocking=*/true);
             std::unordered_map<int64_t, std::vector<int64_t>> by_class;
             for (int64_t i = 0; i < num_samples; ++i) {
-                by_class[labels[i].item<int64_t>()].push_back(i);
+                by_class[labels[i].template item<int64_t>()].push_back(i);
             }
 
             std::vector<double> within_values;
@@ -546,7 +577,7 @@ namespace Thot::NTK {
                 }
                 auto idx_tensor = torch::tensor(idxs, torch::TensorOptions().dtype(torch::kLong));
                 auto submatrix = kernel.index({idx_tensor, idx_tensor});
-                const double mean_sub = submatrix.mean().item<double>();
+                const double mean_sub = submatrix.mean().template item<double>();
                 stats.per_class_self_sim.push_back(mean_sub);
                 within_values.push_back(mean_sub);
             }
@@ -570,7 +601,7 @@ namespace Thot::NTK {
 
             auto between = full_matrix.masked_select(between_mask);
             if (between.numel() > 0) {
-                stats.between_class_mean = between.mean().item<double>();
+                stats.between_class_mean = between.mean().template item<double>();
                 stats.between_class_std = detail::compute_std(between);
                 between_values.push_back(stats.between_class_mean);
             }
@@ -595,11 +626,11 @@ namespace Thot::NTK {
             auto alpha = torch::linalg_solve(regularized, targets); // shape [n, ...]
             auto preds = torch::matmul(kernel, alpha);
             auto diff = preds - targets;
-            stats.train_loss_krr = diff.pow(2).mean().item<double>();
+            stats.train_loss_krr = diff.pow(2).mean().template item<double>();
 
             if (targets.scalar_type() == torch::kLong || targets.scalar_type() == torch::kInt) {
                 auto predicted_labels = preds.argmax(-1);
-                stats.train_accuracy_krr = (predicted_labels == targets).to(torch::kFloat32).mean().item<double>();
+                stats.train_accuracy_krr = (predicted_labels == targets).to(torch::kFloat32).mean().template item<double>();
             }
             stats.ridge_lambda_used = options.ridge_lambda;
             stats.krr_ran = true;

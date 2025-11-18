@@ -189,7 +189,7 @@ double estimate_max_lr_from_ntk(Net& model,
 
 
 
-int main() {
+int ____main() {
     auto [x1, y1, x2, y2] =
         Thot::Data::Load::MNIST("/home/moonfloww/Projects/DATASETS/Image/MNIST",
                                 0.1f, 0.1f, true);

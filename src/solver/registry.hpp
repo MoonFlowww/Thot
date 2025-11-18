@@ -1,5 +1,5 @@
-#ifndef THOT_REGISTER_HPP
-#define THOT_REGISTER_HPP
+#ifndef THOT_SOLVER_REGISTRY_HPP
+#define THOT_SOLVER_REGISTRY_HPP
 
 #include "solver.hpp"
 
@@ -7,7 +7,6 @@
 #include "details/sde.hpp"
 
 namespace Thot::Solver {
-
     inline torch::Tensor Runtime::integrate(torch::Tensor state, const BaseStep& base_step) const {
         if (descriptor.is_sde()) {
             return Details::integrate_sde(descriptor, std::move(state), base_step);
@@ -17,4 +16,4 @@ namespace Thot::Solver {
 
 }
 
-#endif //THOT_REGISTER_HPP
+#endif //THOT_SOLVER_REGISTRY_HPP
