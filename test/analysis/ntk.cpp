@@ -4,23 +4,16 @@ int main() {
     const auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
 
     Thot::Model model("");
-    model.use_cuda(device == torch::kCUDA);
-    model.to(device);
+    model.use_cuda(torch::cuda::is_available());
 
     model.add(Thot::Layer::Flatten());
-    model.add(Thot::Layer::FC({.in_features=3*28*28, .out_features=3*8*8},
-                              Thot::Activation::GeLU,
-                              Thot::Initialization::HeUniform));
-    model.add(Thot::Layer::FC({.in_features=3*8*8, .out_features=8*8},
-                              Thot::Activation::GeLU,
-                              Thot::Initialization::HeUniform));
-    model.add(Thot::Layer::FC({.in_features=16, .out_features=10},
-                              Thot::Activation::Identity,
-                              Thot::Initialization::HeUniform));
+    model.add(Thot::Layer::FC({.in_features=3*28*28, .out_features=3*8*8}, Thot::Activation::GeLU, Thot::Initialization::HeUniform));
+    model.add(Thot::Layer::FC({.in_features=3*8*8, .out_features=8*8}, Thot::Activation::GeLU, Thot::Initialization::HeUniform));
+    model.add(Thot::Layer::FC({.in_features=8*8, .out_features=10}, Thot::Activation::Identity, Thot::Initialization::HeUniform));
 
+    model.to(device);
     auto [x1, y1, x2, y2] =
-        Thot::Data::Load::MNIST("/home/moonfloww/Projects/DATASETS/Image/MNIST",
-                                0.1f, 0.1f);
+        Thot::Data::Load::MNIST("/home/moonfloww/Projects/DATASETS/Image/MNIST", 0.1f, 0.1f);
 
     auto stage_for_device = [&](torch::Tensor tensor) {
         auto host_tensor = tensor;
@@ -37,9 +30,6 @@ int main() {
     x2 = stage_for_device(x2);
     y2 = stage_for_device(y2);
 
-    // Quick sanity check if you want:
-    std::cout << "x1 device: " << x1.device() << "\n";
-    std::cout << "param device: " << model.parameters().front().device() << "\n";
 
     auto result = Thot::NTK::Compute(
         model, x1, y1,
