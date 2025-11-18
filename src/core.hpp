@@ -91,7 +91,7 @@
 #include "regularization/regularization.hpp"
 #include "regularization/apply.hpp"
 #include "calibration/calibration.hpp"
-
+#include "solver/solver.hpp"
 namespace Thot {
     template <class... Ts>
     struct Overloaded : Ts... {
@@ -152,6 +152,7 @@ namespace Thot {
         std::optional<std::vector<torch::Tensor>> validation{};
         std::optional<std::vector<torch::Tensor>> test{};
         std::ostream* stream{&std::cout};
+        std::optional<Solver::Descriptor> solver{};
         GraphMode graph_mode{GraphMode::Disabled};  // Enable CUDA graph capture/replay; pad or drop remainder batches first.
         bool enable_amp{false}; // Enable TensorCores
         torch::MemoryFormat memory_format{torch::MemoryFormat::Contiguous};
@@ -2548,6 +2549,18 @@ namespace Thot {
                 test_dataset = build_evaluation_dataset(*options.validation, "validation");
             }
 
+            if (effective_options.solver && effective_options.graph_mode != GraphMode::Disabled) {
+                throw std::runtime_error("Solver-backed training currently requires GraphMode::Disabled.");
+            }
+
+            std::optional<Solver::Runtime> solver_runtime{};
+            if (effective_options.solver) {
+                solver_runtime.emplace(*effective_options.solver);
+            }
+
+            auto training_step_binding = TrainingDetails::select_training_step(solver_runtime);
+
+
 
             const bool use_buffer = effective_options.buffer_vram > 0;
 
@@ -2565,15 +2578,15 @@ namespace Thot {
 
             if (effective_options.shuffle) {
                 if (use_buffer) {
-                    TrainingDetails::run_epochs<true,  true>(*this, training_dataset, test_dataset, effective_options);
+                    TrainingDetails::run_epochs<true,  true>(*this, training_dataset, test_dataset, effective_options, training_step_binding);
                 } else {
-                    TrainingDetails::run_epochs<false, true>(*this, training_dataset, test_dataset, effective_options);
+                    TrainingDetails::run_epochs<false, true>(*this, training_dataset, test_dataset, effective_options, training_step_binding);
                 }
             } else {
                 if (use_buffer) {
-                    TrainingDetails::run_epochs<true,  false>(*this, training_dataset, test_dataset, effective_options);
+                    TrainingDetails::run_epochs<true,  false>(*this, training_dataset, test_dataset, effective_options, training_step_binding);
                 } else {
-                    TrainingDetails::run_epochs<false, false>(*this, training_dataset, test_dataset, effective_options);
+                    TrainingDetails::run_epochs<false, false>(*this, training_dataset, test_dataset, effective_options, training_step_binding);
                 }
             }
 
@@ -3499,7 +3512,9 @@ namespace Thot {
             }
         }
 
-        torch::Tensor graph_train_step(torch::Tensor batch_inputs, torch::Tensor batch_targets, GraphMode graph_mode, bool regularization_active, bool amp_enabled) {
+        template <bool UseSolver>
+        torch::Tensor graph_train_step_impl
+                    (torch::Tensor batch_inputs, torch::Tensor batch_targets, GraphMode graph_mode, bool regularization_active, bool amp_enabled, const Solver::Runtime* solver_runtime) {
             const auto phase = GraphExecutionPhase::Training;
             if (!graph_execution_enabled(graph_mode, phase)) {
                 graph_mode = GraphMode::Disabled;
@@ -3510,8 +3525,13 @@ namespace Thot {
             auto& state = graph_capture_state(phase);
             if (graph_mode != GraphMode::Disabled) {
                 prepare_optimizers_for_graph(graph_mode);
-
             }
+            if constexpr (UseSolver) {
+                if (graph_mode != GraphMode::Disabled) {
+                    throw std::runtime_error("Solver execution cannot be combined with CUDA graph capture yet.");
+                }
+            }
+
 #ifdef TORCH_CUDA_AVAILABLE
             const bool use_amp = amp_enabled && device_.is_cuda();
             if (use_amp) {
@@ -3536,7 +3556,17 @@ namespace Thot {
 
                 {
                     AutocastGuard autocast_guard(use_amp, autocast_device_type, autocast_dtype);
-                    prediction = execute_plan(std::move(inputs), mode);
+                    if constexpr (UseSolver) {
+                        if (!solver_runtime) {
+                            throw std::runtime_error("Solver descriptor missing for solver-backed training step.");
+                        }
+                        auto base_step = [&](torch::Tensor step_inputs) {
+                            return execute_plan(std::move(step_inputs), mode);
+                        };
+                        prediction = solver_runtime->integrate(std::move(inputs), base_step);
+                    } else {
+                        prediction = execute_plan(std::move(inputs), mode);
+                    }
 
                     if (!prediction.sizes().equals(targets.sizes())) {
                         if (targets.numel() == prediction.numel()) {
@@ -3741,6 +3771,39 @@ namespace Thot {
                 torch::Tensor targets;
             };
 
+            struct TrainingStepBinding {
+                using Impl = torch::Tensor (Model::*)(torch::Tensor,
+                                                     torch::Tensor,
+                                                     GraphMode,
+                                                     bool,
+                                                     bool,
+                                                     const Solver::Runtime*);
+
+                Impl impl{&Model::graph_train_step_impl<false>};
+                const Solver::Runtime* runtime{nullptr};
+
+                [[nodiscard]] torch::Tensor operator()(Model& model,
+                                                       torch::Tensor inputs,
+                                                       torch::Tensor targets,
+                                                       GraphMode mode,
+                                                       bool regularization_active,
+                                                       bool amp_enabled) const {
+                    return (model.*impl)(std::move(inputs),
+                                         std::move(targets),
+                                         mode,
+                                         regularization_active,
+                                         amp_enabled,
+                                         runtime);
+                }
+            };
+
+            [[nodiscard]] static TrainingStepBinding select_training_step(const std::optional<Solver::Runtime>& runtime) {
+                if (runtime) {
+                    return TrainingStepBinding{&Model::graph_train_step_impl<true>, &*runtime};
+                }
+                return TrainingStepBinding{};
+            }
+
             [[nodiscard]] static TensorDataset prepare_tensor_dataset(torch::Tensor inputs, torch::Tensor targets, torch::MemoryFormat memory_format = torch::MemoryFormat::Contiguous)
             {
                 auto prepared_inputs = std::move(inputs);
@@ -3822,7 +3885,7 @@ namespace Thot {
 
             template <bool BufferVRAM, bool ShouldShuffle>
             static void run_epochs(Model& model, TensorDataset& train_dataset,
-                                   const std::optional<TensorDataset>& test_dataset, const TrainOptions& options) {
+                    const std::optional<TensorDataset>& test_dataset, const TrainOptions& options, const TrainingStepBinding& training_step) {
                 const auto device = model.device();
                 const auto total_samples = train_dataset.inputs.size(0);
                 const auto batch_size = static_cast<std::int64_t>(options.batch_size);
@@ -4197,7 +4260,7 @@ namespace Thot {
                                     model.ensure_graph_batch_shapes(batch_graph_mode, batch_inputs, batch_targets);
                                 }
 
-                                loss = model.graph_train_step(batch_inputs, batch_targets, batch_graph_mode, regularization_active, amp_enabled);
+                                loss = training_step(model, batch_inputs, batch_targets, batch_graph_mode, regularization_active, amp_enabled);
 
                                 if (graph_mode == GraphMode::Capture) {
                                     if (batch_signature) {

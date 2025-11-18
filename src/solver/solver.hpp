@@ -1,0 +1,81 @@
+#ifndef THOT_SOLVER_HPP
+#define THOT_SOLVER_HPP
+
+#include <algorithm>
+#include <cstddef>
+#include <functional>
+#include <optional>
+#include <stdexcept>
+
+#include <torch/torch.h>
+
+namespace Thot::Solver {
+
+    enum class MethodFamily {
+        Euler,
+        RungeKutta,
+        BDF,
+        EulerMaruyama,
+        Milstein,
+        StochasticRungeKutta,
+    };
+
+    enum class NoiseModel {
+        None,
+        Additive,
+        Diagonal,
+        Full
+    };
+
+    struct StepControl {
+        double initial_step{1e-3};
+        std::optional<double> max_step{};
+        bool adaptive{false};
+        double safety_factor{0.9};
+
+        [[nodiscard]] double effective_step() const {
+            double step = initial_step;
+            if (max_step) {
+                step = std::min(step, *max_step);
+            }
+            if (adaptive) {
+                step *= safety_factor;
+            }
+            if (step <= 0.0) {
+                throw std::invalid_argument("Step size must be positive.");
+            }
+            return step;
+        }
+    };
+
+    struct Descriptor {
+        MethodFamily method{MethodFamily::Euler};
+        StepControl step_control{};
+        NoiseModel noise{NoiseModel::None};
+
+        [[nodiscard]] bool is_sde() const noexcept {
+            switch (method) {
+                case MethodFamily::EulerMaruyama:
+                case MethodFamily::Milstein:
+                case MethodFamily::StochasticRungeKutta:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+    };
+
+    using BaseStep = std::function<torch::Tensor(torch::Tensor)>;
+
+    struct Runtime {
+        Descriptor descriptor{};
+
+        Runtime() = default;
+        explicit Runtime(Descriptor descriptor_) : descriptor(std::move(descriptor_)) {}
+
+        [[nodiscard]] torch::Tensor integrate(torch::Tensor state, const BaseStep& base_step) const;
+    };
+
+}
+
+#endif // THOT_SOLVER_HPP

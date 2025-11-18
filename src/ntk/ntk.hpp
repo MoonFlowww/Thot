@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <optional>
 
 #include <torch/torch.h>
 
@@ -26,7 +27,6 @@ namespace Thot::NTK {
     enum class OutputMode { SumOutputs, PerOutput, DiagonalAverage };
     enum class Approximation { Exact, RandomProjection, Nystrom };
     enum class MemoryMode { FullGPU, StreamCPU, OperatorCG, OperatorLanczos };
-    enum class Sampling { FullDataset, Subsampled };
 
     using Device = torch::DeviceType;
     using DType = c10::ScalarType;
@@ -38,6 +38,12 @@ namespace Thot::NTK {
 
         std::size_t  max_samples      = 512;
         MemoryMode   memory_mode      = MemoryMode::FullGPU;
+
+        std::optional<uint64_t> subsample_seed{};
+        std::vector<int64_t>    subsample_indices{};
+        int64_t random_projection_dim = 256;
+        int64_t nystrom_rank          = 256;
+        int64_t operator_iterations   = 32;
 
         bool         center_kernel    = false;
         bool         normalize_diag   = false;
@@ -62,7 +68,6 @@ namespace Thot::NTK {
         OutputMode output_mode{OutputMode::SumOutputs};
         bool centered{false};
         bool normalized_diag{false};
-        Sampling sampling{Sampling::FullDataset};
         std::vector<int64_t> sample_indices{};
 
         // 2. Spectrum
@@ -183,16 +188,65 @@ namespace Thot::NTK {
         NTKStats stats{};
 
         const auto total_samples = inputs.dim() > 0 ? inputs.size(0) : 0;
-        const auto num_samples = std::min<int64_t>(options.max_samples, total_samples);
+        const auto desired_samples = std::min<int64_t>(options.max_samples, total_samples);
+
+        auto choose_indices = [&](int64_t count) {
+            std::vector<int64_t> indices;
+            indices.reserve(count);
+
+            auto add_unique = [&](int64_t idx) {
+                if (idx >= 0 && idx < total_samples &&
+                    std::find(indices.begin(), indices.end(), idx) == indices.end()) {
+                    indices.push_back(idx);
+                    }
+            };
+
+            if (!options.subsample_indices.empty()) {
+                for (auto idx : options.subsample_indices) {
+                    add_unique(idx);
+                    if (static_cast<int64_t>(indices.size()) == count) {
+                        break;
+                    }
+                }
+            }
+
+            if (indices.size() < static_cast<std::size_t>(count)) {
+                if (options.subsample_seed.has_value() && count < total_samples) {
+                    std::vector<int64_t> pool(total_samples);
+                    std::iota(pool.begin(), pool.end(), 0);
+                    std::mt19937_64 rng(*options.subsample_seed);
+                    std::shuffle(pool.begin(), pool.end(), rng);
+                    for (auto idx : pool) {
+                        add_unique(idx);
+                        if (static_cast<int64_t>(indices.size()) == count) {
+                            break;
+                        }
+                    }
+                } else {
+                    for (int64_t i = 0; i < total_samples && static_cast<int64_t>(indices.size()) < count; ++i) {
+                        add_unique(i);
+                    }
+                }
+            }
+            if (static_cast<int64_t>(indices.size()) > count) {
+                indices.resize(count);
+            }
+            return indices;
+        };
+
+        int64_t num_samples = desired_samples;
+        std::vector<int64_t> sample_indices;
         if (inputs.dim() == 0 || num_samples == 0) {
             stats.options_used = options;
             result.stats = stats;
             return result;
         }
 
-        inputs = inputs.narrow(0, 0, num_samples);
+        sample_indices = choose_indices(num_samples);
+        auto index_tensor = torch::tensor(sample_indices, torch::TensorOptions().dtype(torch::kLong).device(inputs.device()));
+        inputs = inputs.index_select(0, index_tensor);
         if (targets.defined() && targets.size(0) >= num_samples) {
-            targets = targets.narrow(0, 0, num_samples);
+            targets = targets.index_select(0, index_tensor);
         }
 
         stats.n_samples = num_samples;
@@ -200,11 +254,7 @@ namespace Thot::NTK {
         stats.output_mode = options.output_mode;
         stats.centered = options.center_kernel;
         stats.normalized_diag = options.normalize_diag;
-        stats.sampling = (num_samples == total_samples) ? Sampling::FullDataset : Sampling::Subsampled;
-        stats.sample_indices.reserve(num_samples);
-        for (int64_t i = 0; i < num_samples; ++i) {
-            stats.sample_indices.push_back(i);
-        }
+        stats.sample_indices = sample_indices;
 
         auto& module_ref = [&]() -> torch::nn::Module& {
             if constexpr (std::is_pointer_v<std::decay_t<Model>>) {
@@ -248,89 +298,238 @@ namespace Thot::NTK {
 
         auto grad_matrix = torch::stack(flattened_grads);
 
-        stats.feature_dim_used = grad_matrix.size(1);
-        auto kernel = torch::matmul(grad_matrix, grad_matrix.transpose(0, 1));
+        auto apply_random_projection = [&](const torch::Tensor& features) {
+            const auto proj_dim = std::max<int64_t>(1, std::min<int64_t>(options.random_projection_dim, features.size(1)));
+            auto projection = torch::randn({features.size(1), proj_dim}, features.options());
+            auto projected = torch::matmul(features, projection) / std::sqrt(static_cast<double>(proj_dim));
+            return projected;
+        };
 
-        if (options.center_kernel) {
-            const auto mean_all = kernel.mean();
-            kernel = kernel - kernel.mean(1, true) - kernel.mean(0, true) + mean_all;
-        }
-        if (options.normalize_diag) {
-            auto diag = kernel.diag();
-            auto norm = torch::sqrt(torch::outer(diag, diag) + 1e-12);
-            kernel = kernel / norm;
+        auto build_nystrom = [&](const torch::Tensor& features) {
+            const auto rank = std::max<int64_t>(1, std::min<int64_t>(options.nystrom_rank, features.size(0)));
+            std::vector<int64_t> basis_indices = choose_indices(rank);
+            auto idx_tensor = torch::tensor(basis_indices, torch::TensorOptions().dtype(torch::kLong).device(features.device()));
+            auto basis = features.index_select(0, idx_tensor);
+            auto C = torch::matmul(features, basis.transpose(0, 1));
+            auto W = torch::matmul(basis, basis.transpose(0, 1));
+            auto W_pinv = torch::linalg_pinv(W.to(torch::kFloat64)).to(features.dtype());
+            auto approx = torch::matmul(C, torch::matmul(W_pinv, C.transpose(0, 1)));
+            return std::make_tuple(approx, C, W_pinv);
+        };
+
+        torch::Tensor features = grad_matrix;
+        torch::Tensor kernel;
+        torch::Tensor c_matrix;
+        torch::Tensor w_inv;
+
+        if (options.approximation == Approximation::RandomProjection) {
+            features = apply_random_projection(features);
         }
 
-        stats.kernel_device = kernel.device().type();
-        stats.kernel_dtype = kernel.scalar_type();
+        stats.feature_dim_used = features.size(1);
         stats.approximation_mode = options.approximation;
 
-        stats.trace = kernel.diag().sum().item<double>();
-        stats.frobenius_norm = kernel.norm().item<double>();
-        stats.max_abs_entry = kernel.abs().max().item<double>();
-        stats.symmetry_error_max = (kernel - kernel.transpose(0, 1)).abs().max().item<double>();
-
-        if (options.compute_eigs) {
-            auto kernel_cpu = kernel.to(torch::kCPU, /*non_blocking=*/true).to(torch::kFloat64);
-            auto eig = torch::linalg::eigh(kernel_cpu);
-            auto eigenvalues = std::get<0>(eig);
-            stats.rank_estimate = torch::linalg::matrix_rank(kernel_cpu).item<int64_t>();
-            const auto eigen_vec = eigenvalues.contiguous();
-            std::vector<double> eigen_list(eigen_vec.numel());
-            std::memcpy(eigen_list.data(), eigen_vec.data_ptr<double>(), eigen_vec.numel() * sizeof(double));
-
-            if (!eigen_list.empty()) {
-                std::sort(eigen_list.begin(), eigen_list.end(), std::greater<>());
-                stats.lambda_max = eigen_list.front();
-                for (auto v : eigen_list) {
-                    if (v > 1e-12) {
-                        stats.lambda_min_positive = v;
-                    }
-                }
-                stats.condition_number = (stats.lambda_min_positive > 0.0) ? stats.lambda_max / stats.lambda_min_positive : std::numeric_limits<double>::infinity();
-
-                const auto max_top = std::min<std::size_t>(options.top_k_eigs, eigen_list.size());
-                stats.top_eigenvalues.assign(eigen_list.begin(), eigen_list.begin() + max_top);
-
-                const std::vector<double> percentiles = {0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99};
-                stats.eigenvalue_percentiles.reserve(percentiles.size());
-                for (auto p : percentiles) {
-                    stats.eigenvalue_percentiles.push_back(detail::percentile(eigen_list, p));
-                }
-
-                const double fro2 = stats.frobenius_norm * stats.frobenius_norm;
-                stats.stable_rank = (stats.lambda_max > 0.0) ? (fro2 / (stats.lambda_max * stats.lambda_max)) : 0.0;
-
-                const double sum_eig = std::accumulate(eigen_list.begin(), eigen_list.end(), 0.0);
-                if (sum_eig > 0.0) {
-                    double entropy = 0.0;
-                    for (auto v : eigen_list) {
-                        const double p = v / sum_eig;
-                        if (p > 0.0) {
-                            entropy -= p * std::log(p);
-                        }
-                    }
-                    stats.effective_rank = std::exp(entropy);
-                }
-
-                if (eigen_list.size() > 1) {
-                    stats.spectral_gap = eigen_list.front() - eigen_list[1];
-                }
+        auto matvec = [&](const torch::Tensor& vec) {
+            if (options.approximation == Approximation::Nystrom && c_matrix.defined() && w_inv.defined()) {
+                auto left = torch::matmul(c_matrix, w_inv);
+                return torch::matmul(left, torch::matmul(c_matrix.transpose(0, 1), vec));
             }
-            stats.is_psd_checked = true;
+            auto temp = torch::matmul(features.transpose(0, 1), vec);
+            return torch::matmul(features, temp);
+        };
+
+        auto compute_kernel_from_features = [&](const torch::Tensor& feats) {
+            auto k = torch::matmul(feats, feats.transpose(0, 1));
+            if (options.center_kernel) {
+                const auto mean_all = k.mean();
+                k = k - k.mean(1, true) - k.mean(0, true) + mean_all;
+            }
+            if (options.normalize_diag) {
+                auto diag = k.diag();
+                auto norm = torch::sqrt(torch::outer(diag, diag) + 1e-12);
+                k = k / norm;
+            }
+            return k;
+        };
+
+        if (options.approximation == Approximation::Nystrom) {
+            auto [approx_kernel, C, W_pinv] = build_nystrom(features);
+            c_matrix = C;
+            w_inv = W_pinv;
+            features = features; // unchanged but kept for matvec path
+            kernel = approx_kernel;
+        } else {
+            kernel = compute_kernel_from_features(features);
+        }
+        if (options.memory_mode == MemoryMode::StreamCPU) {
+            features = features.to(torch::kCPU, /*non_blocking=*/true);
+            if (kernel.defined()) {
+                kernel = compute_kernel_from_features(features).to(torch::kCPU, /*non_blocking=*/true);
+            }
+            if (c_matrix.defined()) {
+                c_matrix = c_matrix.to(torch::kCPU, /*non_blocking=*/true);
+                w_inv = w_inv.to(torch::kCPU, /*non_blocking=*/true);
+            }
         }
 
-        auto diag = kernel.diag();
+        auto diag_estimate = (features * features).sum(1);
+        stats.kernel_device = kernel.defined() ? kernel.device().type() : features.device().type();
+        stats.kernel_dtype = kernel.defined() ? kernel.scalar_type() : features.scalar_type();
+
+        if (options.memory_mode == MemoryMode::OperatorCG || options.memory_mode == MemoryMode::OperatorLanczos) {
+            kernel = torch::Tensor();
+        }
+
+        if (kernel.defined()) {
+            stats.trace = kernel.diag().sum().item<double>();
+            stats.frobenius_norm = kernel.norm().item<double>();
+            stats.max_abs_entry = kernel.abs().max().item<double>();
+            stats.symmetry_error_max = (kernel - kernel.transpose(0, 1)).abs().max().item<double>();
+        } else {
+            stats.trace = diag_estimate.sum().item<double>();
+
+            const auto hv_samples = std::max<int64_t>(1, std::min<int64_t>(options.operator_iterations, num_samples));
+            double hv_accum = 0.0;
+            for (int64_t i = 0; i < hv_samples; ++i) {
+                auto r = torch::randn({num_samples, 1}, features.options());
+                auto hv = matvec(r);
+                hv_accum += torch::matmul(r.transpose(0, 1), hv).item<double>();
+            }
+            hv_accum /= static_cast<double>(hv_samples);
+            stats.frobenius_norm = std::sqrt(std::max(hv_accum, 0.0));
+            stats.max_abs_entry = diag_estimate.max().item<double>();
+            stats.symmetry_error_max = 0.0;
+        }
+
+        if (options.compute_eigs) {
+            if (kernel.defined()) {
+                auto kernel_cpu = kernel.to(torch::kCPU, /*non_blocking=*/true).to(torch::kFloat64);
+                auto eig = torch::linalg_eigh(kernel_cpu);
+                auto eigenvalues = std::get<0>(eig);
+                stats.rank_estimate = torch::linalg_matrix_rank(kernel_cpu).item<int64_t>();
+                const auto eigen_vec = eigenvalues.contiguous();
+                std::vector<double> eigen_list(eigen_vec.numel());
+                std::memcpy(eigen_list.data(), eigen_vec.data_ptr<double>(), eigen_vec.numel() * sizeof(double));
+
+                if (!eigen_list.empty()) {
+                    std::sort(eigen_list.begin(), eigen_list.end(), std::greater<>());
+                    stats.lambda_max = eigen_list.front();
+                    for (auto v : eigen_list) {
+                        if (v > 1e-12) {
+                            stats.lambda_min_positive = v;
+                        }
+                    }
+                    stats.condition_number = (stats.lambda_min_positive > 0.0) ? stats.lambda_max / stats.lambda_min_positive : std::numeric_limits<double>::infinity();
+
+                    const auto max_top = std::min<std::size_t>(options.top_k_eigs, eigen_list.size());
+                    stats.top_eigenvalues.assign(eigen_list.begin(), eigen_list.begin() + max_top);
+
+                    const std::vector<double> percentiles = {0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99};
+                    stats.eigenvalue_percentiles.reserve(percentiles.size());
+                    for (auto p : percentiles) {
+                        stats.eigenvalue_percentiles.push_back(detail::percentile(eigen_list, p));
+                    }
+
+                    const double fro2 = stats.frobenius_norm * stats.frobenius_norm;
+                    stats.stable_rank = (stats.lambda_max > 0.0) ? (fro2 / (stats.lambda_max * stats.lambda_max)) : 0.0;
+
+                    const double sum_eig = std::accumulate(eigen_list.begin(), eigen_list.end(), 0.0);
+                    if (sum_eig > 0.0) {
+                        double entropy = 0.0;
+                        for (auto v : eigen_list) {
+                            const double p = v / sum_eig;
+                            if (p > 0.0) {
+                                entropy -= p * std::log(p);
+                            }
+                        }
+                        stats.effective_rank = std::exp(entropy);
+                    }
+
+                    if (eigen_list.size() > 1) {
+                        stats.spectral_gap = eigen_list.front() - eigen_list[1];
+                    }
+                }
+
+                stats.is_psd_checked = true;
+            } else {
+                auto power_iteration = [&](int64_t iters) {
+                    auto v = torch::randn({num_samples, 1}, features.options());
+                    double lambda = 0.0;
+                    for (int64_t i = 0; i < iters; ++i) {
+                        auto mv = matvec(v);
+                        lambda = (v.transpose(0, 1).matmul(mv)).item<double>() / (v.transpose(0, 1).matmul(v)).item<double>();
+                        v = mv / mv.norm();
+                    }
+                    return lambda;
+                };
+
+                auto lanczos = [&](int64_t k) {
+                    auto q = torch::randn({num_samples, 1}, features.options());
+                    q = q / q.norm();
+                    std::vector<double> alphas;
+                    std::vector<double> betas;
+                    torch::Tensor q_prev;
+                    for (int64_t i = 0; i < k; ++i) {
+                        auto z = matvec(q);
+                        if (q_prev.defined()) {
+                            z = z - betas.back() * q_prev;
+                        }
+                        const double alpha = (q.transpose(0, 1).matmul(z)).item<double>();
+                        z = z - alpha * q;
+                        const double beta = z.norm().item<double>();
+                        alphas.push_back(alpha);
+                        if (beta < 1e-10) {
+                            break;
+                        }
+                        betas.push_back(beta);
+                        q_prev = q;
+                        q = z / beta;
+                    }
+
+                    const auto m = static_cast<int64_t>(alphas.size());
+                    auto T = torch::zeros({m, m}, torch::TensorOptions().dtype(torch::kFloat64));
+                    for (int64_t i = 0; i < m; ++i) {
+                        T.index_put_({i, i}, alphas[i]);
+                        if (i + 1 < m && i < static_cast<int64_t>(betas.size())) {
+                            T.index_put_({i, i + 1}, betas[i]);
+                            T.index_put_({i + 1, i}, betas[i]);
+                        }
+                    }
+                    return torch::linalg_eigvalsh(T);
+                };
+
+                const auto iters = std::max<int64_t>(4, options.operator_iterations);
+                stats.lambda_max = power_iteration(iters);
+                stats.lambda_min_positive = stats.lambda_max;
+                stats.condition_number = 1.0;
+                if (options.memory_mode == MemoryMode::OperatorLanczos) {
+                    auto eigs = lanczos(std::min<int64_t>(options.top_k_eigs, num_samples));
+                    auto eig_list = eigs.contiguous();
+                    stats.top_eigenvalues.resize(eig_list.numel());
+                    std::memcpy(stats.top_eigenvalues.data(), eig_list.data_ptr<double>(), eig_list.numel() * sizeof(double));
+                    std::sort(stats.top_eigenvalues.begin(), stats.top_eigenvalues.end(), std::greater<>());
+                    stats.lambda_max = !stats.top_eigenvalues.empty() ? stats.top_eigenvalues.front() : stats.lambda_max;
+                }
+                stats.is_psd_checked = false;
+            }
+        }
+
+        auto diag = kernel.defined() ? kernel.diag() : diag_estimate;
         stats.diag_mean = diag.mean().item<double>();
         stats.diag_std = detail::compute_std(diag);
 
-        auto mask = torch::ones_like(kernel, torch::TensorOptions().dtype(torch::kBool));
-        mask.diagonal().fill_(false);
-        auto offdiag = kernel.masked_select(mask);
-        stats.offdiag_mean = offdiag.numel() > 0 ? offdiag.mean().item<double>() : 0.0;
-        stats.offdiag_std = offdiag.numel() > 0 ? detail::compute_std(offdiag) : 0.0;
+        if (kernel.defined()) {
+            auto mask = torch::ones_like(kernel, torch::TensorOptions().dtype(torch::kBool));
+            mask.diagonal().fill_(false);
+            auto offdiag = kernel.masked_select(mask);
+            stats.offdiag_mean = offdiag.numel() > 0 ? offdiag.mean().item<double>() : 0.0;
+            stats.offdiag_std = offdiag.numel() > 0 ? detail::compute_std(offdiag) : 0.0;
+        } else {
+            stats.offdiag_mean = 0.0;
+            stats.offdiag_std = 0.0;
+        }
 
-        if (targets.defined() && targets.numel() == num_samples) {
+        if (targets.defined() && targets.numel() == num_samples && kernel.defined()) {
             auto labels = targets.flatten().to(torch::kCPU, /*non_blocking=*/true);
             std::unordered_map<int64_t, std::vector<int64_t>> by_class;
             for (int64_t i = 0; i < num_samples; ++i) {
@@ -390,7 +589,7 @@ namespace Thot::NTK {
             stats.lr_recommended_range = {stats.lr_safe * 0.5, stats.lr_safe};
         }
 
-        if (options.run_kernel_regression && targets.defined()) {
+        if (options.run_kernel_regression && targets.defined() && kernel.defined()) {
             auto eye = torch::eye(num_samples, kernel.options());
             auto regularized = kernel + options.ridge_lambda * eye;
             auto alpha = torch::linalg_solve(regularized, targets); // shape [n, ...]
