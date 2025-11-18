@@ -1,6 +1,6 @@
 #ifndef THOT_SWAG_HPP
 #define THOT_SWAG_HPP
-
+// "SWAG: A Simple Baseline for Bayesian Uncertainty in Deep Learning" https://arxiv.org/pdf/1902.02476
 #include <torch/torch.h>
 
 namespace Thot::Regularization::Details {

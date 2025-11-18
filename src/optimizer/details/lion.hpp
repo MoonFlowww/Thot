@@ -1,6 +1,6 @@
 #ifndef THOT_LION_HPP
 #define THOT_LION_HPP
-
+// "Symbolic Discovery of Optimization Algorithms" (Lion) https://arxiv.org/pdf/2302.06675
 #include <algorithm>
 #include <cmath>
 #include <cstdint>

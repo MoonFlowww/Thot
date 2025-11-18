@@ -1,6 +1,6 @@
 #ifndef THOT_REGULARIZATION_DETAILS_SPECTRALNORM_HPP
 #define THOT_REGULARIZATION_DETAILS_SPECTRALNORM_HPP
-
+// "Spectral Normalization for Generative Adversarial Networks" https://arxiv.org/pdf/1802.05957
 #include <torch/torch.h>
 
 #include <tuple>

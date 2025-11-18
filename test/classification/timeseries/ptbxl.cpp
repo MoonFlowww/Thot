@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 #include <random>
-
+#include <optional>
 
 #include <torch/torch.h>
 #include <torch/nn/functional.h>
@@ -180,7 +180,7 @@ namespace {
 
 }
 
-int main() {
+int __main() {
     Thot::Model model("PTBXL_ECG");
     const bool use_cuda = torch::cuda::is_available();
 
@@ -351,7 +351,7 @@ int main() {
                       << "] train=" << train_loss
                       << " val="   << val_loss  << std::endl;
         }
-
+        /*
         std::cout << "\nFold " << (fold + 1) << " evaluation..." << std::endl;
         model.evaluate(
             x_val, y_val,
@@ -365,6 +365,7 @@ int main() {
             },
             {.batch_size = static_cast<std::size_t>(batch_size), .buffer_vram = 1, .print_per_class=false}
         ); std::cout << "\n" << std::endl;
+        */
     }
 
     std::vector<Thot::Metric::Classification::Descriptor> metrics;

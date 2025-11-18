@@ -1,6 +1,6 @@
 #ifndef THOT_LAYER_S4_HPP
 #define THOT_LAYER_S4_HPP
-
+// "Efficiently Modeling Long Sequences with Structured State Spaces" (S4) https://arxiv.org/pdf/2111.00396
 #include <cmath>
 #include <cstdint>
 #include <optional>

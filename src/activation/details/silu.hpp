@@ -1,6 +1,6 @@
 #ifndef THOT_SILU_HPP
 #define THOT_SILU_HPP
-
+// "Searching for Activation Functions" (original SiLU/Swish proposal) https://arxiv.org/pdf/1710.05941
 #include <torch/torch.h>
 
 #include <utility>

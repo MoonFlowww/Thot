@@ -1,5 +1,6 @@
 #ifndef THOT_DROPOUT_HPP
 #define THOT_DROPOUT_HPP
+// "Dropout: A Simple Way to Prevent Neural Networks from Overfitting" https://arxiv.org/pdf/1207.0580
 #include "../../activation/activation.hpp"
 #include "../../common/local.hpp"
 #include <torch/torch.h>

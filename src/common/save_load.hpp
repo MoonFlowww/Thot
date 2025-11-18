@@ -2011,6 +2011,59 @@ namespace Thot::Common::SaveLoad {
             options.beta = Detail::get_numeric<double>(tree, "options.beta", context);
             return Loss::Descriptor{Loss::Details::SmoothL1Descriptor{options}};
         }
+        if (type == "kl") {
+            Loss::Details::KLDivOptions options;
+            options.reduction = Detail::loss_reduction_from_string(
+                Detail::get_string(tree, "options.reduction", context), context);
+            options.log_target = Detail::get_boolean(tree, "options.log_target", context);
+            options.use_batch_mean = Detail::get_boolean(tree, "options.use_batch_mean", context);
+            options.log_softmax_dim = Detail::get_numeric<std::int64_t>(tree, "options.log_softmax_dim", context);
+            options.prediction_is_log = Detail::get_boolean(tree, "options.prediction_is_log", context);
+            return Loss::Descriptor{Loss::Details::KLDivDescriptor{options}};
+        }
+        if (type == "margin_ranking") {
+            Loss::Details::MarginRankingOptions options;
+            options.reduction = Detail::loss_reduction_from_string(
+                Detail::get_string(tree, "options.reduction", context), context);
+            options.margin = Detail::get_numeric<double>(tree, "options.margin", context);
+            return Loss::Descriptor{Loss::Details::MarginRankingDescriptor{options}};
+        }
+        if (type == "cosine_embedding") {
+            Loss::Details::CosineEmbeddingOptions options;
+            options.reduction = Detail::loss_reduction_from_string(
+                Detail::get_string(tree, "options.reduction", context), context);
+            options.margin = Detail::get_numeric<double>(tree, "options.margin", context);
+            return Loss::Descriptor{Loss::Details::CosineEmbeddingDescriptor{options}};
+        }
+        if (type == "dice") {
+            Loss::Details::DiceOptions options;
+            options.reduction = Detail::loss_reduction_from_string(
+                Detail::get_string(tree, "options.reduction", context), context);
+            options.smooth = Detail::get_numeric<double>(tree, "options.smooth", context);
+            options.exponent = Detail::get_numeric<double>(tree, "options.exponent", context);
+            options.clamp_predictions = Detail::get_boolean(tree, "options.clamp_predictions", context);
+            return Loss::Descriptor{Loss::Details::DiceDescriptor{options}};
+        }
+        if (type == "lovasz_softmax") {
+            Loss::Details::LovaszSoftmaxOptions options;
+            options.reduction = Detail::loss_reduction_from_string(
+                Detail::get_string(tree, "options.reduction", context), context);
+            options.per_image = Detail::get_boolean(tree, "options.per_image", context);
+            options.ignore_index = Detail::get_numeric<std::int64_t>(tree, "options.ignore_index", context);
+            options.apply_softmax = Detail::get_boolean(tree, "options.apply_softmax", context);
+            options.include_background = Detail::get_boolean(tree, "options.include_background", context);
+            options.only_present_classes = Detail::get_boolean(tree, "options.only_present_classes", context);
+            return Loss::Descriptor{Loss::Details::LovaszSoftmaxDescriptor{options}};
+        }
+        if (type == "tversky") {
+            Loss::Details::TverskyOptions options;
+            options.reduction = Detail::loss_reduction_from_string(
+                Detail::get_string(tree, "options.reduction", context), context);
+            options.alpha = Detail::get_numeric<double>(tree, "options.alpha", context);
+            options.beta = Detail::get_numeric<double>(tree, "options.beta", context);
+            options.smooth = Detail::get_numeric<double>(tree, "options.smooth", context);
+            return Loss::Descriptor{Loss::Details::TverskyDescriptor{options}};
+        }
         std::ostringstream message;
         message << "Unknown loss descriptor '" << type << "' in " << context;
         throw std::runtime_error(message.str());
