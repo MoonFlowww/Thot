@@ -52,9 +52,6 @@ int main() {
          .stream             = &std::cout,
          .print_summary      = true});
 
-    std::cout << "Kernel shape: " << result.kernel.sizes() << "\n";
-    std::cout << "Trace: " << result.stats.trace << "\n";
-    std::cout << "Condition number: " << result.stats.condition_number << "\n";
 
     return 0;
 }
