@@ -1,8 +1,6 @@
 #ifndef THOT_SOLVER_DETAILS_ODE_HPP
 #define THOT_SOLVER_DETAILS_ODE_HPP
 
-#include "../../../include/solver.hpp"
-
 #include <cmath>
 #include <stdexcept>
 

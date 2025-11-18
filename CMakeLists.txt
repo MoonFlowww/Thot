@@ -201,7 +201,6 @@ add_executable(test_Thot test/ntk_test.cpp #classification/timeseries/ptbxl.cpp 
         src/solver/solver.hpp
         src/solver/details/sde.hpp
         src/solver/details/ode.hpp
-        src/solver/registry.hpp
         test/ntk_test.cpp
 )
 target_link_libraries(test_Thot PRIVATE Thot ${OpenCV_LIBS})
