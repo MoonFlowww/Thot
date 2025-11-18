@@ -774,20 +774,20 @@ namespace Thot::NTK {
                                              .mean()
                                              .template item<double>();
 
-                auto unique_labels = std::get<0>(val_labels.unique(/*sorted=*/true));
+                auto unique_labels = std::get<0>(torch::unique(val_labels, /*sorted=*/true));
                 stats.per_class_val_accuracy_krr.clear();
                 for (int64_t i = 0; i < unique_labels.numel(); ++i) {
                     auto lbl = unique_labels[i];
                     auto mask = (val_labels == lbl);
-                    const auto count = mask.sum().template item<int64_t>();
+                    const auto count = mask.sum().item<int64_t>();
                     if (count == 0) {
                         continue;
                     }
                     auto class_acc = predicted_labels.masked_select(mask)
-                                         .eq(val_labels.masked_select(mask))
-                                         .to(torch::kFloat32)
-                                         .mean()
-                                         .template item<double>();
+                        .eq(val_labels.masked_select(mask))
+                        .to(torch::kFloat32)
+                        .mean()
+                        .item<double>();
                     stats.per_class_val_accuracy_krr.push_back(class_acc);
                 }
             }
