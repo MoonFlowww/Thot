@@ -32,34 +32,33 @@ namespace Thot::NTK {
     using DType = c10::ScalarType;
 
     struct Options {
-        KernelType   kernel_type      = KernelType::NTK;
-        OutputMode   output_mode      = OutputMode::SumOutputs;
-        Approximation approximation   = Approximation::Exact;
+        KernelType kernel_type = KernelType::NTK;
+        OutputMode output_mode = OutputMode::SumOutputs;
+        Approximation approximation = Approximation::Exact;
 
-        std::size_t  max_samples      = 512;
-        MemoryMode   memory_mode      = MemoryMode::FullGPU;
+        std::size_t  max_samples = 512;
+        MemoryMode memory_mode = MemoryMode::FullGPU;
 
         std::optional<uint64_t> subsample_seed{};
-        std::vector<int64_t>    subsample_indices{};
+        std::vector<int64_t> subsample_indices{};
         int64_t random_projection_dim = 256;
-        int64_t nystrom_rank          = 256;
-        int64_t operator_iterations   = 32;
+        int64_t nystrom_rank = 256;
+        int64_t operator_iterations = 32;
 
-        bool         center_kernel    = false;
-        bool         normalize_diag   = false;
+        bool center_kernel= false;
+        bool normalize_diag= false;
 
-        bool         compute_eigs     = true;
-        int          top_k_eigs       = 20;
-        double       ridge_lambda     = 1e-4;
+        bool compute_eigs= true;
+        int top_k_eigs= 20;
+        double ridge_lambda= 1e-4;
 
-        bool         estimate_lr_bound = true;
-        bool         run_kernel_regression = false;
+        bool estimate_lr_bound = true;
+        bool run_kernel_regression = false;
 
         std::ostream* stream{&std::cout};
         bool print_summary{true};
     };
 
-    // TODO: Create pipelines for NTKStats inside NTK/details
     struct NTKStats {
         // 1. Basic info
         int64_t n_samples{0};
