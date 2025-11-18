@@ -45,6 +45,8 @@ namespace Thot::NTK {
         int64_t nystrom_rank = 256;
         int64_t operator_iterations = 32;
 
+        torch::Tensor validation_targets{};
+
         bool center_kernel= false;
         bool normalize_diag= false;
 
@@ -112,6 +114,10 @@ namespace Thot::NTK {
         double  symmetry_error_max{0.0};
         double  max_abs_entry{0.0};
         int64_t cg_iterations{0};
+        double  cg_final_residual{0.0};
+        double  cg_relative_residual{0.0};
+        bool    cg_converged{false};
+
 
         // 7. Meta
         Options options_used{};
@@ -545,6 +551,102 @@ namespace Thot::NTK {
             }
         }
 
+        if (options.memory_mode == MemoryMode::OperatorCG) {
+            struct CGResult {
+                torch::Tensor solution;
+                int64_t iterations{0};
+                double final_residual{0.0};
+                double relative_residual{0.0};
+                bool converged{false};
+            };
+
+            auto apply_operator = [&](const torch::Tensor& v) {
+                auto mv = matvec(v);
+                if (options.ridge_lambda != 0.0) {
+                    mv = mv + options.ridge_lambda * v;
+                }
+                return mv;
+            };
+
+            auto conjugate_gradient = [&](const torch::Tensor& b) {
+                CGResult cg_result{};
+                auto x = torch::zeros_like(b);
+                auto r = b - apply_operator(x);
+                auto p = r.clone();
+                const double tolerance = 1e-6;
+                double rs_old = r.pow(2).sum().template item<double>();
+                const double rs_init = std::max(rs_old, 1e-12);
+                cg_result.final_residual = std::sqrt(rs_old);
+                cg_result.relative_residual = std::sqrt(rs_old / rs_init);
+
+                for (int64_t i = 0; i < options.operator_iterations; ++i) {
+                    auto Ap = apply_operator(p);
+                    const double denom = p.transpose(0, 1).matmul(Ap).template item<double>();
+                    if (std::abs(denom) < 1e-12) {
+                        break;
+                    }
+                    const double alpha = rs_old / denom;
+                    x = x + alpha * p;
+                    r = r - alpha * Ap;
+
+                    const double rs_new = r.pow(2).sum().template item<double>();
+                    cg_result.final_residual = std::sqrt(rs_new);
+                    cg_result.relative_residual = std::sqrt(rs_new / rs_init);
+                    cg_result.iterations = i + 1;
+
+                    if (cg_result.relative_residual < tolerance) {
+                        cg_result.converged = true;
+                        break;
+                    }
+
+                    p = r + (rs_new / rs_old) * p;
+                    rs_old = rs_new;
+                }
+
+                cg_result.solution = x;
+                return cg_result;
+            };
+
+            torch::Tensor rhs;
+            if (targets.defined() && targets.numel() >= num_samples) {
+                rhs = targets.narrow(0, 0, num_samples).reshape({num_samples, -1}).to(features.options());
+            } else {
+                rhs = torch::randn({num_samples, 1}, features.options());
+            }
+
+            std::vector<torch::Tensor> solutions;
+            solutions.reserve(rhs.size(1));
+            stats.cg_iterations = 0;
+            stats.cg_final_residual = 0.0;
+            stats.cg_relative_residual = 0.0;
+            stats.cg_converged = true;
+
+            for (int64_t col = 0; col < rhs.size(1); ++col) {
+                auto column_rhs = rhs.select(1, col).unsqueeze(1);
+                auto cg = conjugate_gradient(column_rhs);
+                solutions.push_back(cg.solution);
+                stats.cg_iterations = std::max<int64_t>(stats.cg_iterations, cg.iterations);
+                stats.cg_final_residual = cg.final_residual;
+                stats.cg_relative_residual = cg.relative_residual;
+                stats.cg_converged = stats.cg_converged && cg.converged;
+            }
+
+            if (options.run_kernel_regression && targets.defined() && targets.numel() >= num_samples) {
+                auto alpha = torch::cat(solutions, 1);
+                auto preds = matvec(alpha);
+                auto target_matrix = rhs;
+                auto diff = preds - target_matrix;
+                stats.train_loss_krr = diff.pow(2).mean().template item<double>();
+
+                if (targets.scalar_type() == torch::kLong || targets.scalar_type() == torch::kInt) {
+                    auto predicted_labels = preds.argmax(-1);
+                    auto target_labels = target_matrix.flatten();
+                    stats.train_accuracy_krr = (predicted_labels == target_labels).to(torch::kFloat32).mean().template item<double>();
+                }
+                stats.ridge_lambda_used = options.ridge_lambda;
+                stats.krr_ran = true;
+            }
+        }
         auto diag = kernel.defined() ? kernel.diag() : diag_estimate;
         stats.diag_mean = diag.mean().template item<double>();
         stats.diag_std = detail::compute_std(diag);
@@ -626,9 +728,80 @@ namespace Thot::NTK {
             auto diff = preds - targets;
             stats.train_loss_krr = diff.pow(2).mean().template item<double>();
 
+            auto derive_float_targets = [&](torch::Tensor base_targets) {
+                if (!base_targets.defined()) {
+                    return torch::Tensor();
+                }
+
+                auto device_aligned = base_targets.to(preds.device());
+                if (preds.dim() > 1 && device_aligned.dim() == 1 && preds.size(1) > 1) {
+                    device_aligned = torch::one_hot(device_aligned.to(torch::kLong), preds.size(1)).to(preds.scalar_type());
+                } else {
+                    device_aligned = device_aligned.to(preds.scalar_type());
+                    if (device_aligned.numel() == preds.numel() && device_aligned.sizes() != preds.sizes()) {
+                        device_aligned = device_aligned.view(preds.sizes());
+                    }
+                }
+
+                if (device_aligned.sizes() == preds.sizes() || device_aligned.numel() == preds.numel()) {
+                    return device_aligned;
+                }
+                return torch::Tensor();
+            };
+
             if (targets.scalar_type() == torch::kLong || targets.scalar_type() == torch::kInt) {
                 auto predicted_labels = preds.argmax(-1);
                 stats.train_accuracy_krr = (predicted_labels == targets).to(torch::kFloat32).mean().template item<double>();
+
+            }
+            auto validation_targets = options.validation_targets.defined() ? options.validation_targets : targets;
+
+            auto aligned_val_targets = derive_float_targets(validation_targets);
+            if (aligned_val_targets.defined()) {
+                auto val_diff = preds - aligned_val_targets;
+                stats.val_loss_krr = val_diff.pow(2).mean().template item<double>();
+            }
+
+            if (validation_targets.defined() &&
+                (validation_targets.scalar_type() == torch::kLong || validation_targets.scalar_type() == torch::kInt)) {
+                auto predicted_labels = preds.argmax(-1);
+                auto val_labels = validation_targets.to(predicted_labels.device());
+                if (val_labels.dim() > 1) {
+                    val_labels = val_labels.view({val_labels.size(0)});
+                }
+                stats.val_accuracy_krr = (predicted_labels == val_labels)
+                                             .to(torch::kFloat32)
+                                             .mean()
+                                             .template item<double>();
+
+                auto unique_labels = std::get<0>(val_labels.unique(/*sorted=*/true));
+                stats.per_class_val_accuracy_krr.clear();
+                for (int64_t i = 0; i < unique_labels.numel(); ++i) {
+                    auto lbl = unique_labels[i];
+                    auto mask = (val_labels == lbl);
+                    const auto count = mask.sum().template item<int64_t>();
+                    if (count == 0) {
+                        continue;
+                    }
+                    auto class_acc = predicted_labels.masked_select(mask)
+                                         .eq(val_labels.masked_select(mask))
+                                         .to(torch::kFloat32)
+                                         .mean()
+                                         .template item<double>();
+                    stats.per_class_val_accuracy_krr.push_back(class_acc);
+                }
+            }
+
+            if (aligned_val_targets.defined()) {
+                auto flat_preds = preds.flatten();
+                auto flat_targets = aligned_val_targets.flatten();
+                const double pred_norm = flat_preds.norm().template item<double>();
+                const double target_norm = flat_targets.norm().template item<double>();
+                if (pred_norm > 0.0 && target_norm > 0.0) {
+                    stats.label_alignment = torch::dot(flat_preds, flat_targets)
+                                                 .template item<double>() /
+                                             (pred_norm * target_norm);
+                }
             }
             stats.ridge_lambda_used = options.ridge_lambda;
             stats.krr_ran = true;
