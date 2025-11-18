@@ -769,17 +769,36 @@ namespace Thot::NTK {
                 if (val_labels.dim() > 1) {
                     val_labels = val_labels.view({val_labels.size(0)});
                 }
+                val_labels = val_labels.to(torch::kLong);
                 stats.val_accuracy_krr = (predicted_labels == val_labels)
                                              .to(torch::kFloat32)
                                              .mean()
                                              .template item<double>();
 
-                auto unique_labels = std::get<0>(torch::unique(val_labels, /*sorted=*/true));
+
+                auto val_labels_flat = val_labels.view({-1});
+
+                std::unordered_set<int64_t> unique_label_set;
+                auto val_labels_cpu = val_labels_flat.to(torch::kCPU, /*non_blocking=*/false, /*copy=*/true);
+                auto labels_accessor = val_labels_cpu.accessor<int64_t, 1>();
+                for (int64_t i = 0; i < val_labels_cpu.numel(); ++i) {
+                    unique_label_set.insert(labels_accessor[i]);
+                }
+
+                std::vector<int64_t> unique_labels_vec(unique_label_set.begin(), unique_label_set.end());
+                std::sort(unique_labels_vec.begin(), unique_labels_vec.end());
+
+                auto unique_labels = torch::from_blob(
+                        unique_labels_vec.data(),
+                        {(int64_t) unique_labels_vec.size()},
+                        torch::TensorOptions().dtype(val_labels.dtype()))
+                        .clone()
+                        .to(predicted_labels.device());
                 stats.per_class_val_accuracy_krr.clear();
                 for (int64_t i = 0; i < unique_labels.numel(); ++i) {
                     auto lbl = unique_labels[i];
                     auto mask = (val_labels == lbl);
-                    const auto count = mask.sum().item<int64_t>();
+                    const auto count = mask.sum().template item<int64_t>();
                     if (count == 0) {
                         continue;
                     }
@@ -787,7 +806,7 @@ namespace Thot::NTK {
                         .eq(val_labels.masked_select(mask))
                         .to(torch::kFloat32)
                         .mean()
-                        .item<double>();
+                        .template item<double>();
                     stats.per_class_val_accuracy_krr.push_back(class_acc);
                 }
             }
