@@ -21,6 +21,7 @@ int main() {
         Thot::Optimizer::AdamW({.learning_rate = 1e-3}),
         Thot::LrScheduler::CosineAnnealing({.T_max = 50})
     );
+    model.set_loss(Thot::Loss::MSE({}));
     auto [train_images, train_labels, test_images, test_labels] =
         Thot::Data::Load::MNIST("./datasets", 1.f, 1.f, true);
         

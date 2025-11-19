@@ -2452,36 +2452,30 @@ namespace Thot {
 
         void train(torch::Tensor train_inputs, torch::Tensor train_targets, TrainOptions options = {}) {
 
-            if (!has_optimizer()) {
+            if (!has_optimizer())
                 throw std::logic_error("Cannot train without an optimizer.");
-            }
-            if (!has_loss()) {
+            if (!has_loss())
                 throw std::logic_error("Cannot train without a loss function.");
-            }
-            if (!train_inputs.defined() || !train_targets.defined()) {
+            if (!train_inputs.defined() || !train_targets.defined())
                 throw std::invalid_argument("Training tensors must be defined.");
-            }
-            if (train_inputs.dim() == 0 || train_targets.dim() == 0) {
+            if (train_inputs.dim() == 0 || train_targets.dim() == 0)
                 throw std::invalid_argument("Training tensors must not be scalars.");
-            }
-            if (train_inputs.size(0) != train_targets.size(0)) {
+            if (train_inputs.size(0) != train_targets.size(0))
                 throw std::invalid_argument("Mismatched number of training samples between inputs and targets.");
-            }
-            if (options.batch_size == 0) {
+            if (options.batch_size == 0)
                 throw std::invalid_argument("Batch size must be greater than zero.");
-            }
+
+            std::int64_t fold_count = 1;
 
             if (options.fold) {
-                if (train_inputs.dim() < 2 || train_targets.dim() < 2) {
+                if (train_inputs.dim() < 2 || train_targets.dim() < 2)
                     throw std::invalid_argument("Folded datasets must expose at least two dimensions (folds and samples).");
-                }
-                if (train_targets.size(0) != train_inputs.size(0)) {
+                if (train_targets.size(0) != train_inputs.size(0))
                     throw std::invalid_argument("Folded inputs and targets must share the same number of folds.");
-                }
-                if (train_targets.size(1) != train_inputs.size(1)) {
+                if (train_targets.size(1) != train_inputs.size(1))
                     throw std::invalid_argument("Folded inputs and targets must share the same number of samples per fold.");
-                }
-                //TODO: CHECKPOINT SET folds nb for training loop
+
+                fold_count = train_inputs.size(0);
             }
 
             clear_training_telemetry();
@@ -2493,7 +2487,7 @@ namespace Thot {
                 throw std::runtime_error("VRAM buffering requires the model to be on a CUDA device.");
             }
 
-            const auto total_samples = train_inputs.size(0);
+            const auto total_samples = options.fold ? train_inputs.size(1) : train_inputs.size(0);
             if (total_samples == 0) {
                 return;
             }
@@ -2535,7 +2529,12 @@ namespace Thot {
 
             set_tensor_memory_format(effective_options.memory_format);
 
-            auto training_dataset = TrainingDetails::prepare_tensor_dataset(std::move(train_inputs), std::move(train_targets), effective_options.memory_format);
+            auto build_training_dataset = [&](torch::Tensor inputs, torch::Tensor targets) {
+                auto dataset = TrainingDetails::prepare_tensor_dataset(std::move(inputs), std::move(targets), effective_options.memory_format);
+                dataset = TrainingDetails::ensure_contiguous(std::move(dataset), effective_options.memory_format);
+                dataset = TrainingDetails::ensure_cpu(std::move(dataset), effective_options.memory_format);
+                return dataset;
+            };
 
             std::optional<typename TrainingDetails::TensorDataset> test_dataset{};
 
@@ -2578,30 +2577,56 @@ namespace Thot {
 
             const bool use_buffer = effective_options.buffer_vram > 0;
 
-            training_dataset = TrainingDetails::ensure_contiguous(std::move(training_dataset),
-                                                                  effective_options.memory_format);
-            training_dataset = TrainingDetails::ensure_cpu(std::move(training_dataset),
-                                                           effective_options.memory_format);
+
 
             if (test_dataset) {
-                *test_dataset = TrainingDetails::ensure_contiguous(std::move(*test_dataset),
-                                                                   effective_options.memory_format);
-                *test_dataset = TrainingDetails::ensure_cpu(std::move(*test_dataset),
-                                                            effective_options.memory_format);
+                *test_dataset = TrainingDetails::ensure_contiguous(std::move(*test_dataset), effective_options.memory_format);
+                *test_dataset = TrainingDetails::ensure_cpu(std::move(*test_dataset), effective_options.memory_format);
             }
 
-            if (effective_options.shuffle) {
-                if (use_buffer) {
-                    TrainingDetails::run_epochs<true,  true>(*this, training_dataset, test_dataset, effective_options, training_step_binding);
+            auto run_training_dataset = [&](typename TrainingDetails::TensorDataset dataset) {
+                auto training_dataset = std::move(dataset);
+                if (effective_options.shuffle) {
+                    if (use_buffer) {
+                        TrainingDetails::run_epochs<true,  true>(*this, training_dataset, test_dataset, effective_options, training_step_binding);
+                    } else {
+                        TrainingDetails::run_epochs<false, true>(*this, training_dataset, test_dataset, effective_options, training_step_binding);
+                    }
                 } else {
-                    TrainingDetails::run_epochs<false, true>(*this, training_dataset, test_dataset, effective_options, training_step_binding);
+                    if (use_buffer) {
+                        TrainingDetails::run_epochs<true,  false>(*this, training_dataset, test_dataset, effective_options, training_step_binding);
+                    } else {
+                        TrainingDetails::run_epochs<false, false>(*this, training_dataset, test_dataset, effective_options, training_step_binding);
+                    }
+                }
+            };
+
+            auto reset_state_between_folds = [&]() {
+                clear_training_telemetry();
+                invalidate_graph_capture(GraphExecutionPhase::Training);
+                graph_workspace_.invalidate();
+#ifdef TORCH_CUDA_AVAILABLE
+                if (amp_training_active_) {
+                    amp_scaler_.reset();
+                    ensure_amp_scaler();
+                }
+#endif
+            };
+
+            if (options.fold) {
+                if (fold_count == 0) {
+                    return;
+                }
+                for (std::int64_t fold_index = 0; fold_index < fold_count; ++fold_index) {
+                    reset_state_between_folds();
+                    auto fold_inputs = train_inputs.select(0, fold_index);
+                    auto fold_targets = train_targets.select(0, fold_index);
+                    auto training_dataset = build_training_dataset(std::move(fold_inputs), std::move(fold_targets));
+                    run_training_dataset(std::move(training_dataset));
                 }
             } else {
-                if (use_buffer) {
-                    TrainingDetails::run_epochs<true,  false>(*this, training_dataset, test_dataset, effective_options, training_step_binding);
-                } else {
-                    TrainingDetails::run_epochs<false, false>(*this, training_dataset, test_dataset, effective_options, training_step_binding);
-                }
+                auto training_dataset = build_training_dataset(std::move(train_inputs), std::move(train_targets));
+                run_training_dataset(std::move(training_dataset));
             }
 
 

@@ -86,10 +86,10 @@ int xmain() {
     Thot::Data::Check::Size(train_images, "Raw");
     Thot::Plot::Data::Image(train_images, {1,2,3,4,5,6,7}); //idx
 
-    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Cutout(train_images, train_labels, {-1, -1}, {12, 12}, -1, 1.f, true, false);
+    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Cutout(train_images, train_labels, {{-1, -1}, {12, 12}, -1, 1.f, true, false});
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Shuffle(train_images, train_labels);
 
-    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {"x"}, 1.f, true, false);
+    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {{"x"}, 1.f, true, false});
     std::tie(train_images, train_labels) = Thot::Data::Manipulation::Shuffle(train_images, train_labels);
 
     Thot::Data::Check::Size(train_images, "Augmented");
