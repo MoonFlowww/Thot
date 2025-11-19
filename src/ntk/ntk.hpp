@@ -110,19 +110,19 @@ namespace Thot::NTK {
         DType  kernel_dtype{torch::kFloat32};
         Approximation approximation_mode{Approximation::Exact};
         int64_t feature_dim_used{0};
-        bool    is_psd_checked{false};
-        double  symmetry_error_max{0.0};
-        double  max_abs_entry{0.0};
+        bool is_psd_checked{false};
+        double symmetry_error_max{0.0};
+        double max_abs_entry{0.0};
         int64_t cg_iterations{0};
-        double  cg_final_residual{0.0};
-        double  cg_relative_residual{0.0};
-        bool    cg_converged{false};
+        double cg_final_residual{0.0};
+        double cg_relative_residual{0.0};
+        bool cg_converged{false};
 
 
         // 7. Meta
         Options options_used{};
-        std::string  model_name{};
-        uint64_t     random_seed{0};
+        std::string model_name{};
+        uint64_t random_seed{0};
     };
 
     struct Result {
@@ -723,9 +723,14 @@ namespace Thot::NTK {
         if (options.run_kernel_regression && targets.defined() && kernel.defined()) {
             auto eye = torch::eye(num_samples, kernel.options());
             auto regularized = kernel + options.ridge_lambda * eye;
-            auto alpha = torch::linalg_solve(regularized, targets); // shape [n, ...]
+            auto regression_targets = targets;
+            if (targets.scalar_type() != kernel.scalar_type()) {
+                regression_targets = targets.to(kernel.scalar_type());
+            }
+
+            auto alpha = torch::linalg_solve(regularized, regression_targets); // shape [n, ...]
             auto preds = torch::matmul(kernel, alpha);
-            auto diff = preds - targets;
+            auto diff = preds - regression_targets;
             stats.train_loss_krr = diff.pow(2).mean().template item<double>();
 
             auto derive_float_targets = [&](torch::Tensor base_targets) {

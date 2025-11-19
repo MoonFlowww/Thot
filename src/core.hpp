@@ -147,13 +147,14 @@ namespace Thot {
     struct TrainOptions {
         std::size_t epoch{Core::kDefaultTrainingConfig.epochs};
         std::size_t batch_size{Core::kDefaultTrainingConfig.batch_size};
+        bool fold{false};
         bool shuffle{Core::kDefaultTrainingConfig.shuffle};
-        std::size_t buffer_vram{Core::kDefaultTrainingConfig.buffer_vram};
         bool monitor{true};
         bool restore_best_state{false};
         std::optional<std::vector<torch::Tensor>> validation{};
         std::optional<std::vector<torch::Tensor>> test{};
         std::ostream* stream{&std::cout};
+        std::size_t buffer_vram{Core::kDefaultTrainingConfig.buffer_vram};
         std::optional<Solver::Descriptor> solver{};
         GraphMode graph_mode{GraphMode::Disabled};  // Enable CUDA graph capture/replay; pad or drop remainder batches first.
         bool enable_amp{false}; // Enable TensorCores
@@ -2470,6 +2471,19 @@ namespace Thot {
                 throw std::invalid_argument("Batch size must be greater than zero.");
             }
 
+            if (options.fold) {
+                if (train_inputs.dim() < 2 || train_targets.dim() < 2) {
+                    throw std::invalid_argument("Folded datasets must expose at least two dimensions (folds and samples).");
+                }
+                if (train_targets.size(0) != train_inputs.size(0)) {
+                    throw std::invalid_argument("Folded inputs and targets must share the same number of folds.");
+                }
+                if (train_targets.size(1) != train_inputs.size(1)) {
+                    throw std::invalid_argument("Folded inputs and targets must share the same number of samples per fold.");
+                }
+                //TODO: CHECKPOINT SET folds nb for training loop
+            }
+
             clear_training_telemetry();
             if (options.epoch == 0) {
                 return;
@@ -2525,9 +2539,7 @@ namespace Thot {
 
             std::optional<typename TrainingDetails::TensorDataset> test_dataset{};
 
-            // NEW: vector<torch::Tensor> with size==2: [inputs, targets]
-            auto build_evaluation_dataset = [&](const std::vector<torch::Tensor>& dataset, std::string_view name)
-                -> typename TrainingDetails::TensorDataset {
+            auto build_evaluation_dataset = [&](const std::vector<torch::Tensor>& dataset, std::string_view name) -> typename TrainingDetails::TensorDataset {
                 if (dataset.size() != 2) {
                     throw std::invalid_argument(std::string(name) +
                         " must contain exactly 2 tensors: [inputs, targets].");
@@ -3886,8 +3898,7 @@ namespace Thot {
             }
 
             template <bool BufferVRAM, bool ShouldShuffle>
-            static void run_epochs(Model& model, TensorDataset& train_dataset,
-                    const std::optional<TensorDataset>& test_dataset, const TrainOptions& options, const TrainingStepBinding& training_step) {
+            static void run_epochs(Model& model, TensorDataset& train_dataset, const std::optional<TensorDataset>& test_dataset, const TrainOptions& options, const TrainingStepBinding& training_step) {
                 const auto device = model.device();
                 const auto total_samples = train_dataset.inputs.size(0);
                 const auto batch_size = static_cast<std::int64_t>(options.batch_size);
@@ -3977,10 +3988,7 @@ namespace Thot {
 
 #ifdef TORCH_CUDA_AVAILABLE
                 struct PrefetchState {
-                    explicit PrefetchState(int device_index)
-                        : stream(torch::cuda::getStreamFromPool(/*isHighPriority=*/false, device_index))
-                    {
-                    }
+                    explicit PrefetchState(int device_index) : stream(torch::cuda::getStreamFromPool(/*isHighPriority=*/false, device_index)) {}
 
                     torch::cuda::CUDAStream stream;
                     std::array<torch::Tensor, 2> inputs{};
@@ -4010,11 +4018,7 @@ namespace Thot {
                     return tensor;
                 };
 
-                auto stage_to_device = [&](torch::Tensor tensor,
-                           torch::Tensor& buffer,
-                           bool apply_channels_last,
-                           bool force_non_blocking = false,
-                           bool use_prefetch_stream = false) {
+                auto stage_to_device = [&](torch::Tensor tensor, torch::Tensor& buffer, bool apply_channels_last, bool force_non_blocking = false, bool use_prefetch_stream = false) {
                     tensor = ensure_layout(std::move(tensor), apply_channels_last);
                     if (!tensor.defined() || tensor.device() == device) {
                         return tensor;
@@ -4115,8 +4119,7 @@ namespace Thot {
                         bool has_batch = schedule_prefetch_from_provider(provider, current_slot);
                         for (std::size_t batch_index = 0; batch_index < max_batches && has_batch; ++batch_index) {
                             wait_for_prefetch_slot(current_slot);
-                            const auto processed = process_batch(prefetch_state->inputs[current_slot],
-                                                                 prefetch_state->targets[current_slot]);
+                            const auto processed = process_batch(prefetch_state->inputs[current_slot], prefetch_state->targets[current_slot]);
                             weight += processed;
 
                             const std::size_t next_slot = current_slot ^ 1U;
@@ -4128,16 +4131,15 @@ namespace Thot {
 
 
                     const std::size_t total_batches = total_samples > 0
-                        ? static_cast<std::size_t>((total_samples + batch_size - 1) / batch_size)
-                        : 0;
+                        ? static_cast<std::size_t>((total_samples + batch_size - 1) / batch_size) : 0;
 
                     auto fetch_batch = [&](std::size_t batch_index) {
                         const auto offset = static_cast<std::int64_t>(batch_index) * batch_size;
                         const auto remaining = total_samples - offset;
                         const auto current_batch = std::min<std::int64_t>(batch_size, remaining);
-                        if (current_batch <= 0) {
+                        if (current_batch <= 0)
                             return std::pair<torch::Tensor, torch::Tensor>{torch::Tensor{}, torch::Tensor{}};
-                        }
+
                         if (graph_mode_enabled && current_batch != batch_size) {
                             throw std::invalid_argument(
                                 "Graph optimisation requires every batch to match the captured batch size ("
