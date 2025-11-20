@@ -11,7 +11,7 @@ int main() {
 
     const int64_t N = 200000;
     const int64_t B = std::pow(2,7);
-    const int64_t epochs = 35;
+    const int64_t epochs = 10;
     const int64_t steps_per_epoch = (N + B - 1) / B;
 
     
@@ -62,7 +62,7 @@ int main() {
         Thot::Optimizer::AdamW({.learning_rate=1e-4, .weight_decay=5e-4}),
             Thot::LrScheduler::CosineAnnealing({
             .T_max = static_cast<size_t>(epochs*0.85) * steps_per_epoch,
-            .eta_min = 3e-7,
+            .eta_min = 3e-6,
             .warmup_steps = 5*static_cast<size_t>(steps_per_epoch),
             .warmup_start_factor = 0.1
         })
@@ -84,14 +84,14 @@ int main() {
     auto [x1, y1, x2, y2] = Thot::Data::Load::CIFAR10("/home/moonfloww/Projects/DATASETS/Image/CIFAR10", 1.f, 1.f, true);
     auto [validation_images, validation_labels] = Thot::Data::Manipulation::Fraction(x2, y2, 0.1f);
     Thot::Data::Check::Size(x1, "Raw");
-
-    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {12, 12}, {-1,-1,-1}, .5f, true, false});
+    std::tie(x1, y1) = Thot::Data::Transform::Augmentation::CLAHE(x1, y1, {256, 2.f, {4,4}, 1.f, true});
+    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {12, 12}, {-1,-1,-1}, .5f, false, false});
     std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {12, 12}, {-1,-1,-1}, 1.f, false, false});
     std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {6, 6}, {-1,-1,-1}, 1.f, false, false});
     std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {6, 6}, {-1,-1,-1}, 1.f, false, false});
     std::tie(x1, y1) = Thot::Data::Manipulation::Shuffle(x1, y1);
 
-    std::tie(x1, y1) = Thot::Data::Manipulation::Flip(x1, y1, {{"x"}, 1.f, false, false});
+    std::tie(x1, y1) = Thot::Data::Manipulation::Flip(x1, y1, {{"x"}, 1.f, true, false});
     std::tie(x1, y1) = Thot::Data::Manipulation::Shuffle(x1, y1);
 
     Thot::Data::Check::Size(x1, "Augmented");
@@ -125,7 +125,11 @@ int main() {
         Thot::Metric::Classification::Informedness
     }, {.batch_size = 64});
 
+    Thot::Plot::Render(model, Thot::Plot::Reliability::GradCAM({.samples = 4, .random = false, .normalize = true, .overlay = true}),
+        validation_images,validation_labels);
 
+    Thot::Plot::Render(model, Thot::Plot::Reliability::LIME({.random = true, .normalize = true, .showWeights = true}),
+        validation_images, validation_labels);
 
     return 0;
 }
