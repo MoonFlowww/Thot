@@ -62,7 +62,7 @@ namespace {
     }
 }
 
-int main() {
+int tymain() {
     Thot::Model model("");
     const auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
     model.use_cuda(torch::cuda::is_available());

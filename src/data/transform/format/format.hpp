@@ -74,9 +74,9 @@ namespace Thot::Data::Transform::Format {
         }
 
         auto float_tensor = Details::to_float32(tensor);
-        if (requested_size.has_value()) {
+        if (requested_size.has_value())
             float_tensor = Details::resize_spatial(float_tensor, *requested_size);
-        }
+
         return Details::clone_as_dtype(float_tensor, tensor.scalar_type());
     }
 

@@ -96,7 +96,7 @@ target_link_libraries(Thot "${TORCH_LIBRARIES}" Boost::filesystem ${OpenCV_LIBS}
 target_include_directories(Thot PUBLIC ${CMAKE_SOURCE_DIR}/include ${TORCH_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS})
 
 #Test
-add_executable(test_Thot  test/analysis/ntk.cpp #classification/timeseries/ptbxl.cpp #regression/timeseries/etth.cpp #images/cifar10.cpp
+add_executable(test_Thot  test/classification/images/cifar10.cpp #analysis/ntk.cpp #classification/timeseries/ptbxl.cpp #regression/timeseries/etth.cpp #
         src/block/details/blocks/residual.hpp
         src/block/details/blocks/sequential.hpp
         src/lrscheduler/details/common.hpp
@@ -163,9 +163,7 @@ add_executable(test_Thot  test/analysis/ntk.cpp #classification/timeseries/ptbxl
         src/plot/details/data.hpp
         src/plot/details/reliability/reliability_lime.hpp
         src/plot/details/reliability/reliability_gradcam.hpp
-        test/speedtest.cpp
         src/data/load/types.hpp
-        test/classification/masks/dubai_segment.cpp
         src/data/transform/augment/atmospheric_drift.hpp
         src/data/transform/augment/chromatic_aberration.hpp
         src/data/transform/augment/clahe.hpp
@@ -196,7 +194,6 @@ add_executable(test_Thot  test/analysis/ntk.cpp #classification/timeseries/ptbxl
         src/layer/details/resizing.hpp
         src/attention/details/latent.hpp
         src/attention/builder.hpp
-        test/analysis/ntk.cpp
         src/ntk/ntk.hpp
         src/solver/solver.hpp
         src/solver/details/sde.hpp

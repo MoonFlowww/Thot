@@ -151,7 +151,6 @@ namespace Thot {
         bool shuffle{Core::kDefaultTrainingConfig.shuffle};
         bool monitor{true};
         bool restore_best_state{false};
-        std::optional<std::vector<torch::Tensor>> validation{};
         std::optional<std::vector<torch::Tensor>> test{};
         std::ostream* stream{&std::cout};
         std::size_t buffer_vram{Core::kDefaultTrainingConfig.buffer_vram};
@@ -2476,6 +2475,8 @@ namespace Thot {
                     throw std::invalid_argument("Folded inputs and targets must share the same number of samples per fold.");
 
                 fold_count = train_inputs.size(0);
+                if (fold_count < 2)
+                    throw std::invalid_argument("K-fold training requires at least two folds when fold mode is enabled.");
             }
 
             clear_training_telemetry();
@@ -2556,11 +2557,8 @@ namespace Thot {
                 return TrainingDetails::prepare_tensor_dataset(inputs, targets, effective_options.memory_format);
             };
 
-            if (options.test) {
+            if (options.test)
                 test_dataset = build_evaluation_dataset(*options.test, "test");
-            } else if (options.validation) {
-                test_dataset = build_evaluation_dataset(*options.validation, "validation");
-            }
 
             if (effective_options.solver && effective_options.graph_mode != GraphMode::Disabled) {
                 throw std::runtime_error("Solver-backed training currently requires GraphMode::Disabled.");
@@ -2584,50 +2582,99 @@ namespace Thot {
                 *test_dataset = TrainingDetails::ensure_cpu(std::move(*test_dataset), effective_options.memory_format);
             }
 
-            auto run_training_dataset = [&](typename TrainingDetails::TensorDataset dataset) {
+            auto run_training_dataset = [&](typename TrainingDetails::TensorDataset dataset, const std::optional<typename TrainingDetails::TensorDataset>& evaluation_dataset) {
                 auto training_dataset = std::move(dataset);
                 if (effective_options.shuffle) {
                     if (use_buffer) {
-                        TrainingDetails::run_epochs<true,  true>(*this, training_dataset, test_dataset, effective_options, training_step_binding);
+                        TrainingDetails::run_epochs<true,  true>(*this, training_dataset, evaluation_dataset, effective_options, training_step_binding);
                     } else {
-                        TrainingDetails::run_epochs<false, true>(*this, training_dataset, test_dataset, effective_options, training_step_binding);
+                        TrainingDetails::run_epochs<false, true>(*this, training_dataset, evaluation_dataset, effective_options, training_step_binding);
                     }
                 } else {
                     if (use_buffer) {
-                        TrainingDetails::run_epochs<true,  false>(*this, training_dataset, test_dataset, effective_options, training_step_binding);
+                        TrainingDetails::run_epochs<true,  false>(*this, training_dataset, evaluation_dataset, effective_options, training_step_binding);
                     } else {
-                        TrainingDetails::run_epochs<false, false>(*this, training_dataset, test_dataset, effective_options, training_step_binding);
+                        TrainingDetails::run_epochs<false, false>(*this, training_dataset, evaluation_dataset, effective_options, training_step_binding);
                     }
                 }
             };
 
-            auto reset_state_between_folds = [&]() {
-                clear_training_telemetry();
-                invalidate_graph_capture(GraphExecutionPhase::Training);
-                graph_workspace_.invalidate();
-#ifdef TORCH_CUDA_AVAILABLE
-                if (amp_training_active_) {
-                    amp_scaler_.reset();
-                    ensure_amp_scaler();
-                }
-#endif
-            };
 
             if (options.fold) {
                 if (fold_count == 0) {
                     return;
                 }
+                const auto fold_sample_count = train_inputs.size(1);
+                if (fold_sample_count == 0) {
+                    return;
+                }
+
+                auto flatten_fold_batches = [](torch::Tensor tensor) {
+                    if (!tensor.defined()) {
+                        return tensor;
+                    }
+                    if (tensor.dim() < 2) {
+                        throw std::invalid_argument("Folded tensors must expose at least two dimensions when flattening.");
+                    }
+                    auto sizes = tensor.sizes().vec();
+                    const auto combined = sizes[0] * sizes[1];
+                    std::vector<int64_t> new_shape;
+                    new_shape.reserve(sizes.size() - 1);
+                    new_shape.push_back(combined);
+                    new_shape.insert(new_shape.end(), sizes.begin() + 2, sizes.end());
+                    return tensor.reshape(new_shape);
+                };
+
+                auto build_fold_tensor = [&](const torch::Tensor& tensor, std::int64_t held_out_fold) {
+                    std::vector<int64_t> training_folds;
+                    training_folds.reserve(static_cast<std::size_t>(fold_count - 1));
+                    for (std::int64_t fold_index = 0; fold_index < fold_count; ++fold_index) {
+                        if (fold_index != held_out_fold) {
+                            training_folds.push_back(fold_index);
+                        }
+                    }
+
+                    auto index_options = torch::TensorOptions().dtype(torch::kLong);
+                    auto fold_indices = torch::tensor(training_folds, index_options);
+                    if (tensor.device().is_cuda()) {
+                        fold_indices = fold_indices.to(tensor.device(), torch::kLong);
+                    }
+
+                    auto selected = tensor.index_select(0, fold_indices);
+                    return flatten_fold_batches(std::move(selected));
+                };
+
                 for (std::int64_t fold_index = 0; fold_index < fold_count; ++fold_index) {
-                    reset_state_between_folds();
-                    auto fold_inputs = train_inputs.select(0, fold_index);
-                    auto fold_targets = train_targets.select(0, fold_index);
-                    auto training_dataset = build_training_dataset(std::move(fold_inputs), std::move(fold_targets));
-                    run_training_dataset(std::move(training_dataset));
+                    reset_training_state();
+
+                    auto validation_inputs = train_inputs.select(0, fold_index);
+                    auto validation_targets = train_targets.select(0, fold_index);
+                    auto validation_dataset = std::optional<typename TrainingDetails::TensorDataset>{};
+                    validation_dataset = build_training_dataset(std::move(validation_inputs), std::move(validation_targets));
+
+                    auto training_inputs = build_fold_tensor(train_inputs, fold_index);
+                    auto training_targets = build_fold_tensor(train_targets, fold_index);
+                    auto training_dataset = build_training_dataset(std::move(training_inputs), std::move(training_targets));
+
+                    run_training_dataset(std::move(training_dataset), validation_dataset);
                 }
             } else {
                 auto training_dataset = build_training_dataset(std::move(train_inputs), std::move(train_targets));
-                run_training_dataset(std::move(training_dataset));
+                run_training_dataset(std::move(training_dataset), test_dataset);
             }
+        }
+
+        void reset_training_state()
+        {
+            clear_training_telemetry();
+            invalidate_graph_capture(GraphExecutionPhase::Training);
+            graph_workspace_.invalidate();
+#ifdef TORCH_CUDA_AVAILABLE
+            if (amp_training_active_) {
+                amp_scaler_.reset();
+                ensure_amp_scaler();
+            }
+#endif
 
 
 

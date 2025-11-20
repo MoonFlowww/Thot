@@ -19,7 +19,7 @@ namespace Thot::Data::Transform::Augmentation {
         struct CutoutOptions {
             const std::vector<int64_t>& offsets;
             const std::vector<int64_t>& sizes;
-            double fill_value = 0.0;
+            const std::vector<int64_t> fill_value{-1, -1, -1};
             std::optional<double> frequency = 0.3;
             std::optional<bool> data_augment = true;
             bool show_progress = true;
@@ -81,8 +81,9 @@ namespace Thot::Data::Transform::Augmentation {
 
         const auto batch_size = result.size(0);
 
-        auto random_color_like = [](const torch::Tensor& tensor, int64_t height_dimension, int64_t width_dimension) {
+        auto random_color_like = [](const torch::Tensor& tensor, int64_t height_dimension, int64_t width_dimension, const std::vector<int64_t>& fill ) {
             auto color_shape = tensor.sizes().vec();
+
             if (height_dimension >= 0 && height_dimension < static_cast<int64_t>(color_shape.size())) {
                 color_shape[static_cast<std::size_t>(height_dimension)] = 1;
             }
@@ -90,6 +91,23 @@ namespace Thot::Data::Transform::Augmentation {
                 color_shape[static_cast<std::size_t>(width_dimension)] = 1;
             }
             auto color = torch::rand(color_shape, tensor.options());
+
+            const int64_t channel_dim = static_cast<int64_t>(color.dim()) - 1;
+            const int64_t n_channels  = color.size(channel_dim);
+
+            for (int64_t c = 0; c < static_cast<int64_t>(fill.size()) && c < n_channels; ++c) {
+                const auto v = fill[c];
+                if (v >= 0) {
+                    // Map 0–255 to [0,1] for floating types, or keep as is otherwise
+                    double val;
+                    if (tensor.is_floating_point()) {
+                        val = static_cast<double>(v) / 255.0;
+                    } else {
+                        val = static_cast<double>(v);
+                    }
+                    color.select(channel_dim, c).fill_(val);
+                }
+            }
             return color.expand(tensor.sizes());
         };
 
@@ -110,12 +128,8 @@ namespace Thot::Data::Transform::Augmentation {
 
                 if (sample_y0 < y1 && sample_x0 < x1) {
                     auto patch = sample.slice(sample_height_dim, sample_y0, y1).slice(sample_width_dim, sample_x0, x1);
-                    if (opt.fill_value == -1.0) {
-                        auto color = random_color_like(patch, sample_height_dim, sample_width_dim);
-                        patch.copy_(color);
-                    } else {
-                        patch.fill_(opt.fill_value);
-                    }
+                    auto color = random_color_like(patch, sample_height_dim, sample_width_dim, opt.fill_value);
+                    patch.copy_(color);
                 }
                 continue;
             }
@@ -175,13 +189,10 @@ namespace Thot::Data::Transform::Augmentation {
 
             auto mask_expanded = mask.view(mask_view_shape).expand(sample.sizes());
 
-            if (opt.fill_value == -1.0) {
-                auto color = random_color_like(sample, sample_height_dim, sample_width_dim);
-                auto updated = torch::where(mask_expanded, color, sample);
-                sample.copy_(updated);
-            } else {
-                sample.masked_fill_(mask_expanded, opt.fill_value);
-            }
+
+            auto color = random_color_like(sample, sample_height_dim, sample_width_dim, opt.fill_value);
+            auto updated = torch::where(mask_expanded, color, sample);
+            sample.copy_(updated);
         }
 
         auto augmented_inputs = torch::cat({inputs, result}, 0);

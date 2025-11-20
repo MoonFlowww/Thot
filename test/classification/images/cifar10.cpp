@@ -5,13 +5,13 @@
 #include <utility>
 #include "../../../include/Thot.h"
 
-int xmain() {
+int main() {
     Thot::Model model("Debug_CIFAR");
     model.use_cuda(torch::cuda::is_available());
 
     const int64_t N = 200000;
     const int64_t B = std::pow(2,7);
-    const int64_t epochs = 20;
+    const int64_t epochs = 35;
     const int64_t steps_per_epoch = (N + B - 1) / B;
 
     
@@ -76,39 +76,40 @@ int xmain() {
         .start_step = static_cast<size_t>(0.85 * (steps_per_epoch*epochs)),
         .accumulation_stride = static_cast<size_t>(steps_per_epoch),
         .max_snapshots = 20,
-    })});
+    }), Thot::Regularization::VAT({5})});
 
 
     
 
-    at::Tensor [train_images, train_labels, test_images, test_labels] = Thot::Data::Load::CIFAR10("/home/moonfloww/Projects/DATASETS/CIFAR10", 1.f, 1.f, true);
-    at::Tensor [validation_images, validation_labels] = Thot::Data::Manipulation::Fraction(test_images, test_labels, 0.1f);
-    Thot::Data::Check::Size(train_images, "Raw");
-    Thot::Plot::Data::Image(train_images, {1,2,3,4,5,6,7}); //idx
+    auto [x1, y1, x2, y2] = Thot::Data::Load::CIFAR10("/home/moonfloww/Projects/DATASETS/Image/CIFAR10", 1.f, 1.f, true);
+    auto [validation_images, validation_labels] = Thot::Data::Manipulation::Fraction(x2, y2, 0.1f);
+    Thot::Data::Check::Size(x1, "Raw");
 
-    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Cutout(train_images, train_labels, {{-1, -1}, {12, 12}, -1, 1.f, true, false});
-    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Shuffle(train_images, train_labels);
+    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {12, 12}, {-1,-1,-1}, .5f, true, false});
+    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {12, 12}, {-1,-1,-1}, 1.f, false, false});
+    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {6, 6}, {-1,-1,-1}, 1.f, false, false});
+    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {6, 6}, {-1,-1,-1}, 1.f, false, false});
+    std::tie(x1, y1) = Thot::Data::Manipulation::Shuffle(x1, y1);
 
-    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Flip(train_images, train_labels, {{"x"}, 1.f, true, false});
-    std::tie(train_images, train_labels) = Thot::Data::Manipulation::Shuffle(train_images, train_labels);
+    std::tie(x1, y1) = Thot::Data::Manipulation::Flip(x1, y1, {{"x"}, 1.f, false, false});
+    std::tie(x1, y1) = Thot::Data::Manipulation::Shuffle(x1, y1);
 
-    Thot::Data::Check::Size(train_images, "Augmented");
+    Thot::Data::Check::Size(x1, "Augmented");
+    Thot::Plot::Data::Image(x1, {1,2,3,4,5,6,7,8,9}); //idx
 
-
-
-    model.train(train_images, train_labels, {
+    model.train(x1, y1, {
         .epoch = static_cast<std::size_t>(epochs),
         .batch_size = static_cast<std::size_t>(B),
         .shuffle = true,
         .restore_best_state = true,
-        .validation = std::vector<at::Tensor>{validation_images, validation_labels},
+        .test = std::vector<at::Tensor>{validation_images, validation_labels},
         .graph_mode = Thot::GraphMode::Capture,
         .enable_amp=true,
         .memory_format = torch::MemoryFormat::Contiguous}
     );
 
 
-    model.evaluate(test_images, test_labels, Thot::Evaluation::Classification,{
+    model.evaluate(x2, y2, Thot::Evaluation::Classification,{
         Thot::Metric::Classification::Accuracy,
         Thot::Metric::Classification::Precision,
         Thot::Metric::Classification::Recall,
