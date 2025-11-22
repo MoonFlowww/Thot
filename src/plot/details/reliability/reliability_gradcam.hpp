@@ -23,7 +23,7 @@ namespace Thot::Plot::Details::Reliability {
     namespace detail {
         inline auto ResolveModules(Thot::Model& model) -> std::vector<std::shared_ptr<torch::nn::Module>>
         {
-            auto modules = model.modules(/*include_self=*/true);
+            auto modules = model.modules(/*include_self=*/false);
             std::vector<std::shared_ptr<torch::nn::Module>> filtered;
             filtered.reserve(modules.size());
             for (auto& module : modules) {
@@ -49,12 +49,8 @@ namespace Thot::Plot::Details::Reliability {
             }
 
             const auto adjust_index = [&](std::size_t index) -> std::shared_ptr<torch::nn::Module> {
-                if (!modules.empty() && modules.front().get() == &model) {
-                    index += 1;
-                }
                 if (index >= modules.size()) {
-                    throw std::out_of_range(
-                        "Requested Grad-CAM layer index exceeds available modules.");
+                    throw std::out_of_range("Requested Grad-CAM layer index exceeds available modules.");
                 }
                 return modules[index];
             };
@@ -268,10 +264,7 @@ namespace Thot::Plot::Details::Reliability {
                 throw std::runtime_error("Grad-CAM expects model outputs shaped as (batch, classes).");
             }
 
-
-
-            auto probabilities = torch::softmax(logits, 1);
-            auto selected = probabilities.index({0, target_class});
+            auto selected = logits.index({0, target_class});
             auto activation = capture.activation;
             if (!activation.defined() || !activation.requires_grad()) {
                 throw std::runtime_error("Target layer activation does not require gradients.");
@@ -320,6 +313,7 @@ namespace Thot::Plot::Details::Reliability {
         options.layoutTitle = "Grad-CAM";
         options.imageTitles = titles;
         options.showColorBox = true;
+        options.columns = descriptor.options.overlay ? 3 : 2;
         Plot::Data::Image images(stacked, indices, options);
         (void)images;
     }

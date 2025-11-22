@@ -28,6 +28,42 @@ namespace Thot::NTK {
     enum class Approximation { Exact, RandomProjection, Nystrom };
     enum class MemoryMode { FullGPU, StreamCPU, OperatorCG, OperatorLanczos };
 
+    [[nodiscard]] inline std::string to_string(KernelType type) {
+        switch (type) {
+            case KernelType::NTK: return "NTK";
+            case KernelType::NNGP: return "NNGP";
+        }
+        return "UnknownKernelType";
+    }
+
+    [[nodiscard]] inline std::string to_string(OutputMode mode) {
+        switch (mode) {
+            case OutputMode::SumOutputs: return "SumOutputs";
+            case OutputMode::PerOutput: return "PerOutput";
+            case OutputMode::DiagonalAverage: return "DiagonalAverage";
+        }
+        return "UnknownOutputMode";
+    }
+
+    [[nodiscard]] inline std::string to_string(Approximation approximation) {
+        switch (approximation) {
+            case Approximation::Exact: return "Exact";
+            case Approximation::RandomProjection: return "RandomProjection";
+            case Approximation::Nystrom: return "Nystrom";
+        }
+        return "UnknownApproximation";
+    }
+
+    [[nodiscard]] inline std::string to_string(MemoryMode mode) {
+        switch (mode) {
+            case MemoryMode::FullGPU: return "FullGPU";
+            case MemoryMode::StreamCPU: return "StreamCPU";
+            case MemoryMode::OperatorCG: return "OperatorCG";
+            case MemoryMode::OperatorLanczos: return "OperatorLanczos";
+        }
+        return "UnknownMemoryMode";
+    }
+
     using Device = torch::DeviceType;
     using DType = c10::ScalarType;
 
@@ -301,11 +337,38 @@ namespace Thot::NTK {
 
 
         std::vector<torch::Tensor> params;
+        torch::Device compute_device = inputs.device();
         for (const auto& p : fetch_parameters(module_ref)) {
             if (p.requires_grad()) {
                 params.push_back(p);
                 stats.n_params_effective += p.numel();
+                if (!p.device().is_cpu()) {
+                    compute_device = p.device();
+                } else if (compute_device.type() != p.device().type()) {
+                    compute_device = p.device();
+                }
             }
+        }
+
+        if (!params.empty()) {
+            const auto reference_device = params.front().device();
+            const bool mismatch_devices = std::any_of(params.begin(), params.end(), [&](const torch::Tensor& tensor) {
+                return tensor.device() != reference_device;
+            });
+            if (!reference_device.is_cpu()) {
+                compute_device = reference_device;
+            }
+            if (mismatch_devices) {
+                throw std::runtime_error("NTK::Compute expected all model parameters on the same device");
+            }
+        }
+
+        if (inputs.device() != compute_device) {
+            inputs = inputs.to(compute_device);
+        }
+
+        if (targets.defined() && targets.device() != compute_device) {
+            targets = targets.to(compute_device);
         }
 
         std::vector<torch::Tensor> flattened_grads;

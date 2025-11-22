@@ -525,6 +525,8 @@ struct MatrixOptions {
         std::string layoutTitle{"Selected images"};
         std::vector<std::string> imageTitles{};
         bool showColorBox{false};
+        std::optional<int> columns{};
+        std::optional<int> rows{};
     };
 
     class Image;
@@ -604,8 +606,15 @@ struct MatrixOptions {
         }
 
         const std::size_t count = selected.size();
-        const int columns = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count))));
-        const int rows = static_cast<int>((static_cast<int>(count) + columns - 1) / columns);
+        int columns = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count))));
+        int rows = static_cast<int>((static_cast<int>(count) + columns - 1) / columns);
+        if (options.columns) {
+            columns = std::max(1, *options.columns);
+            rows = static_cast<int>((static_cast<int>(count) + columns - 1) / columns);
+        }
+        if (options.rows) {
+            rows = std::max(1, *options.rows);
+        }
 
         Utils::Gnuplot plotter{};
         plotter.setMouse(false);

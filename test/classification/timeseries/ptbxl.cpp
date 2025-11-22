@@ -180,7 +180,7 @@ namespace {
 
 }
 
-int __main() {
+int main() {
     Thot::Model model("PTBXL_ECG");
     const bool use_cuda = torch::cuda::is_available();
 

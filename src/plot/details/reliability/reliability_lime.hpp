@@ -106,10 +106,8 @@ namespace Thot::Plot::Details::Reliability {
             throw std::invalid_argument("LIME requires at least one sample.");
         }
 
-        const auto features = static_cast<std::size_t>(inputs.size(1));
-        if (features == 0) {
-            throw std::invalid_argument("LIME expects feature dimension greater than zero.");
-        }
+
+
 
         auto flattened_targets = Interpretability::FlattenTargets(std::move(targets), total_samples);
         auto selected_indices = Interpretability::SelectIndices(
@@ -130,6 +128,13 @@ namespace Thot::Plot::Details::Reliability {
 
         for (auto index : selected_indices) {
             auto sample = inputs.index({static_cast<int64_t>(index)}).clone();
+            auto original_shape = sample.sizes().vec();
+            auto flattened_sample = sample.flatten();
+
+            const auto features = static_cast<std::size_t>(flattened_sample.numel());
+            if (features == 0) {
+                throw std::invalid_argument("LIME expects feature dimension greater than zero.");
+            }
             auto target_class = flattened_targets.index({static_cast<int64_t>(index)}).item<int64_t>();
 
             auto masks = torch::bernoulli(torch::full({static_cast<int64_t>(perturbations),
@@ -140,8 +145,15 @@ namespace Thot::Plot::Details::Reliability {
             masks.index_put_({0}, torch::ones_like(masks.index({0})));
 
             auto distances = (masks - 1.0).abs().sum(1) / static_cast<double>(features);
-            auto expanded = sample.unsqueeze(0).expand({static_cast<int64_t>(perturbations), sample.size(0)});
+            auto expanded = flattened_sample.unsqueeze(0).expand({static_cast<int64_t>(perturbations), flattened_sample.size(0)});
             auto perturbed = masks * expanded;
+
+            std::vector<int64_t> perturbed_shape;
+            perturbed_shape.reserve(original_shape.size() + 1);
+            perturbed_shape.push_back(static_cast<int64_t>(perturbations));
+            perturbed_shape.insert(perturbed_shape.end(), original_shape.begin(), original_shape.end());
+            perturbed = perturbed.view(perturbed_shape);
+
 
             auto logits = model.forward(perturbed);
             if (logits.dim() == 1) {

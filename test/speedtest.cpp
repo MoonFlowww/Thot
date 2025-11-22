@@ -389,12 +389,7 @@ static ClassificationMetrics compute_macro_metrics(const std::vector<int64_t>& t
 }
 
 template <typename ForwardFn>
-static ClassificationMetrics evaluate_classifier(ForwardFn&& forward_fn,
-                                                 const torch::Tensor& data,
-                                                 const torch::Tensor& labels,
-                                                 int64_t batch_size,
-                                                 bool use_cuda,
-                                                 int64_t num_classes) {
+static ClassificationMetrics evaluate_classifier(ForwardFn&& forward_fn, const torch::Tensor& data, const torch::Tensor& labels, int64_t batch_size, bool use_cuda, int64_t num_classes) {
     std::vector<int64_t> tp(num_classes, 0);
     std::vector<int64_t> fp(num_classes, 0);
     std::vector<int64_t> fn(num_classes, 0);
@@ -442,10 +437,10 @@ static ClassificationMetrics evaluate_classifier(ForwardFn&& forward_fn,
 
 
 
-int ssmain() {
+int main() {
     auto [x1, y1, x2, y2] = Thot::Data::Load::MNIST("/home/moonfloww/Projects/DATASETS/Image/MNIST", 1.f, 1.f, true);
     const bool IsCuda = torch::cuda::is_available();
-    const int64_t epochs= 10;
+    const int64_t epochs= 100;
     const int64_t B= 64;
     const int64_t num_classes = 10;
     const int64_t N= x1.size(0);
@@ -511,8 +506,8 @@ int ssmain() {
         for (int64_t i = 0; i < N; i += B) { auto step_start = std::chrono::high_resolution_clock::now();
             const int64_t end = std::min(i + B, N);
 
-            auto inputs  = stage_for_device(x1.index({torch::indexing::Slice(i, end)}), IsCuda);
-            auto targets = stage_for_device(y1.index({torch::indexing::Slice(i, end)}), IsCuda);
+            auto inputs  = x1.index({torch::indexing::Slice(i, end)}).to(torch::kCUDA); //stage_for_device(x1.index({torch::indexing::Slice(i, end)}), IsCuda);
+            auto targets = y1.index({torch::indexing::Slice(i, end)}).to(torch::kCUDA); //stage_for_device(y1.index({torch::indexing::Slice(i, end)}), IsCuda);
 
             model2.zero_grad();
             auto logits = model2.forward(inputs);
@@ -533,34 +528,32 @@ int ssmain() {
     //libtorch
     std::cout << "training 100% LibTorch" << std::endl;
 
-    torch::Device device = IsCuda ? torch::kCUDA : torch::kCPU;
     Net net;
-    net->to(device);
-    torch::optim::SGD optimizer(net->parameters(), torch::optim::SGDOptions(1e-3));
-    torch::nn::CrossEntropyLoss criterion(torch::nn::CrossEntropyLossOptions().label_smoothing(0.02));
+    net->to(torch::kCUDA);
+    torch::optim::SGD optimizer(net->parameters(), torch::optim::SGDOptions(0.1).momentum(0.9).nesterov(true) );
 
+    torch::nn::CrossEntropyLoss criterion(torch::nn::CrossEntropyLossOptions().label_smoothing(0.0));
     net->train();
+
     for (int64_t e = 0; e < epochs; ++e) {
         for (int64_t i = 0; i < N; i += B) { auto step_start = std::chrono::high_resolution_clock::now();
             const int64_t end = std::min(i + B, N);
 
-            auto inputs  = stage_for_device(x1.index({torch::indexing::Slice(i, end)}), IsCuda);
-            auto targets = stage_for_device(y1.index({torch::indexing::Slice(i, end)}), IsCuda);
+            auto inputs  = x1.index({at::indexing::Slice(i, end)}).to(torch::kCUDA); //stage_for_device(x1.index({torch::indexing::Slice(i, end)}), IsCuda);
+            auto targets = y1.index({at::indexing::Slice(i, end)}).to(torch::kCUDA); //stage_for_device(y1.index({torch::indexing::Slice(i, end)}), IsCuda);
 
             optimizer.zero_grad();
             auto logits = net->forward(inputs);
-            auto loss= criterion(logits, targets);
+            auto loss = criterion(logits, targets)/static_cast<double>(B);
             loss.backward();
             optimizer.step();
-
             auto step_end = std::chrono::high_resolution_clock::now();
             double step_ms = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(step_end - step_start).count();
             libtorch_samples.push_back(step_ms);
         }
     }
     net->eval();
-    libtorch_metrics = evaluate_classifier(
-        [&](const torch::Tensor& inputs) { return net->forward(inputs); }, x2, y2, B, IsCuda, num_classes);
+    libtorch_metrics = evaluate_classifier([&](const torch::Tensor& inputs) { return net->forward(inputs); }, x2, y2, B, IsCuda, num_classes);
 
 
     // Compute stats

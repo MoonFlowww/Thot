@@ -11,7 +11,7 @@ int main() {
 
     const int64_t N = 200000;
     const int64_t B = std::pow(2,7);
-    const int64_t epochs = 10;
+    const int64_t epochs = 50;
     const int64_t steps_per_epoch = (N + B - 1) / B;
 
     
@@ -62,7 +62,7 @@ int main() {
         Thot::Optimizer::AdamW({.learning_rate=1e-4, .weight_decay=5e-4}),
             Thot::LrScheduler::CosineAnnealing({
             .T_max = static_cast<size_t>(epochs*0.85) * steps_per_epoch,
-            .eta_min = 3e-6,
+            .eta_min = 1e-5,
             .warmup_steps = 5*static_cast<size_t>(steps_per_epoch),
             .warmup_start_factor = 0.1
         })
@@ -100,12 +100,12 @@ int main() {
     model.train(x1, y1, {
         .epoch = static_cast<std::size_t>(epochs),
         .batch_size = static_cast<std::size_t>(B),
-        .shuffle = true,
+        .shuffle = false,
         .restore_best_state = true,
         .test = std::vector<at::Tensor>{validation_images, validation_labels},
         .graph_mode = Thot::GraphMode::Capture,
         .enable_amp=true,
-        .memory_format = torch::MemoryFormat::Contiguous}
+        .memory_format = torch::MemoryFormat::ChannelsLast}
     );
 
 
@@ -128,8 +128,8 @@ int main() {
     Thot::Plot::Render(model, Thot::Plot::Reliability::GradCAM({.samples = 4, .random = false, .normalize = true, .overlay = true}),
         validation_images,validation_labels);
 
-    Thot::Plot::Render(model, Thot::Plot::Reliability::LIME({.random = true, .normalize = true, .showWeights = true}),
-        validation_images, validation_labels);
+    //Thot::Plot::Render(model, Thot::Plot::Reliability::LIME({.random = true, .normalize = true, .showWeights = true}),
+    //    validation_images, validation_labels);
 
     return 0;
 }
