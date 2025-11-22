@@ -4,12 +4,12 @@
 namespace {
 
     constexpr std::array<std::array<std::uint8_t, 3>, 6> kClassPalette{{
-        std::array<std::uint8_t, 3>{  80, 227, 194},  // Water
-        std::array<std::uint8_t, 3>{ 245, 166,  35},  // raw ground
-        std::array<std::uint8_t, 3>{ 222,  89, 127},  // Road
-        std::array<std::uint8_t, 3>{ 208,   2,  27},  // Building
-        std::array<std::uint8_t, 3>{  65, 117,   5},  // Vegetation
-        std::array<std::uint8_t, 3>{ 155, 155, 155},  // Unlabeled
+        std::array<std::uint8_t, 3>{60, 16, 152},
+        std::array<std::uint8_t, 3>{110,193, 228},
+        std::array<std::uint8_t, 3>{132, 41, 246},
+        std::array<std::uint8_t, 3>{155, 155, 155},
+        std::array<std::uint8_t, 3>{226, 169, 41},
+        std::array<std::uint8_t, 3>{254, 221, 58},
     }};
 
     torch::Tensor ConvertRgbMasksToOneHot(const torch::Tensor& masks) {
@@ -133,7 +133,6 @@ namespace {
     }
 
     torch::Tensor ColorizeClassMasks(const torch::Tensor& class_indices) {
-        // class_indices: [B, H, W] with values in [0, num_classes)
         TORCH_CHECK(class_indices.dim() == 3, "Expected [B, H, W] for class_indices");
 
         const auto B = class_indices.size(0);
@@ -210,18 +209,18 @@ int main() {
 
     auto [x1, y1, x2, y2] =
         Thot::Data::Load::Universal("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/",
-        Thot::Data::Type::JPG{"images", {.grayscale = false, .normalize = false, .size_to_max_tile=false, /*.size=std::array<long,2>{256, 256},*/ .color_order = "RGB"}},
-        Thot::Data::Type::PNG{"masks", {.normalize = false, /*.size=std::array<long,2>{256, 256},*/.size_to_max_tile=true, .color_order = "RGB"}}, {.train_fraction = .8f, .test_fraction = .2f, .shuffle = false});
+        Thot::Data::Type::JPG{"images", {.grayscale = false, .normalize = false, .size_to_max_tile=false, .size={512, 512}, .color_order = "RGB"}},
+        Thot::Data::Type::PNG{"masks", {.normalize = false, .size={512, 512}, .InterpolationMode = Thot::Data::Transform::Format::Options::InterpMode::Nearest, .color_order = "RGB"}}, {.train_fraction = .8f, .test_fraction = .2f, .shuffle = false});
     Thot::Plot::Data::Image(y1, {0});
     PrintUniqueColors(y1, 0);
     Thot::Data::Check::Size(x1, "Inputs Raw");
     Thot::Data::Check::Size(y1, "Outputs Raw");
-    x1 = Thot::Data::Transform::Format::Downsample(x1, {.size=std::vector<int>{256, 256}});
-    y1 = Thot::Data::Transform::Format::Downsample(y1, {.size=std::vector<int>{256, 256}});
-    x2 = Thot::Data::Transform::Format::Downsample(x2, {.size=std::vector<int>{256, 256}});
-    y2 = Thot::Data::Transform::Format::Downsample(y2, {.size=std::vector<int>{256, 256}});
-    Thot::Data::Check::Size(x1, "Inputs Resized");
-    Thot::Data::Check::Size(y1, "Outputs Resized");
+    // x1 = Thot::Data::Transform::Format::Downsample(x1, {.size={512, 512}});
+    // y1 = Thot::Data::Transform::Format::Downsample(y1, {.size={512, 512}});
+    // x2 = Thot::Data::Transform::Format::Downsample(x2, {.size={512, 512}});
+    //y2 = Thot::Data::Transform::Format::Downsample(y2, {.size={512, 512}});
+    // Thot::Data::Check::Size(x1, "Inputs Resized");
+    // Thot::Data::Check::Size(y1, "Outputs Resized");
 
     y1 = ConvertRgbMasksToOneHot(y1);
     y2 = ConvertRgbMasksToOneHot(y2);

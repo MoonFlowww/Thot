@@ -724,7 +724,7 @@ namespace Thot::Data::Load {
             std::optional<std::pair<int, int>> expected_hw;
             int max_rows = 0;
             int max_cols = 0;
-            const bool track_sample_sizes = image_params.size_to_max_tile || image_params.size.has_value();
+            const bool track_sample_sizes = image_params.size_to_max_tile || image_params.size[0] != -1 || image_params.size[1] != -1;
             std::vector<std::pair<int, int>> sample_hw;
             if (track_sample_sizes) {
                 sample_hw.reserve(image_files.size());
@@ -832,17 +832,14 @@ namespace Thot::Data::Load {
                 samples.push_back(std::move(tensor));
             }
             if (track_sample_sizes && !samples.empty()) {
-                std::optional<std::array<int64_t, 2>> target_size;
-                if (image_params.size.has_value()) {
+                std::vector<int> target_size;
+                if (image_params.size[0] !=-1 || image_params.size[1] !=-1) {
                     target_size = image_params.size;
                 } else if (image_params.size_to_max_tile) {
-                    target_size = std::array<int64_t, 2>{max_rows, max_cols};
+                    target_size = std::vector<int>{max_rows, max_cols};
                 }
 
-                if (target_size.has_value()) {
-                    if ((*target_size)[0] <= 0 || (*target_size)[1] <= 0) {
-                        throw std::runtime_error("Requested image size must be positive dimensions.");
-                    }
+                if (target_size[0]>0 || target_size[0]>0) {
                     if (sample_hw.size() != samples.size()) {
                         throw std::runtime_error("Internal error: missing sample size metadata for resizing.");
                     }
@@ -866,16 +863,17 @@ namespace Thot::Data::Load {
 
                     for (std::size_t i = 0; i < samples.size(); ++i) {
                         const auto [rows, cols] = sample_hw[i];
-                        if (rows == (*target_size)[0] && cols == (*target_size)[1]) {
+                        if (rows == (target_size)[0] && cols == (target_size)[1]) {
                             continue;
                         }
 
-                        const bool needs_downscale = rows > (*target_size)[0] || cols > (*target_size)[1];
-                        const bool needs_upscale = rows < (*target_size)[0] || cols < (*target_size)[1];
+                        const bool needs_downscale = rows > (target_size)[0] || cols > (target_size)[1];
+                        const bool needs_upscale = rows < (target_size)[0] || cols < (target_size)[1];
 
                         auto [working, was_permuted] = to_channels_first(samples[i]);
                         Thot::Data::Transform::Format::Options::ScaleOptions options;
-                        options.size = std::vector<int>{static_cast<int>((*target_size)[0]), static_cast<int>((*target_size)[1])};
+                        options.size = std::vector<int>{static_cast<int>((target_size)[0]), static_cast<int>((target_size)[1])};
+                        options.interp = image_params.InterpolationMode;
                         if (needs_downscale && !needs_upscale) {
                             working = Thot::Data::Transform::Format::Downsample(working, options);
                         } else if (needs_upscale && !needs_downscale) {
@@ -891,59 +889,7 @@ namespace Thot::Data::Load {
                     }
                 }
             }
-
             auto batch = torch::stack(samples);
-
-            const bool needs_rescale = image_params.rescale_mode != Type::ImageRescaleMode::None && image_params.rescale_to.has_value();
-
-            if (needs_rescale) {
-                const auto target_size = *image_params.rescale_to;
-
-                auto to_channels_first = [&](torch::Tensor tensor) {
-                    if (image_params.channels_first) {
-                        return std::pair<torch::Tensor, bool>{tensor, false};
-                    }
-
-                    if (tensor.dim() != 4) {
-                        throw std::runtime_error("Image rescale expects a batched tensor with 4 dimensions.");
-                    }
-                    return std::pair<torch::Tensor, bool>{tensor.permute({0, 3, 1, 2}), true};
-                };
-
-                auto restore_layout = [&](torch::Tensor tensor, bool was_permuted) {
-                    if (was_permuted) {
-                        tensor = tensor.permute({0, 2, 3, 1});
-                    }
-                    return tensor;
-                };
-
-                auto apply_resize = [&](auto resize_fn) {
-                    auto [working, permuted] = to_channels_first(batch);
-                    Thot::Data::Transform::Format::Options::ScaleOptions options;
-                    options.size = std::vector<int>{static_cast<int>(target_size[0]), static_cast<int>(target_size[1])};
-                    working = resize_fn(working, options);
-                    batch = restore_layout(working, permuted);
-                };
-
-                switch (image_params.rescale_mode) {
-                    case Type::ImageRescaleMode::Downscale:
-                        apply_resize([](const torch::Tensor& tensor,
-                                        const Thot::Data::Transform::Format::Options::ScaleOptions& options) {
-                            Thot::Data::Transform::Format::Options::DownsampleOptions downscale_options = options;
-                            return Thot::Data::Transform::Format::Downsample(tensor, downscale_options);
-                        });
-                        break;
-                    case Type::ImageRescaleMode::Upscale:
-                        apply_resize([](const torch::Tensor& tensor,
-                                        const Thot::Data::Transform::Format::Options::ScaleOptions& options) {
-                            Thot::Data::Transform::Format::Options::UpsampleOptions upscale_options = options;
-                            return Thot::Data::Transform::Format::Upsample(tensor, upscale_options);
-                        });
-                        break;
-                    default:
-                        break;
-                }
-            }
 
             return batch;
         }
@@ -1706,11 +1652,7 @@ namespace Thot::Data::Load {
 
     template <bool BufferVRAM = false, class DevicePolicyT = Core::DevicePolicy<BufferVRAM>, class InputDescriptorT, class TargetDescriptorT>
     [[nodiscard]] inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-    Universal(const std::string& root,
-              const InputDescriptorT& input_descriptor,
-              const TargetDescriptorT& target_descriptor,
-              Type::GlobalParameters global = {})
-    {
+    Universal(const std::string& root, const InputDescriptorT& input_descriptor, const TargetDescriptorT& target_descriptor, Type::GlobalParameters global = {}) {
         namespace fs = std::filesystem;
 
         if (global.train_fraction < 0.0f || global.test_fraction < 0.0f) {

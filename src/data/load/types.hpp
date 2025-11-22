@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <optional>
 
+#include "../transform/format/format.hpp"
+
 namespace Thot::Data::Type {
     enum class ImageRescaleMode {
         None,
@@ -64,9 +66,9 @@ namespace Thot::Data::Type {
         bool normalize = true;
         bool channels_first = true;
         bool size_to_max_tile = false;
-        std::optional<std::array<int64_t, 2>> size{};
+        std::vector<int> size{-1, -1};
+        Transform::Format::Options::InterpMode InterpolationMode = Transform::Format::Options::InterpMode::Bilinear;
         std::string color_order = "RGB";
-        std::optional<std::array<int64_t, 2>> rescale_to{};
         ImageRescaleMode rescale_mode = ImageRescaleMode::None;
     };
 
