@@ -39,7 +39,7 @@ namespace Thot::Data::Transform::Format {
             if (target_size.size() != 2)
                 throw std::invalid_argument("Format::resize_spatial expects exactly two target dimensions.");
 
-            
+
             auto working = tensor;
             bool added_batch_dim = false;
             if (working.dim() == 3) {

@@ -28,6 +28,8 @@
 
 namespace Thot::Evaluation::Details::Classification {
     struct Descriptor { };
+    struct MultiDescriptor { };
+    struct SegmentationDescriptor { };
 
     struct Options {
         std::size_t batch_size{8};
@@ -568,6 +570,58 @@ namespace Thot::Evaluation::Details::Classification {
     [[nodiscard]] auto Evaluate(Model& model,
                                 torch::Tensor inputs,
                                 torch::Tensor targets,
+                                Descriptor,
+                                const std::vector<Metric::Classification::Descriptor>& descriptors,
+                                const Options& options) -> Report
+    {
+        return Evaluate(model,
+                        std::move(inputs),
+                        std::move(targets),
+                        descriptors,
+                        options);
+    }
+
+    template <class Model>
+    [[nodiscard]] auto Evaluate(Model& model,
+                                torch::Tensor inputs,
+                                torch::Tensor targets,
+                                MultiDescriptor,
+                                const std::vector<Metric::Classification::Descriptor>& descriptors,
+                                const Options& options) -> Report
+    {
+        auto metrics = descriptors;
+        if (std::find_if(metrics.begin(), metrics.end(), [](const auto& descriptor) {
+                return descriptor.kind == Metric::Classification::Kind::JaccardIndexMacro;
+            }) == metrics.end()) {
+            metrics.push_back(Metric::Classification::JaccardIndexMacro);
+        }
+        return Evaluate(model,
+                        std::move(inputs),
+                        std::move(targets),
+                        metrics,
+                        options);
+    }
+
+    template <class Model>
+    [[nodiscard]] auto Evaluate(Model& model,
+                                torch::Tensor inputs,
+                                torch::Tensor targets,
+                                SegmentationDescriptor,
+                                const std::vector<Metric::Classification::Descriptor>& descriptors,
+                                const Options& options) -> Report
+    {
+        auto metrics = descriptors;
+        return Evaluate(model,
+                        std::move(inputs),
+                        std::move(targets),
+                        metrics,
+                        options);
+    }
+
+    template <class Model>
+    [[nodiscard]] auto Evaluate(Model& model,
+                                torch::Tensor inputs,
+                                torch::Tensor targets,
                                 const std::vector<Metric::Classification::Descriptor>& descriptors,
                                 const Options& options) -> Report
     {
@@ -870,14 +924,18 @@ namespace Thot::Evaluation::Details::Classification {
 
             std::optional<std::size_t> inferred_classes;
             if (target_cpu.defined() && target_cpu.numel() > 0) {
-                auto flattened = target_cpu.reshape({-1});
-                if (flattened.dtype() != torch::kLong) {
-                    flattened = flattened.to(torch::kLong);
-                }
+                if (target_cpu.dim() > 1 && target_cpu.size(1) > 1) {
+                    inferred_classes = static_cast<std::size_t>(target_cpu.size(1));
+                } else {
+                    auto flattened = target_cpu.reshape({-1});
+                    if (flattened.dtype() != torch::kLong) {
+                        flattened = flattened.to(torch::kLong);
+                    }
 
-                const auto max_label = flattened.max().item<long>();
-                if (max_label >= 0) {
-                    inferred_classes = static_cast<std::size_t>(max_label) + 1;
+                    const auto max_label = flattened.max().item<long>();
+                    if (max_label >= 0) {
+                        inferred_classes = static_cast<std::size_t>(max_label) + 1;
+                    }
                 }
             }
 
@@ -936,14 +994,18 @@ namespace Thot::Evaluation::Details::Classification {
                 topk_indices_tensor = std::get<1>(topk_result).to(torch::kLong);
             }
 
-            if (target_cpu.dtype() == torch::kFloat32 || target_cpu.dtype() == torch::kFloat64) {
-                if (target_cpu.dim() > 1 && target_cpu.size(1) == static_cast<long>(num_classes)) {
-                    target_cpu = target_cpu.argmax(1);
+            const bool has_multi_channel_targets = target_cpu.dim() > 1 && target_cpu.size(1) == static_cast<long>(num_classes);
+            if (has_multi_channel_targets) {
+                if (target_cpu.dtype() != torch::kFloat32 && target_cpu.dtype() != torch::kFloat64) {
+                    target_cpu = target_cpu.to(torch::kFloat32);
+                }
+                target_cpu = target_cpu.argmax(1);
+            } else if (target_cpu.dtype() != torch::kLong) {
+                if (target_cpu.dtype() == torch::kFloat32 || target_cpu.dtype() == torch::kFloat64) {
+                    target_cpu = target_cpu.to(torch::kLong);
                 } else {
                     target_cpu = target_cpu.to(torch::kLong);
                 }
-            } else if (target_cpu.dtype() != torch::kLong) {
-                target_cpu = target_cpu.to(torch::kLong);
             }
 
 

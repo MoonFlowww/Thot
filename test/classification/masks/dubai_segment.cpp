@@ -92,15 +92,15 @@ namespace {
                 auto predictions   = model.forward(batch_inputs);
                 batch_targets      = batch_targets.to(predictions.scalar_type());
 
-                auto dice_loss = Thot::Loss::Details::compute(
-                    dice_descriptor, predictions, batch_targets);
+                auto probs = torch::softmax(predictions, /*dim=*/1);
+                auto dice_loss = Thot::Loss::Details::compute(dice_descriptor, probs, batch_targets);
 
                 auto clamped_predictions = predictions.clamp(1e-7, 1.0 - 1e-7);
-                auto bce_loss = torch::nn::functional::binary_cross_entropy(
-                    clamped_predictions,
-                    batch_targets,
-                    torch::nn::functional::BinaryCrossEntropyFuncOptions()
-                        .reduction(torch::kMean));
+                auto bce_loss = torch::nn::functional::binary_cross_entropy_with_logits(
+                    predictions, // raw logits
+                    batch_targets, // one-hot [B, 6, H, W] float
+                    torch::nn::functional::BinaryCrossEntropyWithLogitsFuncOptions().reduction(torch::kMean));
+
 
                 auto total_loss = dice_loss.mul(options.dice_weight)
                                 + bce_loss.mul(options.bce_weight);
@@ -159,24 +159,73 @@ namespace {
 
 }
 
+void PrintUniqueColors(const torch::Tensor& batch, std::size_t idx) {
+    TORCH_CHECK(batch.dim() == 4, "Expected [B, 3, H, W]");
+    TORCH_CHECK(batch.size(1) == 3, "Expected 3 channels (RGB)");
+    TORCH_CHECK(idx < static_cast<std::size_t>(batch.size(0)), "idx out of range");
+
+    // [3, H, W] on CPU
+    auto img = batch.index({static_cast<long>(idx)})
+                    .detach()
+                    .to(torch::kCPU)
+                    .contiguous(); // [3, H, W]
+
+    // If it's float, map to uint8
+    if (img.scalar_type() == torch::kFloat32 || img.scalar_type() == torch::kFloat64) {
+        // Your PNG loader with normalize=false is almost certainly 0–255 already,
+        // but we clamp & convert just to be safe.
+        img = img.clamp(0.0, 255.0).round().to(torch::kUInt8);
+    } else if (img.scalar_type() != torch::kUInt8) {
+        img = img.to(torch::kUInt8);
+    }
+
+    // [3, H, W] -> [H, W, 3] -> [N, 3]
+    auto img_flat = img.permute({1, 2, 0})   // [H, W, 3]
+                        .reshape({-1, 3});   // [N, 3]
+
+    // Unique RGB triplets along dim 0
+    auto unique = std::get<0>(
+        torch::unique_dim(img_flat,
+                          /*dim=*/0,
+                          /*sorted=*/true,
+                          /*return_inverse=*/false,
+                          /*return_counts=*/false)
+    ); // [K, 3]
+
+    std::cout << "Unique colors in sample " << idx << ": " << unique.size(0) << "\n";
+    for (int64_t i = 0; i < unique.size(0); ++i) {
+        auto c = unique[i];
+        auto r = c[0].item<int64_t>();
+        auto g = c[1].item<int64_t>();
+        auto b = c[2].item<int64_t>();
+        std::cout << "  RGB(" << r << ", " << g << ", " << b << ")\n";
+    }
+}
+//TODO:
+//- Thot::Data::Load::Universal() with images reader manipulate color with .size= (compression color jitter)
+
 
 int main() {
     Thot::Model model("");
 
     auto [x1, y1, x2, y2] =
-        Thot::Data::Load::Universal("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 3/",
-        Thot::Data::Type::JPG{"images", {.grayscale = false, .normalize = false, .size_to_max_tile=false, .size=std::array<long,2>{256, 256}, .color_order = "RGB"}},
-        Thot::Data::Type::PNG{"masks", {.normalize = false, .size=std::array<long,2>{256, 256}, .color_order = "RGB"}}, {.train_fraction = .8f, .test_fraction = .2f, .shuffle = true});
-
+        Thot::Data::Load::Universal("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/",
+        Thot::Data::Type::JPG{"images", {.grayscale = false, .normalize = false, .size_to_max_tile=false, /*.size=std::array<long,2>{256, 256},*/ .color_order = "RGB"}},
+        Thot::Data::Type::PNG{"masks", {.normalize = false, /*.size=std::array<long,2>{256, 256},*/.size_to_max_tile=true, .color_order = "RGB"}}, {.train_fraction = .8f, .test_fraction = .2f, .shuffle = false});
+    Thot::Plot::Data::Image(y1, {0});
+    PrintUniqueColors(y1, 0);
     Thot::Data::Check::Size(x1, "Inputs Raw");
     Thot::Data::Check::Size(y1, "Outputs Raw");
-    //x1 = Thot::Data::Transform::Format::Downsample(x1, {.size={256, 256}});
-    //y1 = Thot::Data::Transform::Format::Downsample(y1, {.size={256, 256}});
-    //x2 = Thot::Data::Transform::Format::Downsample(x2, {.size={256, 256}});
-    //y2 = Thot::Data::Transform::Format::Downsample(y2, {.size={256, 256}});
+    x1 = Thot::Data::Transform::Format::Downsample(x1, {.size=std::vector<int>{256, 256}});
+    y1 = Thot::Data::Transform::Format::Downsample(y1, {.size=std::vector<int>{256, 256}});
+    x2 = Thot::Data::Transform::Format::Downsample(x2, {.size=std::vector<int>{256, 256}});
+    y2 = Thot::Data::Transform::Format::Downsample(y2, {.size=std::vector<int>{256, 256}});
     Thot::Data::Check::Size(x1, "Inputs Resized");
     Thot::Data::Check::Size(y1, "Outputs Resized");
 
+    y1 = ConvertRgbMasksToOneHot(y1);
+    y2 = ConvertRgbMasksToOneHot(y2);
+    Thot::Data::Check::Size(y1, "Train Targets One-hot");
     std::tie(x1, y1) = Thot::Data::Transform::Augmentation::Flip(x1, y1, {.axes = {"x"}, .frequency = 1.f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Transform::Augmentation::Flip(x1, y1, {.axes = {"y"}, .frequency = 0.5f, .data_augment = true});
     std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, true, false});
@@ -200,17 +249,12 @@ int main() {
 
     Thot::Data::Check::Size(x1, "Inputs Augmented");
     Thot::Data::Check::Size(y1, "Targets Augmented");
-    Thot::Data::Check::Size(y2, "test Targets");
 
     (void)Thot::Plot::Data::Image(x1, idx);
-    //(void)Thot::Plot::Data::Image(y1, idx);
+    auto y1_classes = y1.argmax(1);
+    auto y1_rgb = ColorizeClassMasks(y1_classes);
+    (void)Thot::Plot::Data::Image(y1_rgb, idx);
     //(void)Thot::Plot::Data::Image(y2, {0, 1});
-
-
-    y1 = ConvertRgbMasksToOneHot(y1);
-    y2 = ConvertRgbMasksToOneHot(y2);
-
-    Thot::Data::Check::Size(y1, "Targets One-hot");
 
 
     auto block = [&](int in_c, int out_c) {
@@ -227,19 +271,23 @@ int main() {
         });
     };
 
+    // encoders
     model.add(block(3, 64), "enc1");
     model.add(Thot::Layer::MaxPool2d({{2,2},{2,2}}));
-
     model.add(block(64, 64), "enc2");
     model.add(Thot::Layer::MaxPool2d({{2,2},{2,2}}));
 
+    // decoders
     model.add(upblock(64, 64), "dec1");
     model.add(block(64, 64), "dec_block1");
-
     model.add(upblock(64, 32), "dec2");
     model.add(block(32, 32), "dec_block2");
+    model.add(block(32, 32), "dec_block3");
+    model.add(block(32, 32), "dec_block4");
+    model.add(block(32, 32), "dec_block5");
 
     model.add(Thot::Layer::Conv2d({32, 6, {1,1}, {1,1}, {0,0}}, Thot::Activation::Identity));
+
 
     model.set_loss(Thot::Loss::Dice());
     model.set_optimizer(Thot::Optimizer::AdamW({.learning_rate=1e-4, .weight_decay = 2e-4}));
@@ -247,7 +295,7 @@ int main() {
 
     //Custom loop for dual-loss
     CustomTrainingOptions training_options{};
-    training_options.epochs = 100;
+    training_options.epochs = 20;
     training_options.batch_size = 12;
     training_options.dice_weight = 0.6;
     training_options.bce_weight = 1-training_options.dice_weight;
@@ -278,8 +326,9 @@ int main() {
     Train(model, x1, y1, training_options);
 
     torch::NoGradGuard guard;
-
-    model.evaluate(x2, y2, Thot::Evaluation::Classification, {
+    Thot::Data::Check::Size(x2, "Test Inputs");
+    Thot::Data::Check::Size(y2, "Test Targets");
+    model.evaluate(x2, y2, Thot::Evaluation::Segmentation, {
         Thot::Metric::Classification::Accuracy,
         Thot::Metric::Classification::Precision,
         Thot::Metric::Classification::Recall,
@@ -287,7 +336,7 @@ int main() {
         Thot::Metric::Classification::HausdorffDistance,
         Thot::Metric::Classification::BoundaryIoU,
     },
-    {.batch_size = 8, .buffer_vram=2});
+    {.batch_size = 12, .buffer_vram=2});
 
     {
         model.eval();
@@ -318,8 +367,10 @@ int main() {
         auto pred_rgb = ColorizeClassMasks(pred_classes).contiguous();
         auto target_rgb = ColorizeClassMasks(target_classes);
 
-        Thot::Data::Check::Size(pred_rgb, "Test Target");
-        Thot::Data::Check::Size(target_rgb, "Test Output");
+        Thot::Data::Check::Size(pred_rgb, "RGB Test Target");
+        Thot::Data::Check::Size(target_rgb, "RGB Test Output");
+        Thot::Data::Check::Size(pred_classes, "Hot-One Test Target");
+        Thot::Data::Check::Size(target_classes, "Hot-One Test Output");
         (void)Thot::Plot::Data::Image(target_rgb, local_indices);
         (void)Thot::Plot::Data::Image(pred_rgb,   local_indices);
     }

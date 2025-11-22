@@ -2389,6 +2389,27 @@ namespace Thot {
                 options);
         }
 
+        //TODO: do it cleaner
+        auto evaluate(torch::Tensor evaluation_inputs, torch::Tensor evaluation_targets, Evaluation::MultiClassificationDescriptor descriptor, std::vector<Metric::Classification::Descriptor> metrics, Evaluation::Options options = {}) -> Evaluation::ClassificationReport {
+            return Evaluation::Evaluate(
+                *this,
+                std::move(evaluation_inputs),
+                std::move(evaluation_targets),
+                descriptor,
+                std::move(metrics),
+                options);
+        }
+
+        auto evaluate(torch::Tensor evaluation_inputs, torch::Tensor evaluation_targets, Evaluation::SegmentationDescriptor descriptor, std::vector<Metric::Classification::Descriptor> metrics, Evaluation::Options options = {}) -> Evaluation::ClassificationReport {
+            return Evaluation::Evaluate(
+                *this,
+                std::move(evaluation_inputs),
+                std::move(evaluation_targets),
+                descriptor,
+                std::move(metrics),
+                options);
+        }
+
         template <class Descriptor, class... Args>
         decltype(auto) plot(Descriptor descriptor, Args&&... args);
 
