@@ -33,11 +33,8 @@ namespace Thot::Evaluation {
     using Options = ClassificationOptions;
 
     template <class Model>
-    [[nodiscard]] inline auto Evaluate(Model& model,
-                                       torch::Tensor inputs,
-                                       torch::Tensor targets,
-                                       ClassificationDescriptor,
-                                       std::vector<Metric::Classification::Descriptor> metrics,
+    [[nodiscard]] inline auto Evaluate(Model& model, torch::Tensor inputs, torch::Tensor targets,
+                                       ClassificationDescriptor, std::vector<Metric::Classification::Descriptor> metrics,
                                        const ClassificationOptions& options = ClassificationOptions{}) -> ClassificationReport {
         return Details::Classification::Evaluate(
             model,
@@ -49,11 +46,8 @@ namespace Thot::Evaluation {
     }
 
     template <class Model>
-    [[nodiscard]] inline auto Evaluate(Model& model,
-                                       torch::Tensor inputs,
-                                       torch::Tensor targets,
-                                       MultiClassificationDescriptor,
-                                       std::vector<Metric::Classification::Descriptor> metrics,
+    [[nodiscard]] inline auto Evaluate(Model& model, torch::Tensor inputs, torch::Tensor targets,
+                                       MultiClassificationDescriptor, std::vector<Metric::Classification::Descriptor> metrics,
                                        const ClassificationOptions& options = ClassificationOptions{}) -> ClassificationReport {
         return Details::Classification::Evaluate(
             model,
@@ -65,11 +59,8 @@ namespace Thot::Evaluation {
     }
 
     template <class Model>
-    [[nodiscard]] inline auto Evaluate(Model& model,
-                                       torch::Tensor inputs,
-                                       torch::Tensor targets,
-                                       SegmentationDescriptor,
-                                       std::vector<Metric::Classification::Descriptor> metrics,
+    [[nodiscard]] inline auto Evaluate(Model& model, torch::Tensor inputs, torch::Tensor targets,
+                                       SegmentationDescriptor, std::vector<Metric::Classification::Descriptor> metrics,
                                        const ClassificationOptions& options = ClassificationOptions{}) -> ClassificationReport {
         return Details::Classification::Evaluate(
             model,
