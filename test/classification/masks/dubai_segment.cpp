@@ -347,21 +347,45 @@ int main() {
 
     // encoders
     model.add(block(3, 64), "enc1");
-    model.add(Thot::Layer::MaxPool2d({{2,2},{2,2}}));
-    model.add(block(64, 64), "enc2");
-    model.add(Thot::Layer::MaxPool2d({{2,2},{2,2}}));
+    model.add(Thot::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool1");
+    model.add(block(64, 128), "enc2");
+    model.add(Thot::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool2");
+    model.add(block(128, 256), "enc3");
+    model.add(Thot::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool3");
+    model.add(block(256, 512), "bottleneck");
 
     // decoders
-    model.add(upblock(64, 64), "dec1");
-    model.add(block(64, 64), "dec_block1");
-    model.add(upblock(64, 32), "dec2");
-    model.add(block(32, 32), "dec_block2");
-    model.add(block(32, 32), "dec_block3");
-    model.add(block(32, 32), "dec_block4");
-    model.add(block(32, 32), "dec_block5");
+    model.add(upblock(512, 256), "up3");
+    model.add(block(512, 256), "dec3");
+    model.add(upblock(256, 128), "up2");
+    model.add(block(256, 128), "dec2");
+    model.add(upblock(128, 64), "up1");
+    model.add(block(128, 64), "dec1");
 
-    model.add(Thot::Layer::Conv2d({32, 6, {1,1}, {1,1}, {0,0}}, Thot::Activation::Identity));
+    model.add(Thot::Layer::Conv2d({64, 6, {1, 1}, {1, 1}, {0, 0}}, Thot::Activation::Identity), "logits");
 
+    model.links({
+        // encoder path
+        Thot::LinkSpec{Thot::Port::Input("@input"), Thot::Port::Module("enc1")},
+        Thot::LinkSpec{Thot::Port::Module("enc1"), Thot::Port::Module("pool1")},
+        Thot::LinkSpec{Thot::Port::Module("pool1"), Thot::Port::Module("enc2")},
+        Thot::LinkSpec{Thot::Port::Module("enc2"), Thot::Port::Module("pool2")},
+        Thot::LinkSpec{Thot::Port::Module("pool2"), Thot::Port::Module("enc3")},
+        Thot::LinkSpec{Thot::Port::Module("enc3"), Thot::Port::Module("pool3")},
+        Thot::LinkSpec{Thot::Port::Module("pool3"), Thot::Port::Module("bottleneck")},
+
+        // decoder with skip
+        Thot::LinkSpec{Thot::Port::Module("bottleneck"), Thot::Port::Module("up3")},
+        Thot::LinkSpec{Thot::Port::Join({"up3", "enc3"}, Thot::MergePolicy::Stack), Thot::Port::Module("dec3")},
+        Thot::LinkSpec{Thot::Port::Module("dec3"), Thot::Port::Module("up2")},
+        Thot::LinkSpec{Thot::Port::Join({"up2", "enc2"}, Thot::MergePolicy::Stack), Thot::Port::Module("dec2")},
+        Thot::LinkSpec{Thot::Port::Module("dec2"), Thot::Port::Module("up1")},
+        Thot::LinkSpec{Thot::Port::Join({"up1", "enc1"}, Thot::MergePolicy::Stack), Thot::Port::Module("dec1")},
+
+        // head
+        Thot::LinkSpec{Thot::Port::Module("dec1"), Thot::Port::Module("logits")},
+        Thot::LinkSpec{Thot::Port::Module("logits"), Thot::Port::Output("@output")},
+    }, true);
 
     //Custom loop for dual-loss
     CustomTrainingOptions training_options{};
@@ -396,7 +420,7 @@ int main() {
     std::cout << "PreTrain Targets: " << std::endl;
     PrintUniqueColors(y1, 0);
     //Train(model, x1, y1, training_options);
-    model.train(x1, y1, {.epoch = 10, .batch_size = 8, .restore_best_state = true, .test = std::vector<at::Tensor>{x2, y2}, .enable_amp = true});
+    model.train(x1, y1, {.epoch = 10, .batch_size = 8, .restore_best_state = true, .test = std::vector<at::Tensor>{x2, y2}, .graph_mode = Thot::GraphMode::Capture, .enable_amp = true});
     torch::NoGradGuard guard;
     Thot::Data::Check::Size(x2, "Test Inputs");
     Thot::Data::Check::Size(y2, "Test Targets");
