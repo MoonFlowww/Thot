@@ -816,14 +816,17 @@ namespace Thot {
             std::visit(module_dispatcher, std::move(descriptor));
             module_descriptors_.emplace_back(std::move(preserved_descriptor), module_name);
         }
-        void links(std::vector<LinkSpec> specifications, bool enable_graph_capture);
         struct LinkParams {
             std::unordered_map<std::string, std::size_t> inputs{};   // alias -> input index
             std::unordered_map<std::string, std::size_t> outputs{};  // alias -> output index
             bool enable_graph_capture{false};
         };
 
-
+        void links(std::vector<LinkSpec> specifications, bool enable_graph_capture) {
+            LinkParams params{};
+            params.enable_graph_capture = enable_graph_capture;
+            links(std::move(specifications), std::move(params));
+        }
 
         // Updated multi-IO + params form
         void links(std::vector<LinkSpec> specifications, LinkParams params) {
@@ -999,7 +1002,13 @@ namespace Thot {
                 return node_index;
             };
 
-            auto iequals = [](std::string a, std::string b){
+            auto trim_view = [](std::string_view token) {
+                while (!token.empty() && std::isspace(static_cast<unsigned char>(token.front()))) token.remove_prefix(1);
+                while (!token.empty() && std::isspace(static_cast<unsigned char>(token.back())))  token.remove_suffix(1);
+                return token;
+            };
+
+            auto iequals = [](std::string_view a, std::string_view b){
                 if (a.size()!=b.size()) return false;
                 for (size_t i=0;i<a.size();++i) if (std::tolower((unsigned char)a[i])!=std::tolower((unsigned char)b[i])) return false;
                 return true;

@@ -48,13 +48,7 @@ namespace Thot {
         Port() = default;
 
         Port(Kind kind, std::string identifier, std::string attribute, MergePolicy merge)
-            : kind(kind)
-            , identifier(std::move(identifier))
-            , attribute(std::move(attribute))
-            , representation(build_representation())
-            , merge_policy(merge)
-        {
-        }
+            : kind(kind), identifier(std::move(identifier)), attribute(std::move(attribute)), representation(build_representation()), merge_policy(merge) {}
 
         [[nodiscard]] bool is_input() const noexcept { return kind == Kind::Input; }
         [[nodiscard]] bool is_output() const noexcept { return kind == Kind::Output; }
@@ -226,17 +220,12 @@ namespace Thot {
             }
             Port p{};
             p.kind = Kind::Input;
-            // If given "@input", store canonical identifier "input"; otherwise store the alias verbatim.
-            if (!trimmed.empty() && trimmed.front()=='@') {
-                if (trimmed != "@input") {
-                    throw std::invalid_argument("Unsupported input sentinel '" + std::string(trimmed) + "'. Use '@input' or an alias.");
-                }
-                p.identifier = "input";
-                p.representation = "@input";
-            } else {
-                p.identifier.assign(trimmed.begin(), trimmed.end());
-                p.representation.assign(trimmed.begin(), trimmed.end());
+            if (!trimmed.empty() && trimmed.front()=='@' && trimmed != "@input") {
+                throw std::invalid_argument(
+                    "Unsupported input sentinel '" + std::string(trimmed) + "'. Use '@input' or an alias.");
             }
+            p.identifier.assign(trimmed.begin(), trimmed.end());
+            p.representation.assign(trimmed.begin(), trimmed.end());
             p.merge_policy = MergePolicy::Strict;
             return p;
         }
@@ -248,16 +237,12 @@ namespace Thot {
             }
             Port p{};
             p.kind = Kind::Output;
-            if (!trimmed.empty() && trimmed.front()=='@') {
-                if (trimmed != "@output") {
-                    throw std::invalid_argument("Unsupported output sentinel '" + std::string(trimmed) + "'. Use '@output' or an alias.");
-                }
-                p.identifier = "output";
-                p.representation = "@output";
-            } else {
-                p.identifier.assign(trimmed.begin(), trimmed.end());
-                p.representation.assign(trimmed.begin(), trimmed.end());
+            if (!trimmed.empty() && trimmed.front()=='@' && trimmed != "@output") {
+                throw std::invalid_argument(
+                    "Unsupported output sentinel '" + std::string(trimmed) + "'. Use '@output' or an alias.");
             }
+            p.identifier.assign(trimmed.begin(), trimmed.end());
+            p.representation.assign(trimmed.begin(), trimmed.end());
             p.merge_policy = MergePolicy::Strict;
             return p;
         }
