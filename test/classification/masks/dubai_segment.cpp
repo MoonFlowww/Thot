@@ -424,29 +424,28 @@ namespace {
             }
             int remaining_budget = std::max(0, target_superpixels - static_cast<int>(relocated.size()));
             int max_splits = std::min(remaining_budget, max_splits_per_iter);
+            CenterUpdateResult result{};
             if (max_splits <= 0 || to_split.empty()) {
-                return CenterUpdateResult{std::move(relocated), false};
-            }
-
-            std::sort(to_split.begin(), to_split.end(),
-                      [&](int a, int b) { return area[a] > area[b]; });
-            if (static_cast<int>(to_split.size()) > max_splits) {
-                to_split.resize(static_cast<std::size_t>(max_splits));
-            }
-
-            std::vector<char> will_split(static_cast<std::size_t>(S), 0);
-            for (int l : to_split) {
-                if (l >= 0 && l < S) will_split[static_cast<std::size_t>(l)] = 1;
-            }
-
-            std::vector<Center> next_centers;
-            next_centers.reserve(relocated.size() + to_split.size());
-
-            for (int l = 0; l < S; ++l) {
-                if (!will_split[static_cast<std::size_t>(l)]) {
-                    next_centers.push_back(relocated[l]);
+                result = CenterUpdateResult{std::move(relocated), false};
+            } else {
+                std::sort(to_split.begin(), to_split.end(),
+                          [&](int a, int b) { return area[a] > area[b]; });
+                if (static_cast<int>(to_split.size()) > max_splits) {
+                    to_split.resize(static_cast<std::size_t>(max_splits));
                 }
-            }
+                std::vector<char> will_split(static_cast<std::size_t>(S), 0);
+                for (int l : to_split) {
+                    if (l >= 0 && l < S) will_split[static_cast<std::size_t>(l)] = 1;
+                }
+
+                std::vector<Center> next_centers;
+                next_centers.reserve(relocated.size() + to_split.size());
+
+                for (int l = 0; l < S; ++l) {
+                    if (!will_split[static_cast<std::size_t>(l)]) {
+                        next_centers.push_back(relocated[l]);
+                    }
+                }
 
             for (int l : to_split) {
                 if (l < 0 || l >= S) continue;
@@ -536,7 +535,10 @@ namespace {
                 next_centers.resize(static_cast<std::size_t>(target_superpixels));
             }
 
-            return CenterUpdateResult{std::move(next_centers), true};
+                result = CenterUpdateResult{std::move(next_centers), true};
+            }
+
+            return result;
         }
     }
 
@@ -575,6 +577,113 @@ namespace {
 
 
         return labels; // [H, W], long
+    }
+
+    torch::Tensor BuildRegionStatisticMapsForImage(const torch::Tensor& img_chw,
+                                                   const torch::Tensor& labels_hw) {
+        TORCH_CHECK(img_chw.dim() == 3, "Expected [C, H, W] image");
+        TORCH_CHECK(labels_hw.dim() == 2, "Expected [H, W] labels");
+        TORCH_CHECK(img_chw.size(1) == labels_hw.size(0) &&
+                    img_chw.size(2) == labels_hw.size(1),
+                    "Image and labels spatial dimensions must match");
+
+        auto img    = img_chw.to(torch::kFloat32).to(torch::kCPU).contiguous();
+        auto labels = labels_hw.to(torch::kLong).to(torch::kCPU).contiguous();
+
+        const int64_t C = img.size(0);
+        const int64_t H = img.size(1);
+        const int64_t W = img.size(2);
+
+        auto max_label = labels.max().item<int64_t>();
+        const int64_t K = std::max<int64_t>(0, max_label + 1);
+
+        std::vector<double> min_v(static_cast<std::size_t>(K * C), std::numeric_limits<double>::infinity());
+        std::vector<double> max_v(static_cast<std::size_t>(K * C), -std::numeric_limits<double>::infinity());
+        std::vector<double> sum(static_cast<std::size_t>(K * C), 0.0);
+        std::vector<double> sumsq(static_cast<std::size_t>(K * C), 0.0);
+        std::vector<double> sumcube(static_cast<std::size_t>(K * C), 0.0);
+        std::vector<int64_t> count(static_cast<std::size_t>(K * C), 0);
+
+        auto lacc = labels.accessor<int64_t, 2>();
+        auto iacc = img.accessor<float, 3>();
+
+        for (int64_t y = 0; y < H; ++y) {
+            for (int64_t x = 0; x < W; ++x) {
+                int64_t l = lacc[y][x];
+                if (l < 0 || l >= K) continue;
+                std::size_t base = static_cast<std::size_t>(l * C);
+                for (int64_t c = 0; c < C; ++c) {
+                    double v = static_cast<double>(iacc[c][y][x]);
+                    std::size_t idx = base + static_cast<std::size_t>(c);
+                    min_v[idx] = std::min(min_v[idx], v);
+                    max_v[idx] = std::max(max_v[idx], v);
+                    sum[idx] += v;
+                    sumsq[idx] += v * v;
+                    sumcube[idx] += v * v * v;
+                    count[idx] += 1;
+                }
+            }
+        }
+
+        std::vector<float> mean(static_cast<std::size_t>(K * C), 0.0f);
+        std::vector<float> stddev(static_cast<std::size_t>(K * C), 0.0f);
+        std::vector<float> skew(static_cast<std::size_t>(K * C), 0.0f);
+
+        for (int64_t l = 0; l < K; ++l) {
+            for (int64_t c = 0; c < C; ++c) {
+                std::size_t idx = static_cast<std::size_t>(l * C + c);
+                if (count[idx] <= 0) {
+                    min_v[idx] = 0.0;
+                    max_v[idx] = 0.0;
+                    continue;
+                }
+
+                double cnt   = static_cast<double>(count[idx]);
+                double mu    = sum[idx] / cnt;
+                double ex2   = sumsq[idx] / cnt;
+                double ex3   = sumcube[idx] / cnt;
+                double var   = std::max(0.0, ex2 - mu * mu);
+                double sigma = std::sqrt(var);
+                double c3    = ex3 - 3.0 * mu * ex2 + 2.0 * mu * mu * mu; // E[(x - mu)^3]
+
+                mean[idx]   = static_cast<float>(mu);
+                stddev[idx] = static_cast<float>(sigma);
+                skew[idx]   = (sigma > 0.0)
+                    ? static_cast<float>(c3 / (sigma * sigma * sigma))
+                    : 0.0f;
+            }
+        }
+
+        constexpr int kNumMetrics = 5; // min, max, mean, std, skew
+        auto out = torch::empty({kNumMetrics * C, H, W},
+            torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
+        auto oacc = out.accessor<float, 3>();
+
+        for (int64_t y = 0; y < H; ++y) {
+            for (int64_t x = 0; x < W; ++x) {
+                int64_t l = lacc[y][x];
+                if (l < 0 || l >= K) {
+                    for (int64_t c = 0; c < C; ++c) {
+                        for (int m = 0; m < kNumMetrics; ++m) {
+                            oacc[m * C + c][y][x] = 0.0f;
+                        }
+                    }
+                    continue;
+                }
+
+                std::size_t base = static_cast<std::size_t>(l * C);
+                for (int64_t c = 0; c < C; ++c) {
+                    std::size_t idx = base + static_cast<std::size_t>(c);
+                    oacc[0 * C + c][y][x] = static_cast<float>(min_v[idx]);
+                    oacc[1 * C + c][y][x] = static_cast<float>(max_v[idx]);
+                    oacc[2 * C + c][y][x] = mean[idx];
+                    oacc[3 * C + c][y][x] = stddev[idx];
+                    oacc[4 * C + c][y][x] = skew[idx];
+                }
+            }
+        }
+
+        return out; // [5*C, H, W]
     }
 
     torch::Tensor BuildSuperpixelFeatureBatch(const torch::Tensor& batch_bchw, int num_superpixels) {
