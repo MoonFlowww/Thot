@@ -457,7 +457,7 @@ namespace {
 
                 double cov_xx = Sxx[l] / Sw_shape[l];
                 double cov_yy = Syy[l] / Sw_shape[l];
-                double cov_xy = Sxy[l] / Sw_shape[l]
+                double cov_xy = Sxy[l] / Sw_shape[l];
 
                 double trace = cov_xx + cov_yy;
                 double det   = cov_xx * cov_yy - cov_xy * cov_xy;
