@@ -538,132 +538,132 @@ namespace {
 
             return CenterUpdateResult{std::move(next_centers), true};
         }
-        torch::Tensor ComputeSuperpixelLabels(const torch::Tensor& density_hw, int num_superpixels) {
-            TORCH_CHECK(density_hw.dim() == 2, "Expected [H, W] density");
+    }
 
-            auto dens = GenerateSpeedField(density_hw);
-            const int64_t H = dens.size(0);
-            const int64_t W = dens.size(1);
+    torch::Tensor ComputeSuperpixelLabels(const torch::Tensor& density_hw, int num_superpixels) {
+        TORCH_CHECK(density_hw.dim() == 2, "Expected [H, W] density");
 
-            const int   max_outer_iters      = 20;
-            const int   min_outer_iters      = 3;
-            const float phi                  = 0.5f;
-            const float Ts                   = 2.0f;
-            const float Tc                   = 4.0f;
-            const int   max_splits_per_iter  = 10;
-            const float eps                  = 1e-6f;
+        auto dens = GenerateSpeedField(density_hw);
+        const int64_t H = dens.size(0);
+        const int64_t W = dens.size(1);
 
-            const int N = std::max(1, num_superpixels);
+        const int   max_outer_iters      = 20;
+        const int   min_outer_iters      = 3;
+        const float phi                  = 0.5f;
+        const float Ts                   = 2.0f;
+        const float Tc                   = 4.0f;
+        const int   max_splits_per_iter  = 10;
+        const float eps                  = 1e-6f;
 
-            std::vector<Center> centers = PlaceInitialSeeds(H, W, N);
-            torch::Tensor labels;
-            torch::Tensor geodesic;
-            for (int iter = 0; iter < max_outer_iters; ++iter) {
-                std::tie(labels, geodesic) = EvolveBoundaries(dens, centers);
+        const int N = std::max(1, num_superpixels);
 
-                auto update = RelocateAndSplitCenters(
-                    labels, geodesic, dens, centers, N, max_splits_per_iter,
-                    phi, Ts, Tc, eps);
-                centers = std::move(update.centers);
+        std::vector<Center> centers = PlaceInitialSeeds(H, W, N);
+        torch::Tensor labels;
+        torch::Tensor geodesic;
+        for (int iter = 0; iter < max_outer_iters; ++iter) {
+            std::tie(labels, geodesic) = EvolveBoundaries(dens, centers);
 
-                if (!update.split_performed &&
-                    iter + 1 >= min_outer_iters &&
-                    static_cast<int>(centers.size()) >= N) {
-                    break;
-                    }
+            auto update = RelocateAndSplitCenters(
+                labels, geodesic, dens, centers, N, max_splits_per_iter,
+                phi, Ts, Tc, eps);
+            centers = std::move(update.centers);
+
+            if (!update.split_performed && iter + 1 >= min_outer_iters && static_cast<int>(centers.size()) >= N) {
+                break;
             }
-
-            return labels; // [H, W], long
         }
 
-        torch::Tensor BuildSuperpixelFeatureBatch(const torch::Tensor& batch_bchw, int num_superpixels) {
-            TORCH_CHECK(batch_bchw.dim() == 4, "Expected [B, C, H, W]");
-            TORCH_CHECK(batch_bchw.size(1) == 3, "Expected RGB images with 3 channels");
 
-            auto batch = batch_bchw.to(torch::kFloat32).to(torch::kCPU).contiguous();
-            const int64_t B = batch.size(0);
-            const int64_t C = batch.size(1);
-            const int64_t H = batch.size(2);
-            const int64_t W = batch.size(3);
+        return labels; // [H, W], long
+    }
 
-            constexpr int kNumMetrics = 5;
-            auto out = torch::empty({B, kNumMetrics * C, H, W},
-                torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
+    torch::Tensor BuildSuperpixelFeatureBatch(const torch::Tensor& batch_bchw, int num_superpixels) {
+        TORCH_CHECK(batch_bchw.dim() == 4, "Expected [B, C, H, W]");
+        TORCH_CHECK(batch_bchw.size(1) == 3, "Expected RGB images with 3 channels");
 
-            for (int64_t b = 0; b < B; ++b) {
-                auto img = batch.index({b}); // [3, H, W]
-                auto density = ComputeDensity(img);              // [H, W]
-                auto labels  = ComputeSuperpixelLabels(density, num_superpixels); // [H, W]
-                auto feats = BuildRegionStatisticMapsForImage(img, labels);     // [5*C, H, W]
-                out.index_put_({b}, feats);
-            }
+        auto batch = batch_bchw.to(torch::kFloat32).to(torch::kCPU).contiguous();
+        const int64_t B = batch.size(0);
+        const int64_t C = batch.size(1);
+        const int64_t H = batch.size(2);
+        const int64_t W = batch.size(3);
 
-            return out;
-        }
+        constexpr int kNumMetrics = 5;
+        auto out = torch::empty({B, kNumMetrics * C, H, W},
+            torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
 
-        torch::Tensor BuildSuperpixelOverlay(const torch::Tensor& img_chw, int num_superpixels) {
-            TORCH_CHECK(img_chw.dim() == 3, "Expected [C, H, W] image");
-            TORCH_CHECK(img_chw.size(0) == 3, "Expected RGB image [3, H, W]");
-
-            // Work on CPU float
-            auto img = img_chw.detach().to(torch::kFloat32).to(torch::kCPU).contiguous();
-            const int64_t C = img.size(0);
-            const int64_t H = img.size(1);
-            const int64_t W = img.size(2);
-
-            // Compute density + superpixels
-            auto density = ComputeDensity(img);                         // [H, W]
+        for (int64_t b = 0; b < B; ++b) {
+            auto img = batch.index({b}); // [3, H, W]
+            auto density = ComputeDensity(img);              // [H, W]
             auto labels  = ComputeSuperpixelLabels(density, num_superpixels); // [H, W]
-
-            auto lacc = labels.accessor<int64_t, 2>();
-
-            // Normalize image for display: put in [0,1]
-            auto overlay = img.clone(); // [3, H, W]
-            double maxval = overlay.max().item<double>();
-            if (maxval > 1.5) {
-                // Assume 0–255
-                overlay.div_(255.0f);
-            }
-            auto oacc = overlay.accessor<float, 3>();
-
-            // Build boundary mask: pixel is boundary if any 4-neighbor has different label
-            std::vector<uint8_t> boundary(static_cast<std::size_t>(H * W), 0);
-            const int dx[4] = {1, -1, 0, 0};
-            const int dy[4] = {0, 0, 1, -1};
-
-            for (int64_t y = 0; y < H; ++y) {
-                for (int64_t x = 0; x < W; ++x) {
-                    int64_t k = lacc[y][x];
-                    bool is_boundary = false;
-                    for (int dir = 0; dir < 4; ++dir) {
-                        int64_t xx = x + dx[dir];
-                        int64_t yy = y + dy[dir];
-                        if (xx < 0 || xx >= W || yy < 0 || yy >= H) continue;
-                        if (lacc[yy][xx] != k) {
-                            is_boundary = true;
-                            break;
-                        }
-                    }
-                    if (is_boundary) {
-                        boundary[static_cast<std::size_t>(y * W + x)] = 1;
-                    }
-                }
-            }
-
-            // Paint boundaries in red on top of the image
-            for (int64_t y = 0; y < H; ++y) {
-                for (int64_t x = 0; x < W; ++x) {
-                    if (!boundary[static_cast<std::size_t>(y * W + x)]) continue;
-                    oacc[0][y][x] = 1.0f; // R
-                    oacc[1][y][x] = 0.0f; // G
-                    oacc[2][y][x] = 0.0f; // B
-                }
-            }
-
-            return overlay; // [3, H, W], float32 in [0,1]
+            auto feats = BuildRegionStatisticMapsForImage(img, labels);     // [5*C, H, W]
+            out.index_put_({b}, feats);
         }
+
+        return out;
+    }
+
+    torch::Tensor BuildSuperpixelOverlay(const torch::Tensor& img_chw, int num_superpixels) {
+        TORCH_CHECK(img_chw.dim() == 3, "Expected [C, H, W] image");
+        TORCH_CHECK(img_chw.size(0) == 3, "Expected RGB image [3, H, W]");
+
+        // Work on CPU float
+        auto img = img_chw.detach().to(torch::kFloat32).to(torch::kCPU).contiguous();
+        const int64_t C = img.size(0);
+        const int64_t H = img.size(1);
+        const int64_t W = img.size(2);
+
+        // Compute density + superpixels
+        auto density = ComputeDensity(img);                         // [H, W]
+        auto labels  = ComputeSuperpixelLabels(density, num_superpixels); // [H, W]
+
+        auto lacc = labels.accessor<int64_t, 2>();
+
+        // Normalize image for display: put in [0,1]
+        auto overlay = img.clone(); // [3, H, W]
+        double maxval = overlay.max().item<double>();
+        if (maxval > 1.5) {
+            // Assume 0–255
+            overlay.div_(255.0f);
+        }
+        auto oacc = overlay.accessor<float, 3>();
+
+        // Build boundary mask: pixel is boundary if any 4-neighbor has different label
+        std::vector<uint8_t> boundary(static_cast<std::size_t>(H * W), 0);
+        const int dx[4] = {1, -1, 0, 0};
+        const int dy[4] = {0, 0, 1, -1};
+
+        for (int64_t y = 0; y < H; ++y) {
+            for (int64_t x = 0; x < W; ++x) {
+                int64_t k = lacc[y][x];
+                bool is_boundary = false;
+                for (int dir = 0; dir < 4; ++dir) {
+                    int64_t xx = x + dx[dir];
+                    int64_t yy = y + dy[dir];
+                    if (xx < 0 || xx >= W || yy < 0 || yy >= H) continue;
+                    if (lacc[yy][xx] != k) {
+                        is_boundary = true;
+                        break;
+                    }
+                }
+                if (is_boundary) {
+                    boundary[static_cast<std::size_t>(y * W + x)] = 1;
+                }
+            }
+        }
+
+        // Paint boundaries in red on top of the image
+        for (int64_t y = 0; y < H; ++y) {
+            for (int64_t x = 0; x < W; ++x) {
+                if (!boundary[static_cast<std::size_t>(y * W + x)]) continue;
+                oacc[0][y][x] = 1.0f; // R
+                oacc[1][y][x] = 0.0f; // G
+                oacc[2][y][x] = 0.0f; // B
+            }
+        }
+        return overlay; // [3, H, W], float32 in [0,1]
     }
 }
+
 
 int main() {
     Thot::Model model("");
