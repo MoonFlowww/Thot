@@ -28,6 +28,31 @@ namespace {
         float y;
     };
 
+    struct Sample {
+        struct SuperPixel {
+            torch::Tensor input;
+            torch::Tensor target;
+        };
+
+        template<int R, int G, int B>
+        struct Target {
+            torch::Tensor min;
+            torch::Tensor max;
+            torch::Tensor avg;
+            torch::Tensor std;
+            torch::Tensor skew;
+            torch::Tensor inputRepresentation;
+            torch::Tensor targetRepresentation;
+            torch::Tensor voronoiInput;
+            torch::Tensor voronoiTarget;
+        };
+
+        SuperPixel superpixel;
+        torch::Tensor inputRepresentation;
+        torch::Tensor targetRepresentation;
+        Target<0, 0, 0> target;
+    };
+
     torch::Tensor ConvertRgbMasksToOneHot(const torch::Tensor& masks) {
         TORCH_CHECK(masks.dim() == 4, "Expected [B, 3, H, W]");
         TORCH_CHECK(masks.size(1) == 3, "RGB masks must have 3 channels");
@@ -257,106 +282,109 @@ namespace {
     // - multi-source shortest paths on 4-neighbour grid
     // - w(p,q)= exp[a*||I(p)-I(q)||²]
     // ==========================================
-    torch::Tensor ComputeSuperpixelLabels(const torch::Tensor& density_hw, int num_superpixels) {
-        TORCH_CHECK(density_hw.dim() == 2, "Expected [H, W] density");
-
-        auto dens = density_hw.to(torch::kFloat32).to(torch::kCPU).contiguous();
-        const int64_t H = dens.size(0);
-        const int64_t W = dens.size(1);
-        const int64_t M = H * W;
-
-        // W_x = exp(-D_g / φ)
-        // size threshold T_s, shape threshold T_c
-        const int   max_outer_iters      = 20;
-        const int   min_outer_iters      = 3;
-        const float phi                  = 0.5f;
-        const float Ts                   = 2.0f;
-        const float Tc                   = 4.0f;
-        const int   max_splits_per_iter  = 10;
-        const float eps                  = 1e-6f;
-
+    std::vector<Center> PlaceInitialSeeds(int64_t H, int64_t W, int num_superpixels) {
         const int N = std::max(1, num_superpixels);
         int K = std::max(2, N / 4);
 
         std::vector<Center> centers;
         centers.reserve(static_cast<std::size_t>(N * 2));
 
-        {
-            double total_pixels = static_cast<double>(M);
-            double spacing = std::sqrt(total_pixels / static_cast<double>(K));
+        double total_pixels = static_cast<double>(H * W);
+        double spacing = std::sqrt(total_pixels / static_cast<double>(K));
 
-            int grid_x = std::max(1,
-                static_cast<int>(std::round(static_cast<double>(W) / spacing)));
-            int grid_y = std::max(1,
-                static_cast<int>(std::round(static_cast<double>(H) / spacing)));
+        int grid_x = std::max(1,
+            static_cast<int>(std::round(static_cast<double>(W) / spacing)));
+        int grid_y = std::max(1,
+            static_cast<int>(std::round(static_cast<double>(H) / spacing)));
 
-            double step_x = static_cast<double>(W) / static_cast<double>(grid_x);
-            double step_y = static_cast<double>(H) / static_cast<double>(grid_y);
+        double step_x = static_cast<double>(W) / static_cast<double>(grid_x);
+        double step_y = static_cast<double>(H) / static_cast<double>(grid_y);
 
-            for (int gy = 0; gy < grid_y && static_cast<int>(centers.size()) < K; ++gy) {
-                for (int gx = 0; gx < grid_x && static_cast<int>(centers.size()) < K; ++gx) {
-                    float sx = static_cast<float>((gx + 0.5) * step_x);
-                    float sy = static_cast<float>((gy + 0.5) * step_y);
-                    sx = std::max(0.0f, std::min(static_cast<float>(W - 1), sx));
-                    sy = std::max(0.0f, std::min(static_cast<float>(H - 1), sy));
-                    centers.push_back(Center{sx, sy});
-                }
+        for (int gy = 0; gy < grid_y && static_cast<int>(centers.size()) < K; ++gy) {
+            for (int gx = 0; gx < grid_x && static_cast<int>(centers.size()) < K; ++gx) {
+                float sx = static_cast<float>((gx + 0.5) * step_x);
+                float sy = static_cast<float>((gy + 0.5) * step_y);
+                sx = std::max(0.0f, std::min(static_cast<float>(W - 1), sx));
+                sy = std::max(0.0f, std::min(static_cast<float>(H - 1), sy));
+                centers.push_back(Center{sx, sy});
             }
         }
 
-        torch::Tensor labels;
-        torch::Tensor geodesic;
+        return centers;
+    }
 
-        for (int iter = 0; iter < max_outer_iters; ++iter) {
-            std::tie(labels, geodesic) = RunGeodesicVoronoi(dens, centers);
+    torch::Tensor GenerateSpeedField(const torch::Tensor& density_hw) {
+        TORCH_CHECK(density_hw.dim() == 2, "Expected [H, W] density");
+        return density_hw.to(torch::kFloat32).to(torch::kCPU).contiguous();
+    }
 
-            const int S = static_cast<int>(centers.size());
-            auto lacc = labels.accessor<int64_t, 2>();
-            auto gacc = geodesic.accessor<float, 2>();
-            auto dacc = dens.accessor<float, 2>();
+    std::tuple<torch::Tensor, torch::Tensor> EvolveBoundaries(
+        const torch::Tensor& speed_field,
+        const std::vector<Center>& centers) {
+        return RunGeodesicVoronoi(speed_field, centers);
+    }
 
-            std::vector<double> area(S, 0.0);
-            std::vector<double> sum_x(S, 0.0), sum_y(S, 0.0), sum_w(S, 0.0);
-            std::vector<double> Sxx(S, 0.0), Syy(S, 0.0), Sxy(S, 0.0), Sw_shape(S, 0.0);
+    struct CenterUpdateResult {
+        std::vector<Center> centers;
+        bool split_performed;
+    };
+    CenterUpdateResult RelocateAndSplitCenters(
+        const torch::Tensor& labels,
+        const torch::Tensor& geodesic,
+        const torch::Tensor& speed_field,
+        const std::vector<Center>& centers,
+        int target_superpixels,
+        int max_splits_per_iter,
+        float phi,
+        float Ts,
+        float Tc,
+        float eps) {
+        const int64_t H = speed_field.size(0);
+        const int64_t W = speed_field.size(1);
 
-            for (int64_t y = 0; y < H; ++y) {
-                for (int64_t x = 0; x < W; ++x) {
-                    int64_t l = lacc[y][x];
-                    if (l < 0 || l >= S) continue;
+        const int S = static_cast<int>(centers.size());
+        auto lacc = labels.accessor<int64_t, 2>();
+        auto gacc = geodesic.accessor<float, 2>();
+        auto dacc = speed_field.accessor<float, 2>();
 
-                    float D  = dacc[y][x];   // D(x)
-                    float dg = gacc[y][x];   // D_g(c_l, x)
+        std::vector<double> area(S, 0.0);
+        std::vector<double> sum_x(S, 0.0), sum_y(S, 0.0), sum_w(S, 0.0);
+        std::vector<double> Sxx(S, 0.0), Syy(S, 0.0), Sxy(S, 0.0), Sw_shape(S, 0.0);
 
-                    area[l] += static_cast<double>(D);
+        for (int64_t y = 0; y < H; ++y) {
+            for (int64_t x = 0; x < W; ++x) {
+                int64_t l = lacc[y][x];
+                if (l < 0 || l >= S) continue;
 
-                    float cx = centers[l].x;
-                    float cy = centers[l].y;
-                    float dx = static_cast<float>(x) - cx;
-                    float dy = static_cast<float>(y) - cy;
-                    float len = std::sqrt(dx * dx + dy * dy) + eps;
+                float D  = dacc[y][x];   // D(x)
+                float dg = gacc[y][x];   // D_g(c_l, x)
 
-                    // Eq. (14): W_x D_g / ||x - c||
-                    float W_x = std::exp(-dg / phi);
-                    float w_center = W_x * dg / len;
+                area[l] += static_cast<double>(D);
 
-                    sum_x[l] += static_cast<double>(w_center * static_cast<float>(x));
-                    sum_y[l] += static_cast<double>(w_center * static_cast<float>(y));
-                    sum_w[l] += static_cast<double>(w_center);
+                float cx = centers[l].x;
+                float cy = centers[l].y;
+                float dx = static_cast<float>(x) - cx;
+                float dy = static_cast<float>(y) - cy;
+                float len = std::sqrt(dx * dx + dy * dy) + eps;
 
-                    // Eq. (16): D_g^2 ||x - c||^2 → 2×2 covariance
-                    float w_shape = dg * dg * (dx * dx + dy * dy);
-                    Sxx[l] += static_cast<double>(w_shape * dx * dx);
-                    Syy[l] += static_cast<double>(w_shape * dy * dy);
-                    Sxy[l] += static_cast<double>(w_shape * dx * dy);
-                    Sw_shape[l] += static_cast<double>(w_shape);
-                }
+                float W_x = std::exp(-dg / phi);
+                float w_center = W_x * dg / len;
+
+                sum_x[l] += static_cast<double>(w_center * static_cast<float>(x));
+                sum_y[l] += static_cast<double>(w_center * static_cast<float>(y));
+                sum_w[l] += static_cast<double>(w_center);
+
+                float w_shape = dg * dg * (dx * dx + dy * dy);
+                Sxx[l] += static_cast<double>(w_shape * dx * dx);
+                Syy[l] += static_cast<double>(w_shape * dy * dy);
+                Sxy[l] += static_cast<double>(w_shape * dx * dy);
+                Sw_shape[l] += static_cast<double>(w_shape);
             }
 
             double total_area = 0.0;
             for (int l = 0; l < S; ++l) total_area += area[l];
             double A_mean = (S > 0) ? (total_area / static_cast<double>(S)) : 0.0;
 
-            // Eq. (14): center relocation
             std::vector<Center> relocated;
             relocated.reserve(centers.size());
             for (int l = 0; l < S; ++l) {
@@ -370,8 +398,6 @@ namespace {
                     relocated.push_back(centers[l]);
                 }
             }
-
-            // Eq. (15)+(16): size / shape criteria for splitting
             std::vector<int> to_split;
             to_split.reserve(S);
             for (int l = 0; l < S; ++l) {
@@ -380,6 +406,7 @@ namespace {
                 double cov_xx = Sxx[l] / Sw_shape[l];
                 double cov_yy = Syy[l] / Sw_shape[l];
                 double cov_xy = Sxy[l] / Sw_shape[l];
+
 
                 double trace = cov_xx + cov_yy;
                 double det   = cov_xx * cov_yy - cov_xy * cov_xy;
@@ -395,16 +422,10 @@ namespace {
                     to_split.push_back(l);
                 }
             }
-
-            int remaining_budget = std::max(0, N - static_cast<int>(relocated.size()));
+            int remaining_budget = std::max(0, target_superpixels - static_cast<int>(relocated.size()));
             int max_splits = std::min(remaining_budget, max_splits_per_iter);
             if (max_splits <= 0 || to_split.empty()) {
-                centers = std::move(relocated);
-                if (iter + 1 >= min_outer_iters &&
-                    static_cast<int>(centers.size()) >= N) {
-                    break;
-                    }
-                continue;
+                return CenterUpdateResult{std::move(relocated), false};
             }
 
             std::sort(to_split.begin(), to_split.end(),
@@ -427,7 +448,6 @@ namespace {
                 }
             }
 
-            // Eq. (17): splitting along principal eigenvector
             for (int l : to_split) {
                 if (l < 0 || l >= S) continue;
                 if (Sw_shape[l] <= 0.0) {
@@ -437,7 +457,7 @@ namespace {
 
                 double cov_xx = Sxx[l] / Sw_shape[l];
                 double cov_yy = Syy[l] / Sw_shape[l];
-                double cov_xy = Sxy[l] / Sw_shape[l];
+                double cov_xy = Sxy[l] / Sw_shape[l]
 
                 double trace = cov_xx + cov_yy;
                 double det   = cov_xx * cov_yy - cov_xy * cov_xy;
@@ -449,6 +469,7 @@ namespace {
                     nx = cov_xy;
                     ny = eig1 - cov_xx;
                 }
+
                 double nlen = std::sqrt(nx * nx + ny * ny);
                 if (nlen > 0.0) {
                     nx /= nlen;
@@ -460,10 +481,10 @@ namespace {
 
                 float cx = relocated[l].x;
                 float cy = relocated[l].y;
-
                 for (int64_t y = 0; y < H; ++y) {
                     for (int64_t x = 0; x < W; ++x) {
                         if (lacc[y][x] != l) continue;
+
 
                         float dg = gacc[y][x];
                         float dx = static_cast<float>(x) - cx;
@@ -485,6 +506,7 @@ namespace {
                     }
                 }
 
+
                 if (w1 <= 0.0) {
                     c1x = cx + static_cast<float>(nx) * 0.5f;
                     c1y = cy + static_cast<float>(ny) * 0.5f;
@@ -501,242 +523,147 @@ namespace {
                     c2y /= w2;
                 }
 
-                float nc1x = static_cast<float>(std::max(0.0,
-                                  std::min<double>(W - 1, c1x)));
-                float nc1y = static_cast<float>(std::max(0.0,
-                                  std::min<double>(H - 1, c1y)));
-                float nc2x = static_cast<float>(std::max(0.0,
-                                  std::min<double>(W - 1, c2x)));
-                float nc2y = static_cast<float>(std::max(0.0,
-                                  std::min<double>(H - 1, c2y)));
-
+                float nc1x = static_cast<float>(std::max(0.0, std::min<double>(W - 1, c1x)));
+                float nc1y = static_cast<float>(std::max(0.0, std::min<double>(H - 1, c1y)));
+                float nc2x = static_cast<float>(std::max(0.0, std::min<double>(W - 1, c2x)));
+                float nc2y = static_cast<float>(std::max(0.0, std::min<double>(H - 1, c2y)));
                 next_centers.push_back(Center{nc1x, nc1y});
                 next_centers.push_back(Center{nc2x, nc2y});
             }
 
-            if (static_cast<int>(next_centers.size()) > N) {
-                next_centers.resize(static_cast<std::size_t>(N));
+
+            if (static_cast<int>(next_centers.size()) > target_superpixels) {
+                next_centers.resize(static_cast<std::size_t>(target_superpixels));
             }
 
-            centers = std::move(next_centers);
-
-            if (static_cast<int>(centers.size()) >= N &&
-                iter + 1 >= min_outer_iters) {
-                break;
-                }
+            return CenterUpdateResult{std::move(next_centers), true};
         }
+        torch::Tensor ComputeSuperpixelLabels(const torch::Tensor& density_hw, int num_superpixels) {
+            TORCH_CHECK(density_hw.dim() == 2, "Expected [H, W] density");
 
-        std::tie(labels, geodesic) = RunGeodesicVoronoi(dens, centers);
-        return labels;
-    }
+            auto dens = GenerateSpeedField(density_hw);
+            const int64_t H = dens.size(0);
+            const int64_t W = dens.size(1);
 
+            const int   max_outer_iters      = 20;
+            const int   min_outer_iters      = 3;
+            const float phi                  = 0.5f;
+            const float Ts                   = 2.0f;
+            const float Tc                   = 4.0f;
+            const int   max_splits_per_iter  = 10;
+            const float eps                  = 1e-6f;
 
-    torch::Tensor BuildRegionStatisticMapsForImage(const torch::Tensor& img_chw,
-                                                   const torch::Tensor& labels_hw) {
-        TORCH_CHECK(img_chw.dim() == 3, "Expected [C, H, W] image");
-        TORCH_CHECK(labels_hw.dim() == 2, "Expected [H, W] labels");
+            const int N = std::max(1, num_superpixels);
 
-        auto img = img_chw.to(torch::kFloat32).to(torch::kCPU).contiguous();
-        img.div_(255.0f); // now pixel values in [0,1]
-        auto labels = labels_hw.to(torch::kLong).to(torch::kCPU).contiguous();
+            std::vector<Center> centers = PlaceInitialSeeds(H, W, N);
+            torch::Tensor labels;
+            torch::Tensor geodesic;
+            for (int iter = 0; iter < max_outer_iters; ++iter) {
+                std::tie(labels, geodesic) = EvolveBoundaries(dens, centers);
 
+                auto update = RelocateAndSplitCenters(
+                    labels, geodesic, dens, centers, N, max_splits_per_iter,
+                    phi, Ts, Tc, eps);
+                centers = std::move(update.centers);
 
-        const int64_t C = img.size(0);
-        const int64_t H = img.size(1);
-        const int64_t W = img.size(2);
-
-        auto lacc = labels.accessor<int64_t, 2>();
-
-        // Find number of regions K
-        auto max_label = labels.max().item<int64_t>();
-        int64_t K = max_label + 1;
-        if (K <= 0) {
-            // Fallback single region
-            K = 1;
-        }
-
-        // Accumulators: per region n per channel
-        const double INF = std::numeric_limits<double>::infinity();
-        std::vector<std::vector<double>> sum(C, std::vector<double>(K, 0.0));
-        std::vector<std::vector<double>> sum2(C, std::vector<double>(K, 0.0));
-        std::vector<std::vector<double>> sum3(C, std::vector<double>(K, 0.0));
-        std::vector<std::vector<double>> vmin(C, std::vector<double>(K, INF));
-        std::vector<std::vector<double>> vmax(C, std::vector<double>(K, -INF));
-        std::vector<int64_t> count(K, 0);
-
-        auto acc = img.accessor<float, 3>();
-
-        for (int64_t y = 0; y < H; ++y) {
-            for (int64_t x = 0; x < W; ++x) {
-                int64_t k = lacc[y][x];
-                if (k < 0 || k >= K) continue;
-                ++count[k];
-                for (int64_t c = 0; c < C; ++c) {
-                    float v = acc[c][y][x];
-                    double vd = static_cast<double>(v);
-                    sum[c][k]  += vd;
-                    sum2[c][k] += vd * vd;
-                    sum3[c][k] += vd * vd * vd;
-                    if (vd < vmin[c][k]) vmin[c][k] = vd;
-                    if (vd > vmax[c][k]) vmax[c][k] = vd;
-                }
+                if (!update.split_performed &&
+                    iter + 1 >= min_outer_iters &&
+                    static_cast<int>(centers.size()) >= N) {
+                    break;
+                    }
             }
+
+            return labels; // [H, W], long
         }
 
-        constexpr int kNumMetrics = 5; // min, max, mean, std, skew
-        std::vector<std::vector<std::array<double, kNumMetrics>>> stats;
-        stats.resize(static_cast<std::size_t>(K));
-        for (int64_t k = 0; k < K; ++k) {
-            stats[static_cast<std::size_t>(k)].resize(static_cast<std::size_t>(C));
-        }
+        torch::Tensor BuildSuperpixelFeatureBatch(const torch::Tensor& batch_bchw, int num_superpixels) {
+            TORCH_CHECK(batch_bchw.dim() == 4, "Expected [B, C, H, W]");
+            TORCH_CHECK(batch_bchw.size(1) == 3, "Expected RGB images with 3 channels");
 
-        const double eps = 1e-6;
+            auto batch = batch_bchw.to(torch::kFloat32).to(torch::kCPU).contiguous();
+            const int64_t B = batch.size(0);
+            const int64_t C = batch.size(1);
+            const int64_t H = batch.size(2);
+            const int64_t W = batch.size(3);
 
-        for (int64_t k = 0; k < K; ++k) {
-            double N = static_cast<double>(std::max<int64_t>(count[k], 1));
-            for (int64_t c = 0; c < C; ++c) {
-                double S1 = sum[c][k];
-                double S2 = sum2[c][k];
-                double S3 = sum3[c][k];
+            constexpr int kNumMetrics = 5;
+            auto out = torch::empty({B, kNumMetrics * C, H, W},
+                torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
 
-                double mean = S1 / N;
-                double m2   = S2 / N - mean * mean;
-                if (m2 < eps) m2 = eps;
-                double stdv  = std::sqrt(m2);
-
-                // Third central moment using S1, S2, S3
-                double m3 = S3 / N - 3.0 * mean * (S2 / N) + 2.0 * mean * mean * mean;
-                double skew = m3 / (stdv * stdv * stdv + eps);
-                if (skew > 5.0) skew = 5.0;
-                if (skew < -5.0) skew = -5.0;
-
-                stats[static_cast<std::size_t>(k)][static_cast<std::size_t>(c)][0] = vmin[c][k];
-                stats[static_cast<std::size_t>(k)][static_cast<std::size_t>(c)][1] = vmax[c][k];
-                stats[static_cast<std::size_t>(k)][static_cast<std::size_t>(c)][2] = mean;
-                stats[static_cast<std::size_t>(k)][static_cast<std::size_t>(c)][3] = stdv;
-                stats[static_cast<std::size_t>(k)][static_cast<std::size_t>(c)][4] = skew;
+            for (int64_t b = 0; b < B; ++b) {
+                auto img = batch.index({b}); // [3, H, W]
+                auto density = ComputeDensity(img);              // [H, W]
+                auto labels  = ComputeSuperpixelLabels(density, num_superpixels); // [H, W]
+                auto feats = BuildRegionStatisticMapsForImage(img, labels);     // [5*C, H, W]
+                out.index_put_({b}, feats);
             }
+
+            return out;
         }
 
+        torch::Tensor BuildSuperpixelOverlay(const torch::Tensor& img_chw, int num_superpixels) {
+            TORCH_CHECK(img_chw.dim() == 3, "Expected [C, H, W] image");
+            TORCH_CHECK(img_chw.size(0) == 3, "Expected RGB image [3, H, W]");
 
-        auto feats = torch::empty({kNumMetrics * C, H, W}, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
-        auto facc = feats.accessor<float, 3>();
+            // Work on CPU float
+            auto img = img_chw.detach().to(torch::kFloat32).to(torch::kCPU).contiguous();
+            const int64_t C = img.size(0);
+            const int64_t H = img.size(1);
+            const int64_t W = img.size(2);
 
-        for (int64_t y = 0; y < H; ++y) {
-            for (int64_t x = 0; x < W; ++x) {
-                int64_t k = lacc[y][x];
-                if (k < 0 || k >= K) {
-                    for (int64_t c = 0; c < C; ++c) {
-                        for (int m = 0; m < kNumMetrics; ++m) {
-                            int64_t ch = c * kNumMetrics + m;
-                            facc[ch][y][x] = 0.0f;
+            // Compute density + superpixels
+            auto density = ComputeDensity(img);                         // [H, W]
+            auto labels  = ComputeSuperpixelLabels(density, num_superpixels); // [H, W]
+
+            auto lacc = labels.accessor<int64_t, 2>();
+
+            // Normalize image for display: put in [0,1]
+            auto overlay = img.clone(); // [3, H, W]
+            double maxval = overlay.max().item<double>();
+            if (maxval > 1.5) {
+                // Assume 0–255
+                overlay.div_(255.0f);
+            }
+            auto oacc = overlay.accessor<float, 3>();
+
+            // Build boundary mask: pixel is boundary if any 4-neighbor has different label
+            std::vector<uint8_t> boundary(static_cast<std::size_t>(H * W), 0);
+            const int dx[4] = {1, -1, 0, 0};
+            const int dy[4] = {0, 0, 1, -1};
+
+            for (int64_t y = 0; y < H; ++y) {
+                for (int64_t x = 0; x < W; ++x) {
+                    int64_t k = lacc[y][x];
+                    bool is_boundary = false;
+                    for (int dir = 0; dir < 4; ++dir) {
+                        int64_t xx = x + dx[dir];
+                        int64_t yy = y + dy[dir];
+                        if (xx < 0 || xx >= W || yy < 0 || yy >= H) continue;
+                        if (lacc[yy][xx] != k) {
+                            is_boundary = true;
+                            break;
                         }
                     }
-                    continue;
-                }
-                const auto& sreg = stats[static_cast<std::size_t>(k)];
-                for (int64_t c = 0; c < C; ++c) {
-                    const auto& sc = sreg[static_cast<std::size_t>(c)];
-                    for (int m = 0; m < kNumMetrics; ++m) {
-                        int64_t ch = c * kNumMetrics + m;
-                        facc[ch][y][x] = static_cast<float>(sc[static_cast<std::size_t>(m)]);
+                    if (is_boundary) {
+                        boundary[static_cast<std::size_t>(y * W + x)] = 1;
                     }
                 }
             }
-        }
 
-        return feats; // [5*C, H, W]
-    }
-
-    torch::Tensor BuildSuperpixelFeatureBatch(const torch::Tensor& batch_bchw, int num_superpixels) {
-        TORCH_CHECK(batch_bchw.dim() == 4, "Expected [B, C, H, W]");
-        TORCH_CHECK(batch_bchw.size(1) == 3, "Expected RGB images with 3 channels");
-
-        auto batch = batch_bchw.to(torch::kFloat32).to(torch::kCPU).contiguous();
-        const int64_t B = batch.size(0);
-        const int64_t C = batch.size(1);
-        const int64_t H = batch.size(2);
-        const int64_t W = batch.size(3);
-
-        constexpr int kNumMetrics = 5;
-        auto out = torch::empty({B, kNumMetrics * C, H, W},
-            torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
-
-        for (int64_t b = 0; b < B; ++b) {
-            auto img = batch.index({b}); // [3, H, W]
-            auto density = ComputeDensity(img);              // [H, W]
-            auto labels  = ComputeSuperpixelLabels(density, num_superpixels); // [H, W]
-            auto feats   = BuildRegionStatisticMapsForImage(img, labels);     // [5*C, H, W]
-            out.index_put_({b}, feats);
-        }
-
-        return out;
-    }
-
-    torch::Tensor BuildSuperpixelOverlay(const torch::Tensor& img_chw,
-                                         int num_superpixels) {
-        TORCH_CHECK(img_chw.dim() == 3, "Expected [C, H, W] image");
-        TORCH_CHECK(img_chw.size(0) == 3, "Expected RGB image [3, H, W]");
-
-        // Work on CPU float
-        auto img = img_chw.detach().to(torch::kFloat32).to(torch::kCPU).contiguous();
-        const int64_t C = img.size(0);
-        const int64_t H = img.size(1);
-        const int64_t W = img.size(2);
-
-        // Compute density + superpixels
-        auto density = ComputeDensity(img);                         // [H, W]
-        auto labels  = ComputeSuperpixelLabels(density, num_superpixels); // [H, W]
-
-        auto lacc = labels.accessor<int64_t, 2>();
-
-        // Normalize image for display: put in [0,1]
-        auto overlay = img.clone(); // [3, H, W]
-        double maxval = overlay.max().item<double>();
-        if (maxval > 1.5) {
-            // Assume 0–255
-            overlay.div_(255.0f);
-        }
-        auto oacc = overlay.accessor<float, 3>();
-
-        // Build boundary mask: pixel is boundary if any 4-neighbor has different label
-        std::vector<uint8_t> boundary(static_cast<std::size_t>(H * W), 0);
-        const int dx[4] = {1, -1, 0, 0};
-        const int dy[4] = {0, 0, 1, -1};
-
-        for (int64_t y = 0; y < H; ++y) {
-            for (int64_t x = 0; x < W; ++x) {
-                int64_t k = lacc[y][x];
-                bool is_boundary = false;
-                for (int dir = 0; dir < 4; ++dir) {
-                    int64_t xx = x + dx[dir];
-                    int64_t yy = y + dy[dir];
-                    if (xx < 0 || xx >= W || yy < 0 || yy >= H) continue;
-                    if (lacc[yy][xx] != k) {
-                        is_boundary = true;
-                        break;
-                    }
-                }
-                if (is_boundary) {
-                    boundary[static_cast<std::size_t>(y * W + x)] = 1;
+            // Paint boundaries in red on top of the image
+            for (int64_t y = 0; y < H; ++y) {
+                for (int64_t x = 0; x < W; ++x) {
+                    if (!boundary[static_cast<std::size_t>(y * W + x)]) continue;
+                    oacc[0][y][x] = 1.0f; // R
+                    oacc[1][y][x] = 0.0f; // G
+                    oacc[2][y][x] = 0.0f; // B
                 }
             }
-        }
 
-        // Paint boundaries in red on top of the image
-        for (int64_t y = 0; y < H; ++y) {
-            for (int64_t x = 0; x < W; ++x) {
-                if (!boundary[static_cast<std::size_t>(y * W + x)]) continue;
-                oacc[0][y][x] = 1.0f; // R
-                oacc[1][y][x] = 0.0f; // G
-                oacc[2][y][x] = 0.0f; // B
-            }
+            return overlay; // [3, H, W], float32 in [0,1]
         }
-
-        return overlay; // [3, H, W], float32 in [0,1]
     }
 }
-
 
 int main() {
     Thot::Model model("");
@@ -765,14 +692,32 @@ int main() {
     std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
 
     constexpr int kNumSuperpixels = 256;
-    x1 = BuildSuperpixelFeatureBatch(x1, kNumSuperpixels);
-    x2 = BuildSuperpixelFeatureBatch(x2, kNumSuperpixels);
+
 
     Thot::Data::Check::Size(x1, "Inputs Preprocessed");
     Thot::Data::Check::Size(y1, "Train Targets One-hot");
 
-    Thot::Plot::Data::Image(BuildSuperpixelOverlay(x1_raw.index({0}), kNumSuperpixels).unsqueeze(0), {0});
-    Thot::Plot::Data::Image(BuildSuperpixelOverlay(y1_raw.index({0}), kNumSuperpixels).unsqueeze(0), {0});
+
+
+    std::vector<Sample> samples;
+    Sample::SuperPixel superpixel{x1, y1};
+    Sample::Target<0, 0, 0> target_stats;
+    target_stats.min = y1.min();
+    target_stats.max = y1.max();
+    target_stats.avg = y1.mean();
+    target_stats.std = y1.std();
+    target_stats.skew = torch::zeros_like(target_stats.avg);
+    target_stats.inputRepresentation = BuildSuperpixelOverlay(x1_raw.index({0}), kNumSuperpixels);
+    target_stats.targetRepresentation = BuildSuperpixelOverlay(y1_raw.index({0}), kNumSuperpixels);
+    target_stats.voronoiInput = target_stats.inputRepresentation;
+    target_stats.voronoiTarget = target_stats.targetRepresentation;
+
+    Sample record;
+    record.superpixel = superpixel;
+    record.inputRepresentation = target_stats.inputRepresentation;
+    record.targetRepresentation = target_stats.targetRepresentation;
+    record.target = target_stats;
+    samples.push_back(std::move(record));
     auto block = [&](int in_c, int out_c) {
         return Thot::Block::Sequential({
             Thot::Layer::Conv2d(
