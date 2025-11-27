@@ -74,10 +74,11 @@ namespace Thot::Utils {
         };
 
         struct TerminalOptions {
-            std::string terminal{"qt"};
-            bool enhanced{true};
-            std::optional<std::string> font{};
-            std::optional<double> dpiScale{};
+            TerminalOptions() : terminal("qt"), enhanced(true), font(std::nullopt), dpiScale(std::nullopt) {}
+            std::string terminal;
+            bool enhanced;
+            std::optional<std::string> font;
+            std::optional<double> dpiScale;
         };
 
         explicit Gnuplot(std::string command = "gnuplot", TerminalOptions terminalOptions = TerminalOptions{}) : command_(EnsurePersist(std::move(command))), terminalOptions_(std::move(terminalOptions)), pipe_(nullptr) {

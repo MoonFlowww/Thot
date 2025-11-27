@@ -279,7 +279,7 @@ namespace {
     // ==========================================
     // Geodesic-based superpixels via voronoi (Dijkstra compute)
     // - density D(x) as cost per pixel
-    // - multi-source shortest paths on 4-neighbour grid
+    // - multi-source shortest paths on 4-neighbour grid for Geodesic
     // - w(p,q)= exp[a*||I(p)-I(q)||²]
     // ==========================================
     std::vector<Center> PlaceInitialSeeds(int64_t H, int64_t W, int num_superpixels) {
@@ -328,218 +328,203 @@ namespace {
         std::vector<Center> centers;
         bool split_performed;
     };
-    CenterUpdateResult RelocateAndSplitCenters(
-        const torch::Tensor& labels,
-        const torch::Tensor& geodesic,
-        const torch::Tensor& speed_field,
-        const std::vector<Center>& centers,
-        int target_superpixels,
-        int max_splits_per_iter,
-        float phi,
-        float Ts,
-        float Tc,
-        float eps) {
+
+
+    CenterUpdateResult RelocateAndSplitCenters(const torch::Tensor& labels, const torch::Tensor& geodesic, const torch::Tensor& speed_field, const std::vector<Center>& init_centers,
+            int target_superpixels, int max_splits_per_iter, float phi, float Ts, float Tc, float eps, int post_iterations) {
+        std::vector<Center> centers = init_centers;
+
         const int64_t H = speed_field.size(0);
         const int64_t W = speed_field.size(1);
 
-        const int S = static_cast<int>(centers.size());
         auto lacc = labels.accessor<int64_t, 2>();
         auto gacc = geodesic.accessor<float, 2>();
         auto dacc = speed_field.accessor<float, 2>();
 
-        std::vector<double> area(S, 0.0);
-        std::vector<double> sum_x(S, 0.0), sum_y(S, 0.0), sum_w(S, 0.0);
-        std::vector<double> Sxx(S, 0.0), Syy(S, 0.0), Sxy(S, 0.0), Sw_shape(S, 0.0);
+        //(last iter)
+        bool did_any_split = false;
 
-        for (int64_t y = 0; y < H; ++y) {
-            for (int64_t x = 0; x < W; ++x) {
-                int64_t l = lacc[y][x];
-                if (l < 0 || l >= S) continue;
+        for (int iter = 0; iter < post_iterations; ++iter){
+            const int S = static_cast<int>(centers.size());
 
-                float D  = dacc[y][x];   // D(x)
-                float dg = gacc[y][x];   // D_g(c_l, x)
+            std::vector<double> area(S, 0.0);
+            std::vector<double> sum_x(S, 0.0), sum_y(S, 0.0), sum_w(S, 0.0);
+            std::vector<double> Sxx(S, 0.0), Syy(S, 0.0), Sxy(S, 0.0), Sw_shape(S, 0.0);
 
-                area[l] += static_cast<double>(D);
+            for (int64_t y = 0; y < H; ++y)
+            {
+                for (int64_t x = 0; x < W; ++x)
+                {
+                    int l = lacc[y][x];
+                    if (l < 0 || l >= S) continue;
 
-                float cx = centers[l].x;
-                float cy = centers[l].y;
-                float dx = static_cast<float>(x) - cx;
-                float dy = static_cast<float>(y) - cy;
-                float len = std::sqrt(dx * dx + dy * dy) + eps;
+                    float D  = dacc[y][x];  // local density
+                    float dg = gacc[y][x];  // geodesic distance
 
-                float W_x = std::exp(-dg / phi);
-                float w_center = W_x * dg / len;
+                    area[l] += static_cast<double>(D);
 
-                sum_x[l] += static_cast<double>(w_center * static_cast<float>(x));
-                sum_y[l] += static_cast<double>(w_center * static_cast<float>(y));
-                sum_w[l] += static_cast<double>(w_center);
+                    float cx = centers[l].x;
+                    float cy = centers[l].y;
+                    float dx = float(x) - cx;
+                    float dy = float(y) - cy;
+                    float len = std::sqrt(dx*dx + dy*dy) + eps;
 
-                float w_shape = dg * dg * (dx * dx + dy * dy);
-                Sxx[l] += static_cast<double>(w_shape * dx * dx);
-                Syy[l] += static_cast<double>(w_shape * dy * dy);
-                Sxy[l] += static_cast<double>(w_shape * dx * dy);
-                Sw_shape[l] += static_cast<double>(w_shape);
+                    float W_x = std::exp(-dg / phi); // relocation weight
+                    float w_center = W_x * dg / len;
+
+                    sum_x[l] += w_center * x;
+                    sum_y[l] += w_center * y;
+                    sum_w[l] += w_center;
+
+                    float w_shape = dg * dg * (dx*dx + dy*dy);
+                    Sxx[l] += w_shape * dx * dx;
+                    Syy[l] += w_shape * dy * dy;
+                    Sxy[l] += w_shape * dx * dy;
+                    Sw_shape[l] += w_shape;
+                }
             }
 
             double total_area = 0.0;
             for (int l = 0; l < S; ++l) total_area += area[l];
-            double A_mean = (S > 0) ? (total_area / static_cast<double>(S)) : 0.0;
+            double A_mean = (S > 0 ? total_area / S : 0.0);
 
+            // Center Relloçcation
             std::vector<Center> relocated;
-            relocated.reserve(centers.size());
-            for (int l = 0; l < S; ++l) {
+            relocated.reserve(S);
+
+            for (int l = 0; l < S; ++l)
+            {
                 if (sum_w[l] > 0.0) {
-                    float nx = static_cast<float>(sum_x[l] / sum_w[l]);
-                    float ny = static_cast<float>(sum_y[l] / sum_w[l]);
-                    nx = std::max(0.0f, std::min(static_cast<float>(W - 1), nx));
-                    ny = std::max(0.0f, std::min(static_cast<float>(H - 1), ny));
-                    relocated.push_back(Center{nx, ny});
+                    float nx = sum_x[l] / sum_w[l];
+                    float ny = sum_y[l] / sum_w[l];
+
+                    nx = std::clamp(nx, 0.0f, float(W - 1));
+                    ny = std::clamp(ny, 0.0f, float(H - 1));
+
+                    relocated.push_back({nx, ny});
                 } else {
                     relocated.push_back(centers[l]);
                 }
             }
+
+            // metrics for split
             std::vector<int> to_split;
-            to_split.reserve(S);
-            for (int l = 0; l < S; ++l) {
+
+            for (int l = 0; l < S; ++l)
+            {
                 if (Sw_shape[l] <= 0.0) continue;
 
                 double cov_xx = Sxx[l] / Sw_shape[l];
                 double cov_yy = Syy[l] / Sw_shape[l];
                 double cov_xy = Sxy[l] / Sw_shape[l];
 
-
                 double trace = cov_xx + cov_yy;
                 double det   = cov_xx * cov_yy - cov_xy * cov_xy;
-                double tmp   = std::sqrt(std::max(0.0, trace * trace * 0.25 - det));
-                double eig1  = trace * 0.5 + tmp;
-                double eig2  = trace * 0.5 - tmp;
+                double tmp   = std::sqrt(std::max(0.0, trace*trace*0.25 - det));
+
+                double eig1  = trace*0.5 + tmp;
+                double eig2  = trace*0.5 - tmp;
                 if (eig2 <= 0.0) eig2 = 1e-12;
 
                 double shape_ratio = eig1 / eig2;
-                double size_ratio  = (A_mean > 0.0) ? (area[l] / A_mean) : 0.0;
+                double size_ratio  = (A_mean > 0.0 ? area[l] / A_mean : 0.0);
 
-                if (shape_ratio > Tc || size_ratio > Ts) {
+                if (shape_ratio > Tc || size_ratio > Ts)
                     to_split.push_back(l);
-                }
             }
-            int remaining_budget = std::max(0, target_superpixels - static_cast<int>(relocated.size()));
-            int max_splits = std::min(remaining_budget, max_splits_per_iter);
-            CenterUpdateResult result{};
-            if (max_splits <= 0 || to_split.empty()) {
-                result = CenterUpdateResult{std::move(relocated), false};
-            } else {
-                std::sort(to_split.begin(), to_split.end(),
-                          [&](int a, int b) { return area[a] > area[b]; });
-                if (static_cast<int>(to_split.size()) > max_splits) {
-                    to_split.resize(static_cast<std::size_t>(max_splits));
-                }
-                std::vector<char> will_split(static_cast<std::size_t>(S), 0);
-                for (int l : to_split) {
-                    if (l >= 0 && l < S) will_split[static_cast<std::size_t>(l)] = 1;
-                }
 
-                std::vector<Center> next_centers;
-                next_centers.reserve(relocated.size() + to_split.size());
+            int remaining_budget = std::max(0, target_superpixels - S);
+            int allowed = std::min(remaining_budget, max_splits_per_iter);
 
-                for (int l = 0; l < S; ++l) {
-                    if (!will_split[static_cast<std::size_t>(l)]) {
-                        next_centers.push_back(relocated[l]);
-                    }
-                }
+            if (allowed <= 0 || to_split.empty()) {
+                // no more splits possible
+                centers = relocated;
+                break;
+            }
 
-            for (int l : to_split) {
-                if (l < 0 || l >= S) continue;
-                if (Sw_shape[l] <= 0.0) {
+            std::sort(to_split.begin(), to_split.end(),
+                [&](int a, int b){ return area[a] > area[b]; });
+
+            if (int(to_split.size()) > allowed)
+                to_split.resize(allowed);
+
+            did_any_split = true;
+
+            // Center Splitting (iter)
+            std::vector<char> marked(S, 0);
+            for (int idx : to_split) marked[idx] = 1;
+
+            std::vector<Center> next_centers;
+            next_centers.reserve(S + to_split.size());
+
+            // keep all non-split centers
+            for (int l = 0; l < S; ++l)
+                if (!marked[l]) next_centers.push_back(relocated[l]);
+
+            // split centers
+            for (int l : to_split)
+            {
+                if (Sw_shape[l] <= 0.0)
+                {
                     next_centers.push_back(relocated[l]);
                     continue;
                 }
 
+                double cx = relocated[l].x;
+                double cy = relocated[l].y;
+
+                // eigenvector for split direction
                 double cov_xx = Sxx[l] / Sw_shape[l];
                 double cov_yy = Syy[l] / Sw_shape[l];
                 double cov_xy = Sxy[l] / Sw_shape[l];
 
                 double trace = cov_xx + cov_yy;
                 double det   = cov_xx * cov_yy - cov_xy * cov_xy;
-                double tmp   = std::sqrt(std::max(0.0, trace * trace * 0.25 - det));
-                double eig1  = trace * 0.5 + tmp;
+                double tmp   = std::sqrt(std::max(0.0, trace*trace*0.25 - det));
+                double eig1  = trace*0.5 + tmp;
 
-                double nx = 1.0, ny = 0.0;
-                if (std::abs(cov_xy) > 1e-12 || std::abs(cov_xx - eig1) > 1e-12) {
-                    nx = cov_xy;
-                    ny = eig1 - cov_xx;
-                }
+                double nx = cov_xy;
+                double ny = eig1 - cov_xx;
+                double nlen = std::sqrt(nx*nx + ny*ny);
+                if (nlen <= 0.0) { nx = 1.0; ny = 0.0; }
+                else { nx /= nlen; ny /= nlen; }
 
-                double nlen = std::sqrt(nx * nx + ny * ny);
-                if (nlen > 0.0) {
-                    nx /= nlen;
-                    ny /= nlen;
-                }
+                double c1x=0, c1y=0, c2x=0, c2y=0, w1=0, w2=0;
 
-                double c1x = 0.0, c1y = 0.0, w1 = 0.0;
-                double c2x = 0.0, c2y = 0.0, w2 = 0.0;
-
-                float cx = relocated[l].x;
-                float cy = relocated[l].y;
-                for (int64_t y = 0; y < H; ++y) {
-                    for (int64_t x = 0; x < W; ++x) {
+                // compute two sub-centers
+                for (int64_t y = 0; y < H; ++y)
+                {
+                    for (int64_t x = 0; x < W; ++x)
+                    {
                         if (lacc[y][x] != l) continue;
 
-
                         float dg = gacc[y][x];
-                        float dx = static_cast<float>(x) - cx;
-                        float dy = static_cast<float>(y) - cy;
-                        float proj = dx * static_cast<float>(nx)
-                                   + dy * static_cast<float>(ny);
-                        float len  = std::sqrt(dx * dx + dy * dy) + eps;
+                        float dx = float(x) - cx;
+                        float dy = float(y) - cy;
+                        float proj = dx*nx + dy*ny;
+                        float len  = std::sqrt(dx*dx + dy*dy) + eps;
                         float w    = dg / len;
 
-                        if (proj >= 0.0f) {
-                            c1x += static_cast<double>(w * static_cast<float>(x));
-                            c1y += static_cast<double>(w * static_cast<float>(y));
-                            w1  += static_cast<double>(w);
-                        } else {
-                            c2x += static_cast<double>(w * static_cast<float>(x));
-                            c2y += static_cast<double>(w * static_cast<float>(y));
-                            w2  += static_cast<double>(w);
-                        }
+                        if (proj >= 0) { c1x += w*x; c1y += w*y; w1+=w; }
+                        else           { c2x += w*x; c2y += w*y; w2+=w; }
                     }
                 }
 
+                if (w1 > 0) { c1x /= w1; c1y /= w1; } else { c1x = cx+nx*0.5; c1y = cy+ny*0.5; }
+                if (w2 > 0) { c2x /= w2; c2y /= w2; } else { c2x = cx-nx*0.5; c2y = cy-ny*0.5; }
 
-                if (w1 <= 0.0) {
-                    c1x = cx + static_cast<float>(nx) * 0.5f;
-                    c1y = cy + static_cast<float>(ny) * 0.5f;
-                } else {
-                    c1x /= w1;
-                    c1y /= w1;
-                }
-
-                if (w2 <= 0.0) {
-                    c2x = cx - static_cast<float>(nx) * 0.5f;
-                    c2y = cy - static_cast<float>(ny) * 0.5f;
-                } else {
-                    c2x /= w2;
-                    c2y /= w2;
-                }
-
-                float nc1x = static_cast<float>(std::max(0.0, std::min<double>(W - 1, c1x)));
-                float nc1y = static_cast<float>(std::max(0.0, std::min<double>(H - 1, c1y)));
-                float nc2x = static_cast<float>(std::max(0.0, std::min<double>(W - 1, c2x)));
-                float nc2y = static_cast<float>(std::max(0.0, std::min<double>(H - 1, c2y)));
-                next_centers.push_back(Center{nc1x, nc1y});
-                next_centers.push_back(Center{nc2x, nc2y});
+                next_centers.push_back({float(std::clamp(c1x, 0.0, double(W-1))), float(std::clamp(c1y, 0.0, double(H-1)))});
+                next_centers.push_back({float(std::clamp(c2x, 0.0, double(W-1))), float(std::clamp(c2y, 0.0, double(H-1)))});
             }
 
+            // limit centers
+            if ((int)next_centers.size() > target_superpixels)
+                next_centers.resize(target_superpixels);
 
-            if (static_cast<int>(next_centers.size()) > target_superpixels) {
-                next_centers.resize(static_cast<std::size_t>(target_superpixels));
-            }
-
-                result = CenterUpdateResult{std::move(next_centers), true};
-            }
-
-            return result;
+            centers = std::move(next_centers);
         }
+
+        return CenterUpdateResult{centers, did_any_split};
     }
 
     torch::Tensor ComputeSuperpixelLabels(const torch::Tensor& density_hw, int num_superpixels) {
@@ -565,9 +550,7 @@ namespace {
         for (int iter = 0; iter < max_outer_iters; ++iter) {
             std::tie(labels, geodesic) = EvolveBoundaries(dens, centers);
 
-            auto update = RelocateAndSplitCenters(
-                labels, geodesic, dens, centers, N, max_splits_per_iter,
-                phi, Ts, Tc, eps);
+            auto update = RelocateAndSplitCenters(labels, geodesic, dens, centers, N, max_splits_per_iter, phi, Ts, Tc, eps, 7);
             centers = std::move(update.centers);
 
             if (!update.split_performed && iter + 1 >= min_outer_iters && static_cast<int>(centers.size()) >= N) {
@@ -722,13 +705,12 @@ namespace {
         const int64_t W = img.size(2);
 
         // Compute density + superpixels
-        auto density = ComputeDensity(img);                         // [H, W]
-        auto labels  = ComputeSuperpixelLabels(density, num_superpixels); // [H, W]
-
+        auto density = ComputeDensity(img);
+        auto labels  = ComputeSuperpixelLabels(density, num_superpixels);
+        auto centers = PlaceInitialSeeds(H, W, num_superpixels);
         auto lacc = labels.accessor<int64_t, 2>();
 
-        // Normalize image for display: put in [0,1]
-        auto overlay = img.clone(); // [3, H, W]
+        auto overlay = img.clone();
         double maxval = overlay.max().item<double>();
         if (maxval > 1.5) {
             // Assume 0–255
@@ -769,6 +751,33 @@ namespace {
                 oacc[2][y][x] = 0.0f; // B
             }
         }
+        // Plot the initial Voronoi seeds as a small cross on top of the image
+        auto mark_cross = [&](int cx, int cy) {
+            constexpr int kHalf = 2;
+            for (int dx = -kHalf; dx <= kHalf; ++dx) {
+                int xx = cx + dx;
+                if (xx < 0 || xx >= W || cy < 0 || cy >= H) continue;
+                oacc[0][cy][xx] = 1.0f; // R
+                oacc[1][cy][xx] = 1.0f; // G
+                oacc[2][cy][xx] = 0.0f; // B
+            }
+            for (int dy = -kHalf; dy <= kHalf; ++dy) {
+                int yy = cy + dy;
+                if (yy < 0 || yy >= H || cx < 0 || cx >= W) continue;
+                oacc[0][yy][cx] = 1.0f; // R
+                oacc[1][yy][cx] = 1.0f; // G
+                oacc[2][yy][cx] = 0.0f; // B
+            }
+        };
+
+        for (const auto& c : centers) {
+            int cx = static_cast<int>(std::lround(c.x));
+            int cy = static_cast<int>(std::lround(c.y));
+            if (cx < 0 || cx >= static_cast<int>(W) || cy < 0 || cy >= static_cast<int>(H)) {
+                continue;
+            }
+            mark_cross(cx, cy);
+        }
         return overlay; // [3, H, W], float32 in [0,1]
     }
 }
@@ -778,15 +787,12 @@ int main() {
     Thot::Model model("");
 
     auto [x1, y1, x2, y2] =
-        Thot::Data::Load::Universal("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/",
-            Thot::Data::Type::JPG{
-                "images", {.grayscale = false, .normalize = false,
-                 .size_to_max_tile=false, .size={256, 256}, .color_order = "RGB"}},
-            Thot::Data::Type::PNG{
-                "masks", {.normalize = false, .size={64, 64},
-                 .InterpolationMode = Thot::Data::Transform::Format::Options::InterpMode::Nearest,
-                 .color_order = "RGB"}
-            },{.train_fraction = .8f, .test_fraction = .2f, .shuffle = false});
+        Thot::Data::Load::Universal("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1",
+            Thot::Data::Type::JPG{"images", {.grayscale = false, .normalize_colors = false, .normalize_size=true /*, .size={256, 256}*/, .color_order = "RGB"}},
+            Thot::Data::Type::PNG{"masks", {.normalize_colors = false, .normalize_size=true, .InterpolationMode = Thot::Data::Transform::Format::Options::InterpMode::Nearest, .color_order = "RGB"}
+            },{.train_fraction = 1.f, .test_fraction = 0.f, .shuffle = false});
+
+    /*
     auto x1_raw = x1.clone();
     auto y1_raw = y1.clone();
     y1 = ConvertRgbMasksToOneHot(y1);
@@ -800,13 +806,11 @@ int main() {
     std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
     std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
 
-    constexpr int kNumSuperpixels = 256;
+    constexpr int kNumSuperpixels = 16;
 
 
     Thot::Data::Check::Size(x1, "Inputs Preprocessed");
     Thot::Data::Check::Size(y1, "Train Targets One-hot");
-
-
 
     std::vector<Sample> samples;
     Sample::SuperPixel superpixel{x1, y1};
@@ -816,10 +820,23 @@ int main() {
     target_stats.avg = y1.mean();
     target_stats.std = y1.std();
     target_stats.skew = torch::zeros_like(target_stats.avg);
-    target_stats.inputRepresentation = BuildSuperpixelOverlay(x1_raw.index({0}), kNumSuperpixels);
-    target_stats.targetRepresentation = BuildSuperpixelOverlay(y1_raw.index({0}), kNumSuperpixels);
+    auto input_overlay = BuildSuperpixelOverlay(x1_raw.index({0}), kNumSuperpixels);
+    auto target_overlay = BuildSuperpixelOverlay(y1_raw.index({0}), kNumSuperpixels);
+    target_stats.inputRepresentation = input_overlay;
+    target_stats.targetRepresentation = target_overlay;
     target_stats.voronoiInput = target_stats.inputRepresentation;
     target_stats.voronoiTarget = target_stats.targetRepresentation;
+
+    Thot::Plot::Data::Image(input_overlay.unsqueeze(0), {0}, Thot::Plot::Data::ImagePlotOptions{.layoutTitle = "Input with superpixel segmentation", .showColorBox = true});
+    Thot::Plot::Data::Image(target_overlay.unsqueeze(0),{0}, Thot::Plot::Data::ImagePlotOptions{.layoutTitle = "Raw target with superpixel segmentation", .showColorBox = true});
+
+    auto speed_field = GenerateSpeedField(ComputeDensity(x1_raw.index({0})));
+    auto speed_min = speed_field.min().item<float>();
+    auto speed_max = speed_field.max().item<float>();
+    auto speed_norm = (speed_max > speed_min) ? (speed_field - speed_min) / (speed_max - speed_min) : torch::zeros_like(speed_field);
+    auto speed_rgb = speed_norm.unsqueeze(0).repeat({3, 1, 1});
+
+    Thot::Plot::Data::Image(speed_rgb.unsqueeze(0),{0}, Thot::Plot::Data::ImagePlotOptions{.layoutTitle = "Speed generation map", .showColorBox = true});
 
     Sample record;
     record.superpixel = superpixel;
@@ -827,6 +844,33 @@ int main() {
     record.targetRepresentation = target_stats.targetRepresentation;
     record.target = target_stats;
     samples.push_back(std::move(record));
+
+    */
+    Thot::Data::Check::Size(x1, "Raw Input");
+    // Recompose Tile
+    std::vector<torch::Tensor> rows_input; rows_input.reserve(3);
+    std::vector<torch::Tensor> rows_label; rows_label.reserve(3);
+    for (int i=0; i<3; ++i) {
+        auto inp1 = x1[3*i+0]; auto lab1 = y1[3*i+0];
+        auto inp2 = x1[3*i+1]; auto lab2 = y1[3*i+1];
+        auto inp3 = x1[3*i+2]; auto lab3 = y1[3*i+2];
+
+        torch::Tensor row_inp = torch::cat({inp1, inp2, inp3}, /*dim=*/2);
+        torch::Tensor row_lab = torch::cat({lab1, lab2, lab3}, /*dim=*/2);
+        rows_input.push_back(row_inp); rows_label.push_back(row_lab);
+    }
+    torch::Tensor inp = torch::cat(rows_input, /*dim=*/1); torch::Tensor lab = torch::cat(rows_label, /*dim=*/1);
+    Thot::Data::Check::Size(inp, "Recomposed Tile 1 Input");
+    Thot::Data::Check::Size(lab, "Recomposed Tile Mask");
+    Thot::Plot::Data::Image(inp.unsqueeze(0), {0});
+    Thot::Plot::Data::Image(lab.unsqueeze(0), {0});
+
+    torch::Tensor sum_ch = lab.abs().sum(/*dim=*/0);
+    torch::Tensor dead = sum_ch == 0;
+    auto num_dead = dead.sum().item<int64_t>();
+    std::cout << "Dead pixels (all channels): " << num_dead << std::endl;
+
+    return 0;
     auto block = [&](int in_c, int out_c) {
         return Thot::Block::Sequential({
             Thot::Layer::Conv2d(
@@ -857,7 +901,6 @@ int main() {
     constexpr int kInputChannels = 3 * kNumMetrics; // min,max,mean,std,skew per channel
 
     // ENCODER
-    // 256x256 -> 128 -> 64 -> 32 -> 16
     model.add(block(kInputChannels, 64), "enc1");
     model.add(Thot::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool1");
 
@@ -870,22 +913,15 @@ int main() {
     model.add(block(256, 512), "enc4");
     model.add(Thot::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool4");
 
-    // bottleneck at 16x16
     model.add(block(512, 1024), "bottleneck");
 
 
     //DECODERS (up to 64x64)
-    // 16x16 -> 32x32
     model.add(upblock(1024, 512), "up4");
     model.add(block(1024, 512), "dec4");   // join(up4, enc4) -> 512ch
-
-    // 32x32 -> 64x64
     model.add(upblock(512, 256), "up3");
     model.add(block(512, 256), "dec3");   // join(up3, enc3) -> 256ch
-
-    // head at 64x64
-    model.add(Thot::Layer::Conv2d({256, 6, {1, 1}, {1, 1}, {0, 0}}, Thot::Activation::Identity),
-              "logits");
+    model.add(Thot::Layer::Conv2d({256, 6, {1, 1}, {1, 1}, {0, 0}}, Thot::Activation::Identity), "logits");
 
     model.links({
         // encoder path
@@ -900,11 +936,8 @@ int main() {
         Thot::LinkSpec{Thot::Port::Module("pool4"), Thot::Port::Module("bottleneck")},
 
         // decoder with skip
-        // level 4: 16 -> 32
         Thot::LinkSpec{Thot::Port::Module("bottleneck"), Thot::Port::Module("up4")},
         Thot::LinkSpec{Thot::Port::Join({"up4", "enc4"}, Thot::MergePolicy::Stack), Thot::Port::Module("dec4")},
-
-        // level 3: 32 -> 64
         Thot::LinkSpec{Thot::Port::Module("dec4"), Thot::Port::Module("up3")},
         Thot::LinkSpec{Thot::Port::Join({"up3", "enc3"}, Thot::MergePolicy::Stack), Thot::Port::Module("dec3")},
 
