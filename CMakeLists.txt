@@ -14,7 +14,7 @@ endif()
 
 find_package(Torch REQUIRED)
 find_package(Boost REQUIRED COMPONENTS filesystem)
-find_package(OpenCV REQUIRED COMPONENTS core imgcodecs imgproc)
+find_package(OpenCV REQUIRED COMPONENTS core imgcodecs imgproc highgui)
 
 
 add_library(Thot SHARED

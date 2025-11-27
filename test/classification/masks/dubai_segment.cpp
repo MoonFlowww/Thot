@@ -8,6 +8,11 @@
 #include <cmath>
 #include <cstdint>
 
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/highgui.hpp>
+
 namespace {
     constexpr std::array<std::array<std::uint8_t, 3>, 6> kClassPalette{{
         std::array<std::uint8_t, 3>{60, 16, 152},
@@ -788,7 +793,7 @@ int main() {
 
     auto [x1, y1, x2, y2] =
         Thot::Data::Load::Universal("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1",
-            Thot::Data::Type::JPG{"images", {.grayscale = false, .normalize_colors = false, .normalize_size=true /*, .size={256, 256}*/, .color_order = "RGB"}},
+            Thot::Data::Type::JPG{"images", {.grayscale = false, .normalize_colors = false, .normalize_size=true, .color_order = "RGB"}},
             Thot::Data::Type::PNG{"masks", {.normalize_colors = false, .normalize_size=true, .InterpolationMode = Thot::Data::Transform::Format::Options::InterpMode::Nearest, .color_order = "RGB"}
             },{.train_fraction = 1.f, .test_fraction = 0.f, .shuffle = false});
 
@@ -862,15 +867,61 @@ int main() {
     torch::Tensor inp = torch::cat(rows_input, /*dim=*/1); torch::Tensor lab = torch::cat(rows_label, /*dim=*/1);
     Thot::Data::Check::Size(inp, "Recomposed Tile 1 Input");
     Thot::Data::Check::Size(lab, "Recomposed Tile Mask");
-    Thot::Plot::Data::Image(inp.unsqueeze(0), {0});
-    Thot::Plot::Data::Image(lab.unsqueeze(0), {0});
+    //Thot::Plot::Data::Image(inp.unsqueeze(0), {0});
+    //Thot::Plot::Data::Image(lab.unsqueeze(0), {0});
 
-    torch::Tensor sum_ch = lab.abs().sum(/*dim=*/0);
-    torch::Tensor dead = sum_ch == 0;
-    auto num_dead = dead.sum().item<int64_t>();
-    std::cout << "Dead pixels (all channels): " << num_dead << std::endl;
 
-    return 0;
+
+    {
+        {
+            torch::Tensor t = inp.detach().to(torch::kCPU);
+            t = t.clamp(0, 255).to(torch::kU8);
+            torch::Tensor t_hwc = t.permute({1, 2, 0}).contiguous();
+            int H = t_hwc.size(0);
+            int W = t_hwc.size(1);
+            cv::Mat img(H, W, CV_8UC3, t_hwc.data_ptr<uint8_t>());
+            cv::Mat img_bgr;
+            cv::cvtColor(img, img_bgr, cv::COLOR_RGB2BGR);
+            cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/input_raw.png", img_bgr);
+            cv::GaussianBlur(img_bgr, img_bgr, cv::Size(), 0.83);
+            cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/input_smooth.png", img_bgr);
+        }
+
+        {
+            torch::Tensor t = lab.detach().to(torch::kCPU);
+            t = t.clamp(0, 255).to(torch::kU8);
+            torch::Tensor t_hwc = t.permute({1, 2, 0}).contiguous();
+            int H = t_hwc.size(0);
+            int W = t_hwc.size(1);
+            cv::Mat img(H, W, CV_8UC3, t_hwc.data_ptr<uint8_t>());
+            cv::Mat img_bgr;
+            cv::cvtColor(img, img_bgr, cv::COLOR_RGB2BGR);
+            cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/lab_raw.png", img_bgr);
+            cv::GaussianBlur(img_bgr, img_bgr, cv::Size(), 0.83);
+            cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/lab_smooth.png", img_bgr);
+        }
+
+        {
+            auto input = GenerateSpeedField(ComputeDensity(inp)); //.index({0})
+            auto speed_min = input.min().item<float>();
+            auto speed_max = input.max().item<float>();
+            auto speed_norm = (speed_max > speed_min) ? (input - speed_min) / (speed_max - speed_min) : torch::zeros_like(input);
+            auto speed_rgb = speed_norm.unsqueeze(0).repeat({3, 1, 1});
+            Thot::Data::Check::Size(speed_rgb, "GeoDist");
+            torch::Tensor t = speed_rgb.detach().to(torch::kCPU);
+            t = (t * 255.0).clamp(0, 255).to(torch::kU8);
+            torch::Tensor t_hwc = t.permute({1, 2, 0}).contiguous();
+            int H = t_hwc.size(0);
+            int W = t_hwc.size(1);
+            cv::Mat img(H, W, CV_8UC3, t_hwc.data_ptr<uint8_t>());
+            cv::Mat img_bgr;
+            cv::cvtColor(img, img_bgr, cv::COLOR_RGB2BGR);
+            cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/GeoDistance_Raw.png", img_bgr);
+        }
+    }
+
+
+    //return 0;
     auto block = [&](int in_c, int out_c) {
         return Thot::Block::Sequential({
             Thot::Layer::Conv2d(
@@ -901,7 +952,7 @@ int main() {
     constexpr int kInputChannels = 3 * kNumMetrics; // min,max,mean,std,skew per channel
 
     // ENCODER
-    model.add(block(kInputChannels, 64), "enc1");
+    model.add(block(/*kInputChannels*/3, 64), "enc1");
     model.add(Thot::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool1");
 
     model.add(block(64,  128), "enc2");
@@ -918,10 +969,15 @@ int main() {
 
     //DECODERS (up to 64x64)
     model.add(upblock(1024, 512), "up4");
-    model.add(block(1024, 512), "dec4");   // join(up4, enc4) -> 512ch
+    model.add(block(1024, 512), "dec4");
     model.add(upblock(512, 256), "up3");
-    model.add(block(512, 256), "dec3");   // join(up3, enc3) -> 256ch
-    model.add(Thot::Layer::Conv2d({256, 6, {1, 1}, {1, 1}, {0, 0}}, Thot::Activation::Identity), "logits");
+    model.add(block(512, 256), "dec3");
+
+    model.add(upblock(256, 128), "up2");
+    model.add(block(256, 128),"dec2");
+    model.add(upblock(128, 64), "up1");
+    model.add(block(128, 64), "dec1");
+    model.add(Thot::Layer::Conv2d({64, 6, {1, 1}, {1, 1}, {0, 0}}, Thot::Activation::Identity), "logits");
 
     model.links({
         // encoder path
@@ -941,13 +997,25 @@ int main() {
         Thot::LinkSpec{Thot::Port::Module("dec4"), Thot::Port::Module("up3")},
         Thot::LinkSpec{Thot::Port::Join({"up3", "enc3"}, Thot::MergePolicy::Stack), Thot::Port::Module("dec3")},
 
+        Thot::LinkSpec{Thot::Port::Module("dec3"), Thot::Port::Module("up2") },
+        Thot::LinkSpec{Thot::Port::Join({"up2", "enc2"}, Thot::MergePolicy::Stack), Thot::Port::Module("dec2")},
+        Thot::LinkSpec{Thot::Port::Module("dec2"), Thot::Port::Module("up1") },
+        Thot::LinkSpec{Thot::Port::Join({"up1", "enc1"}, Thot::MergePolicy::Stack), Thot::Port::Module("dec1")},
+
+
         // head
-        Thot::LinkSpec{Thot::Port::Module("dec3"),   Thot::Port::Module("logits")},
+        Thot::LinkSpec{Thot::Port::Module("dec1"),   Thot::Port::Module("logits")}, // dec3
         Thot::LinkSpec{Thot::Port::Module("logits"), Thot::Port::Output("@output")},
     }, true);
 
+    x1 = inp.unsqueeze(0);
+    y1 = ConvertRgbMasksToOneHot(lab.unsqueeze(0));
+
+    x1 = Thot::Data::Transform::Format::Downsample(x1, {.size={512, 512}});
+    y1 = Thot::Data::Transform::Format::Downsample(y1, {.size={512, 512}});
     const auto total_training_samples = x1.size(0);
-    const auto steps_per_epoch = static_cast<std::size_t>((total_training_samples + 8 - 1) / 8);
+    const auto B = 8;
+    const auto steps_per_epoch = static_cast<std::size_t>((total_training_samples + B - 1) / B);
     const auto total_training_steps = std::max<std::size_t>(1, 25 * std::max<std::size_t>(steps_per_epoch, 1));
 
     model.set_loss(Thot::Loss::BCEWithLogits({}));
@@ -971,13 +1039,13 @@ int main() {
     model.use_cuda(torch::cuda::is_available());
 
     model.train(x1, y1,
-        {.epoch = 25,
-         .batch_size = 8,
+        {.epoch = 2500,
+         .batch_size = B,
          .restore_best_state = true,
-         .test = std::vector<at::Tensor>{x2, y2},
+         //.test = std::vector<at::Tensor>{x2, y2},
          .graph_mode = Thot::GraphMode::Capture,
          .enable_amp = true});
-
+    /*
     torch::NoGradGuard guard;
     Thot::Data::Check::Size(x2, "Test Inputs");
     Thot::Data::Check::Size(y2, "Test Targets");
@@ -988,6 +1056,6 @@ int main() {
             Thot::Metric::Classification::Recall,
             Thot::Metric::Classification::JaccardIndexMicro,
         },{.batch_size = 8, .buffer_vram=2});
-
+    */
     return 0;
 }

@@ -56,274 +56,108 @@ namespace Thot::Plot {
     namespace Reliability {
 
 
-        [[nodiscard]] constexpr auto DET(DETOptions options = {}) -> DETDescriptor
-        {
+        [[nodiscard]] inline auto DET(DETOptions options = {}) -> DETDescriptor {
             return DETDescriptor{options};
         }
 
 
 
-        [[nodiscard]] constexpr auto ROC(ROCOptions options = {}) -> ROCDescriptor
-        {
+        [[nodiscard]] inline auto ROC(ROCOptions options = {}) -> ROCDescriptor {
             return ROCDescriptor{options};
         }
 
 
 
-        [[nodiscard]] constexpr auto Youdens(YoudensOptions options = {}) -> YoudensDescriptor
-        {
+        [[nodiscard]] inline auto Youdens(YoudensOptions options = {}) -> YoudensDescriptor {
             return YoudensDescriptor{options};
         }
 
 
 
-        [[nodiscard]] constexpr auto PR(PROptions options = {}) -> PRDescriptor
-        {
+        [[nodiscard]] inline auto PR(PROptions options = {}) -> PRDescriptor {
             return PRDescriptor{options};
         }
 
 
-        [[nodiscard]] constexpr auto GradCAM(GradCAMOptions options = {}) -> GradCAMDescriptor
-        {
+        [[nodiscard]] inline auto GradCAM(GradCAMOptions options = {}) -> GradCAMDescriptor {
             return GradCAMDescriptor{options};
         }
 
 
 
-        [[nodiscard]] constexpr auto LIME(LIMEOptions options = {}) -> LIMEDescriptor
-        {
+        [[nodiscard]] inline auto LIME(LIMEOptions options = {}) -> LIMEDescriptor {
             return LIMEDescriptor{options};
         }
 
 
-        inline void Render(Model& model,
-                           const DETDescriptor& descriptor,
-                           torch::Tensor logits,
-                           torch::Tensor targets)
-        {
-            Details::Reliability::RenderDET(model,
-                                            descriptor,
-                                            std::move(logits),
-                                            std::move(targets));
+        inline void Render(Model& model, const DETDescriptor& descriptor, torch::Tensor logits, torch::Tensor targets) {
+            Details::Reliability::RenderDET(model, descriptor, std::move(logits), std::move(targets));
         }
 
-        inline void Render(Model& model,
-                           const DETDescriptor& descriptor,
-                           torch::Tensor trainLogits,
-                           torch::Tensor trainTargets,
-                           torch::Tensor testLogits,
-                           torch::Tensor testTargets)
-        {
-            Details::Reliability::RenderDET(model,
-                                            descriptor,
-                                            std::move(trainLogits),
-                                            std::move(trainTargets),
-                                            std::move(testLogits),
-                                            std::move(testTargets));
+        inline void Render(Model& model, const DETDescriptor& descriptor, torch::Tensor trainLogits, torch::Tensor trainTargets, torch::Tensor testLogits, torch::Tensor testTargets) {
+            Details::Reliability::RenderDET(model, descriptor, std::move(trainLogits), std::move(trainTargets), std::move(testLogits), std::move(testTargets));
         }
 
-        inline void Render(Model& model,
-                           const DETDescriptor& descriptor,
-                           const std::vector<double>& probabilities,
-                           const std::vector<int64_t>& targets)
-        {
-            Details::Reliability::RenderDET(model,
-                                            descriptor,
-                                            probabilities,
-                                            targets);
+        inline void Render(Model& model, const DETDescriptor& descriptor, const std::vector<double>& probabilities, const std::vector<int64_t>& targets){
+            Details::Reliability::RenderDET(model, descriptor, probabilities, targets);
         }
 
-        inline void Render(Model& model,
-                           const DETDescriptor& descriptor,
-                           const std::vector<double>& trainProbabilities,
-                           const std::vector<int64_t>& trainTargets,
-                           const std::vector<double>& testProbabilities,
-                           const std::vector<int64_t>& testTargets)
-        {
-            Details::Reliability::RenderDET(model,
-                                            descriptor,
-                                            trainProbabilities,
-                                            trainTargets,
-                                            testProbabilities,
-                                            testTargets);
+        inline void Render(Model& model, const DETDescriptor& descriptor, const std::vector<double>& trainProbabilities, const std::vector<int64_t>& trainTargets, const std::vector<double>& testProbabilities, const std::vector<int64_t>& testTargets) {
+            Details::Reliability::RenderDET(model, descriptor, trainProbabilities, trainTargets, testProbabilities, testTargets);
         }
 
-        inline void Render(Model& model,
-                           const ROCDescriptor& descriptor,
-                           torch::Tensor logits,
-                           torch::Tensor targets)
-        {
-            Details::Reliability::RenderROC(model,
-                                            descriptor,
-                                            std::move(logits),
-                                            std::move(targets));
+        inline void Render(Model& model, const ROCDescriptor& descriptor, torch::Tensor logits, torch::Tensor targets) {
+            Details::Reliability::RenderROC(model, descriptor, std::move(logits), std::move(targets));
         }
 
-        inline void Render(Model& model,
-                   const ROCDescriptor& descriptor,
-                   torch::Tensor trainLogits,
-                   torch::Tensor trainTargets,
-                   torch::Tensor testLogits,
-                   torch::Tensor testTargets)
-        {
-            Details::Reliability::RenderROC(model,
-                                            descriptor,
-                                            std::move(trainLogits),
-                                            std::move(trainTargets),
-                                            std::move(testLogits),
-                                            std::move(testTargets));
+        inline void Render(Model& model, const ROCDescriptor& descriptor, torch::Tensor trainLogits, torch::Tensor trainTargets, torch::Tensor testLogits, torch::Tensor testTargets) {
+            Details::Reliability::RenderROC(model, descriptor, std::move(trainLogits), std::move(trainTargets), std::move(testLogits), std::move(testTargets));
         }
 
-        inline void Render(Model& model,
-                           const ROCDescriptor& descriptor,
-                           const std::vector<double>& probabilities,
-                           const std::vector<int64_t>& targets)
-        {
-            Details::Reliability::RenderROC(model,
-                                            descriptor,
-                                            probabilities,
-                                            targets);
+        inline void Render(Model& model, const ROCDescriptor& descriptor, const std::vector<double>& probabilities, const std::vector<int64_t>& targets){
+            Details::Reliability::RenderROC(model, descriptor, probabilities, targets);
         }
 
-        inline void Render(Model& model,
-                           const ROCDescriptor& descriptor,
-                           const std::vector<double>& trainProbabilities,
-                           const std::vector<int64_t>& trainTargets,
-                           const std::vector<double>& testProbabilities,
-                           const std::vector<int64_t>& testTargets)
-        {
-            Details::Reliability::RenderROC(model,
-                                            descriptor,
-                                            trainProbabilities,
-                                            trainTargets,
-                                            testProbabilities,
-                                            testTargets);
+        inline void Render(Model& model, const ROCDescriptor& descriptor, const std::vector<double>& trainProbabilities, const std::vector<int64_t>& trainTargets, const std::vector<double>& testProbabilities, const std::vector<int64_t>& testTargets) {
+            Details::Reliability::RenderROC(model, descriptor, trainProbabilities, trainTargets, testProbabilities, testTargets);
         }
 
-        inline void Render(Model& model,
-                           const YoudensDescriptor& descriptor,
-                           torch::Tensor logits,
-                           torch::Tensor targets)
-        {
-            Details::Reliability::RenderYoudens(model,
-                                                descriptor,
-                                                std::move(logits),
-                                                std::move(targets));
+        inline void Render(Model& model, const YoudensDescriptor& descriptor, torch::Tensor logits, torch::Tensor targets) {
+            Details::Reliability::RenderYoudens(model, descriptor, std::move(logits), std::move(targets));
         }
-        inline void Render(Model& model,
-                           const YoudensDescriptor& descriptor,
-                           torch::Tensor trainLogits,
-                           torch::Tensor trainTargets,
-                           torch::Tensor testLogits,
-                           torch::Tensor testTargets)
-        {
-            Details::Reliability::RenderYoudens(model,
-                                                descriptor,
-                                                std::move(trainLogits),
-                                                std::move(trainTargets),
-                                                std::move(testLogits),
-                                                std::move(testTargets));
+        inline void Render(Model& model, const YoudensDescriptor& descriptor, torch::Tensor trainLogits, torch::Tensor trainTargets, torch::Tensor testLogits, torch::Tensor testTargets) {
+            Details::Reliability::RenderYoudens(model, descriptor, std::move(trainLogits), std::move(trainTargets), std::move(testLogits), std::move(testTargets));
         }
 
-        inline void Render(Model& model,
-                           const YoudensDescriptor& descriptor,
-                           const std::vector<double>& probabilities,
-                           const std::vector<int64_t>& targets)
-        {
-            Details::Reliability::RenderYoudens(model,
-                                                descriptor,
-                                                probabilities,
-                                                targets);
+        inline void Render(Model& model, const YoudensDescriptor& descriptor, const std::vector<double>& probabilities, const std::vector<int64_t>& targets) {
+            Details::Reliability::RenderYoudens(model, descriptor, probabilities, targets);
         }
 
-        inline void Render(Model& model,
-                           const YoudensDescriptor& descriptor,
-                           const std::vector<double>& trainProbabilities,
-                           const std::vector<int64_t>& trainTargets,
-                           const std::vector<double>& testProbabilities,
-                           const std::vector<int64_t>& testTargets)
-        {
-            Details::Reliability::RenderYoudens(model,
-                                                descriptor,
-                                                trainProbabilities,
-                                                trainTargets,
-                                                testProbabilities,
-                                                testTargets);
+        inline void Render(Model& model, const YoudensDescriptor& descriptor, const std::vector<double>& trainProbabilities, const std::vector<int64_t>& trainTargets, const std::vector<double>& testProbabilities, const std::vector<int64_t>& testTargets) {
+            Details::Reliability::RenderYoudens(model, descriptor, trainProbabilities, trainTargets, testProbabilities, testTargets);
         }
 
-        inline void Render(Model& model,
-                           const PRDescriptor& descriptor,
-                           torch::Tensor logits,
-                           torch::Tensor targets)
-        {
-            Details::Reliability::RenderPR(model,
-                                           descriptor,
-                                           std::move(logits),
-                                           std::move(targets));
+        inline void Render(Model& model, const PRDescriptor& descriptor, torch::Tensor logits, torch::Tensor targets) {
+            Details::Reliability::RenderPR(model, descriptor, std::move(logits), std::move(targets));
         }
-        inline void Render(Model& model,
-                           const PRDescriptor& descriptor,
-                           torch::Tensor trainLogits,
-                           torch::Tensor trainTargets,
-                           torch::Tensor testLogits,
-                           torch::Tensor testTargets)
-        {
-            Details::Reliability::RenderPR(model,
-                                           descriptor,
-                                           std::move(trainLogits),
-                                           std::move(trainTargets),
-                                           std::move(testLogits),
-                                           std::move(testTargets));
+        inline void Render(Model& model, const PRDescriptor& descriptor, torch::Tensor trainLogits, torch::Tensor trainTargets, torch::Tensor testLogits, torch::Tensor testTargets) {
+            Details::Reliability::RenderPR(model, descriptor, std::move(trainLogits), std::move(trainTargets), std::move(testLogits), std::move(testTargets));
         }
 
-        inline void Render(Model& model,
-                           const PRDescriptor& descriptor,
-                           const std::vector<double>& probabilities,
-                           const std::vector<int64_t>& targets)
-        {
-            Details::Reliability::RenderPR(model,
-                                           descriptor,
-                                           probabilities,
-                                           targets);
+        inline void Render(Model& model, const PRDescriptor& descriptor, const std::vector<double>& probabilities, const std::vector<int64_t>& targets) {
+            Details::Reliability::RenderPR(model, descriptor, probabilities, targets);
         }
 
-        inline void Render(Model& model,
-                           const PRDescriptor& descriptor,
-                           const std::vector<double>& trainProbabilities,
-                           const std::vector<int64_t>& trainTargets,
-                           const std::vector<double>& testProbabilities,
-                           const std::vector<int64_t>& testTargets)
-        {
-            Details::Reliability::RenderPR(model,
-                                           descriptor,
-                                           trainProbabilities,
-                                           trainTargets,
-                                           testProbabilities,
-                                           testTargets);
+        inline void Render(Model& model, const PRDescriptor& descriptor, const std::vector<double>& trainProbabilities, const std::vector<int64_t>& trainTargets, const std::vector<double>& testProbabilities, const std::vector<int64_t>& testTargets) {
+            Details::Reliability::RenderPR(model, descriptor, trainProbabilities, trainTargets, testProbabilities, testTargets);
         }
 
-        inline void Render(Model& model,
-                           const GradCAMDescriptor& descriptor,
-                           torch::Tensor inputs,
-                           torch::Tensor targets,
-                           std::optional<std::size_t> targetLayer = std::nullopt)
-        {
-            Details::Reliability::RenderGradCAM(model,
-                                                descriptor,
-                                                std::move(inputs),
-                                                std::move(targets),
-                                                std::move(targetLayer));
+        inline void Render(Model& model, const GradCAMDescriptor& descriptor, torch::Tensor inputs, torch::Tensor targets, std::optional<std::size_t> targetLayer = std::nullopt) {
+            Details::Reliability::RenderGradCAM(model, descriptor, std::move(inputs), std::move(targets), std::move(targetLayer));
         }
 
-        inline void Render(Model& model,
-                           const LIMEDescriptor& descriptor,
-                           torch::Tensor inputs,
-                           torch::Tensor targets)
-        {
-            Details::Reliability::RenderLIME(model,
-                                             descriptor,
-                                             std::move(inputs),
-                                             std::move(targets));
+        inline void Render(Model& model, const LIMEDescriptor& descriptor, torch::Tensor inputs, torch::Tensor targets) {
+            Details::Reliability::RenderLIME(model, descriptor, std::move(inputs), std::move(targets));
         }
     }
 
