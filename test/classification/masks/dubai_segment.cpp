@@ -1021,7 +1021,17 @@ int main() {
     const auto steps_per_epoch = static_cast<std::size_t>((total_training_samples + B - 1) / B);
     const auto total_training_steps = std::max<std::size_t>(1, 25 * std::max<std::size_t>(steps_per_epoch, 1));
 
-    model.set_loss(Thot::Loss::BCEWithLogits({}));
+
+    auto class_targets = y1.argmax(1);
+    auto class_counts  = torch::bincount(class_targets.flatten(), /*weights=*/std::nullopt, /*minlength=*/static_cast<int64_t>(kClassPalette.size())).to(torch::kFloat32);
+    auto class_weights = (class_counts + 1e-6f).reciprocal();
+    class_weights = class_weights / class_weights.mean();
+    auto w_cpu = class_weights.to(torch::kCPU).to(torch::kDouble).contiguous();
+    const double* ptr = w_cpu.data_ptr<double>();
+    std::vector<double> w(ptr, ptr + w_cpu.numel());
+
+
+    model.set_loss(Thot::Loss::CrossEntropy({ .weight = w }));
     model.set_optimizer(
         Thot::Optimizer::AdamW({.learning_rate = 5e-5, .weight_decay = 1e-4}),
         Thot::LrScheduler::CosineAnnealing({
@@ -1041,7 +1051,7 @@ int main() {
 
     model.use_cuda(torch::cuda::is_available());
 
-    model.train(x1, y1,
+    model.train(x1, class_targets,
         {.epoch = 500,
          .batch_size = B,
          .restore_best_state = true,
@@ -1051,9 +1061,9 @@ int main() {
 
     torch::NoGradGuard guard;
     Thot::Data::Check::Size(x1, "Test Inputs");
-    Thot::Data::Check::Size(y1, "Test Targets");
+    Thot::Data::Check::Size(class_targets, "Test Targets");
 
-    model.evaluate(x1, y1, Thot::Evaluation::Segmentation,{
+    model.evaluate(x1, class_targets, Thot::Evaluation::Segmentation,{
             Thot::Metric::Classification::Accuracy,
             Thot::Metric::Classification::Precision,
             Thot::Metric::Classification::Recall,

@@ -3,13 +3,14 @@
 #include <optional>
 #include <stdexcept>
 #include <torch/torch.h>
+#include <vector>
 
 #include "reduction.hpp"
 
 namespace Thot::Loss::Details {
     struct CrossEntropyOptions {
         Reduction reduction{Reduction::Mean};
-        bool use_weight{false};
+        std::vector<double> weight{};
         double label_smoothing{0.0};
     };
 
@@ -24,12 +25,13 @@ namespace Thot::Loss::Details {
         auto opts = torch::nn::functional::CrossEntropyFuncOptions{};
         opts = opts.reduction(to_torch_reduction<torch::nn::functional::CrossEntropyFuncOptions>(descriptor.options.reduction));
         opts = opts.label_smoothing(descriptor.options.label_smoothing);
-        if (descriptor.options.use_weight) {
-            if (!weight.has_value() || !weight->defined()) {
-                throw std::invalid_argument("CrossEntropy loss configured to use weight but no weight tensor was provided.");
-            }
-            const auto weight_tensor = weight->to(prediction.device(), prediction.scalar_type());
+        if (!descriptor.options.weight.empty()) {
+            auto weight_tensor = torch::tensor(
+                descriptor.options.weight,
+                torch::TensorOptions().dtype(prediction.scalar_type()).device(prediction.device()));
             opts = opts.weight(weight_tensor);
+        } else if (weight.has_value() && weight->defined()) {
+            opts = opts.weight(weight->to(prediction.device(), prediction.scalar_type()));
         }
         return torch::nn::functional::cross_entropy(prediction, target, opts);
     }

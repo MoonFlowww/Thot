@@ -11,8 +11,8 @@ namespace Thot::Loss::Details {
 
     struct BCEWithLogitsOptions {
         Reduction reduction{Reduction::Mean};
-        bool use_weight{false};
-        bool use_pos_weight{false};
+        std::vector<double> weight{};
+        std::vector<double> pos_weight{};
     };
 
     struct BCEWithLogitsDescriptor {
@@ -24,19 +24,21 @@ namespace Thot::Loss::Details {
         auto opts = torch::nn::functional::BinaryCrossEntropyWithLogitsFuncOptions{};
         opts = opts.reduction(to_torch_reduction<torch::nn::functional::BinaryCrossEntropyFuncOptions>(descriptor.options.reduction));
 
-        if (descriptor.options.use_weight) {
-            if (!weight || !weight->defined()) {
-                throw std::invalid_argument(
-                    "BinaryCrossEntropyWithLogits configured to use weight but no weight tensor was provided.");
-            }
+        if (!descriptor.options.weight.empty()) {
+            auto weight_tensor = torch::tensor(
+                descriptor.options.weight,
+                torch::TensorOptions().dtype(prediction.scalar_type()).device(prediction.device()));
+            opts = opts.weight(weight_tensor);
+        } else if (weight && weight->defined()) {
             opts = opts.weight(weight->to(prediction.device(), prediction.scalar_type()));
         }
 
-        if (descriptor.options.use_pos_weight) {
-            if (!pos_weight || !pos_weight->defined()) {
-                throw std::invalid_argument(
-                    "BinaryCrossEntropyWithLogits configured to use pos_weight but no pos_weight tensor was provided.");
-            }
+        if (!descriptor.options.pos_weight.empty()) {
+            auto pos_weight_tensor = torch::tensor(
+                descriptor.options.pos_weight,
+                torch::TensorOptions().dtype(prediction.scalar_type()).device(prediction.device()));
+            opts = opts.pos_weight(pos_weight_tensor);
+        } else if (pos_weight && pos_weight->defined()) {
             opts = opts.pos_weight(pos_weight->to(prediction.device(), prediction.scalar_type()));
         }
 

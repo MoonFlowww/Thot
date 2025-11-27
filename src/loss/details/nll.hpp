@@ -10,7 +10,7 @@
 namespace Thot::Loss::Details {
     struct NegativeLogLikelihoodOptions {
         Reduction reduction{Reduction::Mean};
-        bool use_weight{false};
+        std::vector<double> weight{};
         std::optional<int64_t> ignore_index{};
     };
 
@@ -23,11 +23,12 @@ namespace Thot::Loss::Details {
         auto opts = torch::nn::functional::NLLLossFuncOptions{};
         opts = opts.reduction(to_torch_reduction<torch::nn::functional::NLLLossFuncOptions>(descriptor.options.reduction));
 
-        if (descriptor.options.use_weight) {
-            if (!weight || !weight->defined()) {
-                throw std::invalid_argument(
-                    "NegativeLogLikelihood configured to use weight but no weight tensor was provided.");
-            }
+        if (!descriptor.options.weight.empty()) {
+            auto weight_tensor = torch::tensor(
+                descriptor.options.weight,
+                torch::TensorOptions().dtype(prediction.scalar_type()).device(prediction.device()));
+            opts = opts.weight(weight_tensor);
+        } else if (weight && weight->defined()) {
             opts = opts.weight(weight->to(prediction.device(), prediction.scalar_type()));
         }
 
