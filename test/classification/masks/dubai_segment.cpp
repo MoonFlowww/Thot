@@ -1013,6 +1013,9 @@ int main() {
 
     x1 = Thot::Data::Transform::Format::Downsample(x1, {.size={512, 512}});
     y1 = Thot::Data::Transform::Format::Downsample(y1, {.size={512, 512}});
+
+    x1 = x1.to(torch::kFloat32) / 255.0f;
+
     const auto total_training_samples = x1.size(0);
     const auto B = 8;
     const auto steps_per_epoch = static_cast<std::size_t>((total_training_samples + B - 1) / B);
@@ -1039,23 +1042,52 @@ int main() {
     model.use_cuda(torch::cuda::is_available());
 
     model.train(x1, y1,
-        {.epoch = 2500,
+        {.epoch = 500,
          .batch_size = B,
          .restore_best_state = true,
          //.test = std::vector<at::Tensor>{x2, y2},
          .graph_mode = Thot::GraphMode::Capture,
          .enable_amp = true});
-    /*
-    torch::NoGradGuard guard;
-    Thot::Data::Check::Size(x2, "Test Inputs");
-    Thot::Data::Check::Size(y2, "Test Targets");
 
-    model.evaluate(x2, y2, Thot::Evaluation::Segmentation,{
+    torch::NoGradGuard guard;
+    Thot::Data::Check::Size(x1, "Test Inputs");
+    Thot::Data::Check::Size(y1, "Test Targets");
+
+    model.evaluate(x1, y1, Thot::Evaluation::Segmentation,{
             Thot::Metric::Classification::Accuracy,
             Thot::Metric::Classification::Precision,
             Thot::Metric::Classification::Recall,
             Thot::Metric::Classification::JaccardIndexMicro,
         },{.batch_size = 8, .buffer_vram=2});
-    */
+
+
+    auto logits = model.forward(x1);
+    auto predicted = logits.argmax(1).to(torch::kCPU);
+    auto first_pred = predicted.index({0}).contiguous();
+
+    const auto H = static_cast<int>(first_pred.size(0));
+    const auto W = static_cast<int>(first_pred.size(1));
+
+    torch::Tensor forecast_rgb = torch::zeros({H, W, 3}, torch::TensorOptions().dtype(torch::kUInt8));
+    auto pacc = first_pred.accessor<long, 2>();
+    auto racc = forecast_rgb.accessor<std::uint8_t, 3>();
+    for (int y = 0; y < H; ++y) {
+        for (int x = 0; x < W; ++x) {
+            auto cls = pacc[y][x];
+            if (cls < 0 || cls >= static_cast<long>(kClassPalette.size()))
+                cls = 0;
+            const auto& rgb = kClassPalette[static_cast<std::size_t>(cls)];
+            racc[y][x][0] = rgb[0];
+            racc[y][x][1] = rgb[1];
+            racc[y][x][2] = rgb[2];
+        }
+    }
+    cv::Mat f_img(H, W, CV_8UC3, forecast_rgb.data_ptr<uint8_t>());
+    cv::Mat f_bgr;
+    cv::cvtColor(f_img, f_bgr, cv::COLOR_RGB2BGR);
+    cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/forecast.png", f_bgr);
+    cv::GaussianBlur(f_bgr, f_bgr, cv::Size(), 0.83);
+    cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/forecast_raw.png", f_bgr);
+
     return 0;
 }
