@@ -6,6 +6,8 @@
 
 #include <torch/torch.h>
 
+#include "../../utils/gnuplot.hpp"
+
 namespace Thot {
     class Model;
 }
@@ -16,6 +18,7 @@ namespace Thot::Plot::Reliability {
         bool confidenceBands{false};
         bool annotateCrossing{true};
         bool adjustScale{false};
+        Utils::Gnuplot::TerminalOptions terminal{};
     };
     struct DETDescriptor {
         DETOptions options{};
@@ -25,6 +28,7 @@ namespace Thot::Plot::Reliability {
         bool KSTest{false};
         bool thresholds{false};
         bool adjustScale{false};
+        Utils::Gnuplot::TerminalOptions terminal{};
     };
 
     struct ROCDescriptor {
@@ -36,6 +40,7 @@ namespace Thot::Plot::Reliability {
         bool annotate{true};
         bool showIsoCost{false};
         bool adjustScale{false};
+        Utils::Gnuplot::TerminalOptions terminal{};
     };
 
     struct YoudensDescriptor {
@@ -47,6 +52,7 @@ namespace Thot::Plot::Reliability {
         bool random{false};
         bool interpolate{true};
         bool adjustScale{false};
+        Utils::Gnuplot::TerminalOptions terminal{};
     };
 
     struct PRDescriptor {
@@ -58,6 +64,7 @@ namespace Thot::Plot::Reliability {
         bool random{false};
         bool normalize{true};
         bool overlay{true};
+        Utils::Gnuplot::TerminalOptions terminal{};
     };
 
     struct GradCAMDescriptor {
@@ -69,6 +76,7 @@ namespace Thot::Plot::Reliability {
         bool random{true};
         bool normalize{true};
         bool showWeights{false};
+        Utils::Gnuplot::TerminalOptions terminal{};
     };
 
     struct LIMEDescriptor {

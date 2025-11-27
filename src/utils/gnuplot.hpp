@@ -73,8 +73,15 @@ namespace Thot::Utils {
             PlotStyle style{};
         };
 
-        explicit Gnuplot(std::string command = "gnuplot") : command_(EnsurePersist(std::move(command))), pipe_(nullptr) {
-            ApplyQtHighDpiScaling();
+        struct TerminalOptions {
+            std::string terminal{"qt"};
+            bool enhanced{true};
+            std::optional<std::string> font{};
+            std::optional<double> dpiScale{};
+        };
+
+        explicit Gnuplot(std::string command = "gnuplot", TerminalOptions terminalOptions = TerminalOptions{}) : command_(EnsurePersist(std::move(command))), terminalOptions_(std::move(terminalOptions)), pipe_(nullptr) {
+            ApplyQtHighDpiScaling(terminalOptions_);
             pipe_ = popen(command_.c_str(), "w");
             if (pipe_ == nullptr) {
                 throw std::runtime_error("Failed to open pipe to gnuplot");
@@ -496,11 +503,15 @@ namespace Thot::Utils {
 
     private:
         std::string command_;
+        TerminalOptions terminalOptions_;
         std::FILE* pipe_;
 
 
-        static void ApplyQtHighDpiScaling() {
-            // Ensure Qt uses reasonable defaults on Wayland compositors such as Hyprland.
+        static void ApplyQtHighDpiScaling(const TerminalOptions& options) {
+            const bool usesQtTerminal = options.terminal.find("qt") != std::string::npos;
+            if (!usesQtTerminal) {
+                return;
+            }
 
             const char* sessionType = std::getenv("XDG_SESSION_TYPE");
             const bool isWayland = (sessionType && std::string_view(sessionType) == "wayland");
@@ -533,6 +544,16 @@ namespace Thot::Utils {
                 _putenv_s("QT_ENABLE_HIGHDPI_SCALING", "1");
 #else
                 setenv("QT_ENABLE_HIGHDPI_SCALING", "1", 1);
+#endif
+            }
+
+            if (options.dpiScale) {
+                std::ostringstream scale;
+                scale << std::setprecision(4) << *options.dpiScale;
+#ifdef _WIN32
+                _putenv_s("QT_SCALE_FACTOR", scale.str().c_str());
+#else
+                setenv("QT_SCALE_FACTOR", scale.str().c_str(), 1);
 #endif
             }
         }
@@ -576,7 +597,14 @@ namespace Thot::Utils {
         }
 
         void initializeDefaultTerminal() {
-            setTerminal("qt enhanced");
+            std::string terminal = terminalOptions_.terminal;
+            if (terminalOptions_.enhanced && terminal.find("enhanced") == std::string::npos) {
+                terminal += " enhanced";
+            }
+            if (terminalOptions_.font && !terminalOptions_.font->empty()) {
+                terminal += " font '" + EscapeSingleQuotes(*terminalOptions_.font) + "'";
+            }
+            setTerminal(terminal);
         }
 
 

@@ -39,7 +39,9 @@ namespace Thot::Plot::Details::Reliability {
                 }
             }
 
-            Utils::Gnuplot plotter{};
+            const auto& options = descriptor.options;
+
+            Utils::Gnuplot plotter("gnuplot", options.terminal);
             plotter.setTitle("Detection Error Tradeoff");
             plotter.setXLabel("False Positive Rate");
             plotter.setYLabel("False Negative Rate");
@@ -47,7 +49,6 @@ namespace Thot::Plot::Details::Reliability {
             plotter.setGrid(true);
             plotter.setKey("top right");
 
-            const auto& options = descriptor.options;
             const bool adjustScale = options.adjustScale;
 
             constexpr double logEpsilon = 1e-6;

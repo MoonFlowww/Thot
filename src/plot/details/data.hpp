@@ -570,6 +570,33 @@ struct MatrixOptions {
             if (images.dim() < 3 || images.dim() > 4) {
                 throw std::invalid_argument("Image expects a 3D or 4D tensor");
             }
+            if (images.dim() == 3) {
+                const auto dim0 = static_cast<std::size_t>(images.size(0));
+                const auto dim2 = static_cast<std::size_t>(images.size(2));
+                const bool channelFirstColor = dim0 == 3 || dim0 == 4;
+                const bool channelLastColor = dim2 == 3 || dim2 == 4;
+
+                if (channelFirstColor || channelLastColor) {
+                    m_isColor = true;
+                    auto normalized = channelLastColor && !channelFirstColor
+                                          ? images.permute({2, 0, 1}).contiguous()
+                                          : images;
+                    if (normalized.size(0) == 4) {
+                        normalized = normalized.index({torch::indexing::Slice(0, 3), torch::indexing::Ellipsis});
+                    }
+
+                    const std::size_t batchSize = 1;
+                    for (auto index : m_indices) {
+                        if (index >= batchSize) {
+                            throw std::out_of_range("Requested image index out of bounds");
+                        }
+                        (void)index;
+                        m_selectedImages.push_back(normalized.detach().clone());
+                    }
+                    return;
+                }
+            }
+
 
             const auto batchSize = static_cast<std::size_t>(images.size(0));
             for (auto index : m_indices) {
@@ -580,12 +607,13 @@ struct MatrixOptions {
 
             if (images.dim() == 4) {
                 const auto channels = static_cast<std::size_t>(images.size(1));
-                m_isColor = channels > 1;
+                const auto trailingChannels = static_cast<std::size_t>(images.size(3));
+                m_isColor = channels > 1 || trailingChannels == 3 || trailingChannels == 4;
                 for (auto index : m_indices) {
                     auto slice = images[index].detach().clone();
                     m_selectedImages.push_back(std::move(slice));
                 }
-            } else { // dim == 3
+            } else { // Grayscale path
                 m_isColor = false;
                 for (auto index : m_indices) {
                     auto slice = images[index].detach().clone();

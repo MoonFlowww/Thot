@@ -41,11 +41,8 @@ namespace Thot::Plot::Details::Reliability {
             return solution;
         }
 
-        inline void RenderLIMEPlot(std::size_t sample_index,
-                                   const std::vector<std::pair<std::size_t, double>>& importances,
-                                   bool show_weights)
-        {
-            Utils::Gnuplot plotter{};
+        inline void RenderLIMEPlot(std::size_t sample_index, const std::vector<std::pair<std::size_t, double>>& importances, bool show_weights, const Utils::Gnuplot::TerminalOptions& terminalOptions) {
+            Utils::Gnuplot plotter("gnuplot", terminalOptions);
             plotter.setTitle("LIME – sample " + std::to_string(sample_index));
             plotter.setXLabel("Feature");
             plotter.setYLabel("Contribution");
@@ -193,7 +190,7 @@ namespace Thot::Plot::Details::Reliability {
             const std::size_t top_k = std::min<std::size_t>(ranked.size(), 10);
             ranked.resize(top_k);
 
-            detail::RenderLIMEPlot(index, ranked, descriptor.options.showWeights);
+            detail::RenderLIMEPlot(index, ranked, descriptor.options.showWeights, descriptor.options.terminal);
         }
 
         if (was_training) {

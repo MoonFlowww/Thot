@@ -64,7 +64,7 @@ namespace Thot::Data::Type {
         bool recursive = false;
         bool grayscale = false;
         bool normalize_colors = false;
-        bool channels_first = false;
+        bool channels_first = true;
         bool normalize_size = false;
         std::vector<int> size{-1, -1};
         Transform::Format::Options::InterpMode InterpolationMode = Transform::Format::Options::InterpMode::Bilinear;

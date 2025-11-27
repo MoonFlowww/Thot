@@ -38,7 +38,9 @@ namespace Thot::Plot::Details::Reliability {
                 }
             }
 
-            Utils::Gnuplot plotter{};
+            const auto& options = descriptor.options;
+
+            Utils::Gnuplot plotter("gnuplot", options.terminal);
             plotter.setTitle("Receiver Operating Characteristic");
             plotter.setXLabel("False Positive Rate");
             plotter.setYLabel("True Positive Rate");
@@ -46,7 +48,6 @@ namespace Thot::Plot::Details::Reliability {
             plotter.setGrid(true);
             plotter.setKey("bottom right");
 
-            const auto& options = descriptor.options;
             const bool adjustScale = options.adjustScale;
             constexpr double logEpsilon = 1e-6;
             constexpr double logBase = 2.0;

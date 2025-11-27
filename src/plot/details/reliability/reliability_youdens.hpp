@@ -38,7 +38,9 @@ namespace Thot::Plot::Details::Reliability {
                 }
             }
 
-            Utils::Gnuplot plotter{};
+            const auto& options = descriptor.options;
+
+            Utils::Gnuplot plotter("gnuplot", options.terminal);
             plotter.setTitle("Youden's J Statistic");
             plotter.setXLabel("Decision Threshold");
             plotter.setYLabel("Youden's J");
