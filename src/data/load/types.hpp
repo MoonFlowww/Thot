@@ -63,9 +63,9 @@ namespace Thot::Data::Type {
     struct ImageParameters {
         bool recursive = false;
         bool grayscale = false;
-        bool normalize = true;
-        bool channels_first = true;
-        bool size_to_max_tile = false;
+        bool normalize_colors = false;
+        bool channels_first = false;
+        bool normalize_size = false;
         std::vector<int> size{-1, -1};
         Transform::Format::Options::InterpMode InterpolationMode = Transform::Format::Options::InterpMode::Bilinear;
         std::string color_order = "RGB";

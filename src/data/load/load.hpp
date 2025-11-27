@@ -13,7 +13,6 @@
 #include <utility>
 #include <charconv>
 #include <vector>
-
 #include <optional>
 #include <regex>
 #include <numeric>
@@ -22,7 +21,7 @@
 #include <unordered_map>
 #include <limits>
 #include <system_error>
-
+#include <iostream>
 
 #include <torch/torch.h>
 
@@ -724,7 +723,9 @@ namespace Thot::Data::Load {
             std::optional<std::pair<int, int>> expected_hw;
             int max_rows = 0;
             int max_cols = 0;
-            const bool track_sample_sizes = image_params.size_to_max_tile || image_params.size[0] != -1 || image_params.size[1] != -1;
+            int min_rows = std::numeric_limits<int>::max();
+            int min_cols = std::numeric_limits<int>::max();
+            const bool track_sample_sizes = image_params.normalize_size || image_params.size[0] != -1 || image_params.size[1] != -1;
             std::vector<std::pair<int, int>> sample_hw;
             if (track_sample_sizes) {
                 sample_hw.reserve(image_files.size());
@@ -786,9 +787,11 @@ namespace Thot::Data::Load {
                 }
 
                 if (track_sample_sizes) {
-                    if (image_params.size_to_max_tile) {
+                    if (image_params.normalize_size) {
                         max_rows = std::max(max_rows, image.rows);
                         max_cols = std::max(max_cols, image.cols);
+                        min_rows = std::min(min_rows, image.rows);
+                        min_cols = std::min(min_cols, image.cols);
                     }
                     sample_hw.emplace_back(image.rows, image.cols);
                 } else {
@@ -800,7 +803,7 @@ namespace Thot::Data::Load {
                 }
 
                 cv::Mat image_float;
-                const double scale = image_params.normalize ? (1.0 / 255.0) : 1.0;
+                const double scale = image_params.normalize_colors ? (1.0 / 255.0) : 1.0;
                 image.convertTo(image_float, CV_32F, scale);
 
                 if (needs_channel_reorder) {
@@ -833,13 +836,14 @@ namespace Thot::Data::Load {
             }
             if (track_sample_sizes && !samples.empty()) {
                 std::vector<int> target_size;
+                const bool normalize_size = image_params.normalize_size;
                 if (image_params.size[0] !=-1 || image_params.size[1] !=-1) {
                     target_size = image_params.size;
-                } else if (image_params.size_to_max_tile) {
-                    target_size = std::vector<int>{max_rows, max_cols};
+                } else if (normalize_size) {
+                    target_size = std::vector<int>{min_rows, min_cols};
                 }
 
-                if (target_size[0]>0 || target_size[0]>0) {
+                if (target_size[0]>0 || target_size[1]>0) {
                     if (sample_hw.size() != samples.size()) {
                         throw std::runtime_error("Internal error: missing sample size metadata for resizing.");
                     }
@@ -867,22 +871,42 @@ namespace Thot::Data::Load {
                             continue;
                         }
 
-                        const bool needs_downscale = rows > (target_size)[0] || cols > (target_size)[1];
-                        const bool needs_upscale = rows < (target_size)[0] || cols < (target_size)[1];
 
                         auto [working, was_permuted] = to_channels_first(samples[i]);
-                        Thot::Data::Transform::Format::Options::ScaleOptions options;
-                        options.size = std::vector<int>{static_cast<int>((target_size)[0]), static_cast<int>((target_size)[1])};
-                        options.interp = image_params.InterpolationMode;
-                        if (needs_downscale && !needs_upscale) {
-                            working = Thot::Data::Transform::Format::Downsample(working, options);
-                        } else if (needs_upscale && !needs_downscale) {
-                            working = Thot::Data::Transform::Format::Upsample(working, options);
-                        } else if (needs_downscale) {
-                            // Mixed dimensions larger/smaller: treat as downscale to avoid overshooting.
-                            working = Thot::Data::Transform::Format::Downsample(working, options);
-                        } else if (needs_upscale) {
-                            working = Thot::Data::Transform::Format::Upsample(working, options);
+                        if (normalize_size) {
+                            const int rows_to_remove = std::max(0, rows - (target_size)[0]);
+                            const int cols_to_remove = std::max(0, cols - (target_size)[1]);
+
+                            if (rows_to_remove > 0) {
+                                working = working.narrow(1, 0, (target_size)[0]);
+                            }
+                            if (cols_to_remove > 0) {
+                                working = working.narrow(2, 0, (target_size)[1]);
+                            }
+
+                            if (rows_to_remove > 0 || cols_to_remove > 0) {
+                                std::cout << "[Thot::Load::Universal]-> normalize_size applied on sample " << i << " (" << rows << "x" << cols
+                                          << " -> " << (target_size)[0] << "x" << (target_size)[1]
+                                          << "): removed " << rows_to_remove << " rows and "
+                                          << cols_to_remove << " columns\n";
+                            }
+                        } else {
+                            const bool needs_downscale = rows > (target_size)[0] || cols > (target_size)[1];
+                            const bool needs_upscale = rows < (target_size)[0] || cols < (target_size)[1];
+
+                            Thot::Data::Transform::Format::Options::ScaleOptions options;
+                            options.size = std::vector<int>{static_cast<int>((target_size)[0]), static_cast<int>((target_size)[1])};
+                            options.interp = image_params.InterpolationMode;
+                            if (needs_downscale && !needs_upscale) {
+                                working = Thot::Data::Transform::Format::Downsample(working, options);
+                            } else if (needs_upscale && !needs_downscale) {
+                                working = Thot::Data::Transform::Format::Upsample(working, options);
+                            } else if (needs_downscale) {
+                                // Mixed dimensions larger/smaller: treat as downscale to avoid overshooting.
+                                working = Thot::Data::Transform::Format::Downsample(working, options);
+                            } else if (needs_upscale) {
+                                working = Thot::Data::Transform::Format::Upsample(working, options);
+                            }
                         }
 
                         samples[i] = restore_layout(working, was_permuted);
