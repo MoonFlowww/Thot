@@ -30,7 +30,9 @@ int main() {
         Thot::Metric::Classification::Precision,
         Thot::Metric::Classification::F1,
         Thot::Metric::Classification::Informedness});
+    return 0;
 }
+
 ```
 
 
