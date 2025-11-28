@@ -7,7 +7,7 @@ Thot is a modern C++ deep-learning framework that layers a strongly-typed API ov
 
 ## Quick Start
 ```cpp
-#include <thot/model.h>
+#include <Thot>
 
 int main() {
     Thot::Model model("demo");
