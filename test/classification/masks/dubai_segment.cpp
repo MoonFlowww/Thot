@@ -1046,6 +1046,7 @@ int main() {
     Thot::Data::Check::Size(x1, "Test Inputs");
     Thot::Data::Check::Size(class_targets, "Test Targets");
 
+
     model.evaluate(x1, class_targets, Thot::Evaluation::Segmentation,{
             Thot::Metric::Classification::Accuracy,
             Thot::Metric::Classification::Precision,
