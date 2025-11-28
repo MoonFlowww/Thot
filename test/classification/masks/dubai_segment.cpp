@@ -785,6 +785,56 @@ namespace {
         }
         return overlay; // [3, H, W], float32 in [0,1]
     }
+
+    torch::Tensor OriginalTile(torch::Tensor&x) {
+        std::vector<torch::Tensor> rows; rows.reserve(3);
+        for (int i=0; i<3; ++i) {
+            auto inp1 = x[3*i+0];
+            auto inp2 = x[3*i+1];
+            auto inp3 = x[3*i+2];
+
+            torch::Tensor row_inp = torch::cat({inp1, inp2, inp3}, 2);
+            rows.push_back(row_inp);
+        }
+        return torch::cat(rows, 1); torch::Tensor lab = torch::cat(rows, 1);
+    }
+
+    torch::Tensor Cuts(torch::Tensor& x, int cuts, bool subcuts=false) {
+        int H = x.size(1); int W = x.size(2); // std::size_t C = x.size(0);
+        int h=H/cuts; int w=W/cuts; //cuts resolution
+
+        std::size_t samples = subcuts ? (cuts*cuts)+((cuts-1)*(cuts-1)) : (cuts*cuts); // x² + (x-1)²
+        std::vector<torch::Tensor> out; out.reserve(samples);
+
+        for(int row=0; row<cuts; ++row) { // classic cuts
+            for(int col=0; col<cuts; ++col) {
+                torch::Tensor patch = x.index({
+                    at::indexing::Slice(),
+                    at::indexing::Slice(h*row, h*(row+1)),
+                    at::indexing::Slice(w*col, w*(col+1))
+                });
+
+                out.push_back(patch);
+            }
+        }
+
+        if (subcuts) {
+            int hshift=static_cast<float>(h)*0.5f; int wshift=static_cast<float>(w)*0.5f;
+            std::size_t subs = cuts-1;
+            for(int row=0; row<subs; ++row) {
+                for(int col=0; col<subs; ++col) {
+                    torch::Tensor patch = x.index({
+                        at::indexing::Slice(),
+                        at::indexing::Slice(h*row+hshift, h*(row+1)+hshift),
+                        at::indexing::Slice(w*col+wshift, w*(col+1)+wshift)
+                    });
+
+                    out.push_back(patch);
+                }
+            }
+        }
+        return torch::stack(out, 0);
+    }
 }
 
 
@@ -851,77 +901,10 @@ int main() {
     samples.push_back(std::move(record));
 
     */
-    Thot::Data::Check::Size(x1, "Raw Input");
-    // Recompose Tile
-    std::vector<torch::Tensor> rows_input; rows_input.reserve(3);
-    std::vector<torch::Tensor> rows_label; rows_label.reserve(3);
-    for (int i=0; i<3; ++i) {
-        auto inp1 = x1[3*i+0]; auto lab1 = y1[3*i+0];
-        auto inp2 = x1[3*i+1]; auto lab2 = y1[3*i+1];
-        auto inp3 = x1[3*i+2]; auto lab3 = y1[3*i+2];
-
-        torch::Tensor row_inp = torch::cat({inp1, inp2, inp3}, /*dim=*/2);
-        torch::Tensor row_lab = torch::cat({lab1, lab2, lab3}, /*dim=*/2);
-        rows_input.push_back(row_inp); rows_label.push_back(row_lab);
-    }
-    torch::Tensor inp = torch::cat(rows_input, /*dim=*/1); torch::Tensor lab = torch::cat(rows_label, /*dim=*/1);
-    Thot::Data::Check::Size(inp, "Recomposed Tile 1 Input");
-    Thot::Data::Check::Size(lab, "Recomposed Tile Mask");
-    //Thot::Plot::Data::Image(inp.unsqueeze(0), {0});
-    //Thot::Plot::Data::Image(lab.unsqueeze(0), {0});
+    auto inp = OriginalTile(x1);
+    auto lab = OriginalTile(y1);
 
 
-
-    {
-        {
-            torch::Tensor t = inp.detach().to(torch::kCPU);
-            t = t.clamp(0, 255).to(torch::kU8);
-            torch::Tensor t_hwc = t.permute({1, 2, 0}).contiguous();
-            int H = t_hwc.size(0);
-            int W = t_hwc.size(1);
-            cv::Mat img(H, W, CV_8UC3, t_hwc.data_ptr<uint8_t>());
-            cv::Mat img_bgr;
-            cv::cvtColor(img, img_bgr, cv::COLOR_RGB2BGR);
-            cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/input_raw.png", img_bgr);
-            cv::GaussianBlur(img_bgr, img_bgr, cv::Size(), 0.83);
-            cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/input_smooth.png", img_bgr);
-        }
-
-        {
-            torch::Tensor t = lab.detach().to(torch::kCPU);
-            t = t.clamp(0, 255).to(torch::kU8);
-            torch::Tensor t_hwc = t.permute({1, 2, 0}).contiguous();
-            int H = t_hwc.size(0);
-            int W = t_hwc.size(1);
-            cv::Mat img(H, W, CV_8UC3, t_hwc.data_ptr<uint8_t>());
-            cv::Mat img_bgr;
-            cv::cvtColor(img, img_bgr, cv::COLOR_RGB2BGR);
-            cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/lab_raw.png", img_bgr);
-            cv::GaussianBlur(img_bgr, img_bgr, cv::Size(), 0.83);
-            cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/lab_smooth.png", img_bgr);
-        }
-
-        {
-            auto input = GenerateSpeedField(ComputeDensity(inp)); //.index({0})
-            auto speed_min = input.min().item<float>();
-            auto speed_max = input.max().item<float>();
-            auto speed_norm = (speed_max > speed_min) ? (input - speed_min) / (speed_max - speed_min) : torch::zeros_like(input);
-            auto speed_rgb = speed_norm.unsqueeze(0).repeat({3, 1, 1});
-            Thot::Data::Check::Size(speed_rgb, "GeoDist");
-            torch::Tensor t = speed_rgb.detach().to(torch::kCPU);
-            t = (t * 255.0).clamp(0, 255).to(torch::kU8);
-            torch::Tensor t_hwc = t.permute({1, 2, 0}).contiguous();
-            int H = t_hwc.size(0);
-            int W = t_hwc.size(1);
-            cv::Mat img(H, W, CV_8UC3, t_hwc.data_ptr<uint8_t>());
-            cv::Mat img_bgr;
-            cv::cvtColor(img, img_bgr, cv::COLOR_RGB2BGR);
-            cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/GeoDistance_Raw.png", img_bgr);
-        }
-    }
-
-
-    //return 0;
     auto block = [&](int in_c, int out_c) {
         return Thot::Block::Sequential({
             Thot::Layer::Conv2d(
@@ -948,11 +931,8 @@ int main() {
         });
     };
 
-    constexpr int kNumMetrics = 5;
-    constexpr int kInputChannels = 3 * kNumMetrics; // min,max,mean,std,skew per channel
-
     // ENCODER
-    model.add(block(/*kInputChannels*/3, 64), "enc1");
+    model.add(block(3, 64), "enc1");
     model.add(Thot::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool1");
 
     model.add(block(64,  128), "enc2");
@@ -972,6 +952,7 @@ int main() {
     model.add(block(1024, 512), "dec4");
     model.add(upblock(512, 256), "up3");
     model.add(block(512, 256), "dec3");
+
 
     model.add(upblock(256, 128), "up2");
     model.add(block(256, 128),"dec2");
@@ -1004,16 +985,16 @@ int main() {
 
 
         // head
-        Thot::LinkSpec{Thot::Port::Module("dec1"),   Thot::Port::Module("logits")}, // dec3
+        Thot::LinkSpec{Thot::Port::Module("dec3"),   Thot::Port::Module("logits")}, // dec3
         Thot::LinkSpec{Thot::Port::Module("logits"), Thot::Port::Output("@output")},
     }, true);
 
-    x1 = inp.unsqueeze(0);
-    y1 = ConvertRgbMasksToOneHot(lab.unsqueeze(0));
+    Thot::Data::Check::Size(inp, "Size Pre-Cuts");
+    constexpr std::size_t cuts = 5;
+    x1 = Cuts(inp, cuts, true); Thot::Data::Check::Size(x1, "X After Cuts"); Thot::Plot::Data::Image(x1, {0, 1, 2, 3, 4});
+    y1 = Cuts(lab, cuts, true); Thot::Data::Check::Size(y1, "Y After Cuts");
 
-    x1 = Thot::Data::Transform::Format::Downsample(x1, {.size={512, 512}});
-    y1 = Thot::Data::Transform::Format::Downsample(y1, {.size={512, 512}});
-
+    y1 = ConvertRgbMasksToOneHot(y1);
     x1 = x1.to(torch::kFloat32) / 255.0f;
 
     const auto total_training_samples = x1.size(0);
@@ -1021,9 +1002,9 @@ int main() {
     const auto steps_per_epoch = static_cast<std::size_t>((total_training_samples + B - 1) / B);
     const auto total_training_steps = std::max<std::size_t>(1, 25 * std::max<std::size_t>(steps_per_epoch, 1));
 
-
+    //loss weights
     auto class_targets = y1.argmax(1);
-    auto class_counts  = torch::bincount(class_targets.flatten(), /*weights=*/std::nullopt, /*minlength=*/static_cast<int64_t>(kClassPalette.size())).to(torch::kFloat32);
+    auto class_counts  = torch::bincount(class_targets.flatten(), std::nullopt, kClassPalette.size()).to(torch::kFloat32);
     auto class_weights = (class_counts + 1e-6f).reciprocal();
     class_weights = class_weights / class_weights.mean();
     auto w_cpu = class_weights.to(torch::kCPU).to(torch::kDouble).contiguous();
@@ -1051,13 +1032,15 @@ int main() {
 
     model.use_cuda(torch::cuda::is_available());
 
+    std::cout << "Train" << std::endl;
     model.train(x1, class_targets,
         {.epoch = 500,
          .batch_size = B,
          .restore_best_state = true,
          //.test = std::vector<at::Tensor>{x2, y2},
-         .graph_mode = Thot::GraphMode::Capture,
+         .graph_mode = Thot::GraphMode::Disabled,
          .enable_amp = true});
+    std::cout << "End" << std::endl;
 
     torch::NoGradGuard guard;
     Thot::Data::Check::Size(x1, "Test Inputs");
@@ -1095,9 +1078,9 @@ int main() {
     cv::Mat f_img(H, W, CV_8UC3, forecast_rgb.data_ptr<uint8_t>());
     cv::Mat f_bgr;
     cv::cvtColor(f_img, f_bgr, cv::COLOR_RGB2BGR);
-    cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/forecast.png", f_bgr);
-    cv::GaussianBlur(f_bgr, f_bgr, cv::Size(), 0.83);
     cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/forecast_raw.png", f_bgr);
+    cv::GaussianBlur(f_bgr, f_bgr, cv::Size(), 0.83);
+    cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/forecast_smooth.png", f_bgr);
 
     return 0;
 }

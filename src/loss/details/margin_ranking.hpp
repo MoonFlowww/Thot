@@ -38,31 +38,49 @@ namespace Thot::Loss::Details {
 
         auto input1 = prediction.select(pair_axis, 0).contiguous();
         auto input2 = prediction.select(pair_axis, 1).contiguous();
+        const bool has_weight = !descriptor.options.weight.empty() || (weight && weight->defined());
         auto opts = torch::nn::functional::MarginRankingLossFuncOptions{};
         opts = opts.margin(descriptor.options.margin);
         opts = opts.reduction(torch::nn::functional::MarginRankingLossFuncOptions::reduction_t{
-            to_torch_reduction<torch::nn::functional::MarginRankingLossFuncOptions>(descriptor.options.reduction)
+            has_weight
+            ? torch::kNone
+            : to_torch_reduction<torch::nn::functional::MarginRankingLossFuncOptions>(descriptor.options.reduction)
         });
 
+        auto y = target.to(input1.device(), input1.scalar_type());
+        if (y.sizes() != input1.sizes())
+            y = y.reshape(input1.sizes());
+        torch::Tensor weight_tensor;
+
         if (!descriptor.options.weight.empty()) {
-            auto weight_tensor = torch::tensor(
+            weight_tensor = torch::tensor(
                 descriptor.options.weight,
                 torch::TensorOptions().dtype(input1.scalar_type()).device(input1.device()));
-            if (weight_tensor.numel() == input1.numel()) {
-                weight_tensor = weight_tensor.reshape(input1.sizes());
-            }
-            opts = opts.weight(weight_tensor);
         } else if (weight && weight->defined()) {
-            opts = opts.weight(weight->to(input1.device(), input1.scalar_type()));
+            weight_tensor = weight->to(input1.device(), input1.scalar_type());
         }
 
 
-        auto y = target.to(input1.device(), input1.scalar_type());
-        if (y.sizes() != input1.sizes()) {
-            y = y.reshape(input1.sizes());
+        if (has_weight && weight_tensor.defined() && weight_tensor.numel() == input1.numel())
+            weight_tensor = weight_tensor.reshape(input1.sizes());
+
+        auto loss = torch::nn::functional::margin_ranking_loss(input1, input2, y, opts);
+
+        if (has_weight) {
+            if (!weight_tensor.defined()) {
+                weight_tensor = torch::ones_like(loss);
+            } else if (weight_tensor.sizes() != loss.sizes()) {
+                if (weight_tensor.numel() == loss.numel()) {
+                    weight_tensor = weight_tensor.reshape(loss.sizes());
+                } else {
+                    weight_tensor = weight_tensor.expand_as(loss);
+                }
+            }
+            loss = loss * weight_tensor;
+            return apply_reduction(std::move(loss), descriptor.options.reduction);
         }
 
-        return torch::nn::functional::margin_ranking_loss(input1, input2, y, opts);
+        return loss;
     }
 
 }
