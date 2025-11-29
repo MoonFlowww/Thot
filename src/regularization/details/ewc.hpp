@@ -1,9 +1,9 @@
-#ifndef OMNI_EWC_HPP
-#define OMNI_EWC_HPP
+#ifndef Nott_EWC_HPP
+#define Nott_EWC_HPP
 // https://arxiv.org/pdf/1612.00796
 #include <torch/torch.h>
 
-namespace Omni::Regularization::Details {
+namespace Nott::Regularization::Details {
 
     struct EWCOptions {
         double strength{0.0};
@@ -42,4 +42,4 @@ namespace Omni::Regularization::Details {
 
 }
 
-#endif //OMNI_EWC_HPP
+#endif //Nott_EWC_HPP

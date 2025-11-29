@@ -1,7 +1,7 @@
-#ifndef OMNI_LRSCHEDULER_COMMON_HPP
-#define OMNI_LRSCHEDULER_COMMON_HPP
+#ifndef Nott_LRSCHEDULER_COMMON_HPP
+#define Nott_LRSCHEDULER_COMMON_HPP
 
-namespace Omni::LrScheduler::Details {
+namespace Nott::LrScheduler::Details {
 
     class Scheduler {
     public:
@@ -9,6 +9,6 @@ namespace Omni::LrScheduler::Details {
         virtual void step() = 0;
     };
 
-}  // namespace Omni::LrScheduler::Details
+}  // namespace Nott::LrScheduler::Details
 
-#endif //OMNI_LRSCHEDULER_COMMON_HPP
+#endif //Nott_LRSCHEDULER_COMMON_HPP

@@ -1,5 +1,5 @@
-#ifndef OMNI_DATA_HPP
-#define OMNI_DATA_HPP
+#ifndef Nott_DATA_HPP
+#define Nott_DATA_HPP
 // This file is an factory, must exempt it from any logical-code. For functions look into "/details"
 #include "details/generation.hpp"
 #include "load/load.hpp"
@@ -7,4 +7,4 @@
 #include "details/repair.hpp"
 #include "transform/dimensionality_reduction.hpp"
 #include "transform/format/format.hpp"
-#endif //OMNI_DATA_HPP
+#endif //Nott_DATA_HPP

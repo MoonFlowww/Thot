@@ -1,5 +1,5 @@
-#ifndef OMNI_BCE_HPP
-#define OMNI_BCE_HPP
+#ifndef Nott_BCE_HPP
+#define Nott_BCE_HPP
 
 #include <optional>
 #include <stdexcept>
@@ -7,7 +7,7 @@
 
 #include "reduction.hpp"
 
-namespace Omni::Loss::Details {
+namespace Nott::Loss::Details {
 
     struct BCEWithLogitsOptions {
         Reduction reduction{Reduction::Mean};
@@ -47,4 +47,4 @@ namespace Omni::Loss::Details {
 
 }
 
-#endif // OMNI_BCE_HPP
+#endif // Nott_BCE_HPP

@@ -1,6 +1,6 @@
 # Evaluation Pipelines
 
-`Omni::Evaluation` provides templated `Evaluate` helpers for supervised models.
+`Nott::Evaluation` provides templated `Evaluate` helpers for supervised models.
 Each invocation streams batches through the network, accumulates metrics, and
 prints human-readable tables if enabled. Two descriptors exist today:
 `Evaluation::Classification` and `Evaluation::Timeseries`.
@@ -8,19 +8,19 @@ prints human-readable tables if enabled. Two descriptors exist today:
 ## Common workflow
 
 ```cpp
-auto report = Omni::Evaluation::Evaluate(
+auto report = Nott::Evaluation::Evaluate(
     model, inputs, targets,
-    Omni::Evaluation::Classification,
-    {Omni::Metric::Classification::Accuracy,
-     Omni::Metric::Classification::F1,
-     Omni::Metric::Classification::ExpectedCalibrationError},
+    Nott::Evaluation::Classification,
+    {Nott::Metric::Classification::Accuracy,
+     Nott::Metric::Classification::F1,
+     Nott::Metric::Classification::ExpectedCalibrationError},
     {.batch_size = 128, .calibration_bins = 20});
     
 // Or
-auto report = model.evaluate(test_images, test_labels, Omni::Evaluation::Classification,{
-    Omni::Metric::Classification::Accuracy,
-    Omni::Metric::Classification::F1,
-    Omni::Metric::Classification::ExpectedCalibrationError}, 
+auto report = model.evaluate(test_images, test_labels, Nott::Evaluation::Classification,{
+    Nott::Metric::Classification::Accuracy,
+    Nott::Metric::Classification::F1,
+    Nott::Metric::Classification::ExpectedCalibrationError}, 
     {.batch_size = 64, .calibration_bins = 20});
 ```
 

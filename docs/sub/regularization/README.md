@@ -1,8 +1,8 @@
 # Regularization Descriptors
-Regularizers in Omni are descriptors that wrap an option struct together with a
+Regularizers in Nott are descriptors that wrap an option struct together with a
 `Details::*` implementation. Descriptors can be attached either globally through
 `Model::set_regularization` or scoped to individual layers via
-[`Omni::LocalConfig`](../local/README.md). During
+[`Nott::LocalConfig`](../local/README.md). During
 [Docs/Training](../training/README.md) the engine evaluates every descriptor once per
 step while remaining compatible with CUDA graph capture.
 
@@ -14,8 +14,8 @@ Apply regularizers to the whole model by passing a vector of descriptors to
 
 ```cpp
 model.set_regularization({ /*vector field*/
-    Omni::Regularization::L2({.coefficient = 5e-5}),
-    Omni::Regularization::ElasticNet({
+    Nott::Regularization::L2({.coefficient = 5e-5}),
+    Nott::Regularization::ElasticNet({
         .l1_coefficient = 2e-6,
         .l2_coefficient = 5e-6,
     }),
@@ -23,12 +23,12 @@ model.set_regularization({ /*vector field*/
 ```
 
 To localise penalties, include them in the `regularization` field of a
-[`Omni::LocalConfig`](../local/README.md):
+[`Nott::LocalConfig`](../local/README.md):
 
 ```cpp
-Omni::LocalConfig decoder_scope{
+Nott::LocalConfig decoder_scope{
     .regularization = { /*vector field*/
-        Omni::Regularization::MaxNorm({
+        Nott::Regularization::MaxNorm({
             .coefficient = 1.0,
             .max_norm = 3.0,
             .dim = 0,
@@ -36,9 +36,9 @@ Omni::LocalConfig decoder_scope{
     },
 };
 
-model.add(Omni::Layer::FC({512, 256, /*bias*/ true},
-                          Omni::Activation::SiLU,
-                          Omni::Initialization::KaimingUniform,
+model.add(Nott::Layer::FC({512, 256, /*bias*/ true},
+                          Nott::Activation::SiLU,
+                          Nott::Initialization::KaimingUniform,
                           decoder_scope),
           "decoder_fc");
 ```
@@ -54,32 +54,32 @@ so you can spot the available options at a glance:
 
 ```cpp
 constexpr std::array kAllRegularizers{
-    Omni::Regularization::L1(),
-    Omni::Regularization::ElasticNet(),
-    Omni::Regularization::GroupLasso(),
-    Omni::Regularization::StructuredL2(),
-    Omni::Regularization::L0HardConcrete(),
-    Omni::Regularization::Orthogonality(),
-    Omni::Regularization::SpectralNorm(),
-    Omni::Regularization::MaxNorm(),
-    Omni::Regularization::KLSparsity(),
-    Omni::Regularization::DeCov(),
-    Omni::Regularization::CenteringVariance(),
-    Omni::Regularization::JacobianNorm(),
-    Omni::Regularization::WGANGP(),
-    Omni::Regularization::R1(),
-    Omni::Regularization::R2(),
-    Omni::Regularization::TRADES(),
-    Omni::Regularization::VAT(),
-    Omni::Regularization::L2(),
-    Omni::Regularization::EWC(),
-    Omni::Regularization::MAS(),
-    Omni::Regularization::SI(),
-    Omni::Regularization::NuclearNorm(),
-    Omni::Regularization::SWA(),
-    Omni::Regularization::SWAG(),
-    Omni::Regularization::FGE(),
-    Omni::Regularization::SFGE(),
+    Nott::Regularization::L1(),
+    Nott::Regularization::ElasticNet(),
+    Nott::Regularization::GroupLasso(),
+    Nott::Regularization::StructuredL2(),
+    Nott::Regularization::L0HardConcrete(),
+    Nott::Regularization::Orthogonality(),
+    Nott::Regularization::SpectralNorm(),
+    Nott::Regularization::MaxNorm(),
+    Nott::Regularization::KLSparsity(),
+    Nott::Regularization::DeCov(),
+    Nott::Regularization::CenteringVariance(),
+    Nott::Regularization::JacobianNorm(),
+    Nott::Regularization::WGANGP(),
+    Nott::Regularization::R1(),
+    Nott::Regularization::R2(),
+    Nott::Regularization::TRADES(),
+    Nott::Regularization::VAT(),
+    Nott::Regularization::L2(),
+    Nott::Regularization::EWC(),
+    Nott::Regularization::MAS(),
+    Nott::Regularization::SI(),
+    Nott::Regularization::NuclearNorm(),
+    Nott::Regularization::SWA(),
+    Nott::Regularization::SWAG(),
+    Nott::Regularization::FGE(),
+    Nott::Regularization::SFGE(),
 };
 ```
 | Descriptor | Category | Key options (default) |

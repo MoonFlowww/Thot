@@ -1,5 +1,5 @@
-#ifndef OMNI_LOSS_LOVASZ_SOFTMAX_HPP
-#define OMNI_LOSS_LOVASZ_SOFTMAX_HPP
+#ifndef Nott_LOSS_LOVASZ_SOFTMAX_HPP
+#define Nott_LOSS_LOVASZ_SOFTMAX_HPP
 
 #include <optional>
 #include <stdexcept>
@@ -9,7 +9,7 @@
 
 #include "reduction.hpp"
 
-namespace Omni::Loss::Details {
+namespace Nott::Loss::Details {
 
     namespace LovaszSoftmaxInternal {
         inline torch::Tensor lovasz_grad(torch::Tensor sorted_ground_truth)
@@ -175,4 +175,4 @@ namespace Omni::Loss::Details {
 
 }
 
-#endif // OMNI_LOSS_LOVASZ_SOFTMAX_HPP
+#endif // Nott_LOSS_LOVASZ_SOFTMAX_HPP

@@ -1,5 +1,5 @@
-#ifndef OMNI_PATCH_UNEMBED_HPP
-#define OMNI_PATCH_UNEMBED_HPP
+#ifndef Nott_PATCH_UNEMBED_HPP
+#define Nott_PATCH_UNEMBED_HPP
 
 #include <cstdint>
 #include <stdexcept>
@@ -13,7 +13,7 @@
 #include "../../common/local.hpp"
 #include "../registry.hpp"
 
-namespace Omni::Layer::Details {
+namespace Nott::Layer::Details {
 
     struct PatchUnembedOptions {
         std::int64_t channels{1};
@@ -99,8 +99,8 @@ namespace Omni::Layer::Details {
 
     struct PatchUnembedDescriptor {
         PatchUnembedOptions options{};
-        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
-        ::Omni::LocalConfig local{};
+        ::Nott::Activation::Descriptor activation{::Nott::Activation::Identity};
+        ::Nott::LocalConfig local{};
     };
 
     template <class Owner>
@@ -118,4 +118,4 @@ namespace Omni::Layer::Details {
 
 }
 
-#endif //OMNI_PATCH_UNEMBED_HPP
+#endif //Nott_PATCH_UNEMBED_HPP

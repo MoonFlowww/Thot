@@ -1,5 +1,5 @@
-#ifndef OMNI_DATA_TRANSFORM_AUGMENTATION_CHROMATIC_ABERRATION_HPP
-#define OMNI_DATA_TRANSFORM_AUGMENTATION_CHROMATIC_ABERRATION_HPP
+#ifndef Nott_DATA_TRANSFORM_AUGMENTATION_CHROMATIC_ABERRATION_HPP
+#define Nott_DATA_TRANSFORM_AUGMENTATION_CHROMATIC_ABERRATION_HPP
 
 #include <cstdint>
 #include <optional>
@@ -9,7 +9,7 @@
 
 #include "common.hpp"
 
-namespace Omni::Data::Transform::Augmentation {
+namespace Nott::Data::Transform::Augmentation {
     namespace Options {
          struct ChromaticAberrationOptions {
              double max_shift_pixels = 2.0;
@@ -62,4 +62,4 @@ namespace Omni::Data::Transform::Augmentation {
     }
 }
 
-#endif // OMNI_DATA_TRANSFORM_AUGMENTATION_CHROMATIC_ABERRATION_HPP
+#endif // Nott_DATA_TRANSFORM_AUGMENTATION_CHROMATIC_ABERRATION_HPP

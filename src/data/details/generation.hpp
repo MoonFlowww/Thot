@@ -1,4 +1,4 @@
-#ifndef OMNI_GENERATION_HPP
-#define OMNI_GENERATION_HPP
+#ifndef Nott_GENERATION_HPP
+#define Nott_GENERATION_HPP
 // Generating dummy data only
-#endif //OMNI_GENERATION_HPP
+#endif //Nott_GENERATION_HPP

@@ -1,5 +1,5 @@
-#ifndef OMNI_REPAIR_HPP
-#define OMNI_REPAIR_HPP
+#ifndef Nott_REPAIR_HPP
+#define Nott_REPAIR_HPP
 // 1) HoloClean: Holistic Data Repairs with Probabilistic Inference https://arxiv.org/pdf/1702.00820
 #include <algorithm>
 #include <cmath>
@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-namespace Omni::Data::Repair {
+namespace Nott::Data::Repair {
     class HoloClean {
     public:
         struct Record {
@@ -370,4 +370,4 @@ namespace Omni::Data::Repair {
     };
 }
 
-#endif // OMNI_REPAIR_HPP
+#endif // Nott_REPAIR_HPP

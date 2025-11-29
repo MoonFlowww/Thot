@@ -1,5 +1,5 @@
-#ifndef OMNI_COMMON_STREAMING_HPP
-#define OMNI_COMMON_STREAMING_HPP
+#ifndef Nott_COMMON_STREAMING_HPP
+#define Nott_COMMON_STREAMING_HPP
 
 #include <cstddef>
 #include <memory>
@@ -12,7 +12,7 @@
 #include <ATen/cuda/CUDAStream.h>
 #endif
 
-namespace Omni {
+namespace Nott {
 
     enum class GraphMode {
         Disabled,
@@ -185,4 +185,4 @@ namespace Omni {
 
 }
 
-#endif  // OMNI_COMMON_STREAMING_HPP
+#endif  // Nott_COMMON_STREAMING_HPP

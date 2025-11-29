@@ -1,11 +1,11 @@
-#ifndef OMNI_DATA_TRANSFORM_NORMALIZATION_POWER_HPP
-#define OMNI_DATA_TRANSFORM_NORMALIZATION_POWER_HPP
+#ifndef Nott_DATA_TRANSFORM_NORMALIZATION_POWER_HPP
+#define Nott_DATA_TRANSFORM_NORMALIZATION_POWER_HPP
 
 #include <torch/torch.h>
 #include <cmath>
 #include "common.hpp"
 
-namespace Omni::Data::Transform::Normalization {
+namespace Nott::Data::Transform::Normalization {
 
     namespace Options{
         struct BoxCoxOptions {
@@ -55,4 +55,4 @@ namespace Omni::Data::Transform::Normalization {
 
 }
 
-#endif // OMNI_DATA_TRANSFORM_NORMALIZATION_POWER_HPP
+#endif // Nott_DATA_TRANSFORM_NORMALIZATION_POWER_HPP

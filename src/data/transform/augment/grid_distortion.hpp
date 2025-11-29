@@ -1,5 +1,5 @@
-#ifndef OMNI_DATA_TRANSFORM_AUGMENTATION_GRID_DISTORTION_HPP
-#define OMNI_DATA_TRANSFORM_AUGMENTATION_GRID_DISTORTION_HPP
+#ifndef Nott_DATA_TRANSFORM_AUGMENTATION_GRID_DISTORTION_HPP
+#define Nott_DATA_TRANSFORM_AUGMENTATION_GRID_DISTORTION_HPP
 
 #include <cstdint>
 #include <optional>
@@ -10,7 +10,7 @@
 
 #include "common.hpp"
 
-namespace Omni::Data::Transform::Augmentation {
+namespace Nott::Data::Transform::Augmentation {
     namespace Options {
         struct GridDistortionOptions {
             double distort_limit = 0.08;
@@ -57,4 +57,4 @@ namespace Omni::Data::Transform::Augmentation {
     }
 }
 
-#endif // OMNI_DATA_TRANSFORM_AUGMENTATION_GRID_DISTORTION_HPP
+#endif // Nott_DATA_TRANSFORM_AUGMENTATION_GRID_DISTORTION_HPP

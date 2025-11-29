@@ -1,12 +1,12 @@
-#ifndef OMNI_RMSPROP_HPP
-#define OMNI_RMSPROP_HPP
+#ifndef Nott_RMSPROP_HPP
+#define Nott_RMSPROP_HPP
 
 #include <torch/torch.h>
 #include <vector>
 #include <algorithm>
 #include <memory>
 
-namespace Omni::Optimizer::Details {
+namespace Nott::Optimizer::Details {
 
     struct RMSpropOptions {
         double learning_rate{1e-2};
@@ -166,4 +166,4 @@ namespace Omni::Optimizer::Details {
 
 }
 
-#endif // OMNI_RMSPROP_HPP
+#endif // Nott_RMSPROP_HPP

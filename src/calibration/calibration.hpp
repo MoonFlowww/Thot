@@ -1,5 +1,5 @@
-#ifndef OMNI_CALIBRATION_HPP
-#define OMNI_CALIBRATION_HPP
+#ifndef Nott_CALIBRATION_HPP
+#define Nott_CALIBRATION_HPP
 // This file is an factory, must exempt it from any logical-code. For functions look into "/details"
 
 #include <algorithm>
@@ -23,7 +23,7 @@
 #include "../utils/gnuplot.hpp"
 
 
-namespace Omni::Calibration {
+namespace Nott::Calibration {
     template <class...>
     inline constexpr bool always_false_v = false;
 
@@ -538,4 +538,4 @@ namespace Omni::Calibration {
 }
 
 
-#endif //OMNI_CALIBRATION_HPP
+#endif //Nott_CALIBRATION_HPP

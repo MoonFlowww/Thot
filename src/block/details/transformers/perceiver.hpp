@@ -1,5 +1,5 @@
-#ifndef OMNI_PERCEIVER_HPP
-#define OMNI_PERCEIVER_HPP
+#ifndef Nott_PERCEIVER_HPP
+#define Nott_PERCEIVER_HPP
 // "Perceiver: General Perception with Iterative Attention" https://arxiv.org/pdf/2103.03206
 // Hybrid architecture attending from a small latent array to high-dimensional inputs via cross and latent self-attention.
 
@@ -18,7 +18,7 @@
 #include "../../../activation/activation.hpp"
 #include "../../../activation/apply.hpp"
 
-namespace Omni::Block::Details::Transformer::Perceiver {
+namespace Nott::Block::Details::Transformer::Perceiver {
 
     struct AttentionOptions {
         std::int64_t query_dim{512};
@@ -32,7 +32,7 @@ namespace Omni::Block::Details::Transformer::Perceiver {
     struct FeedForwardOptions {
         std::int64_t embed_dim{512};
         double mlp_ratio{4.0};
-        ::Omni::Activation::Descriptor activation{::Omni::Activation::GeLU};
+        ::Nott::Activation::Descriptor activation{::Nott::Activation::GeLU};
         bool bias{true};
         double dropout{0.0};
     };
@@ -136,7 +136,7 @@ namespace Omni::Block::Details::Transformer::Perceiver {
             torch::Tensor forward(torch::Tensor input)
             {
                 auto hidden = linear1_->forward(input);
-                hidden = ::Omni::Activation::Details::apply(options_.activation.type, std::move(hidden));
+                hidden = ::Nott::Activation::Details::apply(options_.activation.type, std::move(hidden));
                 if (dropout_) {
                     hidden = dropout_->forward(hidden);
                 }
@@ -265,4 +265,4 @@ namespace Omni::Block::Details::Transformer::Perceiver {
 
 }
 
-#endif // OMNI_PERCEIVER_HPP
+#endif // Nott_PERCEIVER_HPP

@@ -1,5 +1,5 @@
-#ifndef OMNI_LAYER_HPP
-#define OMNI_LAYER_HPP
+#ifndef Nott_LAYER_HPP
+#define Nott_LAYER_HPP
 // This file is a factory, must exempt it from any logical-code. For functions look into "/details"
 #include <variant>
 #include <vector>
@@ -20,7 +20,7 @@
 
 #include "registry.hpp"
 
-namespace Omni::Layer {
+namespace Nott::Layer {
     using FCOptions = Details::FCOptions;
     using FCDescriptor = Details::FCDescriptor;
 
@@ -105,32 +105,32 @@ namespace Omni::Layer {
                                     DownsampleDescriptor>;
 
     [[nodiscard]] inline auto FC(const FCOptions& options,
-                                 ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
-                                 ::Omni::Initialization::Descriptor initialization = ::Omni::Initialization::Default, ::Omni::LocalConfig local = {}) -> FCDescriptor {
+                                 ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,
+                                 ::Nott::Initialization::Descriptor initialization = ::Nott::Initialization::Default, ::Nott::LocalConfig local = {}) -> FCDescriptor {
         return {options, activation, initialization, std::move(local)};
     }
 
     [[nodiscard]] inline auto Conv1d(const Conv1dOptions& options,
-                                 ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
-                                 ::Omni::Initialization::Descriptor initialization = ::Omni::Initialization::Default,
-                                 ::Omni::LocalConfig local = {}) -> Conv1dDescriptor{
+                                 ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,
+                                 ::Nott::Initialization::Descriptor initialization = ::Nott::Initialization::Default,
+                                 ::Nott::LocalConfig local = {}) -> Conv1dDescriptor{
         return {options, activation, initialization, std::move(local)};
     }
 
-    [[nodiscard]] inline auto Conv2d(const Conv2dOptions& options, ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
-                                     ::Omni::Initialization::Descriptor initialization = ::Omni::Initialization::Default, ::Omni::LocalConfig local = {}) -> Conv2dDescriptor {
+    [[nodiscard]] inline auto Conv2d(const Conv2dOptions& options, ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,
+                                     ::Nott::Initialization::Descriptor initialization = ::Nott::Initialization::Default, ::Nott::LocalConfig local = {}) -> Conv2dDescriptor {
         return {options, activation, initialization, std::move(local)};
     }
 
     [[nodiscard]] inline auto BatchNorm2d(const BatchNorm2dOptions& options,
-                                              ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
-                                              ::Omni::Initialization::Descriptor initialization = ::Omni::Initialization::Default, ::Omni::LocalConfig local = {}) -> BatchNorm2dDescriptor {
+                                              ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,
+                                              ::Nott::Initialization::Descriptor initialization = ::Nott::Initialization::Default, ::Nott::LocalConfig local = {}) -> BatchNorm2dDescriptor {
         return {options, activation, initialization, std::move(local)};
     }
 
     [[nodiscard]] inline auto MaxPool1d(const MaxPool1dOptions& options,
-                                        ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
-                                        ::Omni::LocalConfig local = {}) -> PoolingDescriptor {
+                                        ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,
+                                        ::Nott::LocalConfig local = {}) -> PoolingDescriptor {
         PoolingDescriptor descriptor{};
         descriptor.options = options;
         descriptor.activation = activation;
@@ -139,8 +139,8 @@ namespace Omni::Layer {
     }
 
     [[nodiscard]] inline auto AvgPool1d(const AvgPool1dOptions& options,
-                                        ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
-                                        ::Omni::LocalConfig local = {}) -> PoolingDescriptor {
+                                        ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,
+                                        ::Nott::LocalConfig local = {}) -> PoolingDescriptor {
         PoolingDescriptor descriptor{};
         descriptor.options = options;
         descriptor.activation = activation;
@@ -149,8 +149,8 @@ namespace Omni::Layer {
     }
 
     [[nodiscard]] inline auto AdaptiveAvgPool1d(const AdaptiveAvgPool1dOptions& options,
-                                                ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
-                                                ::Omni::LocalConfig local = {}) -> PoolingDescriptor {
+                                                ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,
+                                                ::Nott::LocalConfig local = {}) -> PoolingDescriptor {
         PoolingDescriptor descriptor{};
         descriptor.options = options;
         descriptor.activation = activation;
@@ -159,8 +159,8 @@ namespace Omni::Layer {
     }
 
     [[nodiscard]] inline auto AdaptiveMaxPool1d(const AdaptiveMaxPool1dOptions& options,
-                                                ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
-                                                ::Omni::LocalConfig local = {}) -> PoolingDescriptor {
+                                                ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,
+                                                ::Nott::LocalConfig local = {}) -> PoolingDescriptor {
         PoolingDescriptor descriptor{};
         descriptor.options = options;
         descriptor.activation = activation;
@@ -169,7 +169,7 @@ namespace Omni::Layer {
     }
 
     [[nodiscard]] inline auto MaxPool2d(const MaxPool2dOptions& options,
-                                        ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,  ::Omni::LocalConfig local = {}) -> PoolingDescriptor {
+                                        ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,  ::Nott::LocalConfig local = {}) -> PoolingDescriptor {
         PoolingDescriptor descriptor{};
         descriptor.options = options;
         descriptor.activation = activation;
@@ -178,7 +178,7 @@ namespace Omni::Layer {
     }
 
     [[nodiscard]] inline auto AvgPool2d(const AvgPool2dOptions& options,
-                                        ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,  ::Omni::LocalConfig local = {}) -> PoolingDescriptor {
+                                        ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,  ::Nott::LocalConfig local = {}) -> PoolingDescriptor {
         PoolingDescriptor descriptor{};
         descriptor.options = options;
         descriptor.activation = activation;
@@ -187,7 +187,7 @@ namespace Omni::Layer {
     }
 
     [[nodiscard]] inline auto AdaptiveAvgPool2d(const AdaptiveAvgPool2dOptions& options,
-                                                ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,  ::Omni::LocalConfig local = {}) -> PoolingDescriptor {
+                                                ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,  ::Nott::LocalConfig local = {}) -> PoolingDescriptor {
         PoolingDescriptor descriptor{};
         descriptor.options = options;
         descriptor.activation = activation;
@@ -196,7 +196,7 @@ namespace Omni::Layer {
     }
 
     [[nodiscard]] inline auto AdaptiveMaxPool2d(const AdaptiveMaxPool2dOptions& options,
-                                                ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,  ::Omni::LocalConfig local = {}) -> PoolingDescriptor {
+                                                ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,  ::Nott::LocalConfig local = {}) -> PoolingDescriptor {
         PoolingDescriptor descriptor{};
         descriptor.options = options;
         descriptor.activation = activation;
@@ -204,78 +204,78 @@ namespace Omni::Layer {
         return descriptor;
     }
 
-    [[nodiscard]] inline auto HardDropout(const HardDropoutOptions& options, ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,  ::Omni::LocalConfig local = {}) -> HardDropoutDescriptor {
+    [[nodiscard]] inline auto HardDropout(const HardDropoutOptions& options, ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,  ::Nott::LocalConfig local = {}) -> HardDropoutDescriptor {
         return {options, activation, std::move(local)};
     }
 
-    [[nodiscard]] inline auto SoftDropout(const SoftDropoutOptions& options, ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity, ::Omni::LocalConfig local = {}) -> SoftDropoutDescriptor {
+    [[nodiscard]] inline auto SoftDropout(const SoftDropoutOptions& options, ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity, ::Nott::LocalConfig local = {}) -> SoftDropoutDescriptor {
         return {options, activation, std::move(local)};
     }
 
     [[nodiscard]] inline auto Flatten(const FlattenOptions& options = {},
-                                      ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,  ::Omni::LocalConfig local = {}) -> FlattenDescriptor {
+                                      ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,  ::Nott::LocalConfig local = {}) -> FlattenDescriptor {
         return {options, activation, std::move(local)};
     }
 
-    [[nodiscard]] inline auto Upsample(const UpsampleOptions& options = {}, ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity, ::Omni::LocalConfig local = {}) -> UpsampleDescriptor {
+    [[nodiscard]] inline auto Upsample(const UpsampleOptions& options = {}, ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity, ::Nott::LocalConfig local = {}) -> UpsampleDescriptor {
         return {options, activation, std::move(local)};
     }
 
-    [[nodiscard]] inline auto Downsample(const DownsampleOptions& options = {}, ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity, ::Omni::LocalConfig local = {}) -> DownsampleDescriptor {
+    [[nodiscard]] inline auto Downsample(const DownsampleOptions& options = {}, ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity, ::Nott::LocalConfig local = {}) -> DownsampleDescriptor {
         return {options, activation, std::move(local)};
     }
 
     [[nodiscard]] inline auto RNN(const RNNOptions& options,
-                                   ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
-                                   ::Omni::Initialization::Descriptor initialization = ::Omni::Initialization::Default,
-                                   ::Omni::LocalConfig local = {}) -> RNNDescriptor {
+                                   ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,
+                                   ::Nott::Initialization::Descriptor initialization = ::Nott::Initialization::Default,
+                                   ::Nott::LocalConfig local = {}) -> RNNDescriptor {
         return {options, activation, initialization, std::move(local)};
     }
 
     [[nodiscard]] inline auto LSTM(const LSTMOptions& options,
-                                    ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
-                                    ::Omni::Initialization::Descriptor initialization = ::Omni::Initialization::Default,
-                                    ::Omni::LocalConfig local = {}) -> LSTMDescriptor {
+                                    ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,
+                                    ::Nott::Initialization::Descriptor initialization = ::Nott::Initialization::Default,
+                                    ::Nott::LocalConfig local = {}) -> LSTMDescriptor {
         return {options, activation, initialization, std::move(local)};
     }
     [[nodiscard]] inline auto xLSTM(const xLSTMOptions& options,
-                                    ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
-                                    ::Omni::Initialization::Descriptor initialization = ::Omni::Initialization::Default,
-                                    ::Omni::LocalConfig local = {}) -> xLSTMDescriptor {
+                                    ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,
+                                    ::Nott::Initialization::Descriptor initialization = ::Nott::Initialization::Default,
+                                    ::Nott::LocalConfig local = {}) -> xLSTMDescriptor {
         return {options, activation, initialization, std::move(local)};
     }
 
 
     [[nodiscard]] inline auto GRU(const GRUOptions& options,
-                                   ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
-                                   ::Omni::Initialization::Descriptor initialization = ::Omni::Initialization::Default,
-                                   ::Omni::LocalConfig local = {}) -> GRUDescriptor {
+                                   ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,
+                                   ::Nott::Initialization::Descriptor initialization = ::Nott::Initialization::Default,
+                                   ::Nott::LocalConfig local = {}) -> GRUDescriptor {
         return {options, activation, initialization, std::move(local)};
     }
 
 
 
     [[nodiscard]] inline auto S4(const S4Options& options,
-                              ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
-                              ::Omni::Initialization::Descriptor initialization = ::Omni::Initialization::Default,
-                              ::Omni::LocalConfig local = {}) -> S4Descriptor {
+                              ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,
+                              ::Nott::Initialization::Descriptor initialization = ::Nott::Initialization::Default,
+                              ::Nott::LocalConfig local = {}) -> S4Descriptor {
         return {options, activation, initialization, std::move(local)};
     }
 
 
     [[nodiscard]] inline auto Reduce(const ReduceOptions& options = {},
-                                 ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
-                                 ::Omni::LocalConfig local = {}) -> ReduceDescriptor {
+                                 ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,
+                                 ::Nott::LocalConfig local = {}) -> ReduceDescriptor {
         return {options, activation, std::move(local)};
     }
 
     [[nodiscard]] inline auto PatchUnembed(const PatchUnembedOptions& options = {},
-                                 ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
-                                 ::Omni::LocalConfig local = {}) -> PatchUnembedDescriptor {
+                                 ::Nott::Activation::Descriptor activation = ::Nott::Activation::Identity,
+                                 ::Nott::LocalConfig local = {}) -> PatchUnembedDescriptor {
         return {options, activation, std::move(local)};
     }
 
 
 }
 
-#endif //OMNI_LAYER_HPP
+#endif //Nott_LAYER_HPP

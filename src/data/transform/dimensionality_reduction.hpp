@@ -1,11 +1,11 @@
-#ifndef OMNI_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_HPP
-#define OMNI_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_HPP
+#ifndef Nott_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_HPP
+#define Nott_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_HPP
 
 #include "dimensionality_reduction/common.hpp"
 #include "dimensionality_reduction/pca.hpp"
 #include "dimensionality_reduction/rpca.hpp"
 
-namespace Omni::Data::Transform {
+namespace Nott::Data::Transform {
     using DimensionalityReduction::PCA;
     using DimensionalityReduction::PCAResult;
     using DimensionalityReduction::ProjectPCA;
@@ -13,4 +13,4 @@ namespace Omni::Data::Transform {
     namespace DimensionalityReductionDetails = DimensionalityReduction::Details;
 }
 
-#endif // OMNI_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_HPP
+#endif // Nott_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_HPP

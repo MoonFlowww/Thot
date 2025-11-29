@@ -1,9 +1,9 @@
-#ifndef OMNI_SWAG_HPP
-#define OMNI_SWAG_HPP
+#ifndef Nott_SWAG_HPP
+#define Nott_SWAG_HPP
 // "SWAG: A Simple Baseline for Bayesian Uncertainty in Deep Learning" https://arxiv.org/pdf/1902.02476
 #include <torch/torch.h>
 
-namespace Omni::Regularization::Details {
+namespace Nott::Regularization::Details {
 
     struct SWAGOptions {
         double coefficient{0.0};
@@ -52,4 +52,4 @@ namespace Omni::Regularization::Details {
 
 }
 
-#endif // OMNI_SWAG_HPP
+#endif // Nott_SWAG_HPP

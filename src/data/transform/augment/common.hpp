@@ -1,5 +1,5 @@
-#ifndef OMNI_DATA_TRANSFORM_AUGMENTATION_COMMON_HPP
-#define OMNI_DATA_TRANSFORM_AUGMENTATION_COMMON_HPP
+#ifndef Nott_DATA_TRANSFORM_AUGMENTATION_COMMON_HPP
+#define Nott_DATA_TRANSFORM_AUGMENTATION_COMMON_HPP
 
 #include <algorithm>
 #include <cmath>
@@ -11,7 +11,7 @@
 #include <torch/nn/functional.h>
 #include <torch/torch.h>
 
-namespace Omni::Data::Transform::Augmentation::Details {
+namespace Nott::Data::Transform::Augmentation::Details {
     inline bool augmentation_enabled(const std::optional<bool>& data_augment) {
         return !(data_augment.has_value() && !data_augment.value());
     }
@@ -168,4 +168,4 @@ namespace Omni::Data::Transform::Augmentation::Details {
     }
 }
 
-#endif // OMNI_DATA_TRANSFORM_AUGMENTATION_COMMON_HPP
+#endif // Nott_DATA_TRANSFORM_AUGMENTATION_COMMON_HPP

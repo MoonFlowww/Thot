@@ -1,5 +1,5 @@
-#ifndef OMNI_LAYER_S4_HPP
-#define OMNI_LAYER_S4_HPP
+#ifndef Nott_LAYER_S4_HPP
+#define Nott_LAYER_S4_HPP
 // "Efficiently Modeling Long Sequences with Structured State Spaces" (S4) https://arxiv.org/pdf/2111.00396
 #include <cmath>
 #include <cstdint>
@@ -17,7 +17,7 @@
 #include "../../initialization/initialization.hpp"
 #include "../registry.hpp"
 
-namespace Omni::Layer::Details {
+namespace Nott::Layer::Details {
 
     enum class S4Initialization {
         HiPPO,
@@ -38,9 +38,9 @@ namespace Omni::Layer::Details {
 
     struct S4Descriptor {
         S4Options options{};
-        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
-        ::Omni::Initialization::Descriptor initialization{::Omni::Initialization::Default};
-        ::Omni::LocalConfig local{};
+        ::Nott::Activation::Descriptor activation{::Nott::Activation::Identity};
+        ::Nott::Initialization::Descriptor initialization{::Nott::Initialization::Default};
+        ::Nott::LocalConfig local{};
     };
 
     struct S4State {
@@ -310,9 +310,9 @@ namespace Omni::Layer::Details {
             return output;
         }
 
-        void apply_initialization(const ::Omni::Initialization::Descriptor& descriptor)
+        void apply_initialization(const ::Nott::Initialization::Descriptor& descriptor)
         {
-            ::Omni::Initialization::Details::apply_module_initialization(input_projection_, descriptor);
+            ::Nott::Initialization::Details::apply_module_initialization(input_projection_, descriptor);
         }
 
     private:
@@ -530,4 +530,4 @@ namespace Omni::Layer::Details {
     }
 }
 
-#endif // OMNI_LAYER_S4_HPP
+#endif // Nott_LAYER_S4_HPP

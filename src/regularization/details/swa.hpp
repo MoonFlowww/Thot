@@ -1,9 +1,9 @@
-#ifndef OMNI_SWA_HPP
-#define OMNI_SWA_HPP
+#ifndef Nott_SWA_HPP
+#define Nott_SWA_HPP
 // "Averaging Weights Leads to Wider Optima in Deep Learning" (SWA) https://arxiv.org/pdf/1803.05407
 #include <torch/torch.h>
 
-namespace Omni::Regularization::Details {
+namespace Nott::Regularization::Details {
 
     struct SWAOptions {
         double coefficient{0.0};
@@ -44,4 +44,4 @@ namespace Omni::Regularization::Details {
 
 }
 
-#endif // OMNI_SWA_HPP
+#endif // Nott_SWA_HPP

@@ -1,9 +1,9 @@
-#ifndef OMNI_SI_HPP
-#define OMNI_SI_HPP
+#ifndef Nott_SI_HPP
+#define Nott_SI_HPP
 //https://arxiv.org/pdf/1703.04200
 #include <torch/torch.h>
 
-namespace Omni::Regularization::Details {
+namespace Nott::Regularization::Details {
 
     struct SIOptions {
         double strength{0.0};
@@ -44,4 +44,4 @@ namespace Omni::Regularization::Details {
 
 }
 
-#endif //OMNI_SI_HPP
+#endif //Nott_SI_HPP

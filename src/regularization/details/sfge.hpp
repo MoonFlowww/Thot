@@ -1,12 +1,12 @@
-#ifndef OMNI_SFGE_HPP
-#define OMNI_SFGE_HPP
+#ifndef Nott_SFGE_HPP
+#define Nott_SFGE_HPP
 
 #include <torch/torch.h>
 
 #include <numeric>
 #include <vector>
 
-namespace Omni::Regularization::Details {
+namespace Nott::Regularization::Details {
 
     struct SFGEOptions {
         double coefficient{0.0};
@@ -61,4 +61,4 @@ namespace Omni::Regularization::Details {
 
 }
 
-#endif // OMNI_SFGE_HPP
+#endif // Nott_SFGE_HPP

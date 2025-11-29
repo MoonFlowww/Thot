@@ -1,5 +1,5 @@
-#ifndef OMNI_SIGMOID_HPP
-#define OMNI_SIGMOID_HPP
+#ifndef Nott_SIGMOID_HPP
+#define Nott_SIGMOID_HPP
 
 #include <torch/torch.h>
 
@@ -7,7 +7,7 @@
 
 #include "../activation.hpp"
 
-namespace Omni::Activation::Details {
+namespace Nott::Activation::Details {
     struct Sigmoid {
         [[nodiscard]] torch::Tensor operator()(torch::Tensor input) const {
             return torch::sigmoid(std::move(input));
@@ -15,4 +15,4 @@ namespace Omni::Activation::Details {
     };
 }
 
-#endif //OMNI_SIGMOID_HPP
+#endif //Nott_SIGMOID_HPP

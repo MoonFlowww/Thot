@@ -1,5 +1,5 @@
-#ifndef OMNI_CLASSIFICATION_HPP
-#define OMNI_CLASSIFICATION_HPP
+#ifndef Nott_CLASSIFICATION_HPP
+#define Nott_CLASSIFICATION_HPP
 
 #include <algorithm>
 #include <cmath>
@@ -26,7 +26,7 @@
 #include "../../plot/details/statistics.hpp"
 #include "../../utils/terminal.hpp"
 
-namespace Omni::Evaluation::Details::Classification {
+namespace Nott::Evaluation::Details::Classification {
     struct Descriptor { };
     struct MultiDescriptor { };
     struct SegmentationDescriptor { };
@@ -411,7 +411,7 @@ namespace Omni::Evaluation::Details::Classification {
             return {beta1, beta0};
         }
 
-        using Omni::Plot::Details::compute_kolmogorov_smirnov; // TODO: KS
+        using Nott::Plot::Details::compute_kolmogorov_smirnov; // TODO: KS
         inline torch::Tensor squeeze_spatial(torch::Tensor tensor) {
             if (!tensor.defined()) {
                 return tensor;
@@ -826,7 +826,7 @@ namespace Omni::Evaluation::Details::Classification {
                                         ? std::size_t{0}
                                         : (total_samples + batch_size - 1) / batch_size;
 
-        Omni::StreamingOptions streaming_options{};
+        Nott::StreamingOptions streaming_options{};
         if (batch_size > 0) {
             streaming_options.batch_size = batch_size;
         }
@@ -835,7 +835,7 @@ namespace Omni::Evaluation::Details::Classification {
         }
 
         auto prepare_batch = [&](torch::Tensor input_batch, torch::Tensor target_batch)
-            -> std::optional<Omni::StreamingBatch>
+            -> std::optional<Nott::StreamingBatch>
         {
             if (!input_batch.defined() || !target_batch.defined()) {
                 return std::nullopt;
@@ -843,17 +843,17 @@ namespace Omni::Evaluation::Details::Classification {
 
             input_batch = ensure_memory_format(std::move(input_batch));
 
-            Omni::StreamingBatch batch{};
+            Nott::StreamingBatch batch{};
             batch.inputs = std::move(input_batch);
             batch.targets = std::move(target_batch);
             if (batch.targets.defined()) {
-                batch.reference_targets = Omni::DeferredHostTensor::from_tensor(batch.targets, non_blocking_transfers);
+                batch.reference_targets = Nott::DeferredHostTensor::from_tensor(batch.targets, non_blocking_transfers);
             }
 
             return batch;
         };
 
-        auto process_batch = [&](torch::Tensor logits_tensor, Omni::StreamingBatch batch) {
+        auto process_batch = [&](torch::Tensor logits_tensor, Nott::StreamingBatch batch) {
             if (!logits_tensor.defined()) {
                 return;
             }
@@ -887,7 +887,7 @@ namespace Omni::Evaluation::Details::Classification {
 
             if (!logits.device().is_cpu()) {
                 if (non_blocking_transfers) {
-                    auto deferred_logits = Omni::DeferredHostTensor::from_tensor(logits, /*non_blocking=*/true);
+                    auto deferred_logits = Nott::DeferredHostTensor::from_tensor(logits, /*non_blocking=*/true);
                     logits = deferred_logits.materialize();
                 } else {
                     logits = logits.to(torch::kCPU, logits.scalar_type(), /*non_blocking=*/false);
@@ -911,7 +911,7 @@ namespace Omni::Evaluation::Details::Classification {
                 return;
             if (!target_cpu.device().is_cpu()) {
                 if (non_blocking_transfers) {
-                    auto deferred_targets = Omni::DeferredHostTensor::from_tensor(target_cpu, /*non_blocking=*/true);
+                    auto deferred_targets = Nott::DeferredHostTensor::from_tensor(target_cpu, /*non_blocking=*/true);
                     target_cpu = deferred_targets.materialize();
                 } else {
                     target_cpu = target_cpu.to(torch::kCPU, target_cpu.scalar_type(), /*non_blocking=*/false);
@@ -1167,7 +1167,7 @@ namespace Omni::Evaluation::Details::Classification {
                 auto seg_targets = segmentation_targets;
                 if (!seg_preds.device().is_cpu()) {
                     if (non_blocking_transfers) {
-                        auto deferred = Omni::DeferredHostTensor::from_tensor(seg_preds, /*non_blocking=*/true);
+                        auto deferred = Nott::DeferredHostTensor::from_tensor(seg_preds, /*non_blocking=*/true);
                         seg_preds = deferred.materialize();
                     } else {
                         seg_preds = seg_preds.to(torch::kCPU, seg_preds.scalar_type(), /*non_blocking=*/false);
@@ -1175,7 +1175,7 @@ namespace Omni::Evaluation::Details::Classification {
                 }
                 if (!seg_targets.device().is_cpu()) {
                     if (non_blocking_transfers) {
-                        auto deferred = Omni::DeferredHostTensor::from_tensor(seg_targets, /*non_blocking=*/true);
+                        auto deferred = Nott::DeferredHostTensor::from_tensor(seg_targets, /*non_blocking=*/true);
                         seg_targets = deferred.materialize();
                     } else {
                         seg_targets = seg_targets.to(torch::kCPU, seg_targets.scalar_type(), /*non_blocking=*/false);
@@ -1888,4 +1888,4 @@ namespace Omni::Evaluation::Details::Classification {
         }
     }
 }
-#endif //OMNI_CLASSIFICATION_HPP
+#endif //Nott_CLASSIFICATION_HPP

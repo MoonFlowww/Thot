@@ -1,5 +1,5 @@
-#ifndef OMNI_DATA_TRANSFORM_AUGMENTATION_FLIP_HPP
-#define OMNI_DATA_TRANSFORM_AUGMENTATION_FLIP_HPP
+#ifndef Nott_DATA_TRANSFORM_AUGMENTATION_FLIP_HPP
+#define Nott_DATA_TRANSFORM_AUGMENTATION_FLIP_HPP
 
 #include <algorithm>
 #include <optional>
@@ -11,7 +11,7 @@
 
 #include "common.hpp"
 
-namespace Omni::Data::Transform::Augmentation {
+namespace Nott::Data::Transform::Augmentation {
     namespace Options {
         struct FlipOptions {
             const std::vector<std::string>& axes;
@@ -125,4 +125,4 @@ namespace Omni::Data::Transform::Augmentation {
     }
 }
 
-#endif // OMNI_DATA_TRANSFORM_AUGMENTATION_FLIP_HPP
+#endif // Nott_DATA_TRANSFORM_AUGMENTATION_FLIP_HPP

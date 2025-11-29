@@ -1,5 +1,5 @@
-#ifndef OMNI_DATA_TRANSFORM_AUGMENTATION_ATMOSPHERIC_DRIFT_HPP
-#define OMNI_DATA_TRANSFORM_AUGMENTATION_ATMOSPHERIC_DRIFT_HPP
+#ifndef Nott_DATA_TRANSFORM_AUGMENTATION_ATMOSPHERIC_DRIFT_HPP
+#define Nott_DATA_TRANSFORM_AUGMENTATION_ATMOSPHERIC_DRIFT_HPP
 
 #include <array>
 #include <optional>
@@ -10,7 +10,7 @@
 
 #include "common.hpp"
 
-namespace Omni::Data::Transform::Augmentation {
+namespace Nott::Data::Transform::Augmentation {
     namespace Options {
         struct AtmosphericDriftOptions {
             std::array<double, 3> atmospheric_color = {0.9, 0.95, 1.0};
@@ -57,4 +57,4 @@ namespace Omni::Data::Transform::Augmentation {
     }
 }
 
-#endif // OMNI_DATA_TRANSFORM_AUGMENTATION_ATMOSPHERIC_DRIFT_HPP
+#endif // Nott_DATA_TRANSFORM_AUGMENTATION_ATMOSPHERIC_DRIFT_HPP

@@ -1,5 +1,5 @@
-#ifndef OMNI_COMMON_LOCAL_HPP
-#define OMNI_COMMON_LOCAL_HPP
+#ifndef Nott_COMMON_LOCAL_HPP
+#define Nott_COMMON_LOCAL_HPP
 
 #include <optional>
 #include <vector>
@@ -8,12 +8,12 @@
 #include "../optimizer/optimizer.hpp"
 #include "../regularization/regularization.hpp"
 
-namespace Omni {
+namespace Nott {
     struct LocalConfig {
-        std::optional<::Omni::Optimizer::Descriptor> optimizer{};
-        std::optional<::Omni::Loss::Descriptor> loss{};
-        std::vector<::Omni::Regularization::Descriptor> regularization{};
+        std::optional<::Nott::Optimizer::Descriptor> optimizer{};
+        std::optional<::Nott::Loss::Descriptor> loss{};
+        std::vector<::Nott::Regularization::Descriptor> regularization{};
     };
 }
 
-#endif // OMNI_COMMON_LOCAL_HPP
+#endif // Nott_COMMON_LOCAL_HPP

@@ -1,5 +1,5 @@
-#ifndef OMNI_LAYER_REDUCE_HPP
-#define OMNI_LAYER_REDUCE_HPP
+#ifndef Nott_LAYER_REDUCE_HPP
+#define Nott_LAYER_REDUCE_HPP
 #include <algorithm>
 #include <cstdint>
 #include <numeric>
@@ -12,7 +12,7 @@
 #include "../../common/local.hpp"
 #include "../registry.hpp"
 
-namespace Omni::Layer::Details {
+namespace Nott::Layer::Details {
 
     enum class ReduceOp {
         Sum,
@@ -124,8 +124,8 @@ namespace Omni::Layer::Details {
 
     struct ReduceDescriptor {
         ReduceOptions options{};
-        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
-        ::Omni::LocalConfig local{};
+        ::Nott::Activation::Descriptor activation{::Nott::Activation::Identity};
+        ::Nott::LocalConfig local{};
     };
 
     template <class Owner>
@@ -142,4 +142,4 @@ namespace Omni::Layer::Details {
     }
 
 }
-#endif //OMNI_LAYER_REDUCE_HPP
+#endif //Nott_LAYER_REDUCE_HPP

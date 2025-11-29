@@ -1,5 +1,5 @@
-#ifndef OMNI_LOSS_TVERSKY_HPP
-#define OMNI_LOSS_TVERSKY_HPP
+#ifndef Nott_LOSS_TVERSKY_HPP
+#define Nott_LOSS_TVERSKY_HPP
 
 #include <optional>
 #include <stdexcept>
@@ -7,7 +7,7 @@
 
 #include "reduction.hpp"
 
-namespace Omni::Loss::Details {
+namespace Nott::Loss::Details {
 
     struct TverskyOptions {
         Reduction reduction{Reduction::Mean};
@@ -64,4 +64,4 @@ namespace Omni::Loss::Details {
 
 }
 
-#endif // OMNI_LOSS_TVERSKY_HPP
+#endif // Nott_LOSS_TVERSKY_HPP

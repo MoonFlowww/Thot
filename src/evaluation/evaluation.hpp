@@ -1,5 +1,5 @@
-#ifndef OMNI_EVALUATION_HPP
-#define OMNI_EVALUATION_HPP
+#ifndef Nott_EVALUATION_HPP
+#define Nott_EVALUATION_HPP
 // This file is an factory, must exempt it from any logical-code. For functions look into "/details"
 #include <utility>
 #include <vector>
@@ -9,7 +9,7 @@
 #include "details/classification.hpp"
 #include "details/timeserie.hpp"
 
-namespace Omni::Evaluation {
+namespace Nott::Evaluation {
     using ClassificationOptions = Details::Classification::Options;
     using TimeseriesOptions = Details::Timeseries::Options;
 
@@ -83,4 +83,4 @@ namespace Omni::Evaluation {
     }
 }
 
-#endif //OMNI_EVALUATION_HPP
+#endif //Nott_EVALUATION_HPP

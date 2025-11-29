@@ -1,5 +1,5 @@
-#ifndef OMNI_DATA_TRANSFORM_AUGMENTATION_OPTICAL_DISTORTION_HPP
-#define OMNI_DATA_TRANSFORM_AUGMENTATION_OPTICAL_DISTORTION_HPP
+#ifndef Nott_DATA_TRANSFORM_AUGMENTATION_OPTICAL_DISTORTION_HPP
+#define Nott_DATA_TRANSFORM_AUGMENTATION_OPTICAL_DISTORTION_HPP
 
 #include <optional>
 #include <utility>
@@ -8,7 +8,7 @@
 
 #include "common.hpp"
 
-namespace Omni::Data::Transform::Augmentation {
+namespace Nott::Data::Transform::Augmentation {
     namespace Options {
         struct OpticalDistortionOptions {
             std::pair<double, double> k1_range = {-0.1, 0.1};
@@ -55,4 +55,4 @@ namespace Omni::Data::Transform::Augmentation {
     }
 }
 
-#endif // OMNI_DATA_TRANSFORM_AUGMENTATION_OPTICAL_DISTORTION_HPP
+#endif // Nott_DATA_TRANSFORM_AUGMENTATION_OPTICAL_DISTORTION_HPP

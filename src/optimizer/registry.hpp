@@ -1,5 +1,5 @@
-#ifndef OMNI_OPTIMIZER_REGISTRY_HPP
-#define OMNI_OPTIMIZER_REGISTRY_HPP
+#ifndef Nott_OPTIMIZER_REGISTRY_HPP
+#define Nott_OPTIMIZER_REGISTRY_HPP
 
 
 #include <memory>
@@ -17,7 +17,7 @@
 #include "details/lion.hpp"
 #include "details/rmsprop.hpp"
 
-namespace Omni::Optimizer::Details {
+namespace Nott::Optimizer::Details {
     template <class Owner, class Descriptor>
     std::unique_ptr<torch::optim::Optimizer> build_optimizer(Owner&, const Descriptor&) {
         static_assert(sizeof(Descriptor) == 0, "Unsupported optimizer descriptor provided to build_optimizer.");
@@ -96,4 +96,4 @@ namespace Omni::Optimizer::Details {
     }
 }
 
-#endif // OMNI_OPTIMIZER_REGISTRY_HPP
+#endif // Nott_OPTIMIZER_REGISTRY_HPP

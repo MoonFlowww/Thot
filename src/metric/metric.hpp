@@ -1,7 +1,7 @@
-#ifndef OMNI_METRIC_HPP
-#define OMNI_METRIC_HPP
+#ifndef Nott_METRIC_HPP
+#define Nott_METRIC_HPP
 // This file is an factory, must exempt it from any logical-code. For functions look into "/details"
-namespace Omni::Metric::Classification {
+namespace Nott::Metric::Classification {
     enum class Kind {
         Accuracy,
         AUCROC,
@@ -123,7 +123,7 @@ namespace Omni::Metric::Classification {
     inline constexpr Descriptor BoundaryIoU{Kind::BoundaryIoU};
 }
 
-namespace Omni::Metric::Timeseries {
+namespace Nott::Metric::Timeseries {
     enum class Kind {
         MeanAbsoluteError,
         MeanAbsolutePercentageError,
@@ -243,4 +243,4 @@ namespace Omni::Metric::Timeseries {
 }
 
 
-#endif //OMNI_METRIC_HPP
+#endif //Nott_METRIC_HPP

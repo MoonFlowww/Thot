@@ -1,5 +1,5 @@
-#ifndef OMNI_REGULARIZATION_DETAILS_L0_HARD_CONCRETE_HPP
-#define OMNI_REGULARIZATION_DETAILS_L0_HARD_CONCRETE_HPP
+#ifndef Nott_REGULARIZATION_DETAILS_L0_HARD_CONCRETE_HPP
+#define Nott_REGULARIZATION_DETAILS_L0_HARD_CONCRETE_HPP
 
 #include <torch/torch.h>
 
@@ -7,7 +7,7 @@
 
 #include "common.hpp"
 
-namespace Omni::Regularization::Details {
+namespace Nott::Regularization::Details {
 
     struct L0HardConcreteOptions {
         double coefficient{0.0};
@@ -37,4 +37,4 @@ namespace Omni::Regularization::Details {
 
 }
 
-#endif // OMNI_REGULARIZATION_DETAILS_L0_HARD_CONCRETE_HPP
+#endif // Nott_REGULARIZATION_DETAILS_L0_HARD_CONCRETE_HPP

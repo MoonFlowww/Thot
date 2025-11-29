@@ -1,5 +1,5 @@
-#ifndef OMNI_SWISH_HPP
-#define OMNI_SWISH_HPP
+#ifndef Nott_SWISH_HPP
+#define Nott_SWISH_HPP
 // "Searching for Activation Functions" (original SiLU/Swish proposal) https://arxiv.org/pdf/1710.05941
 #include <torch/torch.h>
 
@@ -7,7 +7,7 @@
 
 #include "../activation.hpp"
 
-namespace Omni::Activation::Details {
+namespace Nott::Activation::Details {
 
     struct Swish {
         [[nodiscard]] torch::Tensor operator()(torch::Tensor input) const {
@@ -18,4 +18,4 @@ namespace Omni::Activation::Details {
 
 }
 
-#endif //OMNI_SWISH_HPP
+#endif //Nott_SWISH_HPP

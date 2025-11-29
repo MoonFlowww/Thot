@@ -1,5 +1,5 @@
-#ifndef OMNI_COMMON_GRAPH_HPP
-#define OMNI_COMMON_GRAPH_HPP
+#ifndef Nott_COMMON_GRAPH_HPP
+#define Nott_COMMON_GRAPH_HPP
 
 #include <algorithm>
 #include <cctype>
@@ -16,11 +16,11 @@
 
 #include <torch/torch.h>
 
-namespace Omni::Layer::Details {
+namespace Nott::Layer::Details {
     struct RegisteredLayer;
 }
 
-namespace Omni {
+namespace Nott {
     enum class MergePolicy {
         Strict,
         Broadcast,
@@ -334,7 +334,7 @@ namespace Omni {
         std::size_t activation_index{std::numeric_limits<std::size_t>::max()};
 
         struct ModuleData {
-            ::Omni::Layer::Details::RegisteredLayer* layer{nullptr};
+            ::Nott::Layer::Details::RegisteredLayer* layer{nullptr};
             std::size_t input_index{std::numeric_limits<std::size_t>::max()};
         };
 

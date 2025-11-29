@@ -1,5 +1,5 @@
-#ifndef OMNI_VISION_HPP
-#define OMNI_VISION_HPP
+#ifndef Nott_VISION_HPP
+#define Nott_VISION_HPP
 // "An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale" Dosovitskiy https://arxiv.org/pdf/2010.11929
 // Vision transformer blocks with optional Swin-style shifted window attention for hierarchical visual modeling.
 
@@ -22,9 +22,9 @@
 #include "../../../attention/attention.hpp"
 #include "../../../attention/details/head.hpp"
 
-namespace Omni::Block::Details::Transformer::Vision {
-    using PositionalEncodingType = ::Omni::Layer::Details::PositionalEncodingType;
-    using PositionalEncodingOptions = ::Omni::Layer::Details::PositionalEncodingOptions;
+namespace Nott::Block::Details::Transformer::Vision {
+    using PositionalEncodingType = ::Nott::Layer::Details::PositionalEncodingType;
+    using PositionalEncodingOptions = ::Nott::Layer::Details::PositionalEncodingOptions;
 
     enum class Variant {
         ViT,
@@ -37,13 +37,13 @@ namespace Omni::Block::Details::Transformer::Vision {
         double dropout{0.0};
         bool bias{true};
         bool batch_first{true};
-        ::Omni::Attention::Variant variant{::Omni::Attention::Variant::Full};
+        ::Nott::Attention::Variant variant{::Nott::Attention::Variant::Full};
     };
 
     struct FeedForwardOptions {
         std::int64_t embed_dim{768};
         double mlp_ratio{4.0};
-        ::Omni::Activation::Descriptor activation{::Omni::Activation::GeLU};
+        ::Nott::Activation::Descriptor activation{::Nott::Activation::GeLU};
         bool bias{true};
     };
 
@@ -134,9 +134,9 @@ namespace Omni::Block::Details::Transformer::Vision {
     }
 
     namespace Detail {
-        using ::Omni::Block::Details::Transformer::Classic::Detail::normalise_to_sequence;
-        using ::Omni::Block::Details::Transformer::Classic::Detail::restore_from_sequence;
-        using ClassicPositionalEncoding = ::Omni::Block::Details::Transformer::Classic::Detail::PositionalEncoding;
+        using ::Nott::Block::Details::Transformer::Classic::Detail::normalise_to_sequence;
+        using ::Nott::Block::Details::Transformer::Classic::Detail::restore_from_sequence;
+        using ClassicPositionalEncoding = ::Nott::Block::Details::Transformer::Classic::Detail::PositionalEncoding;
 
         class PatchEmbedImpl : public torch::nn::Module {
         public:
@@ -403,7 +403,7 @@ namespace Omni::Block::Details::Transformer::Vision {
                 residual = output;
                 auto ff_input = options_.pre_norm ? norm2_->forward(output) : output;
                 auto hidden = linear1_->forward(ff_input);
-                hidden = ::Omni::Activation::Details::apply(descriptor_.feed_forward.activation.type, std::move(hidden));
+                hidden = ::Nott::Activation::Details::apply(descriptor_.feed_forward.activation.type, std::move(hidden));
                 if (feed_forward_dropout_) {
                     hidden = feed_forward_dropout_->forward(hidden);
                 }
@@ -509,4 +509,4 @@ namespace Omni::Block::Details::Transformer::Vision {
 
 }
 
-#endif // OMNI_VISION_HPP
+#endif // Nott_VISION_HPP

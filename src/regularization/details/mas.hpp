@@ -1,9 +1,9 @@
-#ifndef OMNI_MAS_HPP
-#define OMNI_MAS_HPP
+#ifndef Nott_MAS_HPP
+#define Nott_MAS_HPP
 //https://arxiv.org/pdf/1711.09601
 #include <torch/torch.h>
 
-namespace Omni::Regularization::Details {
+namespace Nott::Regularization::Details {
 
     struct MASOptions {
         double strength{0.0};
@@ -41,4 +41,4 @@ namespace Omni::Regularization::Details {
     }
 
 }
-#endif //OMNI_MAS_HPP
+#endif //Nott_MAS_HPP

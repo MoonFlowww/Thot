@@ -1,5 +1,5 @@
-#ifndef OMNI_POOLING_HPP
-#define OMNI_POOLING_HPP
+#ifndef Nott_POOLING_HPP
+#define Nott_POOLING_HPP
 #include <cstdint>
 #include <variant>
 #include <vector>
@@ -12,7 +12,7 @@
 #include "../../common/local.hpp"
 #include "../registry.hpp"
 
-namespace Omni::Layer::Details {
+namespace Nott::Layer::Details {
 
     struct MaxPool1dOptions {
         std::vector<std::int64_t> kernel_size{2};
@@ -73,8 +73,8 @@ namespace Omni::Layer::Details {
 
     struct PoolingDescriptor {
         PoolingOptions options{};
-        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
-        ::Omni::LocalConfig local{};
+        ::Nott::Activation::Descriptor activation{::Nott::Activation::Identity};
+        ::Nott::LocalConfig local{};
     };
 
     template <class Owner>
@@ -183,4 +183,4 @@ namespace Omni::Layer::Details {
 
 }
 
-#endif //OMNI_POOLING_HPP
+#endif //Nott_POOLING_HPP

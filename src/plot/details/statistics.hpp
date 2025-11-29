@@ -1,12 +1,12 @@
-#ifndef OMNI_PLOT_DETAILS_STATISTICS_HPP
-#define OMNI_PLOT_DETAILS_STATISTICS_HPP
+#ifndef Nott_PLOT_DETAILS_STATISTICS_HPP
+#define Nott_PLOT_DETAILS_STATISTICS_HPP
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <vector>
 
-namespace Omni::Plot::Details {
+namespace Nott::Plot::Details {
     inline double compute_kolmogorov_smirnov(const std::vector<double>& probs,
                                              const std::vector<int>& outcomes)
     {
@@ -61,4 +61,4 @@ namespace Omni::Plot::Details {
     }
 }
 
-#endif // OMNI_PLOT_DETAILS_STATISTICS_HPP
+#endif // Nott_PLOT_DETAILS_STATISTICS_HPP

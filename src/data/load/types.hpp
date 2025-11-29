@@ -1,5 +1,5 @@
-#ifndef OMNI_TYPES_HPP
-#define OMNI_TYPES_HPP
+#ifndef Nott_TYPES_HPP
+#define Nott_TYPES_HPP
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -9,7 +9,7 @@
 
 #include "../transform/format/format.hpp"
 
-namespace Omni::Data::Type {
+namespace Nott::Data::Type {
     enum class ImageRescaleMode {
         None,
         Downscale,
@@ -119,4 +119,4 @@ namespace Omni::Data::Type {
 
     };
 }
-#endif //OMNI_TYPES_HPP
+#endif //Nott_TYPES_HPP

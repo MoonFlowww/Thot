@@ -1,5 +1,5 @@
-#ifndef OMNI_PLOT_DETAILS_RELIABILITY_HPP
-#define OMNI_PLOT_DETAILS_RELIABILITY_HPP
+#ifndef Nott_PLOT_DETAILS_RELIABILITY_HPP
+#define Nott_PLOT_DETAILS_RELIABILITY_HPP
 
 #include <cstddef>
 #include <optional>
@@ -8,11 +8,11 @@
 
 #include "../../utils/gnuplot.hpp"
 
-namespace Omni {
+namespace Nott {
     class Model;
 }
 
-namespace Omni::Plot::Reliability {
+namespace Nott::Plot::Reliability {
     struct DETOptions {
         bool KSTest{false};
         bool confidenceBands{false};
@@ -84,7 +84,7 @@ namespace Omni::Plot::Reliability {
     };
 }
 
-namespace Omni::Plot::Details::Reliability {
+namespace Nott::Plot::Details::Reliability {
     void RenderGradCAM(Model& model,
                        const Plot::Reliability::GradCAMDescriptor& descriptor,
                        torch::Tensor inputs,
@@ -98,4 +98,4 @@ namespace Omni::Plot::Details::Reliability {
 }
 #include "reliability/reliability_gradcam.hpp"
 #include "reliability/reliability_lime.hpp"
-#endif // OMNI_PLOT_DETAILS_RELIABILITY_HPP
+#endif // Nott_PLOT_DETAILS_RELIABILITY_HPP

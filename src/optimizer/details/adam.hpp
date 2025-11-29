@@ -1,5 +1,5 @@
-#ifndef OMNI_ADAM_HPP
-#define OMNI_ADAM_HPP
+#ifndef Nott_ADAM_HPP
+#define Nott_ADAM_HPP
 // Adam: https://arxiv.org/pdf/1412.6980
 // AdamW: https://arxiv.org/pdf/1711.05101
 // Adan: https://arxiv.org/pdf/2208.06677
@@ -13,7 +13,7 @@
 #include <memory>
 #include <vector>
 
-namespace Omni::Optimizer::Details {
+namespace Nott::Optimizer::Details {
 
     struct AdamOptions {
         double learning_rate{1e-3};
@@ -251,6 +251,6 @@ namespace Omni::Optimizer::Details {
 
     using AdamWOptimizer = AdamW;
 
-} // namespace Omni::Optimizer::Details
+} // namespace Nott::Optimizer::Details
 
-#endif // OMNI_ADAM_HPP
+#endif // Nott_ADAM_HPP

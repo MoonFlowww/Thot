@@ -1,8 +1,8 @@
-#ifndef OMNI_ACTIVATION_HPP
-#define OMNI_ACTIVATION_HPP
+#ifndef Nott_ACTIVATION_HPP
+#define Nott_ACTIVATION_HPP
 // This file is a factory, must exempt it from any logical-code. For functions look into "/details"
 
-namespace Omni::Activation {
+namespace Nott::Activation {
     enum class Type {
         Identity,
         ReLU,
@@ -40,4 +40,4 @@ namespace Omni::Activation {
     inline constexpr Descriptor Swish{Type::Swish};
 }
 
-#endif //OMNI_ACTIVATION_HPP
+#endif //Nott_ACTIVATION_HPP

@@ -1,5 +1,5 @@
-#ifndef OMNI_BATCHNORM_HPP
-#define OMNI_BATCHNORM_HPP
+#ifndef Nott_BATCHNORM_HPP
+#define Nott_BATCHNORM_HPP
 //https://arxiv.org/pdf/1502.03167
 #include <cstdint>
 
@@ -17,7 +17,7 @@
 #include "../../initialization/initialization.hpp"
 #include "../registry.hpp"
 
-namespace Omni::Layer::Details {
+namespace Nott::Layer::Details {
 
     struct BatchNorm2dOptions {
         std::int64_t num_features{};
@@ -29,9 +29,9 @@ namespace Omni::Layer::Details {
 
     struct BatchNorm2dDescriptor {
         BatchNorm2dOptions options{};
-        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
-        ::Omni::Initialization::Descriptor initialization{::Omni::Initialization::Default};
-        ::Omni::LocalConfig local{};
+        ::Nott::Activation::Descriptor activation{::Nott::Activation::Identity};
+        ::Nott::Initialization::Descriptor initialization{::Nott::Initialization::Default};
+        ::Nott::LocalConfig local{};
     };
 
     template <class Owner>
@@ -48,7 +48,7 @@ namespace Omni::Layer::Details {
                             .track_running_stats(descriptor.options.track_running_stats);
 
         auto module = owner.register_module("batchnorm2d_" + std::to_string(index), torch::nn::BatchNorm2d(options));
-        ::Omni::Initialization::Details::apply_module_initialization(module, descriptor);
+        ::Nott::Initialization::Details::apply_module_initialization(module, descriptor);
 
         RegisteredLayer registered_layer{};
         registered_layer.activation = descriptor.activation.type;
@@ -60,4 +60,4 @@ namespace Omni::Layer::Details {
 
 }
 
-#endif //OMNI_BATCHNORM_HPP
+#endif //Nott_BATCHNORM_HPP

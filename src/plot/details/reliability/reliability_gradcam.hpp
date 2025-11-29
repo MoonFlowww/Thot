@@ -1,5 +1,5 @@
-#ifndef OMNI_RELIABILITY_GRADCAM_HPP
-#define OMNI_RELIABILITY_GRADCAM_HPP
+#ifndef Nott_RELIABILITY_GRADCAM_HPP
+#define Nott_RELIABILITY_GRADCAM_HPP
 
 #include <algorithm>
 #include <array>
@@ -19,9 +19,9 @@
 #include "../data.hpp"
 #include "reliability_curve_utils.hpp"
 
-namespace Omni::Plot::Details::Reliability {
+namespace Nott::Plot::Details::Reliability {
     namespace detail {
-        inline auto ResolveModules(Omni::Model& model) -> std::vector<std::shared_ptr<torch::nn::Module>>
+        inline auto ResolveModules(Nott::Model& model) -> std::vector<std::shared_ptr<torch::nn::Module>>
         {
             auto modules = model.modules(/*include_self=*/false);
             std::vector<std::shared_ptr<torch::nn::Module>> filtered;
@@ -39,7 +39,7 @@ namespace Omni::Plot::Details::Reliability {
 
 
 
-        inline auto ResolveTargetLayer(Omni::Model& model,
+        inline auto ResolveTargetLayer(Nott::Model& model,
                                        std::optional<std::size_t> requested)
             -> std::shared_ptr<torch::nn::Module>
         {
@@ -318,4 +318,4 @@ namespace Omni::Plot::Details::Reliability {
         (void)images;
     }
 }
-#endif // OMNI_RELIABILITY_GRADCAM_HPP
+#endif // Nott_RELIABILITY_GRADCAM_HPP

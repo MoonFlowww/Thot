@@ -1,4 +1,4 @@
-#include "../../../include/Omni.h"
+#include "../../../include/Nott.h"
 #include <array>
 #include <iostream>
 #include <tuple>
@@ -885,7 +885,7 @@ namespace {
 
 
 int main() {
-    Omni::Model model("");
+    Nott::Model model("");
     std::vector<torch::Tensor> xs;
     std::vector<torch::Tensor> ys;
 
@@ -893,27 +893,27 @@ int main() {
         std::string path = "/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile " + std::to_string(tile);
         // cuts(3*3) -> Tile -> cuts(X*Y)
         auto [x1, y1, x2, y2] =
-            Omni::Data::Load::Universal(path,
-                Omni::Data::Type::JPG{"images", {.grayscale = false, .normalize_colors = false, .normalize_size = true, .color_order = "RGB"}},
-                Omni::Data::Type::PNG{"masks",  {.normalize_colors = false, .normalize_size = true, .InterpolationMode = Omni::Data::Transform::Format::Options::InterpMode::Nearest, .color_order = "RGB"}},
+            Nott::Data::Load::Universal(path,
+                Nott::Data::Type::JPG{"images", {.grayscale = false, .normalize_colors = false, .normalize_size = true, .color_order = "RGB"}},
+                Nott::Data::Type::PNG{"masks",  {.normalize_colors = false, .normalize_size = true, .InterpolationMode = Nott::Data::Transform::Format::Options::InterpMode::Nearest, .color_order = "RGB"}},
                 {.train_fraction = 1.f, .test_fraction = 0.f, .shuffle = false});
 
         x1 = OriginalTile(x1);
-        Omni::Data::Check::Size(x1, ("X"+std::to_string(tile) + " Reconstructed Tile"));
+        Nott::Data::Check::Size(x1, ("X"+std::to_string(tile) + " Reconstructed Tile"));
         savePic(x1, path, "input");
         y1 = OriginalTile(y1);
         savePic(y1, path, "target");
-        Omni::Data::Check::Size(x1, ("Y"+std::to_string(tile) + " Reconstructed Tile"));
+        Nott::Data::Check::Size(x1, ("Y"+std::to_string(tile) + " Reconstructed Tile"));
         auto EstX= EstimCuts(x1.size(1), x1.size(2), 128);
         auto EstY= EstimCuts(y1.size(1), y1.size(2), 128);
         std::cout << "Estimator {X,Y}: " << EstX << " || n: " << EstX[0]*EstX[1] << " + " << (EstX[0]-1)*(EstX[1]-1) << std::endl;
         x1 = Cuts(x1, EstX, true); // Estim used to minimize artefacts from Downsample
         y1 = Cuts(y1, EstY, true);
 
-        Omni::Data::Check::Size(x1, ("X"+std::to_string(tile) + " After cuts"));
-        Omni::Data::Check::Size(y1, ("Y"+std::to_string(tile) + " After cuts"));
-        x1 = Omni::Data::Transform::Format::Downsample(x1, {.size = {128, 128}, .interp = Omni::Data::Transform::Format::Options::InterpMode::Bilinear});
-        y1 = Omni::Data::Transform::Format::Downsample(y1, {.size = {128, 128}, .interp = Omni::Data::Transform::Format::Options::InterpMode::Nearest});
+        Nott::Data::Check::Size(x1, ("X"+std::to_string(tile) + " After cuts"));
+        Nott::Data::Check::Size(y1, ("Y"+std::to_string(tile) + " After cuts"));
+        x1 = Nott::Data::Transform::Format::Downsample(x1, {.size = {128, 128}, .interp = Nott::Data::Transform::Format::Options::InterpMode::Bilinear});
+        y1 = Nott::Data::Transform::Format::Downsample(y1, {.size = {128, 128}, .interp = Nott::Data::Transform::Format::Options::InterpMode::Nearest});
 
         xs.push_back(x1);
         ys.push_back(y1);
@@ -922,22 +922,22 @@ int main() {
     torch::Tensor X = torch::cat(xs, 0);
     torch::Tensor Y = torch::cat(ys, 0);
 
-    Omni::Data::Check::Size(X, "X Total");
-    Omni::Data::Check::Size(Y, "Y Total");
+    Nott::Data::Check::Size(X, "X Total");
+    Nott::Data::Check::Size(Y, "Y Total");
 
 
-    // std::tie(x1, y1) = Omni::Data::Transform::Augmentation::Flip(x1, y1, {.axes = {"x"}, .frequency = 1.f, .data_augment = true});
-    // std::tie(x1, y1) = Omni::Data::Transform::Augmentation::Flip(x1, y1, {.axes = {"y"}, .frequency = 1.f, .data_augment = true});
-    // std::tie(x1, y1) = Omni::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, true, false});
-    // std::tie(x1, y1) = Omni::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
-    // std::tie(x1, y1) = Omni::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
-    // std::tie(x1, y1) = Omni::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
-    // std::tie(x1, y1) = Omni::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
+    // std::tie(x1, y1) = Nott::Data::Transform::Augmentation::Flip(x1, y1, {.axes = {"x"}, .frequency = 1.f, .data_augment = true});
+    // std::tie(x1, y1) = Nott::Data::Transform::Augmentation::Flip(x1, y1, {.axes = {"y"}, .frequency = 1.f, .data_augment = true});
+    // std::tie(x1, y1) = Nott::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, true, false});
+    // std::tie(x1, y1) = Nott::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
+    // std::tie(x1, y1) = Nott::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
+    // std::tie(x1, y1) = Nott::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
+    // std::tie(x1, y1) = Nott::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
 
     constexpr int kNumSuperpixels = 8;
 
     auto input_overlay = BuildSuperpixelOverlay(X.index({0}), kNumSuperpixels);
-    Omni::Plot::Data::Image(input_overlay.unsqueeze(0), {0}, Omni::Plot::Data::ImagePlotOptions{.layoutTitle = "Input with superpixel segmentation", .showColorBox = true});
+    Nott::Plot::Data::Image(input_overlay.unsqueeze(0), {0}, Nott::Plot::Data::ImagePlotOptions{.layoutTitle = "Input with superpixel segmentation", .showColorBox = true});
 
     {
         auto img0     = X.index({0});
@@ -954,9 +954,9 @@ int main() {
         auto d_norm = (geodesic0 - d_min) / (d_max - d_min + 1e-6f);
         auto d_rgb  = d_norm.unsqueeze(0).repeat({3, 1, 1});
 
-        Omni::Plot::Data::Image(
+        Nott::Plot::Data::Image(
             d_rgb.unsqueeze(0), {0},
-            Omni::Plot::Data::ImagePlotOptions{
+            Nott::Plot::Data::ImagePlotOptions{
                 .layoutTitle  = "Geodesic distance map",
                 .showColorBox = true
             });
@@ -997,39 +997,39 @@ int main() {
 
 
     auto block = [&](int in_c, int out_c) {
-        return Omni::Block::Sequential({
-            Omni::Layer::Conv2d(
+        return Nott::Block::Sequential({
+            Nott::Layer::Conv2d(
                 {in_c, out_c, {3,3}, {1,1}, {1,1}},
-                Omni::Activation::ReLU,
-                Omni::Initialization::HeUniform
+                Nott::Activation::ReLU,
+                Nott::Initialization::HeUniform
             ),
-            Omni::Layer::Conv2d(
+            Nott::Layer::Conv2d(
                 {out_c, out_c, {3,3}, {1,1}, {1,1}},
-                Omni::Activation::ReLU,
-                Omni::Initialization::HeUniform
+                Nott::Activation::ReLU,
+                Nott::Initialization::HeUniform
             ),
         });
     };
 
     auto upblock = [&](int in_c, int out_c) {
-        return Omni::Block::Sequential({
-            Omni::Layer::Upsample({.scale = {2,2}, .mode  = Omni::UpsampleMode::Bilinear}),
-            Omni::Layer::Conv2d(
+        return Nott::Block::Sequential({
+            Nott::Layer::Upsample({.scale = {2,2}, .mode  = Nott::UpsampleMode::Bilinear}),
+            Nott::Layer::Conv2d(
                 {in_c, out_c, {3,3}, {1,1}, {1,1}},
-                Omni::Activation::ReLU,
-                Omni::Initialization::HeUniform
+                Nott::Activation::ReLU,
+                Nott::Initialization::HeUniform
             ),
         });
     };
 
     model.add(block(3, 64), "enc1");
-    model.add(Omni::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool1");
+    model.add(Nott::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool1");
     model.add(block(64,  128), "enc2");
-    model.add(Omni::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool2");
+    model.add(Nott::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool2");
     model.add(block(128, 256), "enc3");
-    model.add(Omni::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool3");
+    model.add(Nott::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool3");
     model.add(block(256, 512), "enc4");
-    model.add(Omni::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool4");
+    model.add(Nott::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool4");
 
     model.add(block(512, 1024), "bottleneck");
 
@@ -1042,31 +1042,31 @@ int main() {
     model.add(upblock(128, 64), "up1");
     model.add(block(128, 64), "dec1");
 
-    model.add(Omni::Layer::Conv2d({64, 6, {1, 1}, {1, 1}, {0, 0}}, Omni::Activation::Identity), "logits");
+    model.add(Nott::Layer::Conv2d({64, 6, {1, 1}, {1, 1}, {0, 0}}, Nott::Activation::Identity), "logits");
 
     model.links({
-        Omni::LinkSpec{Omni::Port::Input("@input"), Omni::Port::Module("enc1")},
-        Omni::LinkSpec{Omni::Port::Module("enc1"),  Omni::Port::Module("pool1")},
-        Omni::LinkSpec{Omni::Port::Module("pool1"), Omni::Port::Module("enc2")},
-        Omni::LinkSpec{Omni::Port::Module("enc2"),  Omni::Port::Module("pool2")},
-        Omni::LinkSpec{Omni::Port::Module("pool2"), Omni::Port::Module("enc3")},
-        Omni::LinkSpec{Omni::Port::Module("enc3"),  Omni::Port::Module("pool3")},
-        Omni::LinkSpec{Omni::Port::Module("pool3"), Omni::Port::Module("enc4")},
-        Omni::LinkSpec{Omni::Port::Module("enc4"),  Omni::Port::Module("pool4")},
-        Omni::LinkSpec{Omni::Port::Module("pool4"), Omni::Port::Module("bottleneck")},
+        Nott::LinkSpec{Nott::Port::Input("@input"), Nott::Port::Module("enc1")},
+        Nott::LinkSpec{Nott::Port::Module("enc1"),  Nott::Port::Module("pool1")},
+        Nott::LinkSpec{Nott::Port::Module("pool1"), Nott::Port::Module("enc2")},
+        Nott::LinkSpec{Nott::Port::Module("enc2"),  Nott::Port::Module("pool2")},
+        Nott::LinkSpec{Nott::Port::Module("pool2"), Nott::Port::Module("enc3")},
+        Nott::LinkSpec{Nott::Port::Module("enc3"),  Nott::Port::Module("pool3")},
+        Nott::LinkSpec{Nott::Port::Module("pool3"), Nott::Port::Module("enc4")},
+        Nott::LinkSpec{Nott::Port::Module("enc4"),  Nott::Port::Module("pool4")},
+        Nott::LinkSpec{Nott::Port::Module("pool4"), Nott::Port::Module("bottleneck")},
 
-        Omni::LinkSpec{Omni::Port::Module("bottleneck"), Omni::Port::Module("up4")},
-        Omni::LinkSpec{Omni::Port::Join({"up4", "enc4"}, Omni::MergePolicy::Stack), Omni::Port::Module("dec4")},
-        Omni::LinkSpec{Omni::Port::Module("dec4"), Omni::Port::Module("up3")},
-        Omni::LinkSpec{Omni::Port::Join({"up3", "enc3"}, Omni::MergePolicy::Stack), Omni::Port::Module("dec3")},
+        Nott::LinkSpec{Nott::Port::Module("bottleneck"), Nott::Port::Module("up4")},
+        Nott::LinkSpec{Nott::Port::Join({"up4", "enc4"}, Nott::MergePolicy::Stack), Nott::Port::Module("dec4")},
+        Nott::LinkSpec{Nott::Port::Module("dec4"), Nott::Port::Module("up3")},
+        Nott::LinkSpec{Nott::Port::Join({"up3", "enc3"}, Nott::MergePolicy::Stack), Nott::Port::Module("dec3")},
 
-        Omni::LinkSpec{Omni::Port::Module("dec3"), Omni::Port::Module("up2") },
-        Omni::LinkSpec{Omni::Port::Join({"up2", "enc2"}, Omni::MergePolicy::Stack), Omni::Port::Module("dec2")},
-        Omni::LinkSpec{Omni::Port::Module("dec2"), Omni::Port::Module("up1") },
-        Omni::LinkSpec{Omni::Port::Join({"up1", "enc1"}, Omni::MergePolicy::Stack), Omni::Port::Module("dec1")},
+        Nott::LinkSpec{Nott::Port::Module("dec3"), Nott::Port::Module("up2") },
+        Nott::LinkSpec{Nott::Port::Join({"up2", "enc2"}, Nott::MergePolicy::Stack), Nott::Port::Module("dec2")},
+        Nott::LinkSpec{Nott::Port::Module("dec2"), Nott::Port::Module("up1") },
+        Nott::LinkSpec{Nott::Port::Join({"up1", "enc1"}, Nott::MergePolicy::Stack), Nott::Port::Module("dec1")},
 
-        Omni::LinkSpec{Omni::Port::Module("dec1"),   Omni::Port::Module("logits")}, // dec3
-        Omni::LinkSpec{Omni::Port::Module("logits"), Omni::Port::Output("@output")},
+        Nott::LinkSpec{Nott::Port::Module("dec1"),   Nott::Port::Module("logits")}, // dec3
+        Nott::LinkSpec{Nott::Port::Module("logits"), Nott::Port::Output("@output")},
     }, true);
 
 
@@ -1075,7 +1075,7 @@ int main() {
     Y = ConvertRgbMasksToOneHot(Y);
     X= X.to(torch::kFloat32) / 255.0f;
 
-    Omni::Plot::Data::Image(X, {0, 100, 1000, 2000, 5000, 11734});
+    Nott::Plot::Data::Image(X, {0, 100, 1000, 2000, 5000, 11734});
 
     const auto total_training_samples = X.size(0);
     const auto B = 32;
@@ -1093,17 +1093,17 @@ int main() {
     std::vector<double> w(ptr, ptr + w_cpu.numel());
 
 
-    model.set_loss(Omni::Loss::CrossEntropy({ /*.weight = w*/ }));
+    model.set_loss(Nott::Loss::CrossEntropy({ /*.weight = w*/ }));
     model.set_optimizer(
-        Omni::Optimizer::AdamW({.learning_rate = 5e-5, .weight_decay = 1e-4}),
-        Omni::LrScheduler::CosineAnnealing({
+        Nott::Optimizer::AdamW({.learning_rate = 5e-5, .weight_decay = 1e-4}),
+        Nott::LrScheduler::CosineAnnealing({
             .T_max = (total_training_steps),
             .eta_min = 1e-6,
             .warmup_steps = std::min<std::size_t>(steps_per_epoch * 5, total_training_steps / 5),
             .warmup_start_factor = 0.1,
         }));
 
-    model.set_regularization({Omni::Regularization::SWAG({
+    model.set_regularization({Nott::Regularization::SWAG({
         .coefficient = 5e-4,
         .variance_epsilon = 1e-6,
         .start_step = static_cast<std::size_t>(0.65 * static_cast<double>(total_training_steps)),
@@ -1114,31 +1114,31 @@ int main() {
     model.use_cuda(torch::cuda::is_available());
 
 
-    // std::tie(X, Y) = Omni::Data::Manipulation::Fraction(X, Y, 0.1f); // 10%
-    // Omni::Data::Check::Size(X, "10% X Train");
+    // std::tie(X, Y) = Nott::Data::Manipulation::Fraction(X, Y, 0.1f); // 10%
+    // Nott::Data::Check::Size(X, "10% X Train");
     auto out = struct2train(samples);
     model.train(out[0], out[1],
         {.epoch = E,
         .batch_size = B,
         .restore_best_state = true,
         .test = std::vector<at::Tensor>{X, Y},
-        .graph_mode = Omni::GraphMode::Capture,
+        .graph_mode = Nott::GraphMode::Capture,
         .enable_amp = true,
         // .memory_format = torch::MemoryFormat::ChannelsLast
         });
 
-    model.evaluate(out[0], out[1], Omni::Evaluation::Segmentation,{
-        Omni::Metric::Classification::Accuracy,
-        Omni::Metric::Classification::Precision,
-        Omni::Metric::Classification::Recall,
-        Omni::Metric::Classification::JaccardIndexMicro,
-        Omni::Metric::Classification::BoundaryIoU,
-        Omni::Metric::Classification::HausdorffDistance,
+    model.evaluate(out[0], out[1], Nott::Evaluation::Segmentation,{
+        Nott::Metric::Classification::Accuracy,
+        Nott::Metric::Classification::Precision,
+        Nott::Metric::Classification::Recall,
+        Nott::Metric::Classification::JaccardIndexMicro,
+        Nott::Metric::Classification::BoundaryIoU,
+        Nott::Metric::Classification::HausdorffDistance,
     },{.batch_size = B, .buffer_vram=2});
 
 
-    std::tie(X, Y) = Omni::Data::Manipulation::Fraction(out[0], out[1], 0.01f);
-    Omni::Data::Check::Size(X, "Inference");
+    std::tie(X, Y) = Nott::Data::Manipulation::Fraction(out[0], out[1], 0.01f);
+    Nott::Data::Check::Size(X, "Inference");
     auto logits = model.forward(X);
     auto predicted = logits.argmax(1).to(torch::kCPU);
     auto first_pred = predicted.index({0}).contiguous();
@@ -1147,9 +1147,9 @@ int main() {
     auto ground_truth = Y.argmax(1).to(torch::kCPU);
     auto gt_rgb = ColorizeClassMap(ground_truth.index({0}).contiguous());
 
-    Omni::Plot::Data::Image(forecast_rgb, {0});
-    Omni::Plot::Data::Image(gt_rgb, {0});
-    Omni::Plot::Data::Image(X, {0});
+    Nott::Plot::Data::Image(forecast_rgb, {0});
+    Nott::Plot::Data::Image(gt_rgb, {0});
+    Nott::Plot::Data::Image(X, {0});
     // cv::Mat f_img(H, W, CV_8UC3, forecast_rgb.data_ptr<uint8_t>());
     // cv::Mat f_bgr;
     // cv::cvtColor(f_img, f_bgr, cv::COLOR_RGB2BGR);
@@ -1278,7 +1278,7 @@ Epoch [47/50] | Train loss: 0.013382 | Test loss: 0.012975 | ΔLoss: -0.000519 (
 Epoch [48/50] | Train loss: 0.013139 | Test loss: 0.012817 | ΔLoss: -0.000158 (∇) | duration: 96.08sec
 Epoch [49/50] | Train loss: 0.012878 | Test loss: 0.012620 | ΔLoss: -0.000197 (∇) | duration: 96.08sec
 Epoch [50/50] | Train loss: 0.012654 | Test loss: 0.012409 | ΔLoss: -0.000211 (∇) | duration: 97.82sec
-[Omni] Reloading best state of the network...
+[Nott] Reloading best state of the network...
 End
 Test Inputs: (11735, 3, 128, 128)
 Test Targets: (11735, 128, 128)

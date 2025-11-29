@@ -4,11 +4,11 @@ The activation module exposes a `Descriptor` wrapper over the `Activation::Type`
 enumeration. Each helper constant (for example `Activation::GeLU`) simply
 pre-fills that descriptor so it can be threaded through layer builders or
 blocks – you
-select the strategy by passing one of the `Omni::Activation::*` constants
+select the strategy by passing one of the `Nott::Activation::*` constants
 when building your model.
 
 ```cpp
-model.add(Omni::Layer::FC({...}, Omni::Activation::ReLU, Omni::Initialization::HeUniform));
+model.add(Nott::Layer::FC({...}, Nott::Activation::ReLU, Nott::Initialization::HeUniform));
 ```
 
 ## Available activations
@@ -37,4 +37,4 @@ validation is still recommended when wiring them into layer pipelines.
 
 #### HyperLinks related:
 - [Docs/Introduction](../../README.md) (`model.add()`)
-- [Docs/Initialization](../initialization/README.md) (`Omni::Initialization::*`)
+- [Docs/Initialization](../initialization/README.md) (`Nott::Initialization::*`)

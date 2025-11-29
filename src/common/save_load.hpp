@@ -1,5 +1,5 @@
-#ifndef OMNI_COMMON_SAVE_LOAD_HPP
-#define OMNI_COMMON_SAVE_LOAD_HPP
+#ifndef Nott_COMMON_SAVE_LOAD_HPP
+#define Nott_COMMON_SAVE_LOAD_HPP
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
@@ -29,7 +29,7 @@
 #include "../optimizer/optimizer.hpp"
 #include "../regularization/regularization.hpp"
 
-namespace Omni::Common::SaveLoad {
+namespace Nott::Common::SaveLoad {
     using PropertyTree = boost::property_tree::ptree;
     using ModuleDescriptor = std::variant<Layer::Descriptor, Block::Descriptor>;
 
@@ -304,7 +304,7 @@ namespace Omni::Common::SaveLoad {
             throw std::runtime_error(message.str());
         }
 
-        inline PropertyTree serialize_bert_attention_options(const ::Omni::Block::Details::Transformer::Bert::AttentionOptions &o) {
+        inline PropertyTree serialize_bert_attention_options(const ::Nott::Block::Details::Transformer::Bert::AttentionOptions &o) {
             PropertyTree t;
             t.put("embed_dim", o.embed_dim);
             t.put("num_heads", o.num_heads);
@@ -315,7 +315,7 @@ namespace Omni::Common::SaveLoad {
             return t;
         }
 
-        inline PropertyTree serialize_bert_feed_forward_options(const ::Omni::Block::Details::Transformer::Bert::FeedForwardOptions &o) {
+        inline PropertyTree serialize_bert_feed_forward_options(const ::Nott::Block::Details::Transformer::Bert::FeedForwardOptions &o) {
             PropertyTree t;
             t.put("embed_dim", o.embed_dim);
             t.put("mlp_ratio", o.mlp_ratio);
@@ -327,14 +327,14 @@ namespace Omni::Common::SaveLoad {
             return t;
         }
 
-        inline PropertyTree serialize_bert_layer_norm_options(const ::Omni::Block::Details::Transformer::Bert::LayerNormOptions &o) {
+        inline PropertyTree serialize_bert_layer_norm_options(const ::Nott::Block::Details::Transformer::Bert::LayerNormOptions &o) {
             PropertyTree t;
             t.put("eps", o.eps);
             t.put("elementwise_affine", o.elementwise_affine);
             return t;
         }
 
-        inline PropertyTree serialize_bert_embedding_options(const ::Omni::Block::Details::Transformer::Bert::EmbeddingOptions &o) {
+        inline PropertyTree serialize_bert_embedding_options(const ::Nott::Block::Details::Transformer::Bert::EmbeddingOptions &o) {
             PropertyTree t;
             t.put("vocab_size", o.vocab_size);
             t.put("type_vocab_size", o.type_vocab_size);
@@ -345,14 +345,14 @@ namespace Omni::Common::SaveLoad {
             return t;
         }
 
-        inline PropertyTree serialize_bert_encoder_layer_descriptor(const ::Omni::Block::Details::Transformer::Bert::EncoderLayerDescriptor &d) {
+        inline PropertyTree serialize_bert_encoder_layer_descriptor(const ::Nott::Block::Details::Transformer::Bert::EncoderLayerDescriptor &d) {
             PropertyTree t;
             t.add_child("attention", serialize_bert_attention_options(d.attention));
             t.add_child("feed_forward", serialize_bert_feed_forward_options(d.feed_forward));
             return t;
         }
 
-        inline PropertyTree serialize_bert_encoder_options(const ::Omni::Block::Details::Transformer::Bert::EncoderOptions &o) {
+        inline PropertyTree serialize_bert_encoder_options(const ::Nott::Block::Details::Transformer::Bert::EncoderOptions &o) {
             PropertyTree t;
             t.put("layers", static_cast<std::uint64_t>(o.layers));
             t.put("embed_dim", o.embed_dim);
@@ -393,19 +393,19 @@ namespace Omni::Common::SaveLoad {
 
 
 
-        inline ::Omni::Block::Details::Transformer::Bert::LayerNormOptions deserialize_bert_layer_norm_options(
+        inline ::Nott::Block::Details::Transformer::Bert::LayerNormOptions deserialize_bert_layer_norm_options(
             const PropertyTree& tree, const std::string& context)
         {
-            ::Omni::Block::Details::Transformer::Bert::LayerNormOptions options;
+            ::Nott::Block::Details::Transformer::Bert::LayerNormOptions options;
             options.eps = get_numeric<double>(tree, "eps", context);
             options.elementwise_affine = get_boolean(tree, "elementwise_affine", context);
             return options;
         }
 
-        inline ::Omni::Block::Details::Transformer::Bert::EmbeddingOptions deserialize_bert_embedding_options(
+        inline ::Nott::Block::Details::Transformer::Bert::EmbeddingOptions deserialize_bert_embedding_options(
             const PropertyTree& tree, const std::string& context)
         {
-            ::Omni::Block::Details::Transformer::Bert::EmbeddingOptions options;
+            ::Nott::Block::Details::Transformer::Bert::EmbeddingOptions options;
             options.vocab_size = get_numeric<std::int64_t>(tree, "vocab_size", context);
             options.type_vocab_size = get_numeric<std::int64_t>(tree, "type_vocab_size", context);
             options.max_position_embeddings = get_numeric<std::int64_t>(tree, "max_position_embeddings", context);
@@ -416,8 +416,8 @@ namespace Omni::Common::SaveLoad {
         }
 
 
-        inline ::Omni::Block::Details::Transformer::Bert::AttentionOptions deserialize_bert_attention_options(const PropertyTree& tree, const std::string& context) {
-            ::Omni::Block::Details::Transformer::Bert::AttentionOptions options;
+        inline ::Nott::Block::Details::Transformer::Bert::AttentionOptions deserialize_bert_attention_options(const PropertyTree& tree, const std::string& context) {
+            ::Nott::Block::Details::Transformer::Bert::AttentionOptions options;
             options.embed_dim = get_numeric<std::int64_t>(tree, "embed_dim", context);
             options.num_heads = get_numeric<std::int64_t>(tree, "num_heads", context);
             options.dropout = get_numeric<double>(tree, "dropout", context);
@@ -426,10 +426,10 @@ namespace Omni::Common::SaveLoad {
             options.variant = attention_variant_from_string(get_string(tree, "variant", context));
             return options;
         }
-        inline ::Omni::Block::Details::Transformer::Bert::FeedForwardOptions deserialize_bert_feed_forward_options(
+        inline ::Nott::Block::Details::Transformer::Bert::FeedForwardOptions deserialize_bert_feed_forward_options(
         const PropertyTree& tree, const std::string& context)
         {
-            ::Omni::Block::Details::Transformer::Bert::FeedForwardOptions options;
+            ::Nott::Block::Details::Transformer::Bert::FeedForwardOptions options;
             options.embed_dim = get_numeric<std::int64_t>(tree, "embed_dim", context);
             options.mlp_ratio = get_numeric<double>(tree, "mlp_ratio", context);
             if (const auto activation_node = tree.get_child_optional("activation")) {
@@ -443,20 +443,20 @@ namespace Omni::Common::SaveLoad {
             return options;
         }
 
-        inline ::Omni::Block::Details::Transformer::Bert::EncoderLayerDescriptor
+        inline ::Nott::Block::Details::Transformer::Bert::EncoderLayerDescriptor
         deserialize_bert_encoder_layer_descriptor(const PropertyTree& tree, const std::string& context)
         {
-            ::Omni::Block::Details::Transformer::Bert::EncoderLayerDescriptor descriptor;
+            ::Nott::Block::Details::Transformer::Bert::EncoderLayerDescriptor descriptor;
             descriptor.attention = deserialize_bert_attention_options(tree.get_child("attention"), context + " attention");
             descriptor.feed_forward =
                 deserialize_bert_feed_forward_options(tree.get_child("feed_forward"), context + " feed_forward");
             return descriptor;
         }
 
-        inline ::Omni::Block::Details::Transformer::Bert::EncoderOptions deserialize_bert_encoder_options(
+        inline ::Nott::Block::Details::Transformer::Bert::EncoderOptions deserialize_bert_encoder_options(
             const PropertyTree& tree, const std::string& context)
         {
-            ::Omni::Block::Details::Transformer::Bert::EncoderOptions options;
+            ::Nott::Block::Details::Transformer::Bert::EncoderOptions options;
             options.layers = static_cast<std::size_t>(get_numeric<std::uint64_t>(tree, "layers", context));
             options.embed_dim = get_numeric<std::int64_t>(tree, "embed_dim", context);
             options.attention = deserialize_bert_attention_options(tree.get_child("attention"), context + " attention");
@@ -982,7 +982,7 @@ namespace Omni::Common::SaveLoad {
         }
 
         inline PropertyTree serialize_perceiver_attention_options(
-        const ::Omni::Block::Details::Transformer::Perceiver::AttentionOptions &o)
+        const ::Nott::Block::Details::Transformer::Perceiver::AttentionOptions &o)
         {
             PropertyTree t;
             t.put("query_dim", o.query_dim);
@@ -995,7 +995,7 @@ namespace Omni::Common::SaveLoad {
         }
 
         inline PropertyTree serialize_perceiver_feed_forward_options(
-            const ::Omni::Block::Details::Transformer::Perceiver::FeedForwardOptions &o)
+            const ::Nott::Block::Details::Transformer::Perceiver::FeedForwardOptions &o)
         {
             PropertyTree t;
             t.put("embed_dim", o.embed_dim);
@@ -1011,7 +1011,7 @@ namespace Omni::Common::SaveLoad {
         }
 
         inline PropertyTree serialize_perceiver_encoder_layer_descriptor(
-            const ::Omni::Block::Details::Transformer::Perceiver::EncoderLayerDescriptor &d)
+            const ::Nott::Block::Details::Transformer::Perceiver::EncoderLayerDescriptor &d)
         {
             PropertyTree t;
             t.add_child("feed_forward", serialize_perceiver_feed_forward_options(d.feed_forward));
@@ -1019,7 +1019,7 @@ namespace Omni::Common::SaveLoad {
         }
 
         inline PropertyTree serialize_perceiver_encoder_options(
-            const ::Omni::Block::Details::Transformer::Perceiver::EncoderOptions &o)
+            const ::Nott::Block::Details::Transformer::Perceiver::EncoderOptions &o)
         {
             PropertyTree t;
             t.put("layers", static_cast<std::uint64_t>(o.layers));
@@ -1036,16 +1036,16 @@ namespace Omni::Common::SaveLoad {
             return t;
         }
 
-        inline std::string serialize_vision_variant(::Omni::Block::Details::Transformer::Vision::Variant v) {
+        inline std::string serialize_vision_variant(::Nott::Block::Details::Transformer::Vision::Variant v) {
             switch (v) {
-                case ::Omni::Block::Details::Transformer::Vision::Variant::ViT:  return "vit";
-                case ::Omni::Block::Details::Transformer::Vision::Variant::Swin: return "swin";
+                case ::Nott::Block::Details::Transformer::Vision::Variant::ViT:  return "vit";
+                case ::Nott::Block::Details::Transformer::Vision::Variant::Swin: return "swin";
                 default: return "unknown";
             }
         }
 
         inline PropertyTree serialize_vision_attention_options(
-            const ::Omni::Block::Details::Transformer::Vision::AttentionOptions &o)
+            const ::Nott::Block::Details::Transformer::Vision::AttentionOptions &o)
         {
             PropertyTree t;
             t.put("embed_dim", o.embed_dim);
@@ -1058,7 +1058,7 @@ namespace Omni::Common::SaveLoad {
         }
 
         inline PropertyTree serialize_vision_feed_forward_options(
-            const ::Omni::Block::Details::Transformer::Vision::FeedForwardOptions &o)
+            const ::Nott::Block::Details::Transformer::Vision::FeedForwardOptions &o)
         {
             PropertyTree t;
             t.put("embed_dim", o.embed_dim);
@@ -1072,7 +1072,7 @@ namespace Omni::Common::SaveLoad {
         }
 
         inline PropertyTree serialize_vision_layer_norm_options(
-            const ::Omni::Block::Details::Transformer::Vision::LayerNormOptions &o)
+            const ::Nott::Block::Details::Transformer::Vision::LayerNormOptions &o)
         {
             PropertyTree t;
             t.put("eps", o.eps);
@@ -1081,7 +1081,7 @@ namespace Omni::Common::SaveLoad {
         }
 
         inline PropertyTree serialize_vision_patch_embedding_options(
-            const ::Omni::Block::Details::Transformer::Vision::PatchEmbeddingOptions &o)
+            const ::Nott::Block::Details::Transformer::Vision::PatchEmbeddingOptions &o)
         {
             PropertyTree t;
             t.put("in_channels", o.in_channels);
@@ -1094,7 +1094,7 @@ namespace Omni::Common::SaveLoad {
         }
 
         inline PropertyTree serialize_vision_window_options(
-            const ::Omni::Block::Details::Transformer::Vision::WindowOptions &o)
+            const ::Nott::Block::Details::Transformer::Vision::WindowOptions &o)
         {
             PropertyTree t;
             t.put("size", o.size);
@@ -1103,17 +1103,17 @@ namespace Omni::Common::SaveLoad {
         }
 
         // positional encoding serializer — simple mapping, safe fallback if you don't already have one.
-        inline std::string serialize_positional_encoding_type(::Omni::Layer::Details::PositionalEncodingType t) {
+        inline std::string serialize_positional_encoding_type(::Nott::Layer::Details::PositionalEncodingType t) {
             switch (t) {
-                case ::Omni::Layer::Details::PositionalEncodingType::None: return "none";
-                case ::Omni::Layer::Details::PositionalEncodingType::Sinusoidal: return "sinusoidal";
-                case ::Omni::Layer::Details::PositionalEncodingType::Learned: return "learned";
+                case ::Nott::Layer::Details::PositionalEncodingType::None: return "none";
+                case ::Nott::Layer::Details::PositionalEncodingType::Sinusoidal: return "sinusoidal";
+                case ::Nott::Layer::Details::PositionalEncodingType::Learned: return "learned";
                 default: return "unknown";
             }
         }
 
         inline PropertyTree serialize_positional_encoding_options(
-            const ::Omni::Layer::Details::PositionalEncodingOptions &o)
+            const ::Nott::Layer::Details::PositionalEncodingOptions &o)
         {
             PropertyTree t;
             t.put("type", serialize_positional_encoding_type(o.type));
@@ -1123,7 +1123,7 @@ namespace Omni::Common::SaveLoad {
         }
 
         inline PropertyTree serialize_vision_encoder_layer_descriptor(
-            const ::Omni::Block::Details::Transformer::Vision::EncoderLayerDescriptor &d)
+            const ::Nott::Block::Details::Transformer::Vision::EncoderLayerDescriptor &d)
         {
             PropertyTree t;
             t.add_child("attention", serialize_vision_attention_options(d.attention));
@@ -1133,7 +1133,7 @@ namespace Omni::Common::SaveLoad {
         }
 
         inline PropertyTree serialize_vision_encoder_options(
-            const ::Omni::Block::Details::Transformer::Vision::EncoderOptions &o)
+            const ::Nott::Block::Details::Transformer::Vision::EncoderOptions &o)
         {
             PropertyTree t;
             t.put("layers", static_cast<std::uint64_t>(o.layers));
@@ -1154,7 +1154,7 @@ namespace Omni::Common::SaveLoad {
         }
 
         inline PropertyTree serialize_longformer_attention_options(
-    const ::Omni::Block::Details::Transformer::LongformerXL::AttentionOptions &o)
+    const ::Nott::Block::Details::Transformer::LongformerXL::AttentionOptions &o)
         {
             PropertyTree t;
             t.put("embed_dim", o.embed_dim);
@@ -1166,7 +1166,7 @@ namespace Omni::Common::SaveLoad {
         }
 
         inline PropertyTree serialize_longformer_feed_forward_options(
-            const ::Omni::Block::Details::Transformer::LongformerXL::FeedForwardOptions &o)
+            const ::Nott::Block::Details::Transformer::LongformerXL::FeedForwardOptions &o)
         {
             PropertyTree t;
             t.put("embed_dim", o.embed_dim);
@@ -1182,7 +1182,7 @@ namespace Omni::Common::SaveLoad {
         }
 
         inline PropertyTree serialize_longformer_layer_norm_options(
-            const ::Omni::Block::Details::Transformer::LongformerXL::LayerNormOptions &o)
+            const ::Nott::Block::Details::Transformer::LongformerXL::LayerNormOptions &o)
         {
             PropertyTree t;
             t.put("eps", o.eps);
@@ -1191,7 +1191,7 @@ namespace Omni::Common::SaveLoad {
         }
 
         inline PropertyTree serialize_longformer_encoder_layer_descriptor(
-            const ::Omni::Block::Details::Transformer::LongformerXL::EncoderLayerDescriptor &d)
+            const ::Nott::Block::Details::Transformer::LongformerXL::EncoderLayerDescriptor &d)
         {
             PropertyTree t;
             t.add_child("attention", serialize_longformer_attention_options(d.attention));
@@ -1200,7 +1200,7 @@ namespace Omni::Common::SaveLoad {
         }
 
         inline PropertyTree serialize_longformer_encoder_options(
-            const ::Omni::Block::Details::Transformer::LongformerXL::EncoderOptions &o)
+            const ::Nott::Block::Details::Transformer::LongformerXL::EncoderOptions &o)
         {
             PropertyTree t;
             t.put("layers", static_cast<std::uint64_t>(o.layers));
@@ -1267,43 +1267,43 @@ namespace Omni::Common::SaveLoad {
             message << "Unknown pooling variant '" << value << "'.";
             throw std::runtime_error(message.str());
         }
-        inline std::string upsample_mode_to_string(::Omni::UpsampleMode mode)
+        inline std::string upsample_mode_to_string(::Nott::UpsampleMode mode)
         {
             switch (mode) {
-                case ::Omni::UpsampleMode::Bilinear: return "bilinear";
-                case ::Omni::UpsampleMode::Bicubic: return "bicubic";
-                case ::Omni::UpsampleMode::Nearest:
+                case ::Nott::UpsampleMode::Bilinear: return "bilinear";
+                case ::Nott::UpsampleMode::Bicubic: return "bicubic";
+                case ::Nott::UpsampleMode::Nearest:
                 default: return "nearest";
             }
         }
 
-        inline ::Omni::UpsampleMode upsample_mode_from_string(const std::string& value, const std::string& context)
+        inline ::Nott::UpsampleMode upsample_mode_from_string(const std::string& value, const std::string& context)
         {
             const auto lowered = to_lower(value);
-            if (lowered == "nearest") return ::Omni::UpsampleMode::Nearest;
-            if (lowered == "bilinear") return ::Omni::UpsampleMode::Bilinear;
-            if (lowered == "bicubic") return ::Omni::UpsampleMode::Bicubic;
+            if (lowered == "nearest") return ::Nott::UpsampleMode::Nearest;
+            if (lowered == "bilinear") return ::Nott::UpsampleMode::Bilinear;
+            if (lowered == "bicubic") return ::Nott::UpsampleMode::Bicubic;
             std::ostringstream message;
             message << "Unknown upsample mode '" << value << "' in " << context;
             throw std::runtime_error(message.str());
         }
 
-        inline std::string downsample_mode_to_string(::Omni::DownsampleMode mode)
+        inline std::string downsample_mode_to_string(::Nott::DownsampleMode mode)
         {
             switch (mode) {
-                case ::Omni::DownsampleMode::Bilinear: return "bilinear";
-                case ::Omni::DownsampleMode::Bicubic: return "bicubic";
-                case ::Omni::DownsampleMode::Nearest:
+                case ::Nott::DownsampleMode::Bilinear: return "bilinear";
+                case ::Nott::DownsampleMode::Bicubic: return "bicubic";
+                case ::Nott::DownsampleMode::Nearest:
                 default: return "nearest";
             }
         }
 
-        inline ::Omni::DownsampleMode downsample_mode_from_string(const std::string& value, const std::string& context)
+        inline ::Nott::DownsampleMode downsample_mode_from_string(const std::string& value, const std::string& context)
         {
             const auto lowered = to_lower(value);
-            if (lowered == "nearest") return ::Omni::DownsampleMode::Nearest;
-            if (lowered == "bilinear") return ::Omni::DownsampleMode::Bilinear;
-            if (lowered == "bicubic") return ::Omni::DownsampleMode::Bicubic;
+            if (lowered == "nearest") return ::Nott::DownsampleMode::Nearest;
+            if (lowered == "bilinear") return ::Nott::DownsampleMode::Bilinear;
+            if (lowered == "bicubic") return ::Nott::DownsampleMode::Bicubic;
             std::ostringstream message;
             message << "Unknown downsample mode '" << value << "' in " << context;
             throw std::runtime_error(message.str());
@@ -2804,7 +2804,7 @@ namespace Omni::Common::SaveLoad {
                     tree.add_child("layers", layers);
                 } else if constexpr (std::is_same_v<
                     DescriptorType,
-                    ::Omni::Block::Details::Transformer::Perceiver::EncoderDescriptor>) {
+                    ::Nott::Block::Details::Transformer::Perceiver::EncoderDescriptor>) {
 
                     tree.put("type", "perceiver_encoder");
 
@@ -2828,7 +2828,7 @@ namespace Omni::Common::SaveLoad {
                     }
                     tree.add_child("layers", layers);
 
-                } else if constexpr (std::is_same_v<DescriptorType, ::Omni::Block::Details::Transformer::Bert::EncoderDescriptor>) {
+                } else if constexpr (std::is_same_v<DescriptorType, ::Nott::Block::Details::Transformer::Bert::EncoderDescriptor>) {
                     tree.put("type", "bert_encoder");
                     tree.put("options.layers", static_cast<std::uint64_t>(concrete.options.layers));
                     tree.put("options.embed_dim", concrete.options.embed_dim);
@@ -2853,7 +2853,7 @@ namespace Omni::Common::SaveLoad {
                     }
                     tree.add_child("layers", layers);
 
-                    } else if constexpr (std::is_same_v<DescriptorType, ::Omni::Block::Details::Transformer::Vision::EncoderDescriptor>) {
+                    } else if constexpr (std::is_same_v<DescriptorType, ::Nott::Block::Details::Transformer::Vision::EncoderDescriptor>) {
 
                         tree.put("type", "vision_encoder");
 
@@ -2887,7 +2887,7 @@ namespace Omni::Common::SaveLoad {
 
                     } else if constexpr (std::is_same_v<
                         DescriptorType,
-                        ::Omni::Block::Details::Transformer::LongformerXL::EncoderDescriptor>) {
+                        ::Nott::Block::Details::Transformer::LongformerXL::EncoderDescriptor>) {
 
                         tree.put("type", "longformer_xl_encoder");
 
@@ -3092,7 +3092,7 @@ namespace Omni::Common::SaveLoad {
             return Block::Descriptor{descriptor};
         }
         if (type == "bert_encoder") {
-            ::Omni::Block::Details::Transformer::Bert::EncoderDescriptor descriptor;
+            ::Nott::Block::Details::Transformer::Bert::EncoderDescriptor descriptor;
             const auto& options_tree = tree.get_child("options");
             descriptor.options = Detail::deserialize_bert_encoder_options(options_tree, context + " bert encoder options");
             for (const auto& node : tree.get_child("layers")) {
@@ -3217,4 +3217,4 @@ namespace Omni::Common::SaveLoad {
         return tree;
     }
 }
-#endif // OMNI_COMMON_SAVE_LOAD_HPP
+#endif // Nott_COMMON_SAVE_LOAD_HPP

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(Omni)
+project(Nott)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
@@ -17,8 +17,8 @@ find_package(Boost REQUIRED COMPONENTS filesystem)
 find_package(OpenCV REQUIRED COMPONENTS core imgcodecs imgproc highgui)
 
 
-add_library(Omni SHARED
-        src/Omni.cpp
+add_library(Nott SHARED
+        src/Nott.cpp
         src/core.hpp
         src/layer/layer.hpp
         src/loss/loss.hpp
@@ -92,11 +92,11 @@ add_library(Omni SHARED
         src/optimizer/registry.hpp)
 
 
-target_link_libraries(Omni "${TORCH_LIBRARIES}" Boost::filesystem ${OpenCV_LIBS})
-target_include_directories(Omni PUBLIC ${CMAKE_SOURCE_DIR}/include ${TORCH_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(Nott "${TORCH_LIBRARIES}" Boost::filesystem ${OpenCV_LIBS})
+target_include_directories(Nott PUBLIC ${CMAKE_SOURCE_DIR}/include ${TORCH_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS})
 
 #Test
-add_executable(test_Omni  test/classification/masks/dubai_segment.cpp #analysis/ntk.cpp #classification/timeseries/ptbxl.cpp #regression/timeseries/etth.cpp #
+add_executable(test_Nott  test/classification/masks/dubai_segment.cpp #analysis/ntk.cpp #classification/timeseries/ptbxl.cpp #regression/timeseries/etth.cpp #
         src/block/details/blocks/residual.hpp
         src/block/details/blocks/sequential.hpp
         src/lrscheduler/details/common.hpp
@@ -199,4 +199,4 @@ add_executable(test_Omni  test/classification/masks/dubai_segment.cpp #analysis/
         src/solver/details/sde.hpp
         src/solver/details/ode.hpp
 )
-target_link_libraries(test_Omni PRIVATE Omni ${OpenCV_LIBS})
+target_link_libraries(test_Nott PRIVATE Nott ${OpenCV_LIBS})

@@ -18,10 +18,10 @@
 #include <torch/torch.h>
 #include <torch/nn/functional.h>
 
-#include "../../../include/Omni.h"
+#include "../../../include/Nott.h"
 
-inline Omni::AsyncPinnedTensor async_pinn_memory(torch::Tensor tensor) {
-    return Omni::async_pin_memory(std::move(tensor));
+inline Nott::AsyncPinnedTensor async_pinn_memory(torch::Tensor tensor) {
+    return Nott::async_pin_memory(std::move(tensor));
 }
 namespace {
     struct ECGDataset {
@@ -119,7 +119,7 @@ namespace {
 
 
     ECGDatasetSplit load_ptbxl_dataset(const std::string& root, bool low_res, float train_split) {
-        auto [train_inputs, train_targets, validation_inputs, validation_targets] = Omni::Data::Load::PTBXL<>(root, low_res, train_split, true, false);
+        auto [train_inputs, train_targets, validation_inputs, validation_targets] = Nott::Data::Load::PTBXL<>(root, low_res, train_split, true, false);
         return {{std::move(train_inputs), std::move(train_targets)}, {std::move(validation_inputs), std::move(validation_targets)}};
     }
 
@@ -160,7 +160,7 @@ namespace {
         torch::Tensor risk_features;
     };
 
-    TrainingArtifacts forward_physics_informed(Omni::Model& model, torch::Tensor inputs, int latent_dim, int param_dim, int num_classes, int leads) {
+    TrainingArtifacts forward_physics_informed(Nott::Model& model, torch::Tensor inputs, int latent_dim, int param_dim, int num_classes, int leads) {
         auto combined = model.forward(std::move(inputs));
 
         const auto splits = combined.split({latent_dim, param_dim, num_classes}, /*dim=*/1);
@@ -181,7 +181,7 @@ namespace {
 }
 
 int main() {
-    Omni::Model model("PTBXL_ECG");
+    Nott::Model model("PTBXL_ECG");
     const bool use_cuda = torch::cuda::is_available();
 
     const auto dataset = load_ptbxl_dataset("/home/moonfloww/Projects/DATASETS/Timeserie/ECG_ACC", true, 0.8f);
@@ -216,8 +216,8 @@ int main() {
     const int64_t latent_dim = leads * 2; // Vm + W per lead
     const int64_t param_dim = 4;
     const int64_t num_classes = dataset.train.labels.max().item<int64_t>() + 1;
-    Omni::Data::Check::Size(train_signals, "Signals");
-    Omni::Data::Check::Size(dataset.train.labels, "Label dims");
+    Nott::Data::Check::Size(train_signals, "Signals");
+    Nott::Data::Check::Size(dataset.train.labels, "Label dims");
 
     std::unordered_set<long> seen;
 
@@ -228,48 +228,48 @@ int main() {
     }
 
 
-    model.add(Omni::Layer::Conv2d({
+    model.add(Nott::Layer::Conv2d({
             .in_channels= leads,.out_channels= 32, .kernel_size= {3, 3}, .stride= {1, 1}, .padding= {1, 1}, .dilation= {1, 1}, .groups= 1, .bias= false},
-            Omni::Activation::SiLU, Omni::Initialization::HeNormal), "conv1");
+            Nott::Activation::SiLU, Nott::Initialization::HeNormal), "conv1");
 
-    model.add(Omni::Layer::Conv2d(
+    model.add(Nott::Layer::Conv2d(
             {.in_channels= 32, .out_channels= 64, .kernel_size= {3, 3}, .stride= {1, 1}, .padding= {2, 1}, .dilation= {2, 1}, .groups= 1, .bias= false},
-            Omni::Activation::SiLU, Omni::Initialization::HeNormal), "conv2");
+            Nott::Activation::SiLU, Nott::Initialization::HeNormal), "conv2");
 
-    model.add(Omni::Layer::Conv2d(
+    model.add(Nott::Layer::Conv2d(
         {.in_channels= 64, .out_channels = 64, .kernel_size= {3, 3}, .stride= {2, 1}, .padding= {1, 1}, .dilation= {1, 1}, .groups= 1, .bias= false},
-        Omni::Activation::SiLU, Omni::Initialization::HeNormal), "conv3");
+        Nott::Activation::SiLU, Nott::Initialization::HeNormal), "conv3");
 
 
-    model.add(Omni::Layer::Conv2d(
+    model.add(Nott::Layer::Conv2d(
         {.in_channels= 64, .out_channels= 128, .kernel_size= {3, 3}, .stride= {1, 1}, .padding= {4, 1}, .dilation= {4, 1}, .groups= 1, .bias= false},
-            Omni::Activation::SiLU, Omni::Initialization::HeNormal), "conv4");
+            Nott::Activation::SiLU, Nott::Initialization::HeNormal), "conv4");
 
-    model.add(Omni::Layer::Conv2d(
+    model.add(Nott::Layer::Conv2d(
         {.in_channels = 128, .out_channels = 128, .kernel_size  = {3, 3}, .stride = {2, 1}, .padding= {1, 1}, .dilation = {1, 1}, .groups = 1, .bias = false},
-        Omni::Activation::SiLU, Omni::Initialization::HeNormal), "conv5");
+        Nott::Activation::SiLU, Nott::Initialization::HeNormal), "conv5");
 
-    model.add(Omni::Layer::Reduce({ .op= Omni::Layer::ReduceOp::Mean, .dims= {2}, .keep_dim = false }), "flat");
+    model.add(Nott::Layer::Reduce({ .op= Nott::Layer::ReduceOp::Mean, .dims= {2}, .keep_dim = false }), "flat");
 
 
-    model.add(Omni::Layer::xLSTM(
+    model.add(Nott::Layer::xLSTM(
 { .input_size   = input_features, .hidden_size  = 128, .num_layers= 3, .dropout= 0.1, .batch_first= true, .bidirectional=true },
-        Omni::Activation::Identity, Omni::Initialization::XavierUniform), "lstm");
+        Nott::Activation::Identity, Nott::Initialization::XavierUniform), "lstm");
 
-    model.add(Omni::Layer::Reduce({ .op= Omni::Layer::ReduceOp::Mean, .dims= {1}, .keep_dim = false }), "Reduc");
+    model.add(Nott::Layer::Reduce({ .op= Nott::Layer::ReduceOp::Mean, .dims= {1}, .keep_dim = false }), "Reduc");
 
-    model.add(Omni::Layer::SoftDropout({ .probability = 0.3}), "SD1");
-    model.add(Omni::Layer::FC({256, 128, true}, Omni::Activation::SiLU, Omni::Initialization::HeNormal), "fc1");
-    model.add(Omni::Layer::HardDropout({ .probability = 0.2 }), "HD1");
-    model.add(Omni::Layer::FC({128, latent_dim + param_dim + num_classes, true}, Omni::Activation::Identity, Omni::Initialization::HeNormal), "heads");
+    model.add(Nott::Layer::SoftDropout({ .probability = 0.3}), "SD1");
+    model.add(Nott::Layer::FC({256, 128, true}, Nott::Activation::SiLU, Nott::Initialization::HeNormal), "fc1");
+    model.add(Nott::Layer::HardDropout({ .probability = 0.2 }), "HD1");
+    model.add(Nott::Layer::FC({128, latent_dim + param_dim + num_classes, true}, Nott::Activation::Identity, Nott::Initialization::HeNormal), "heads");
 
 
     auto parameters = model.parameters();
     torch::optim::AdamW optimizer(parameters, torch::optim::AdamWOptions(2e-4).weight_decay(1e-4));
 
-    Omni::Data::Transform::Normalization::Zscore(train_signals, {.lag=30, .forward_only=true});
-    Omni::Data::Transform::Normalization::Zscore(validation_signals, {.lag=30, .forward_only=true});
-    Omni::Data::Check::Size(train_signals, "Zscore");
+    Nott::Data::Transform::Normalization::Zscore(train_signals, {.lag=30, .forward_only=true});
+    Nott::Data::Transform::Normalization::Zscore(validation_signals, {.lag=30, .forward_only=true});
+    Nott::Data::Check::Size(train_signals, "Zscore");
 
     model.use_cuda(use_cuda);
     const auto device = model.device();
@@ -337,10 +337,10 @@ int main() {
         auto x_val   = train_signals.index_select(0, f.val_indices);
         auto y_val   = dataset.train.labels.index_select(0, f.val_indices);
 
-        Omni::Data::Check::Size(x_train, "Fold train signals");
-        Omni::Data::Check::Size(y_train, "Fold train labels");
-        Omni::Data::Check::Size(x_val,   "Fold val signals");
-        Omni::Data::Check::Size(y_val,   "Fold val labels");
+        Nott::Data::Check::Size(x_train, "Fold train signals");
+        Nott::Data::Check::Size(y_train, "Fold train labels");
+        Nott::Data::Check::Size(x_val,   "Fold val signals");
+        Nott::Data::Check::Size(y_val,   "Fold val labels");
 
         for (int64_t epoch = 0; epoch < epochs; ++epoch) {
             const auto train_loss = run_epoch(x_train, y_train, true);
@@ -355,29 +355,29 @@ int main() {
         std::cout << "\nFold " << (fold + 1) << " evaluation..." << std::endl;
         model.evaluate(
             x_val, y_val,
-            Omni::Evaluation::Classification,
+            Nott::Evaluation::Classification,
             {
-                Omni::Metric::Classification::Accuracy,
-                Omni::Metric::Classification::F1,
-                Omni::Metric::Classification::Precision,
-                Omni::Metric::Classification::Recall,
-                Omni::Metric::Classification::AUCROC,
+                Nott::Metric::Classification::Accuracy,
+                Nott::Metric::Classification::F1,
+                Nott::Metric::Classification::Precision,
+                Nott::Metric::Classification::Recall,
+                Nott::Metric::Classification::AUCROC,
             },
             {.batch_size = static_cast<std::size_t>(batch_size), .buffer_vram = 1, .print_per_class=false}
         ); std::cout << "\n" << std::endl;
         */
     }
 
-    std::vector<Omni::Metric::Classification::Descriptor> metrics;
+    std::vector<Nott::Metric::Classification::Descriptor> metrics;
 
 
     std::cout << "\nRunning evaluation..." << std::endl;
-    model.evaluate(validation_signals, dataset.validation.labels, Omni::Evaluation::Classification, {
-        Omni::Metric::Classification::Accuracy,
-        Omni::Metric::Classification::F1,
-        Omni::Metric::Classification::Precision,
-        Omni::Metric::Classification::Recall,
-        Omni::Metric::Classification::AUCROC,
+    model.evaluate(validation_signals, dataset.validation.labels, Nott::Evaluation::Classification, {
+        Nott::Metric::Classification::Accuracy,
+        Nott::Metric::Classification::F1,
+        Nott::Metric::Classification::Precision,
+        Nott::Metric::Classification::Recall,
+        Nott::Metric::Classification::AUCROC,
         }, {.batch_size=static_cast<std::size_t>(batch_size), .buffer_vram=1});
 
     return 0;

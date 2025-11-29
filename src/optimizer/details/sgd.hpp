@@ -1,5 +1,5 @@
-#ifndef OMNI_SGD_HPP
-#define OMNI_SGD_HPP
+#ifndef Nott_SGD_HPP
+#define Nott_SGD_HPP
 
 #include <stdexcept>
 #include <torch/torch.h>
@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <memory>
 
-namespace Omni::Optimizer::Details {
+namespace Nott::Optimizer::Details {
 
     struct SGDOptions {
         double learning_rate{1e-2};
@@ -131,6 +131,6 @@ namespace Omni::Optimizer::Details {
 
     using SGDOptimizer = SGD;
 
-} // namespace Omni::Optimizer::Details
+} // namespace Nott::Optimizer::Details
 
-#endif //OMNI_SGD_HPP
+#endif //Nott_SGD_HPP

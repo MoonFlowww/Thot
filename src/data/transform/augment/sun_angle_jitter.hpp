@@ -1,5 +1,5 @@
-#ifndef OMNI_DATA_TRANSFORM_AUGMENTATION_SUN_ANGLE_JITTER_HPP
-#define OMNI_DATA_TRANSFORM_AUGMENTATION_SUN_ANGLE_JITTER_HPP
+#ifndef Nott_DATA_TRANSFORM_AUGMENTATION_SUN_ANGLE_JITTER_HPP
+#define Nott_DATA_TRANSFORM_AUGMENTATION_SUN_ANGLE_JITTER_HPP
 
 #include <cmath>
 #include <optional>
@@ -9,7 +9,7 @@
 
 #include "common.hpp"
 
-namespace Omni::Data::Transform::Augmentation {
+namespace Nott::Data::Transform::Augmentation {
     namespace Options {
         struct SunAngleJitterOptions {
             double base_angle_degrees = 45.0;
@@ -59,4 +59,4 @@ namespace Omni::Data::Transform::Augmentation {
     }
 }
 
-#endif // OMNI_DATA_TRANSFORM_AUGMENTATION_SUN_ANGLE_JITTER_HPP
+#endif // Nott_DATA_TRANSFORM_AUGMENTATION_SUN_ANGLE_JITTER_HPP

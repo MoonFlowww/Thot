@@ -1,21 +1,21 @@
 # Local Configuration and Custom Routing
 
-Omni allows every layer or block to carry its own training scope (optimizer, loss,
+Nott allows every layer or block to carry its own training scope (optimizer, loss,
 regularization) while also exposing a routing DSL to wire complex data flows
 between modules. This document summarises the local configuration knobs and shows
 how to remap the forward graph with `Model::links`.
 
 ## Local definitions
 
-### `Omni::LocalConfig`
-`Omni::LocalConfig` bundles three optional pieces of configuration that can be
+### `Nott::LocalConfig`
+`Nott::LocalConfig` bundles three optional pieces of configuration that can be
 attached to a module descriptor:
 
 | Field | Type | Effect |
 | --- | --- | --- |
-| `optimizer` | `std::optional<Omni::Optimizer::Descriptor>` | Replaces the model-wide optimizer for the owning module. |
-| `loss` | `std::optional<Omni::Loss::Descriptor>` | Serialised with the architecture for future use. |
-| `regularization` | `std::vector<Omni::Regularization::Descriptor>` | Registers penalties that only touch the owning module’s parameters. |
+| `optimizer` | `std::optional<Nott::Optimizer::Descriptor>` | Replaces the model-wide optimizer for the owning module. |
+| `loss` | `std::optional<Nott::Loss::Descriptor>` | Serialised with the architecture for future use. |
+| `regularization` | `std::vector<Nott::Regularization::Descriptor>` | Registers penalties that only touch the owning module’s parameters. |
 
 The structure lives in `src/common/local.hpp` and is fully serialised when a
 model is saved, so local scopes survive round-trips through
@@ -28,17 +28,17 @@ keeps the global behaviour, while filling any field activates the override on
 that specific descriptor.[Src/Layer: Layer factory overloads](../../../src/layer/layer.hpp#L92-L138) [code: Block factory overloads](../../../src/block/block.hpp#L48-L80)
 
 ```cpp
-Omni::LocalConfig bottleneck_scope{
-    .optimizer = Omni::Optimizer::AdamW({.learning_rate = 3e-4f}),
+Nott::LocalConfig bottleneck_scope{
+    .optimizer = Nott::Optimizer::AdamW({.learning_rate = 3e-4f}),
     .regularization = {/*vector field*/
-        Omni::Regularization::L2({.coefficient=0.f})
+        Nott::Regularization::L2({.coefficient=0.f})
     }
 };
 
 model.add(
-    Omni::Layer::FC({1024, 256, /*bias*/true},
-        Omni::Activation::GeLU,
-        Omni::Initialization::HeNormal,
+    Nott::Layer::FC({1024, 256, /*bias*/true},
+        Nott::Activation::GeLU,
+        Nott::Initialization::HeNormal,
         bottleneck_scope), "bottleneck");
 ```
 

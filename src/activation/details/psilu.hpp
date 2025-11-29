@@ -1,5 +1,5 @@
-#ifndef OMNI_PSILU_HPP
-#define OMNI_PSILU_HPP
+#ifndef Nott_PSILU_HPP
+#define Nott_PSILU_HPP
 
 #include <torch/torch.h>
 
@@ -7,7 +7,7 @@
 
 #include "../activation.hpp"
 
-namespace Omni::Activation::Details {
+namespace Nott::Activation::Details {
 
     struct PSiLU {
         [[nodiscard]] torch::Tensor operator()(torch::Tensor input) const {
@@ -18,4 +18,4 @@ namespace Omni::Activation::Details {
     };
 
 }
-#endif //OMNI_PSILU_HPP
+#endif //Nott_PSILU_HPP

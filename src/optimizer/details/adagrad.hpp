@@ -1,5 +1,5 @@
-#ifndef OMNI_ADAGRAD_HPP
-#define OMNI_ADAGRAD_HPP
+#ifndef Nott_ADAGRAD_HPP
+#define Nott_ADAGRAD_HPP
 
 
 
@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <memory>
 
-namespace Omni::Optimizer::Details {
+namespace Nott::Optimizer::Details {
 
     struct AdagradOptions {
         double learning_rate{1e-2};
@@ -143,4 +143,4 @@ namespace Omni::Optimizer::Details {
 
 }
 
-#endif // OMNI_ADAGRAD_HPP
+#endif // Nott_ADAGRAD_HPP

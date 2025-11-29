@@ -1,5 +1,5 @@
-#ifndef OMNI_CONV_HPP
-#define OMNI_CONV_HPP
+#ifndef Nott_CONV_HPP
+#define Nott_CONV_HPP
 //https://hal.science/hal-05083427/document
 #include <cstdint>
 #include <string>
@@ -13,7 +13,7 @@
 #include "../../common/local.hpp"
 #include "../registry.hpp"
 
-namespace Omni::Layer::Details {
+namespace Nott::Layer::Details {
 
 
     struct Conv1dOptions {
@@ -30,9 +30,9 @@ namespace Omni::Layer::Details {
 
     struct Conv1dDescriptor {
         Conv1dOptions options{};
-        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
-        ::Omni::Initialization::Descriptor initialization{::Omni::Initialization::Default};
-        ::Omni::LocalConfig local{};
+        ::Nott::Activation::Descriptor activation{::Nott::Activation::Identity};
+        ::Nott::Initialization::Descriptor initialization{::Nott::Initialization::Default};
+        ::Nott::LocalConfig local{};
     };
 
 
@@ -50,9 +50,9 @@ namespace Omni::Layer::Details {
 
     struct Conv2dDescriptor {
         Conv2dOptions options{};
-        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
-        ::Omni::Initialization::Descriptor initialization{::Omni::Initialization::Default};
-        ::Omni::LocalConfig local{};
+        ::Nott::Activation::Descriptor activation{::Nott::Activation::Identity};
+        ::Nott::Initialization::Descriptor initialization{::Nott::Initialization::Default};
+        ::Nott::LocalConfig local{};
     };
 
     template <typename T, typename = void>
@@ -126,7 +126,7 @@ namespace Omni::Layer::Details {
                 apply_memory_format(module, torch::MemoryFormat::ChannelsLast);
             }
         }
-        ::Omni::Initialization::Details::apply_module_initialization(module, descriptor);
+        ::Nott::Initialization::Details::apply_module_initialization(module, descriptor);
 
         RegisteredLayer registered_layer{};
         registered_layer.activation = descriptor.activation.type;
@@ -180,7 +180,7 @@ namespace Omni::Layer::Details {
                 apply_memory_format(module, torch::MemoryFormat::ChannelsLast);
             }
         }
-        ::Omni::Initialization::Details::apply_module_initialization(module, descriptor);
+        ::Nott::Initialization::Details::apply_module_initialization(module, descriptor);
 
         RegisteredLayer registered_layer{};
         registered_layer.activation = descriptor.activation.type;
@@ -192,4 +192,4 @@ namespace Omni::Layer::Details {
 
 }
 
-#endif //OMNI_CONV_HPP
+#endif //Nott_CONV_HPP

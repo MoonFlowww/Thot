@@ -1,5 +1,5 @@
-#ifndef OMNI_LIBRARY_H
-#define OMNI_LIBRARY_H
+#ifndef Nott_LIBRARY_H
+#define Nott_LIBRARY_H
 
 #include "../src/core.hpp"
 #include "../src/layer/layer.hpp"
@@ -22,4 +22,4 @@
 //  - Provide a single spot to toggle build flags (concept checks, static
 //    assertions, compile-time diagnostics) once the runtime skeleton is ready.
 
-#endif // OMNI_LIBRARY_H
+#endif // Nott_LIBRARY_H

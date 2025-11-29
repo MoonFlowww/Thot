@@ -1,5 +1,5 @@
-#ifndef OMNI_FLATTEN_HPP
-#define OMNI_FLATTEN_HPP
+#ifndef Nott_FLATTEN_HPP
+#define Nott_FLATTEN_HPP
 #include <cstdint>
 #include <utility>
 
@@ -9,7 +9,7 @@
 #include "../../common/local.hpp"
 #include "../registry.hpp"
 
-namespace Omni::Layer::Details {
+namespace Nott::Layer::Details {
 
     struct FlattenOptions {
         std::int64_t start_dim{1};
@@ -51,8 +51,8 @@ namespace Omni::Layer::Details {
 
     struct FlattenDescriptor {
         FlattenOptions options{};
-        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
-        ::Omni::LocalConfig local{};
+        ::Nott::Activation::Descriptor activation{::Nott::Activation::Identity};
+        ::Nott::LocalConfig local{};
     };
 
     template <class Owner>
@@ -70,4 +70,4 @@ namespace Omni::Layer::Details {
 
 }
 
-#endif //OMNI_FLATTEN_HPP
+#endif //Nott_FLATTEN_HPP

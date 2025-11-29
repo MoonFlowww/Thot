@@ -1,5 +1,5 @@
-#ifndef OMNI_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_PCA_HPP
-#define OMNI_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_PCA_HPP
+#ifndef Nott_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_PCA_HPP
+#define Nott_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_PCA_HPP
 
 #include <algorithm>
 #include <cstddef>
@@ -11,7 +11,7 @@
 #include "common.hpp"
 #include "../../../core.hpp"
 
-namespace Omni::Data::Transform::DimensionalityReduction {
+namespace Nott::Data::Transform::DimensionalityReduction {
     struct PCAResult {
         torch::Tensor components;
         torch::Tensor explained_variance;
@@ -107,4 +107,4 @@ namespace Omni::Data::Transform::DimensionalityReduction {
     }
 }
 
-#endif // OMNI_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_PCA_HPP
+#endif // Nott_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_PCA_HPP

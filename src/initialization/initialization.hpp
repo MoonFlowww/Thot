@@ -1,8 +1,8 @@
-#ifndef OMNI_INITIALIZATION_HPP
-#define OMNI_INITIALIZATION_HPP
+#ifndef Nott_INITIALIZATION_HPP
+#define Nott_INITIALIZATION_HPP
 // This file is a factory, must exempt it from any logical-code. For functions look into "/details"
 
-namespace Omni::Initialization {
+namespace Nott::Initialization {
     enum class Type {
         Default,
         XavierNormal,
@@ -28,4 +28,4 @@ namespace Omni::Initialization {
     inline constexpr Descriptor Lyapunov{Type::Lyapunov};
 }
 
-#endif //OMNI_INITIALIZATION_HPP
+#endif //Nott_INITIALIZATION_HPP

@@ -1,10 +1,10 @@
-#ifndef OMNI_LOSS_REDUCTION_HPP
-#define OMNI_LOSS_REDUCTION_HPP
+#ifndef Nott_LOSS_REDUCTION_HPP
+#define Nott_LOSS_REDUCTION_HPP
 
 #include <torch/torch.h>
 #include <type_traits>
 
-namespace Omni::Loss::Details {
+namespace Nott::Loss::Details {
 
     enum class Reduction { Mean, Sum, None };
 
@@ -40,4 +40,4 @@ namespace Omni::Loss::Details {
 
 }
 
-#endif // OMNI_LOSS_REDUCTION_HPP
+#endif // Nott_LOSS_REDUCTION_HPP

@@ -1,8 +1,8 @@
-#ifndef OMNI_LOSS_HELPER_HPP
-#define OMNI_LOSS_HELPER_HPP
+#ifndef Nott_LOSS_HELPER_HPP
+#define Nott_LOSS_HELPER_HPP
 #include "reduction.hpp"
 
-namespace Omni::Loss::Details {
+namespace Nott::Loss::Details {
 
     inline torch::Tensor apply_reduction_weighted(torch::Tensor loss, const torch::Tensor& weight, Reduction reduction) {
         auto w = weight.to(loss.options()).expand_as(loss);
@@ -21,4 +21,4 @@ namespace Omni::Loss::Details {
         }
     }
 }
-#endif //OMNI_LOSS_HELPER_HPP
+#endif //Nott_LOSS_HELPER_HPP

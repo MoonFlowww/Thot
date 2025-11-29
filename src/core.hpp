@@ -1,5 +1,5 @@
-#ifndef OMNI_CORE_HPP
-#define OMNI_CORE_HPP
+#ifndef Nott_CORE_HPP
+#define Nott_CORE_HPP
 /*
  * Core orchestrator of the framework.
  * ---------------------------------------------------------------------------
@@ -94,7 +94,7 @@
 #include "solver/solver.hpp"
 #include "training/kfold.hpp"
 
-namespace Omni {
+namespace Nott {
     template <class... Ts>
     struct Overloaded : Ts... {
         using Ts::operator()...;
@@ -4622,7 +4622,7 @@ namespace Omni {
                 flush_pending_epoch_logs(true);
                 if (options.restore_best_state && best_state_captured) {
                     [[maybe_unused]] const auto train_loss = last_train_loss_scalar.materialize();
-                    std::cout << "[Omni] Reloading best state of the network..." << std::endl;
+                    std::cout << "[Nott] Reloading best state of the network..." << std::endl;
                     torch::NoGradGuard no_grad{};
                     auto parameters = model.parameters();
                     const auto parameter_limit = std::min(parameters.size(), best_parameters.size());
@@ -5102,7 +5102,7 @@ namespace Omni {
 
 #include "plot/plot.hpp"
 
-namespace Omni {
+namespace Nott {
     template <class Descriptor, class... Args>
     decltype(auto) Model::plot(Descriptor descriptor, Args&&... args) {
         return Plot::Render(*this,
@@ -5110,4 +5110,4 @@ namespace Omni {
                             std::forward<Args>(args)...);
     }
 }
-#endif //OMNI_CORE_HPP
+#endif //Nott_CORE_HPP

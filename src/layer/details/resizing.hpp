@@ -1,5 +1,5 @@
-#ifndef OMNI_LAYER_RESIZING_HPP
-#define OMNI_LAYER_RESIZING_HPP
+#ifndef Nott_LAYER_RESIZING_HPP
+#define Nott_LAYER_RESIZING_HPP
 
 #include <cstdint>
 #include <stdexcept>
@@ -13,7 +13,7 @@
 #include "../../common/local.hpp"
 #include "../registry.hpp"
 
-namespace Omni {
+namespace Nott {
     enum class UpsampleMode {
         Nearest,
         Bilinear,
@@ -27,7 +27,7 @@ namespace Omni {
     };
 }
 
-namespace Omni::Layer::Details {
+namespace Nott::Layer::Details {
 
     inline torch::nn::functional::InterpolateFuncOptions::mode_t to_interpolate_mode(UpsampleMode mode)
     {
@@ -146,14 +146,14 @@ namespace Omni::Layer::Details {
 
     struct UpsampleDescriptor {
         UpsampleOptions options{};
-        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
-        ::Omni::LocalConfig local{};
+        ::Nott::Activation::Descriptor activation{::Nott::Activation::Identity};
+        ::Nott::LocalConfig local{};
     };
 
     struct DownsampleDescriptor {
         DownsampleOptions options{};
-        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
-        ::Omni::LocalConfig local{};
+        ::Nott::Activation::Descriptor activation{::Nott::Activation::Identity};
+        ::Nott::LocalConfig local{};
     };
 
     template <class Owner>
@@ -183,4 +183,4 @@ namespace Omni::Layer::Details {
     }
 }
 
-#endif // OMNI_LAYER_RESIZING_HPP
+#endif // Nott_LAYER_RESIZING_HPP

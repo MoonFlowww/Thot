@@ -1,5 +1,5 @@
-#ifndef OMNI_SWIGLU_HPP
-#define OMNI_SWIGLU_HPP
+#ifndef Nott_SWIGLU_HPP
+#define Nott_SWIGLU_HPP
 // "PaLM: Scaling Language Modeling with Pathways" (introduces SwiGLU) https://arxiv.org/pdf/2204.02311
 #include <torch/torch.h>
 
@@ -8,7 +8,7 @@
 
 #include "../activation.hpp"
 
-namespace Omni::Activation::Details {
+namespace Nott::Activation::Details {
 
     struct SwiGLU {
         [[nodiscard]] torch::Tensor operator()(torch::Tensor input) const {
@@ -26,4 +26,4 @@ namespace Omni::Activation::Details {
 
 }
 
-#endif //OMNI_SWIGLU_HPP
+#endif //Nott_SWIGLU_HPP

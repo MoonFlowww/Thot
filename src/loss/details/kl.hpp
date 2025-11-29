@@ -1,5 +1,5 @@
-#ifndef OMNI_LOSS_KL_HPP
-#define OMNI_LOSS_KL_HPP
+#ifndef Nott_LOSS_KL_HPP
+#define Nott_LOSS_KL_HPP
 #include <optional>
 #include <stdexcept>
 
@@ -7,7 +7,7 @@
 
 #include "reduction.hpp"
 
-namespace Omni::Loss::Details {
+namespace Nott::Loss::Details {
     struct KLDivOptions {
         Reduction reduction{Reduction::Mean};
         bool log_target{false};
@@ -53,4 +53,4 @@ namespace Omni::Loss::Details {
         return torch::nn::functional::kl_div(input, tgt, opts);
     }
 }
-#endif //OMNI_LOSS_KL_HPP
+#endif //Nott_LOSS_KL_HPP

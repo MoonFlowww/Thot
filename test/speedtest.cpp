@@ -1,5 +1,5 @@
 #include <torch/torch.h>
-#include <../include/Omni.h>
+#include <../include/Nott.h>
 #include <chrono>
 #include <limits>
 #include <string>
@@ -297,25 +297,25 @@ namespace LatencyUtils {
 
 }
 
-inline Omni::Loss::Details::CrossEntropyDescriptor set(Omni::Model& model, const bool&device) { // Used to reset learnable parameters between Omni PreBuild and Omni Custom
-    model.add(Omni::Layer::Conv2d({.in_channels = 1,  .out_channels = 32,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Omni::Activation::ReLU, Omni::Initialization::HeUniform));
-    model.add(Omni::Layer::Conv2d({.in_channels = 32, .out_channels = 32,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Omni::Activation::ReLU, Omni::Initialization::HeUniform));
-    model.add(Omni::Layer::MaxPool2d({.kernel_size={2,2}, .stride={2,2}, .padding={0,0}}));
+inline Nott::Loss::Details::CrossEntropyDescriptor set(Nott::Model& model, const bool&device) { // Used to reset learnable parameters between Nott PreBuild and Nott Custom
+    model.add(Nott::Layer::Conv2d({.in_channels = 1,  .out_channels = 32,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Nott::Activation::ReLU, Nott::Initialization::HeUniform));
+    model.add(Nott::Layer::Conv2d({.in_channels = 32, .out_channels = 32,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Nott::Activation::ReLU, Nott::Initialization::HeUniform));
+    model.add(Nott::Layer::MaxPool2d({.kernel_size={2,2}, .stride={2,2}, .padding={0,0}}));
 
-    model.add(Omni::Layer::Conv2d({.in_channels = 32, .out_channels = 64,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Omni::Activation::ReLU, Omni::Initialization::HeUniform));
-    model.add(Omni::Layer::Conv2d({.in_channels = 64, .out_channels = 64,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Omni::Activation::ReLU, Omni::Initialization::HeUniform));
-    model.add(Omni::Layer::MaxPool2d({.kernel_size={2,2}, .stride={2,2}, .padding={0,0}}));
+    model.add(Nott::Layer::Conv2d({.in_channels = 32, .out_channels = 64,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Nott::Activation::ReLU, Nott::Initialization::HeUniform));
+    model.add(Nott::Layer::Conv2d({.in_channels = 64, .out_channels = 64,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Nott::Activation::ReLU, Nott::Initialization::HeUniform));
+    model.add(Nott::Layer::MaxPool2d({.kernel_size={2,2}, .stride={2,2}, .padding={0,0}}));
 
-    model.add(Omni::Layer::Conv2d({.in_channels = 64, .out_channels = 128, .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Omni::Activation::ReLU, Omni::Initialization::HeUniform));
-    model.add(Omni::Layer::MaxPool2d({.kernel_size={2,2}, .stride={2,2}, .padding={0,0}}));
+    model.add(Nott::Layer::Conv2d({.in_channels = 64, .out_channels = 128, .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Nott::Activation::ReLU, Nott::Initialization::HeUniform));
+    model.add(Nott::Layer::MaxPool2d({.kernel_size={2,2}, .stride={2,2}, .padding={0,0}}));
 
-    model.add(Omni::Layer::Flatten());
-    model.add(Omni::Layer::FC({1152, 524}, Omni::Activation::ReLU,  Omni::Initialization::HeUniform));
-    model.add(Omni::Layer::FC({524, 126},  Omni::Activation::ReLU,  Omni::Initialization::HeUniform));
-    model.add(Omni::Layer::FC({126, 10},   Omni::Activation::Identity, Omni::Initialization::HeUniform));
+    model.add(Nott::Layer::Flatten());
+    model.add(Nott::Layer::FC({1152, 524}, Nott::Activation::ReLU,  Nott::Initialization::HeUniform));
+    model.add(Nott::Layer::FC({524, 126},  Nott::Activation::ReLU,  Nott::Initialization::HeUniform));
+    model.add(Nott::Layer::FC({126, 10},   Nott::Activation::Identity, Nott::Initialization::HeUniform));
 
-    model.set_optimizer(Omni::Optimizer::SGD({.learning_rate = 1e-3}));
-    const auto ce = Omni::Loss::CrossEntropy({.label_smoothing = 0.02f});
+    model.set_optimizer(Nott::Optimizer::SGD({.learning_rate = 1e-3}));
+    const auto ce = Nott::Loss::CrossEntropy({.label_smoothing = 0.02f});
     model.set_loss(ce);
     model.use_cuda(device);
     return ce;
@@ -323,7 +323,7 @@ inline Omni::Loss::Details::CrossEntropyDescriptor set(Omni::Model& model, const
 
 
 static torch::Tensor stage_for_device(torch::Tensor tensor, const bool& device) { const auto dev = device ? torch::kCUDA : torch::kCPU;
-    auto pinned = Omni::async_pin_memory(std::move(tensor));
+    auto pinned = Nott::async_pin_memory(std::move(tensor));
     auto host_tensor = pinned.materialize();
     const bool non_blocking = device && host_tensor.is_pinned();
     return host_tensor.to(dev, host_tensor.scalar_type(), non_blocking);
@@ -438,33 +438,33 @@ static ClassificationMetrics evaluate_classifier(ForwardFn&& forward_fn, const t
 
 
 int main() {
-    auto [x1, y1, x2, y2] = Omni::Data::Load::MNIST("/home/moonfloww/Projects/DATASETS/Image/MNIST", 1.f, 1.f, true);
+    auto [x1, y1, x2, y2] = Nott::Data::Load::MNIST("/home/moonfloww/Projects/DATASETS/Image/MNIST", 1.f, 1.f, true);
     const bool IsCuda = torch::cuda::is_available();
     const int64_t epochs= 100;
     const int64_t B= 64;
     const int64_t num_classes = 10;
     const int64_t N= x1.size(0);
-    Omni::Data::Check::Size(x1);
+    Nott::Data::Check::Size(x1);
 
     const int64_t steps_per_epoch = (N + B - 1) / B;
     const std::size_t total_steps_estimate = static_cast<std::size_t>(epochs * steps_per_epoch);
 
-    std::vector<double> omni_prebuilt_samples;
-    std::vector<double> omni_custom_samples;
+    std::vector<double> Nott_prebuilt_samples;
+    std::vector<double> Nott_custom_samples;
     std::vector<double> libtorch_samples;
 
-    omni_prebuilt_samples.reserve(total_steps_estimate);
-    omni_custom_samples.reserve(total_steps_estimate);
+    Nott_prebuilt_samples.reserve(total_steps_estimate);
+    Nott_custom_samples.reserve(total_steps_estimate);
     libtorch_samples.reserve(total_steps_estimate);
 
-    ClassificationMetrics omni_prebuilt_metrics;
-    ClassificationMetrics omni_custom_metrics;
+    ClassificationMetrics Nott_prebuilt_metrics;
+    ClassificationMetrics Nott_custom_metrics;
     ClassificationMetrics libtorch_metrics;
 
 
-    // Omni built-in train()
-    std::cout << "training 100% Omni" << std::endl;
-    Omni::Model model1("");
+    // Nott built-in train()
+    std::cout << "training 100% Nott" << std::endl;
+    Nott::Model model1("");
     set(model1, IsCuda); // define the network
     model1.clear_training_telemetry(); // not necessary
     model1.train(x1, y1, {.epoch = epochs, .batch_size = B, .monitor = false , .enable_amp = false});
@@ -489,17 +489,17 @@ int main() {
 
         const double step_latency_ms = step_latency_sec * 1000.0;
         for (std::size_t s = 0; s < epoch_steps; ++s) {
-            omni_prebuilt_samples.push_back(step_latency_ms);
+            Nott_prebuilt_samples.push_back(step_latency_ms);
         }
     }
     model1.eval();
-    omni_prebuilt_metrics = evaluate_classifier(
+    Nott_prebuilt_metrics = evaluate_classifier(
         [&](const torch::Tensor& inputs) { return model1.forward(inputs); }, x2, y2, B, IsCuda, num_classes);
 
 
-    // 50% Omni (manual training loop using Omni modelf
-    std::cout << "training 50% Omni" << std::endl;
-    Omni::Model model2("");
+    // 50% Nott (manual training loop using Nott modelf
+    std::cout << "training 50% Nott" << std::endl;
+    Nott::Model model2("");
     const auto ce = set(model2, IsCuda); // define the network
     model2.clear_training_telemetry(); // not necessary
     for (int64_t e = 0; e < epochs; ++e) {
@@ -511,17 +511,17 @@ int main() {
 
             model2.zero_grad();
             auto logits = model2.forward(inputs);
-            auto loss   = Omni::Loss::Details::compute(ce, logits, targets);
+            auto loss   = Nott::Loss::Details::compute(ce, logits, targets);
             loss.backward();
             model2.step();
 
             auto step_end = std::chrono::high_resolution_clock::now();
             double step_ms = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(step_end - step_start).count();
-            omni_custom_samples.push_back(step_ms);
+            Nott_custom_samples.push_back(step_ms);
         }
     }
     model2.eval();
-    omni_custom_metrics = evaluate_classifier(
+    Nott_custom_metrics = evaluate_classifier(
         [&](const torch::Tensor& inputs) { return model2.forward(inputs); }, x2, y2, B, IsCuda, num_classes);
 
 
@@ -559,17 +559,17 @@ int main() {
     // Compute stats
     std::cout << "\n\n\n";
 
-    const LatencyUtils::StepLatencyStats omni_prebuilt_stats =
-        LatencyUtils::build_stats_from_samples("Omni Train() (warmup+Tukey 0.98)", omni_prebuilt_samples, 200, 0.98);
+    const LatencyUtils::StepLatencyStats Nott_prebuilt_stats =
+        LatencyUtils::build_stats_from_samples("Nott Train() (warmup+Tukey 0.98)", Nott_prebuilt_samples, 200, 0.98);
 
-    const LatencyUtils::StepLatencyStats omni_custom_stats =
-        LatencyUtils::build_stats_from_samples("Omni + Custom Train() (warmup+Tukey 0.98)", omni_custom_samples, 200, 0.98);
+    const LatencyUtils::StepLatencyStats Nott_custom_stats =
+        LatencyUtils::build_stats_from_samples("Nott + Custom Train() (warmup+Tukey 0.98)", Nott_custom_samples, 200, 0.98);
 
     const LatencyUtils::StepLatencyStats libtorch_stats =
         LatencyUtils::build_stats_from_samples("Libtorch Raw (warmup+Tukey 0.98)", libtorch_samples, 200, 0.98);
 
-    print_stats(omni_prebuilt_stats);
-    print_stats(omni_custom_stats);
+    print_stats(Nott_prebuilt_stats);
+    print_stats(Nott_custom_stats);
     print_stats(libtorch_stats);
 
     auto compute_overhead = [](double lhs, double rhs) {
@@ -577,20 +577,20 @@ int main() {
         return (lhs - rhs) / rhs * 100.0;
     };
 
-    const double OmniPreBuild = omni_prebuilt_stats.average_ms();
-    const double Omnicustom = omni_custom_stats.average_ms();
+    const double NottPreBuild = Nott_prebuilt_stats.average_ms();
+    const double Nottcustom = Nott_custom_stats.average_ms();
     const double LibTorchRaw  = libtorch_stats.average_ms();
 
 
     std::cout << "\n\nOverhead %" << std::endl;
-    std::cout << "   Omni vs Libtorch Overhead: " << compute_overhead(OmniPreBuild, LibTorchRaw) << "%\n";
-    std::cout << "   Omni PreBuild Train() vs Custom Train() Overhead: " << compute_overhead(OmniPreBuild, Omnicustom) << "%\n";
-    std::cout << "   Omni Custom Train() vs Libtorch Overhead: " << compute_overhead(Omnicustom, LibTorchRaw) << "%\n";
+    std::cout << "   Nott vs Libtorch Overhead: " << compute_overhead(NottPreBuild, LibTorchRaw) << "%\n";
+    std::cout << "   Nott PreBuild Train() vs Custom Train() Overhead: " << compute_overhead(NottPreBuild, Nottcustom) << "%\n";
+    std::cout << "   Nott Custom Train() vs Libtorch Overhead: " << compute_overhead(Nottcustom, LibTorchRaw) << "%\n";
 
 
     std::cout << "\nClassification Metrics (macro-averaged)\n";
-    print_metrics("Omni Train()", omni_prebuilt_metrics);
-    print_metrics("Omni Custom Train()", omni_custom_metrics);
+    print_metrics("Nott Train()", Nott_prebuilt_metrics);
+    print_metrics("Nott Custom Train()", Nott_custom_metrics);
     print_metrics("LibTorch", libtorch_metrics);
 
     return 0;

@@ -1,5 +1,5 @@
-#ifndef OMNI_BLOCK_DETAILS_RESIDUAL_HPP
-#define OMNI_BLOCK_DETAILS_RESIDUAL_HPP
+#ifndef Nott_BLOCK_DETAILS_RESIDUAL_HPP
+#define Nott_BLOCK_DETAILS_RESIDUAL_HPP
 
 #include <cstddef>
 #include <optional>
@@ -14,22 +14,22 @@
 #include "../../../activation/apply.hpp"
 #include "../../../layer/layer.hpp"
 
-namespace Omni::Block::Details {
+namespace Nott::Block::Details {
     struct ResidualSkipOptions {
-        std::optional<::Omni::Layer::Descriptor> projection{};
+        std::optional<::Nott::Layer::Descriptor> projection{};
     };
 
     struct ResidualOutputOptions {
-        ::Omni::Activation::Descriptor final_activation{::Omni::Activation::Identity};
+        ::Nott::Activation::Descriptor final_activation{::Nott::Activation::Identity};
         double dropout{0.0};
     };
 
     struct ResidualDescriptor {
-        std::vector<::Omni::Layer::Descriptor> layers{};
+        std::vector<::Nott::Layer::Descriptor> layers{};
         std::size_t repeats{1};
         ResidualSkipOptions skip{};
         ResidualOutputOptions output{};
-        ::Omni::LocalConfig local{};
+        ::Nott::LocalConfig local{};
     };
 
     class ResidualBlockImpl : public torch::nn::Module {
@@ -47,17 +47,17 @@ namespace Omni::Block::Details {
             std::size_t module_index = 0;
             block_layers_.reserve(descriptor.repeats);
             for (std::size_t repeat = 0; repeat < descriptor.repeats; ++repeat) {
-                std::vector<::Omni::Layer::Details::RegisteredLayer> registered_layers{};
+                std::vector<::Nott::Layer::Details::RegisteredLayer> registered_layers{};
                 registered_layers.reserve(descriptor.layers.size());
                 for (const auto& layer_descriptor : descriptor.layers) {
-                    registered_layers.push_back(::Omni::Layer::Details::build_registered_layer(
+                    registered_layers.push_back(::Nott::Layer::Details::build_registered_layer(
                         *this, layer_descriptor, module_index++));
                 }
                 block_layers_.emplace_back(std::move(registered_layers));
             }
 
             if (descriptor.skip.projection.has_value()) {
-                projection_layer_ = ::Omni::Layer::Details::build_registered_layer(
+                projection_layer_ = ::Nott::Layer::Details::build_registered_layer(
                     *this, *descriptor.skip.projection, module_index++);
             }
 
@@ -93,13 +93,13 @@ namespace Omni::Block::Details {
 
                 for (const auto& layer : layers) {
                     branch = layer.forward(std::move(branch));
-                    branch = ::Omni::Activation::Details::apply(layer.activation, std::move(branch));
+                    branch = ::Nott::Activation::Details::apply(layer.activation, std::move(branch));
                 }
 
                 auto skip_connection = residual;
                 if (projection_layer_.has_value()) {
                     skip_connection = projection_layer_->forward(std::move(skip_connection));
-                    skip_connection = ::Omni::Activation::Details::apply(
+                    skip_connection = ::Nott::Activation::Details::apply(
                         projection_layer_->activation, std::move(skip_connection));
                 }
 
@@ -129,7 +129,7 @@ namespace Omni::Block::Details {
                 }
 
                 branch = std::move(branch) + std::move(skip_connection);
-                branch = ::Omni::Activation::Details::apply(final_activation_, std::move(branch));
+                branch = ::Nott::Activation::Details::apply(final_activation_, std::move(branch));
                 if (dropout_) {
                     branch = dropout_->forward(branch);
                 }
@@ -166,7 +166,7 @@ namespace Omni::Block::Details {
             }
         }
 
-        void apply_tensor_memory_format_to_layer(::Omni::Layer::Details::RegisteredLayer& layer)
+        void apply_tensor_memory_format_to_layer(::Nott::Layer::Details::RegisteredLayer& layer)
         {
             if (!layer.module) {
                 return;
@@ -191,13 +191,13 @@ namespace Omni::Block::Details {
                 apply_tensor_memory_format_to_layer(*projection_layer_);
             }
         }
-        std::vector<std::vector<::Omni::Layer::Details::RegisteredLayer>> block_layers_{};
-        std::optional<::Omni::Layer::Details::RegisteredLayer> projection_layer_{};
-        ::Omni::Activation::Type final_activation_{::Omni::Activation::Type::Identity};
+        std::vector<std::vector<::Nott::Layer::Details::RegisteredLayer>> block_layers_{};
+        std::optional<::Nott::Layer::Details::RegisteredLayer> projection_layer_{};
+        ::Nott::Activation::Type final_activation_{::Nott::Activation::Type::Identity};
         torch::nn::Dropout dropout_{nullptr};
         torch::MemoryFormat preferred_tensor_memory_format_{torch::MemoryFormat::Contiguous};
     };
 
     TORCH_MODULE(ResidualBlock);
 }
-#endif // OMNI_BLOCK_DETAILS_RESIDUAL_HPP
+#endif // Nott_BLOCK_DETAILS_RESIDUAL_HPP

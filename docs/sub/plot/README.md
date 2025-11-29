@@ -1,6 +1,6 @@
 # Plotting Utilities
 
-`Omni::Plot` exposes lightweight wrappers around the statistics captured during
+`Nott::Plot` exposes lightweight wrappers around the statistics captured during
 [Docs/Training](../training/README.md) and [Docs/Evaluation](../evaluation/README.md).
 Plots rely on the Gnuplot bindings shipped in `src/utils/gnuplot.hpp`; ensure
 `gnuplot` is available in your environment when rendering to the desktop.
@@ -11,13 +11,13 @@ Plots rely on the Gnuplot bindings shipped in `src/utils/gnuplot.hpp`; ensure
 rates) stored inside `Model::training_telemetry()`.
 
 ```cpp
-auto descriptor = Omni::Plot::Training::Loss({
+auto descriptor = Nott::Plot::Training::Loss({
     .learningRate = true,
     .smoothing = true,
     .smoothingWindow = 5,
     .logScale = false,
 });
-Omni::Plot::Training::Render(model, descriptor, train_losses, val_losses, lrs);
+Nott::Plot::Training::Render(model, descriptor, train_losses, val_losses, lrs);
 ```
 
 - **`learningRate`** toggles overlaying the step-wise learning rate on a

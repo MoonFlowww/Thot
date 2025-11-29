@@ -1,11 +1,11 @@
-#ifndef OMNI_REGULARIZATION_DETAILS_VAT_HPP
-#define OMNI_REGULARIZATION_DETAILS_VAT_HPP
+#ifndef Nott_REGULARIZATION_DETAILS_VAT_HPP
+#define Nott_REGULARIZATION_DETAILS_VAT_HPP
 // "Virtual Adversarial Training: A Regularization Method for Supervised and Semi-supervised Learning" https://arxiv.org/pdf/1704.03976
 #include <torch/torch.h>
 
 #include "common.hpp"
 
-namespace Omni::Regularization::Details {
+namespace Nott::Regularization::Details {
 
     struct VATOptions {
         double coefficient{0.0};
@@ -40,4 +40,4 @@ namespace Omni::Regularization::Details {
 
 }
 
-#endif // OMNI_REGULARIZATION_DETAILS_VAT_HPP
+#endif // Nott_REGULARIZATION_DETAILS_VAT_HPP

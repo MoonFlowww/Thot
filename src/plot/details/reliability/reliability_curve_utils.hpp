@@ -1,5 +1,5 @@
-#ifndef OMNI_RELIABILITY_CURVE_UTILS_HPP
-#define OMNI_RELIABILITY_CURVE_UTILS_HPP
+#ifndef Nott_RELIABILITY_CURVE_UTILS_HPP
+#define Nott_RELIABILITY_CURVE_UTILS_HPP
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -14,7 +14,7 @@
 
 #include "../../../core.hpp"
 
-namespace Omni::Plot::Details::Reliability::Curves {
+namespace Nott::Plot::Details::Reliability::Curves {
     struct BinarySeries {
         std::vector<double> scores{};
         std::vector<int64_t> targets{};
@@ -358,7 +358,7 @@ namespace Omni::Plot::Details::Reliability::Curves {
     }
 }
 
-namespace Omni::Plot::Details::Reliability::Interpretability {
+namespace Nott::Plot::Details::Reliability::Interpretability {
     inline auto SelectIndices(std::size_t total, std::size_t requested, bool random)
         -> std::vector<std::size_t>
     {
@@ -406,4 +406,4 @@ namespace Omni::Plot::Details::Reliability::Interpretability {
         return targets;
     }
 }
-#endif //OMNI_RELIABILITY_CURVE_UTILS_HPP
+#endif //Nott_RELIABILITY_CURVE_UTILS_HPP

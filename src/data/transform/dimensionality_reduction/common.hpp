@@ -1,5 +1,5 @@
-#ifndef OMNI_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_COMMON_HPP
-#define OMNI_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_COMMON_HPP
+#ifndef Nott_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_COMMON_HPP
+#define Nott_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_COMMON_HPP
 
 #include <cmath>
 #include <cstddef>
@@ -7,7 +7,7 @@
 
 #include <torch/torch.h>
 
-namespace Omni::Data::Transform::DimensionalityReduction {
+namespace Nott::Data::Transform::DimensionalityReduction {
     namespace Details {
         inline torch::Tensor shrinkage(const torch::Tensor& tensor, double tau) {
             if (tau <= 0.0) {
@@ -40,4 +40,4 @@ namespace Omni::Data::Transform::DimensionalityReduction {
     }
 }
 
-#endif // OMNI_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_COMMON_HPP
+#endif // Nott_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_COMMON_HPP

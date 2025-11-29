@@ -1,5 +1,5 @@
-#ifndef OMNI_MANIPULATION_HPP
-#define OMNI_MANIPULATION_HPP
+#ifndef Nott_MANIPULATION_HPP
+#define Nott_MANIPULATION_HPP
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -31,19 +31,19 @@
 #include "augment/sun_angle_jitter.hpp"
 #include "normalization/registry.hpp"
 
-namespace Omni::Data::Manipulation {
-    using ::Omni::Data::Transform::Augmentation::AtmosphericDrift;
-    using ::Omni::Data::Transform::Augmentation::ChromaticAberration;
-    using ::Omni::Data::Transform::Augmentation::CLAHE;
-    using ::Omni::Data::Transform::Augmentation::CloudOcclusion;
-    using ::Omni::Data::Transform::Augmentation::Cutout;
-    using ::Omni::Data::Transform::Augmentation::Flip;
-    using ::Omni::Data::Transform::Augmentation::GridDistortion;
-    using ::Omni::Data::Transform::Augmentation::OpticalDistortion;
-    using ::Omni::Data::Transform::Augmentation::RandomBrightnessContrast;
-    using ::Omni::Data::Transform::Augmentation::SunAngleJitter;
+namespace Nott::Data::Manipulation {
+    using ::Nott::Data::Transform::Augmentation::AtmosphericDrift;
+    using ::Nott::Data::Transform::Augmentation::ChromaticAberration;
+    using ::Nott::Data::Transform::Augmentation::CLAHE;
+    using ::Nott::Data::Transform::Augmentation::CloudOcclusion;
+    using ::Nott::Data::Transform::Augmentation::Cutout;
+    using ::Nott::Data::Transform::Augmentation::Flip;
+    using ::Nott::Data::Transform::Augmentation::GridDistortion;
+    using ::Nott::Data::Transform::Augmentation::OpticalDistortion;
+    using ::Nott::Data::Transform::Augmentation::RandomBrightnessContrast;
+    using ::Nott::Data::Transform::Augmentation::SunAngleJitter;
 
-    namespace Normalization = ::Omni::Data::Transform::Normalization;
+    namespace Normalization = ::Nott::Data::Transform::Normalization;
 
     //Fisher-Yates
     inline std::pair<torch::Tensor, torch::Tensor> Shuffle(const torch::Tensor& inputs, const torch::Tensor& targets, const std::optional<std::uint64_t>& seed = std::nullopt) {
@@ -147,7 +147,7 @@ namespace Omni::Data::Manipulation {
 
 }
 
-namespace Omni::Data::Check {
+namespace Nott::Data::Check {
     struct ImbalanceReport {
         torch::Tensor train_counts;
         torch::Tensor test_counts;
@@ -270,4 +270,4 @@ namespace Omni::Data::Check {
     }
 }
 
-#endif //OMNI_MANIPULATION_HPP
+#endif //Nott_MANIPULATION_HPP

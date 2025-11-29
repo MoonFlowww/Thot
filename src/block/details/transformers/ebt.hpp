@@ -1,5 +1,5 @@
-#ifndef OMNI_EBT_HPP
-#define OMNI_EBT_HPP
+#ifndef Nott_EBT_HPP
+#define Nott_EBT_HPP
 // "Energy-Based Transformers" — Haziza et al., 2025 (arXiv:2507.02092).
 // Models discrete or continuous modalities by refining latent tokens through learned energy gradients instead of explicit softmax attention.
 // https://arxiv.org/pdf/2507.02092
@@ -23,7 +23,7 @@
 #include <ATen/cuda/CUDAStream.h>
 #endif
 
-namespace Omni::Block::Details::Transformer::EBT {
+namespace Nott::Block::Details::Transformer::EBT {
     enum class ModalityType {
         Discrete,
         Continuous,
@@ -554,4 +554,4 @@ namespace Omni::Block::Details::Transformer::EBT {
     using DecoderModule = Detail::Decoder;
 }
 
-#endif //OMNI_EBT_HPP
+#endif //Nott_EBT_HPP

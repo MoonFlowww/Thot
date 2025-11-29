@@ -1,5 +1,5 @@
-#ifndef OMNI_TEMPERATURE_SCALING_HPP
-#define OMNI_TEMPERATURE_SCALING_HPP
+#ifndef Nott_TEMPERATURE_SCALING_HPP
+#define Nott_TEMPERATURE_SCALING_HPP
 #include <atomic>
 #include <memory>
 #include <stdexcept>
@@ -132,4 +132,4 @@ namespace Details {
     }
 
 }
-#endif //OMNI_TEMPERATURE_SCALING_HPP
+#endif //Nott_TEMPERATURE_SCALING_HPP

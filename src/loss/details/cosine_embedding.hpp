@@ -1,5 +1,5 @@
-#ifndef OMNI_COSINE_EMBEDDING_HPP
-#define OMNI_COSINE_EMBEDDING_HPP
+#ifndef Nott_COSINE_EMBEDDING_HPP
+#define Nott_COSINE_EMBEDDING_HPP
 
 #include <optional>
 #include <stdexcept>
@@ -9,7 +9,7 @@
 //TODO: rework
 // - using single path : std::visit([&](const auto& d){ return Loss::Details::compute(d, prediction, target, weight); }, *loss_descriptor_);
 //      --> Cos Embedd expect 2 inputs
-namespace Omni::Loss::Details {
+namespace Nott::Loss::Details {
 
     struct CosineEmbeddingOptions {
         Reduction reduction{Reduction::Mean};
@@ -63,4 +63,4 @@ namespace Omni::Loss::Details {
 
 }
 
-#endif // OMNI_COSINE_EMBEDDING_HPP
+#endif // Nott_COSINE_EMBEDDING_HPP

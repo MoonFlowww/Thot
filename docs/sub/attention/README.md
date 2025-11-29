@@ -1,11 +1,11 @@
 # Attention Modules
 
-The `Omni::Attention` namespace provides descriptors that plug into transformer
+The `Nott::Attention` namespace provides descriptors that plug into transformer
 blocks and other components needing multi-head attention. This document covers
 the available descriptor, its option set, and the runtime module exposed under
-`Omni::Attention::Details`.
+`Nott::Attention::Details`.
 
-## Descriptor: `Omni::Attention::MultiHead(...)`
+## Descriptor: `Nott::Attention::MultiHead(...)`
 
 `MultiHead` returns a descriptor wrapping `MultiHeadOptions`. The descriptor is
 consumed by transformer blocks (see `src/block/details/transformers`) and can
@@ -31,10 +31,10 @@ also be used to instantiate the low-level module manually.
 - `variant` *(enum, default: `Variant::Full`)* – choose between full attention
   and a causal (upper-triangularly masked) variant.
 
-## Runtime Module: `Omni::Attention::Details::MultiHeadAttention`
+## Runtime Module: `Nott::Attention::Details::MultiHeadAttention`
 
 The descriptor is materialised into a LibTorch module through
-`Omni::Attention::Details::MultiHeadAttention`. The module validates the option
+`Nott::Attention::Details::MultiHeadAttention`. The module validates the option
 set (positive dimensions and `embed_dim % num_heads == 0`) before registering
 four linear projections (`q_proj`, `k_proj`, `v_proj`, `out_proj`), a
 `ScaledDotProductKernel`, and an output dropout layer.
@@ -65,7 +65,7 @@ Given tensors shaped according to `batch_first`:
 ## Manual Usage Example
 
 ```cpp
-using namespace Omni;
+using namespace Nott;
 auto descriptor = Attention::MultiHead({
     .embed_dim = 512,
     .num_heads = 8,
@@ -87,5 +87,5 @@ auto attention = Attention::Details::MultiHeadAttention(impl_options);
 auto output = attention->forward(query, key, value, attn_mask, key_padding_mask);
 ```
 
-The transformer blocks in `Omni::Block::Transformer*` perform this mapping for
+The transformer blocks in `Nott::Block::Transformer*` perform this mapping for
 you, but the descriptor and implementation are exposed for custom wiring. [Docs/Block & Transformer](../block/README.md)

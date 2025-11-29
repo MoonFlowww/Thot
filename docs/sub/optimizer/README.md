@@ -36,7 +36,7 @@ their underlying implementation.
 
 ### Warmup integration
 
-Adam-based optimizers expose `ensure_state_initialized()` hooks that Omni calls
+Adam-based optimizers expose `ensure_state_initialized()` hooks that Nott calls
 when CUDA graph capture or warmup schedules are used. This keeps the internal
 state tensors resident on the correct device before the first optimisation step.
 

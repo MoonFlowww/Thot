@@ -1,5 +1,5 @@
-#ifndef OMNI_MARGIN_RANKING_HPP
-#define OMNI_MARGIN_RANKING_HPP
+#ifndef Nott_MARGIN_RANKING_HPP
+#define Nott_MARGIN_RANKING_HPP
 
 #include <optional>
 #include <stdexcept>
@@ -8,7 +8,7 @@
 
 #include "reduction.hpp"
 
-namespace Omni::Loss::Details {
+namespace Nott::Loss::Details {
     struct MarginRankingOptions {
         Reduction reduction{Reduction::Mean};
         double margin{0.0};
@@ -85,4 +85,4 @@ namespace Omni::Loss::Details {
 
 }
 
-#endif // OMNI_MARGIN_RANKING_HPP
+#endif // Nott_MARGIN_RANKING_HPP

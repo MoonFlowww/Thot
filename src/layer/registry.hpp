@@ -1,5 +1,5 @@
-#ifndef OMNI_LAYER_REGISTRY_HPP
-#define OMNI_LAYER_REGISTRY_HPP
+#ifndef Nott_LAYER_REGISTRY_HPP
+#define Nott_LAYER_REGISTRY_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -12,7 +12,7 @@
 #include <stdexcept>
 
 
-namespace Omni::Layer::Details {
+namespace Nott::Layer::Details {
     template <class Impl>
     [[nodiscard]] inline std::shared_ptr<torch::nn::Module>
     to_shared_module_ptr(const torch::nn::ModuleHolder<Impl>& holder)
@@ -71,9 +71,9 @@ namespace Omni::Layer::Details {
         }
 
         ForwardBinding forward{};
-        ::Omni::Activation::Type activation{::Omni::Activation::Type::Identity};
+        ::Nott::Activation::Type activation{::Nott::Activation::Type::Identity};
         std::shared_ptr<torch::nn::Module> module{};
-        ::Omni::LocalConfig local{};
+        ::Nott::LocalConfig local{};
         std::string name{};
         RegisteredLayer() = default;
 
@@ -202,4 +202,4 @@ namespace Omni::Layer::Details {
 
 
 }
-#endif // OMNI_LAYER_REGISTRY_HPP
+#endif // Nott_LAYER_REGISTRY_HPP

@@ -1,9 +1,9 @@
-#ifndef OMNI_REGULARIZATION_DETAILS_ORTHOGONALITY_HPP
-#define OMNI_REGULARIZATION_DETAILS_ORTHOGONALITY_HPP
+#ifndef Nott_REGULARIZATION_DETAILS_ORTHOGONALITY_HPP
+#define Nott_REGULARIZATION_DETAILS_ORTHOGONALITY_HPP
 
 #include <torch/torch.h>
 
-namespace Omni::Regularization::Details {
+namespace Nott::Regularization::Details {
 
     struct OrthogonalityOptions {
         double coefficient{0.0};
@@ -35,4 +35,4 @@ namespace Omni::Regularization::Details {
 
 }
 
-#endif // OMNI_REGULARIZATION_DETAILS_ORTHOGONALITY_HPP
+#endif // Nott_REGULARIZATION_DETAILS_ORTHOGONALITY_HPP

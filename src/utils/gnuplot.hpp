@@ -1,5 +1,5 @@
-#ifndef OMNI_GNUPLOT_HPP
-#define OMNI_GNUPLOT_HPP
+#ifndef Nott_GNUPLOT_HPP
+#define Nott_GNUPLOT_HPP
 
 #include <algorithm>
 #include <cstdio>
@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 #include <iomanip>
-namespace Omni::Utils {
+namespace Nott::Utils {
     class Gnuplot {
     public:
         enum class PlotMode {
@@ -723,4 +723,4 @@ namespace Omni::Utils {
     };
 }
 
-#endif // OMNI_GNUPLOT_HPP
+#endif // Nott_GNUPLOT_HPP

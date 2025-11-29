@@ -1,11 +1,11 @@
-#ifndef OMNI_SOLVER_DETAILS_SDE_HPP
-#define OMNI_SOLVER_DETAILS_SDE_HPP
+#ifndef Nott_SOLVER_DETAILS_SDE_HPP
+#define Nott_SOLVER_DETAILS_SDE_HPP
 
 
 #include <cmath>
 #include <stdexcept>
 
-namespace Omni::Solver::Details {
+namespace Nott::Solver::Details {
     inline torch::Tensor integrate_sde(const Descriptor& descriptor,
                                        torch::Tensor state,
                                        const BaseStep& base_step) {
@@ -54,4 +54,4 @@ namespace Omni::Solver::Details {
         }
     }
 }
-#endif // OMNI_SOLVER_DETAILS_SDE_HPP
+#endif // Nott_SOLVER_DETAILS_SDE_HPP

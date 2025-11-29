@@ -1,10 +1,10 @@
-#ifndef OMNI_INITIALIZATION_APPLY_HPP
-#define OMNI_INITIALIZATION_APPLY_HPP
+#ifndef Nott_INITIALIZATION_APPLY_HPP
+#define Nott_INITIALIZATION_APPLY_HPP
 #include <torch/torch.h>
 
 #include "initialization.hpp"
 
-namespace Omni::Initialization::Details {
+namespace Nott::Initialization::Details {
     namespace detail {
         template <class Module>
         inline void zero_bias_if_present(Module& module) {
@@ -27,22 +27,22 @@ namespace Omni::Initialization::Details {
         }();
 
         switch (type) {
-            case ::Omni::Initialization::Type::XavierNormal:
+            case ::Nott::Initialization::Type::XavierNormal:
                 torch::nn::init::xavier_normal_(module->weight);
                 detail::zero_bias_if_present(module);
                 break;
-            case ::Omni::Initialization::Type::XavierUniform:
+            case ::Nott::Initialization::Type::XavierUniform:
                 torch::nn::init::xavier_uniform_(module->weight);
                 detail::zero_bias_if_present(module);
                 break;
-            case ::Omni::Initialization::Type::HeNormal:
+            case ::Nott::Initialization::Type::HeNormal:
                 torch::nn::init::kaiming_normal_(module->weight,
                                                  /*a=*/0.0,
                                                  torch::kFanIn,
                                                  torch::kReLU);
                 detail::zero_bias_if_present(module);
                 break;
-            case ::Omni::Initialization::Type::HeUniform:
+            case ::Nott::Initialization::Type::HeUniform:
                 torch::nn::init::kaiming_uniform_(module->weight,
                                                   /*a=*/0.0,
                                                   torch::kFanIn,
@@ -50,23 +50,23 @@ namespace Omni::Initialization::Details {
                 detail::zero_bias_if_present(module);
                 break;
 
-            case ::Omni::Initialization::Type::Dirac:
+            case ::Nott::Initialization::Type::Dirac:
                 if (module->weight.dim() >= 3) {
                     torch::nn::init::dirac_(module->weight);
                 }
                 detail::zero_bias_if_present(module);
                 break;
-            case ::Omni::Initialization::Type::Lyapunov:
+            case ::Nott::Initialization::Type::Lyapunov:
                 torch::nn::init::orthogonal_(module->weight);
                 detail::zero_bias_if_present(module);
                 break;
-            case ::Omni::Initialization::Type::ZeroBias:
+            case ::Nott::Initialization::Type::ZeroBias:
                 detail::zero_bias_if_present(module);
                 break;
-            case ::Omni::Initialization::Type::Default:
+            case ::Nott::Initialization::Type::Default:
             default:
                 break;
         }
     }
 }
-#endif // OMNI_INITIALIZATION_APPLY_HPP
+#endif // Nott_INITIALIZATION_APPLY_HPP

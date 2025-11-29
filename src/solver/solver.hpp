@@ -1,5 +1,5 @@
-#ifndef OMNI_SOLVER_HPP
-#define OMNI_SOLVER_HPP
+#ifndef Nott_SOLVER_HPP
+#define Nott_SOLVER_HPP
 
 #include <algorithm>
 #include <cstddef>
@@ -9,7 +9,7 @@
 
 #include <torch/torch.h>
 
-namespace Omni::Solver {
+namespace Nott::Solver {
 
     enum class MethodFamily {
         Euler,
@@ -81,7 +81,7 @@ namespace Omni::Solver {
 #include "details/ode.hpp"
 #include "details/sde.hpp"
 
-namespace Omni::Solver {
+namespace Nott::Solver {
     inline torch::Tensor Runtime::integrate(torch::Tensor state, const BaseStep& base_step) const {
         if (descriptor.is_sde()) {
             return Details::integrate_sde(descriptor, std::move(state), base_step);
@@ -91,4 +91,4 @@ namespace Omni::Solver {
 }
 
 
-#endif // OMNI_SOLVER_HPP
+#endif // Nott_SOLVER_HPP

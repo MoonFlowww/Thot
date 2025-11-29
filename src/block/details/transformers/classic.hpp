@@ -1,5 +1,5 @@
-#ifndef OMNI_CLASSIC_HPP
-#define OMNI_CLASSIC_HPP
+#ifndef Nott_CLASSIC_HPP
+#define Nott_CLASSIC_HPP
 
 // "Attention Is All You Need" — Vaswani et al., NeurIPS 2017 (arXiv:1706.03762).
 // Canonical encoder/decoder transformer with multi-head self-attention, position encodings,
@@ -30,9 +30,9 @@
 #include "../blocks/residual.hpp"
 #include "../blocks/sequential.hpp"
 
-namespace Omni::Block::Details::Transformer::Classic {
-    using PositionalEncodingType = ::Omni::Layer::Details::PositionalEncodingType;
-    using PositionalEncodingOptions = ::Omni::Layer::Details::PositionalEncodingOptions;
+namespace Nott::Block::Details::Transformer::Classic {
+    using PositionalEncodingType = ::Nott::Layer::Details::PositionalEncodingType;
+    using PositionalEncodingOptions = ::Nott::Layer::Details::PositionalEncodingOptions;
 
     struct AttentionOptions {
         std::int64_t embed_dim{512};
@@ -40,15 +40,15 @@ namespace Omni::Block::Details::Transformer::Classic {
         double dropout{0.0};
         bool bias{true};
         bool batch_first{true};
-        ::Omni::Attention::Variant variant{::Omni::Attention::Variant::Full};
+        ::Nott::Attention::Variant variant{::Nott::Attention::Variant::Full};
     };
 
     struct FeedForwardOptions {
         std::int64_t embed_dim{512};
         double mlp_ratio{4.0};
-        ::Omni::Activation::Descriptor activation{::Omni::Activation::GeLU};
+        ::Nott::Activation::Descriptor activation{::Nott::Activation::GeLU};
         bool bias{true};
-        ::Omni::Initialization::Descriptor initialization{::Omni::Initialization::Default};
+        ::Nott::Initialization::Descriptor initialization{::Nott::Initialization::Default};
     };
 
     struct LayerNormOptions {
@@ -59,10 +59,10 @@ namespace Omni::Block::Details::Transformer::Classic {
 
 
     struct EncoderLayerDescriptor {
-        ::Omni::Attention::Descriptor attention;
-        ::Omni::Layer::Descriptor attention_dropout;
-        std::vector<::Omni::Layer::Descriptor> feed_forward;
-        ::Omni::Layer::Descriptor feed_forward_dropout;
+        ::Nott::Attention::Descriptor attention;
+        ::Nott::Layer::Descriptor attention_dropout;
+        std::vector<::Nott::Layer::Descriptor> feed_forward;
+        ::Nott::Layer::Descriptor feed_forward_dropout;
     };
 
     struct EncoderOptions {
@@ -99,24 +99,24 @@ namespace Omni::Block::Details::Transformer::Classic {
         for (std::size_t index = 0; index < options.layers; ++index) {
             EncoderLayerDescriptor layer{};
 
-            ::Omni::Attention::MultiHeadOptions attention_descriptor_options{};
+            ::Nott::Attention::MultiHeadOptions attention_descriptor_options{};
             attention_descriptor_options.embed_dim = attention_options.embed_dim;
             attention_descriptor_options.num_heads = attention_options.num_heads;
             attention_descriptor_options.dropout = attention_options.dropout;
             attention_descriptor_options.bias = attention_options.bias;
             attention_descriptor_options.batch_first = attention_options.batch_first;
             attention_descriptor_options.variant = attention_options.variant;
-            layer.attention = ::Omni::Attention::MultiHead(attention_descriptor_options);
+            layer.attention = ::Nott::Attention::MultiHead(attention_descriptor_options);
 
-            layer.attention_dropout = ::Omni::Layer::HardDropout({attention_options.dropout});
+            layer.attention_dropout = ::Nott::Layer::HardDropout({attention_options.dropout});
 
-            ::Omni::Layer::FCOptions fc1_options{feed_forward.embed_dim, hidden_dim, feed_forward.bias};
-            layer.feed_forward.emplace_back(::Omni::Layer::FC(fc1_options, feed_forward.activation, feed_forward.initialization));
+            ::Nott::Layer::FCOptions fc1_options{feed_forward.embed_dim, hidden_dim, feed_forward.bias};
+            layer.feed_forward.emplace_back(::Nott::Layer::FC(fc1_options, feed_forward.activation, feed_forward.initialization));
 
-            ::Omni::Layer::FCOptions fc2_options{hidden_dim, feed_forward.embed_dim, feed_forward.bias};
-            layer.feed_forward.emplace_back(::Omni::Layer::FC(fc2_options, ::Omni::Activation::Identity, feed_forward.initialization));
+            ::Nott::Layer::FCOptions fc2_options{hidden_dim, feed_forward.embed_dim, feed_forward.bias};
+            layer.feed_forward.emplace_back(::Nott::Layer::FC(fc2_options, ::Nott::Activation::Identity, feed_forward.initialization));
 
-            layer.feed_forward_dropout = ::Omni::Layer::HardDropout({options.dropout});
+            layer.feed_forward_dropout = ::Nott::Layer::HardDropout({options.dropout});
 
             descriptor.layers.emplace_back(std::move(layer));
         }
@@ -125,12 +125,12 @@ namespace Omni::Block::Details::Transformer::Classic {
     }
 
     struct DecoderLayerDescriptor {
-        ::Omni::Attention::Descriptor self_attention;
-        ::Omni::Layer::Descriptor self_attention_dropout;
-        ::Omni::Attention::Descriptor cross_attention;
-        ::Omni::Layer::Descriptor cross_attention_dropout;
-        std::vector<::Omni::Layer::Descriptor> feed_forward;
-        ::Omni::Layer::Descriptor feed_forward_dropout;
+        ::Nott::Attention::Descriptor self_attention;
+        ::Nott::Layer::Descriptor self_attention_dropout;
+        ::Nott::Attention::Descriptor cross_attention;
+        ::Nott::Layer::Descriptor cross_attention_dropout;
+        std::vector<::Nott::Layer::Descriptor> feed_forward;
+        ::Nott::Layer::Descriptor feed_forward_dropout;
     };
 
     struct DecoderOptions {
@@ -170,33 +170,33 @@ namespace Omni::Block::Details::Transformer::Classic {
         for (std::size_t index = 0; index < options.layers; ++index) {
             DecoderLayerDescriptor layer{};
 
-            ::Omni::Attention::MultiHeadOptions self_attention_descriptor_options{};
+            ::Nott::Attention::MultiHeadOptions self_attention_descriptor_options{};
             self_attention_descriptor_options.embed_dim = self_attention.embed_dim;
             self_attention_descriptor_options.num_heads = self_attention.num_heads;
             self_attention_descriptor_options.dropout = self_attention.dropout;
             self_attention_descriptor_options.bias = self_attention.bias;
             self_attention_descriptor_options.batch_first = self_attention.batch_first;
             self_attention_descriptor_options.variant = self_attention.variant;
-            layer.self_attention = ::Omni::Attention::MultiHead(self_attention_descriptor_options);
-            layer.self_attention_dropout = ::Omni::Layer::HardDropout({self_attention.dropout});
+            layer.self_attention = ::Nott::Attention::MultiHead(self_attention_descriptor_options);
+            layer.self_attention_dropout = ::Nott::Layer::HardDropout({self_attention.dropout});
 
-            ::Omni::Attention::MultiHeadOptions cross_attention_descriptor_options{};
+            ::Nott::Attention::MultiHeadOptions cross_attention_descriptor_options{};
             cross_attention_descriptor_options.embed_dim = cross_attention.embed_dim;
             cross_attention_descriptor_options.num_heads = cross_attention.num_heads;
             cross_attention_descriptor_options.dropout = cross_attention.dropout;
             cross_attention_descriptor_options.bias = cross_attention.bias;
             cross_attention_descriptor_options.batch_first = cross_attention.batch_first;
             cross_attention_descriptor_options.variant = cross_attention.variant;
-            layer.cross_attention = ::Omni::Attention::MultiHead(cross_attention_descriptor_options);
-            layer.cross_attention_dropout = ::Omni::Layer::HardDropout({cross_attention.dropout});
+            layer.cross_attention = ::Nott::Attention::MultiHead(cross_attention_descriptor_options);
+            layer.cross_attention_dropout = ::Nott::Layer::HardDropout({cross_attention.dropout});
 
-            ::Omni::Layer::FCOptions fc1_options{feed_forward.embed_dim, hidden_dim, feed_forward.bias};
-            layer.feed_forward.emplace_back(::Omni::Layer::FC(fc1_options, feed_forward.activation, feed_forward.initialization));
+            ::Nott::Layer::FCOptions fc1_options{feed_forward.embed_dim, hidden_dim, feed_forward.bias};
+            layer.feed_forward.emplace_back(::Nott::Layer::FC(fc1_options, feed_forward.activation, feed_forward.initialization));
 
-            ::Omni::Layer::FCOptions fc2_options{hidden_dim, feed_forward.embed_dim, feed_forward.bias};
-            layer.feed_forward.emplace_back(::Omni::Layer::FC(fc2_options, ::Omni::Activation::Identity, feed_forward.initialization));
+            ::Nott::Layer::FCOptions fc2_options{hidden_dim, feed_forward.embed_dim, feed_forward.bias};
+            layer.feed_forward.emplace_back(::Nott::Layer::FC(fc2_options, ::Nott::Activation::Identity, feed_forward.initialization));
 
-            layer.feed_forward_dropout = ::Omni::Layer::HardDropout({options.dropout});
+            layer.feed_forward_dropout = ::Nott::Layer::HardDropout({options.dropout});
 
             descriptor.layers.emplace_back(std::move(layer));
         }
@@ -403,13 +403,13 @@ namespace Omni::Block::Details::Transformer::Classic {
                 norm1_ = register_module("norm1", torch::nn::LayerNorm(norm_options));
                 norm2_ = register_module("norm2", torch::nn::LayerNorm(norm_options));
 
-                attention_ = ::Omni::Attention::Details::register_attention(*this, "self_attention", std::move(descriptor.attention));
+                attention_ = ::Nott::Attention::Details::register_attention(*this, "self_attention", std::move(descriptor.attention));
 
                 std::size_t module_index = 0;
-                auto register_layer = [&](::Omni::Layer::Descriptor layer_descriptor) {
+                auto register_layer = [&](::Nott::Layer::Descriptor layer_descriptor) {
                     return std::visit(
                         [&](const auto& concrete_descriptor) {
-                            return ::Omni::Layer::Details::build_registered_layer(*this,
+                            return ::Nott::Layer::Details::build_registered_layer(*this,
                                                                                   concrete_descriptor,
                                                                                   module_index++);
                         },
@@ -434,10 +434,10 @@ namespace Omni::Block::Details::Transformer::Classic {
 
                 auto residual = output;
                 auto normalised = norm1_->forward(residual);
-                auto attention = ::Omni::Attention::Details::forward_attention(attention_, normalised, normalised, normalised, attn_mask, key_padding_mask);
+                auto attention = ::Nott::Attention::Details::forward_attention(attention_, normalised, normalised, normalised, attn_mask, key_padding_mask);
                 if (attention_dropout_.forward) {
                     attention = attention_dropout_.forward(std::move(attention));
-                    attention = ::Omni::Activation::Details::apply(attention_dropout_.activation, std::move(attention));
+                    attention = ::Nott::Activation::Details::apply(attention_dropout_.activation, std::move(attention));
                 }
                 output = residual + attention;
 
@@ -448,11 +448,11 @@ namespace Omni::Block::Details::Transformer::Classic {
                         continue;
                     }
                     feed_forward = layer.forward(std::move(feed_forward));
-                    feed_forward = ::Omni::Activation::Details::apply(layer.activation, std::move(feed_forward));
+                    feed_forward = ::Nott::Activation::Details::apply(layer.activation, std::move(feed_forward));
                 }
                 if (feed_forward_dropout_.forward) {
                     feed_forward = feed_forward_dropout_.forward(std::move(feed_forward));
-                    feed_forward = ::Omni::Activation::Details::apply(feed_forward_dropout_.activation,
+                    feed_forward = ::Nott::Activation::Details::apply(feed_forward_dropout_.activation,
                                                                       std::move(feed_forward));
                 }
 
@@ -463,12 +463,12 @@ namespace Omni::Block::Details::Transformer::Classic {
         private:
             std::int64_t embed_dim_{};
             LayerNormOptions layer_norm_options_{};
-            ::Omni::Attention::Details::AttentionModule attention_{};
+            ::Nott::Attention::Details::AttentionModule attention_{};
             torch::nn::LayerNorm norm1_{nullptr};
             torch::nn::LayerNorm norm2_{nullptr};
-            ::Omni::Layer::Details::RegisteredLayer attention_dropout_{};
-            std::vector<::Omni::Layer::Details::RegisteredLayer> feed_forward_layers_{};
-            ::Omni::Layer::Details::RegisteredLayer feed_forward_dropout_{};
+            ::Nott::Layer::Details::RegisteredLayer attention_dropout_{};
+            std::vector<::Nott::Layer::Details::RegisteredLayer> feed_forward_layers_{};
+            ::Nott::Layer::Details::RegisteredLayer feed_forward_dropout_{};
         };
 
         TORCH_MODULE(TransformerEncoderLayer);
@@ -549,15 +549,15 @@ namespace Omni::Block::Details::Transformer::Classic {
                 norm2_ = register_module("norm2", torch::nn::LayerNorm(norm_options));
                 norm3_ = register_module("norm3", torch::nn::LayerNorm(norm_options));
 
-                self_attention_ = ::Omni::Attention::Details::register_attention(*this, "self_attention", std::move(descriptor.self_attention));
+                self_attention_ = ::Nott::Attention::Details::register_attention(*this, "self_attention", std::move(descriptor.self_attention));
 
-                cross_attention_ = ::Omni::Attention::Details::register_attention(*this, "cross_attention", std::move(descriptor.cross_attention));
+                cross_attention_ = ::Nott::Attention::Details::register_attention(*this, "cross_attention", std::move(descriptor.cross_attention));
 
                 std::size_t module_index = 0;
-                auto register_layer = [&](::Omni::Layer::Descriptor layer_descriptor) {
+                auto register_layer = [&](::Nott::Layer::Descriptor layer_descriptor) {
                     return std::visit(
                         [&](const auto& concrete_descriptor) {
-                            return ::Omni::Layer::Details::build_registered_layer(
+                            return ::Nott::Layer::Details::build_registered_layer(
                                 *this, concrete_descriptor, module_index++);
                         },
                         std::move(layer_descriptor));
@@ -587,10 +587,10 @@ namespace Omni::Block::Details::Transformer::Classic {
 
                 auto residual = output;
                 auto self_norm = norm1_->forward(residual);
-                auto self_attention = ::Omni::Attention::Details::forward_attention(self_attention_, self_norm, self_norm, self_norm, tgt_mask, tgt_key_padding_mask);
+                auto self_attention = ::Nott::Attention::Details::forward_attention(self_attention_, self_norm, self_norm, self_norm, tgt_mask, tgt_key_padding_mask);
                 if (self_attention_dropout_.forward) {
                     self_attention = self_attention_dropout_.forward(std::move(self_attention));
-                    self_attention = ::Omni::Activation::Details::apply(
+                    self_attention = ::Nott::Activation::Details::apply(
                         self_attention_dropout_.activation, std::move(self_attention));
                 }
                 output = residual + self_attention;
@@ -598,10 +598,10 @@ namespace Omni::Block::Details::Transformer::Classic {
                 if (memory.defined()) {
                     residual = output;
                     auto cross_norm = norm2_->forward(output);
-                    auto cross_attention = ::Omni::Attention::Details::forward_attention(cross_attention_, cross_norm, memory, memory, memory_mask, memory_key_padding_mask);
+                    auto cross_attention = ::Nott::Attention::Details::forward_attention(cross_attention_, cross_norm, memory, memory, memory_mask, memory_key_padding_mask);
                     if (cross_attention_dropout_.forward) {
                         cross_attention = cross_attention_dropout_.forward(std::move(cross_attention));
-                        cross_attention = ::Omni::Activation::Details::apply(
+                        cross_attention = ::Nott::Activation::Details::apply(
                             cross_attention_dropout_.activation, std::move(cross_attention));
                     }
                     output = residual + cross_attention;
@@ -614,12 +614,12 @@ namespace Omni::Block::Details::Transformer::Classic {
                         continue;
                     }
                     feed_forward = layer.forward(std::move(feed_forward));
-                    feed_forward = ::Omni::Activation::Details::apply(
+                    feed_forward = ::Nott::Activation::Details::apply(
                         layer.activation, std::move(feed_forward));
                 }
                 if (feed_forward_dropout_.forward) {
                     feed_forward = feed_forward_dropout_.forward(std::move(feed_forward));
-                    feed_forward = ::Omni::Activation::Details::apply(
+                    feed_forward = ::Nott::Activation::Details::apply(
                         feed_forward_dropout_.activation, std::move(feed_forward));
                 }
 
@@ -630,15 +630,15 @@ namespace Omni::Block::Details::Transformer::Classic {
         private:
             std::int64_t embed_dim_{};
             LayerNormOptions layer_norm_options_{};
-            ::Omni::Attention::Details::AttentionModule self_attention_{};
-            ::Omni::Attention::Details::AttentionModule cross_attention_{};
+            ::Nott::Attention::Details::AttentionModule self_attention_{};
+            ::Nott::Attention::Details::AttentionModule cross_attention_{};
             torch::nn::LayerNorm norm1_{nullptr};
             torch::nn::LayerNorm norm2_{nullptr};
             torch::nn::LayerNorm norm3_{nullptr};
-            ::Omni::Layer::Details::RegisteredLayer self_attention_dropout_{};
-            ::Omni::Layer::Details::RegisteredLayer cross_attention_dropout_{};
-            std::vector<::Omni::Layer::Details::RegisteredLayer> feed_forward_layers_{};
-            ::Omni::Layer::Details::RegisteredLayer feed_forward_dropout_{};
+            ::Nott::Layer::Details::RegisteredLayer self_attention_dropout_{};
+            ::Nott::Layer::Details::RegisteredLayer cross_attention_dropout_{};
+            std::vector<::Nott::Layer::Details::RegisteredLayer> feed_forward_layers_{};
+            ::Nott::Layer::Details::RegisteredLayer feed_forward_dropout_{};
         };
 
         TORCH_MODULE(TransformerDecoderLayer);
@@ -728,4 +728,4 @@ namespace Omni::Block::Details::Transformer::Classic {
     using TransformerDecoder = Detail::TransformerDecoder;
 }
 
-#endif //OMNI_CLASSIC_HPP
+#endif //Nott_CLASSIC_HPP

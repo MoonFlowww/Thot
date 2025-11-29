@@ -1,4 +1,4 @@
-#ifndef OMNI_CCE_HPP
-#define OMNI_CCE_HPP
+#ifndef Nott_CCE_HPP
+#define Nott_CCE_HPP
 
-#endif //OMNI_CCE_HPP
+#endif //Nott_CCE_HPP

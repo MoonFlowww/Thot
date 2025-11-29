@@ -1,5 +1,5 @@
-#ifndef OMNI_SOFTMAX_HPP
-#define OMNI_SOFTMAX_HPP
+#ifndef Nott_SOFTMAX_HPP
+#define Nott_SOFTMAX_HPP
 
 #include <torch/torch.h>
 
@@ -7,7 +7,7 @@
 
 #include "../activation.hpp"
 
-namespace Omni::Activation::Details {
+namespace Nott::Activation::Details {
 
     struct Softmax {
         [[nodiscard]] torch::Tensor operator()(torch::Tensor input) const {
@@ -21,4 +21,4 @@ namespace Omni::Activation::Details {
 
 }
 
-#endif //OMNI_SOFTMAX_HPP
+#endif //Nott_SOFTMAX_HPP

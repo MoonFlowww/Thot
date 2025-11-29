@@ -1,9 +1,9 @@
-#ifndef OMNI_REGULARIZATION_DETAILS_L1_HPP
-#define OMNI_REGULARIZATION_DETAILS_L1_HPP
+#ifndef Nott_REGULARIZATION_DETAILS_L1_HPP
+#define Nott_REGULARIZATION_DETAILS_L1_HPP
 
 #include <torch/torch.h>
 
-namespace Omni::Regularization::Details {
+namespace Nott::Regularization::Details {
 
     struct L1Options {
         double coefficient{0.0};
@@ -25,4 +25,4 @@ namespace Omni::Regularization::Details {
 
 }
 
-#endif // OMNI_REGULARIZATION_DETAILS_L1_HPP
+#endif // Nott_REGULARIZATION_DETAILS_L1_HPP

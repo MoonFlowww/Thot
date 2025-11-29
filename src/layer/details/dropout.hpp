@@ -1,5 +1,5 @@
-#ifndef OMNI_DROPOUT_HPP
-#define OMNI_DROPOUT_HPP
+#ifndef Nott_DROPOUT_HPP
+#define Nott_DROPOUT_HPP
 // "Dropout: A Simple Way to Prevent Neural Networks from Overfitting" https://arxiv.org/pdf/1207.0580
 #include "../../activation/activation.hpp"
 #include "../../common/local.hpp"
@@ -7,7 +7,7 @@
 #include <string>
 #include <utility>
 #include "../registry.hpp"
-namespace Omni::Layer::Details {
+namespace Nott::Layer::Details {
 
     struct HardDropoutOptions {
         double probability{0.5};
@@ -16,8 +16,8 @@ namespace Omni::Layer::Details {
 
     struct HardDropoutDescriptor {
         HardDropoutOptions options{};
-        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
-        ::Omni::LocalConfig local{};
+        ::Nott::Activation::Descriptor activation{::Nott::Activation::Identity};
+        ::Nott::LocalConfig local{};
     };
 
     class HardDropoutImpl : public torch::nn::Module {
@@ -92,8 +92,8 @@ namespace Omni::Layer::Details {
 
     struct SoftDropoutDescriptor {
         SoftDropoutOptions options{};
-        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
-        ::Omni::LocalConfig local{};
+        ::Nott::Activation::Descriptor activation{::Nott::Activation::Identity};
+        ::Nott::LocalConfig local{};
     };
 
     class SoftDropoutImpl : public torch::nn::Module {
@@ -230,4 +230,4 @@ namespace Omni::Layer::Details {
 
 }
 
-#endif //OMNI_DROPOUT_HPP
+#endif //Nott_DROPOUT_HPP

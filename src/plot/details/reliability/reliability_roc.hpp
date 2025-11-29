@@ -1,5 +1,5 @@
-#ifndef OMNI_RELIABILITY_ROC_HPP
-#define OMNI_RELIABILITY_ROC_HPP
+#ifndef Nott_RELIABILITY_ROC_HPP
+#define Nott_RELIABILITY_ROC_HPP
 
 #include <array>
 #include <cstddef>
@@ -15,12 +15,12 @@
 #include "../../../utils/terminal.hpp"
 #include "../reliability.hpp"
 
-namespace Omni {
+namespace Nott {
     class Model;
 }
 
 
-namespace Omni::Plot::Details::Reliability {
+namespace Nott::Plot::Details::Reliability {
     namespace detail {
 
 
@@ -109,7 +109,7 @@ namespace Omni::Plot::Details::Reliability {
                 style.lineWidth = 2.0;
                 style.pointType = 7;
                 style.pointSize = 1.1;
-                style.lineColor = Utils::Terminal::Omni::Plot::Details::Reliability::detail::PickColor(index);
+                style.lineColor = Utils::Terminal::Nott::Plot::Details::Reliability::detail::PickColor(index);
 
                 datasets.push_back(Utils::Gnuplot::DataSet2D{
                     std::move(falsePositiveRates),
@@ -171,4 +171,4 @@ namespace Omni::Plot::Details::Reliability {
 }
 
 
-#endif //OMNI_RELIABILITY_ROC_HPP
+#endif //Nott_RELIABILITY_ROC_HPP

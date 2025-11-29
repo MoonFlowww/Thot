@@ -1,5 +1,5 @@
-#ifndef OMNI_NTK_HPP
-#define OMNI_NTK_HPP
+#ifndef Nott_NTK_HPP
+#define Nott_NTK_HPP
 
 #include <algorithm>
 #include <cmath>
@@ -22,7 +22,7 @@
 
 #include <torch/torch.h>
 
-namespace Omni::NTK {
+namespace Nott::NTK {
     enum class KernelType { NTK, NNGP };
     enum class OutputMode { SumOutputs, PerOutput, DiagonalAverage };
     enum class Approximation { Exact, RandomProjection, Nystrom };
@@ -906,4 +906,4 @@ namespace Omni::NTK {
     }
 }
 
-#endif // OMNI_NTK_HPP
+#endif // Nott_NTK_HPP

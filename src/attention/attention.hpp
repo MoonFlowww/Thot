@@ -1,11 +1,11 @@
-#ifndef OMNI_ATTENTION_HPP
-#define OMNI_ATTENTION_HPP
+#ifndef Nott_ATTENTION_HPP
+#define Nott_ATTENTION_HPP
 // This file is an factory, must exempt it from any logical-code. For functions look into "/details"
 
 #include <cstdint>
 #include <variant>
 
-namespace Omni::Attention {
+namespace Nott::Attention {
     enum class Variant {
         Full,
         Causal,
@@ -50,4 +50,4 @@ namespace Omni::Attention {
     }
 }
 
-#endif //OMNI_ATTENTION_HPP
+#endif //Nott_ATTENTION_HPP

@@ -1,5 +1,5 @@
-#ifndef OMNI_HEAD_HPP
-#define OMNI_HEAD_HPP
+#ifndef Nott_HEAD_HPP
+#define Nott_HEAD_HPP
 #include <cstdint>
 #include <stdexcept>
 #include <utility>
@@ -9,14 +9,14 @@
 #include "../attention.hpp"
 #include "kernel.hpp"
 
-namespace Omni::Attention::Details {
+namespace Nott::Attention::Details {
     struct MultiHeadAttentionOptions {
         std::int64_t embed_dim{1};
         std::int64_t num_heads{1};
         double dropout{0.0};
         bool bias{true};
         bool batch_first{true};
-        ::Omni::Attention::Variant variant{::Omni::Attention::Variant::Full};
+        ::Nott::Attention::Variant variant{::Nott::Attention::Variant::Full};
     };
 
     class MultiHeadAttentionImpl : public torch::nn::Module {
@@ -98,4 +98,4 @@ namespace Omni::Attention::Details {
     TORCH_MODULE(MultiHeadAttention);
 }
 
-#endif //OMNI_HEAD_HPP
+#endif //Nott_HEAD_HPP

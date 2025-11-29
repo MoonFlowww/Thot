@@ -1,5 +1,5 @@
-#ifndef OMNI_ACTIVATION_APPLY_HPP
-#define OMNI_ACTIVATION_APPLY_HPP
+#ifndef Nott_ACTIVATION_APPLY_HPP
+#define Nott_ACTIVATION_APPLY_HPP
 
 #include <torch/torch.h>
 
@@ -20,40 +20,40 @@
 #include "details/swish.hpp"
 #include "details/tanh.hpp"
 
-namespace Omni::Activation::Details {
-    inline torch::Tensor apply(::Omni::Activation::Type type, torch::Tensor input) {
+namespace Nott::Activation::Details {
+    inline torch::Tensor apply(::Nott::Activation::Type type, torch::Tensor input) {
         switch (type) {
-            case ::Omni::Activation::Type::ReLU:
+            case ::Nott::Activation::Type::ReLU:
                 return ReLU{}(std::move(input));
-            case ::Omni::Activation::Type::Sigmoid:
+            case ::Nott::Activation::Type::Sigmoid:
                 return Sigmoid{}(std::move(input));
-            case ::Omni::Activation::Type::Tanh:
+            case ::Nott::Activation::Type::Tanh:
                 return Tanh{}(std::move(input));
-            case ::Omni::Activation::Type::LeakyReLU:
+            case ::Nott::Activation::Type::LeakyReLU:
                 return LeakyReLU{}(std::move(input));
-            case ::Omni::Activation::Type::Softmax:
+            case ::Nott::Activation::Type::Softmax:
                 return Softmax{}(std::move(input));
-            case ::Omni::Activation::Type::SiLU:
+            case ::Nott::Activation::Type::SiLU:
                 return SiLU{}(std::move(input));
-            case ::Omni::Activation::Type::GeLU:
+            case ::Nott::Activation::Type::GeLU:
                 return GeLU{}(std::move(input));
-            case ::Omni::Activation::Type::GLU:
+            case ::Nott::Activation::Type::GLU:
                 return GLU{}(std::move(input));
-            case ::Omni::Activation::Type::SwiGLU:
+            case ::Nott::Activation::Type::SwiGLU:
                 return SwiGLU{}(std::move(input));
-            case ::Omni::Activation::Type::dSiLU:
+            case ::Nott::Activation::Type::dSiLU:
                 return dSiLU{}(std::move(input));
-            case ::Omni::Activation::Type::PSiLU:
+            case ::Nott::Activation::Type::PSiLU:
                 return PSiLU{}(std::move(input));
-            case ::Omni::Activation::Type::Mish:
+            case ::Nott::Activation::Type::Mish:
                 return Mish{}(std::move(input));
-            case ::Omni::Activation::Type::Swish:
+            case ::Nott::Activation::Type::Swish:
                 return Swish{}(std::move(input));
-            case ::Omni::Activation::Type::Identity:
+            case ::Nott::Activation::Type::Identity:
                 return input;
             default:
                 return input;
         }
     }
 }
-#endif // OMNI_ACTIVATION_APPLY_HPP
+#endif // Nott_ACTIVATION_APPLY_HPP

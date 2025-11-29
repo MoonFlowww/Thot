@@ -1,6 +1,6 @@
 # Block Containers and Transformer Blueprints
 
-The `Omni::Block` namespace bundles higher-level containers that stitch layers
+The `Nott::Block` namespace bundles higher-level containers that stitch layers
 into reusable macro-architectures. Blocks honour the same activation,
 initialization, and [Docs/Local](../local/README.md) overrides accepted by individual
 [Docs/Layers](../layer/README.md), letting you mix coarse and fine-grained
@@ -21,44 +21,44 @@ Build a residual-flavoured sequential block and register it on a model with the 
 
 Sequential Block:
 ```cpp
-Omni::Model model("resnet_tiny");
+Nott::Model model("resnet_tiny");
 
-model.add(Omni::Block::Sequential({
-    Omni::Layer::Conv2d(
-        Omni::Layer::Conv2dOptions{
+model.add(Nott::Block::Sequential({
+    Nott::Layer::Conv2d(
+        Nott::Layer::Conv2dOptions{
             .in_channels = 3,
             .out_channels = 64,
             .kernel_size = {3, 3},
             .stride = {1, 1},
             .padding = {1, 1}
         },
-        Omni::Activation::ReLU),
-    Omni::Layer::BatchNorm2d(Omni::Layer::BatchNorm2dOptions{.num_features = 64}),
-    Omni::Layer::Conv2d(
-        Omni::Layer::Conv2dOptions{
+        Nott::Activation::ReLU),
+    Nott::Layer::BatchNorm2d(Nott::Layer::BatchNorm2dOptions{.num_features = 64}),
+    Nott::Layer::Conv2d(
+        Nott::Layer::Conv2dOptions{
             .in_channels = 64,
             .out_channels = 64,
             .kernel_size = {3, 3},
             .stride = {1, 1},
             .padding = {1, 1}
         },
-        Omni::Activation::ReLU)
+        Nott::Activation::ReLU)
 }));
 ```
 Residual Block:
 ```cpp
-model.add(Omni::Block::Residual({
-    Omni::Layer::Conv2d(
-        Omni::Layer::Conv2dOptions{
+model.add(Nott::Block::Residual({
+    Nott::Layer::Conv2d(
+        Nott::Layer::Conv2dOptions{
             .in_channels = 64,
             .out_channels = 64,
             .kernel_size = {3, 3},
             .stride = {1, 1},
             .padding = {1, 1}
         },
-        Omni::Activation::ReLU),
-    Omni::Layer::Conv2d(
-        Omni::Layer::Conv2dOptions{
+        Nott::Activation::ReLU),
+    Nott::Layer::Conv2d(
+        Nott::Layer::Conv2dOptions{
             .in_channels = 64,
             .out_channels = 64,
             .kernel_size = {3, 3},

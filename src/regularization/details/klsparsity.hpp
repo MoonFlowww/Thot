@@ -1,9 +1,9 @@
-#ifndef OMNI_REGULARIZATION_DETAILS_KLSPARSITY_HPP
-#define OMNI_REGULARIZATION_DETAILS_KLSPARSITY_HPP
+#ifndef Nott_REGULARIZATION_DETAILS_KLSPARSITY_HPP
+#define Nott_REGULARIZATION_DETAILS_KLSPARSITY_HPP
 
 #include <torch/torch.h>
 
-namespace Omni::Regularization::Details {
+namespace Nott::Regularization::Details {
 
     struct KLSparsityOptions {
         double coefficient{0.0};
@@ -40,4 +40,4 @@ namespace Omni::Regularization::Details {
 
 }
 
-#endif // OMNI_REGULARIZATION_DETAILS_KLSPARSITY_HPP
+#endif // Nott_REGULARIZATION_DETAILS_KLSPARSITY_HPP

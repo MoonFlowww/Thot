@@ -1,11 +1,11 @@
-#ifndef OMNI_REGULARIZATION_DETAILS_MAXNORM_HPP
-#define OMNI_REGULARIZATION_DETAILS_MAXNORM_HPP
+#ifndef Nott_REGULARIZATION_DETAILS_MAXNORM_HPP
+#define Nott_REGULARIZATION_DETAILS_MAXNORM_HPP
 
 #include <torch/torch.h>
 
 #include "common.hpp"
 
-namespace Omni::Regularization::Details {
+namespace Nott::Regularization::Details {
 
     struct MaxNormOptions {
         double coefficient{0.0};
@@ -37,4 +37,4 @@ namespace Omni::Regularization::Details {
 
 }
 
-#endif // OMNI_REGULARIZATION_DETAILS_MAXNORM_HPP
+#endif // Nott_REGULARIZATION_DETAILS_MAXNORM_HPP

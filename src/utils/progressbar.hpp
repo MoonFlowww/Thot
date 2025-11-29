@@ -1,5 +1,5 @@
-#ifndef LIBOMNI_PROGRESSBAR_HPP
-#define LIBOMNI_PROGRESSBAR_HPP
+#ifndef LIBNott_PROGRESSBAR_HPP
+#define LIBNott_PROGRESSBAR_HPP
 
 #include <algorithm>
 #include <cmath>
@@ -9,7 +9,7 @@
 #include <sstream>
 #include <string>
 
-namespace Omni::Utils {
+namespace Nott::Utils {
     class ProgressBar {
     public:
         ProgressBar(std::int64_t total, std::string label, std::size_t width = 30)
@@ -115,4 +115,4 @@ namespace Omni::Utils {
     };
 }
 
-#endif // LIBOMNI_PROGRESSBAR_HPP
+#endif // LIBNott_PROGRESSBAR_HPP

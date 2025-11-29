@@ -1,5 +1,5 @@
-#ifndef OMNI_PLOT_DETAILS_DATA_HPP
-#define OMNI_PLOT_DETAILS_DATA_HPP
+#ifndef Nott_PLOT_DETAILS_DATA_HPP
+#define Nott_PLOT_DETAILS_DATA_HPP
 
 #include <algorithm>
 #include <array>
@@ -22,7 +22,7 @@
 
 #include "../../utils/gnuplot.hpp"
 
-namespace Omni::Plot::Data {
+namespace Nott::Plot::Data {
     namespace Details {
         inline auto as_cpu_contiguous(const torch::Tensor& tensor) -> torch::Tensor
         {
@@ -486,7 +486,7 @@ struct MatrixOptions {
         }
 
         static std::atomic<std::size_t> matrixCounter{0};
-        const auto datablockId = "omni_matrix_" + std::to_string(++matrixCounter);
+        const auto datablockId = "Nott_matrix_" + std::to_string(++matrixCounter);
         const auto datablockRef = "$" + datablockId;
         plotter.defineDatablock(datablockId, Details::build_grayscale_writer(prepared));
 
@@ -677,7 +677,7 @@ struct MatrixOptions {
                 const auto height = prepared.size(1);
                 const auto width = prepared.size(2);
 
-                const auto datablockId = "omni_image_" + std::to_string(++datablockCounter);
+                const auto datablockId = "Nott_image_" + std::to_string(++datablockCounter);
                 const auto datablockRef = "$" + datablockId;
 
                 std::ostringstream xrange;
@@ -696,7 +696,7 @@ struct MatrixOptions {
                 auto prepared = Details::prepare_grayscale_tensor(tensor.clone());
                 const auto height = prepared.size(0);
                 const auto width = prepared.size(1);
-                const auto datablockId = "omni_image_" + std::to_string(++datablockCounter);
+                const auto datablockId = "Nott_image_" + std::to_string(++datablockCounter);
                 const auto datablockRef = "$" + datablockId;
 
                 std::ostringstream xrange;
@@ -730,4 +730,4 @@ struct MatrixOptions {
     }
 }
 
-#endif // OMNI_PLOT_DETAILS_DATA_HPP
+#endif // Nott_PLOT_DETAILS_DATA_HPP

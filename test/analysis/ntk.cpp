@@ -1,4 +1,4 @@
-#include "../../include/Omni.h"
+#include "../../include/Nott.h"
 
 #include <cmath>
 #include <iomanip>
@@ -64,20 +64,20 @@ namespace {
 }
 
 int main() {
-    Omni::Model model("");
+    Nott::Model model("");
     const auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
     model.use_cuda(torch::cuda::is_available());
 
     const int64_t hidden_dim1 = 64;
     const int64_t hidden_dim2 = 64;
     const int64_t num_classes = 3;
-    model.add(Omni::Layer::Flatten());
-    model.add(Omni::Layer::FC({.in_features = 2, .out_features = hidden_dim1}, Omni::Activation::GeLU,
-                              Omni::Initialization::HeUniform));
-    model.add(Omni::Layer::FC({.in_features = hidden_dim1, .out_features = hidden_dim2}, Omni::Activation::GeLU,
-                              Omni::Initialization::HeUniform));
-    model.add(Omni::Layer::FC({.in_features = hidden_dim2, .out_features = num_classes}, Omni::Activation::Identity,
-                              Omni::Initialization::HeUniform));
+    model.add(Nott::Layer::Flatten());
+    model.add(Nott::Layer::FC({.in_features = 2, .out_features = hidden_dim1}, Nott::Activation::GeLU,
+                              Nott::Initialization::HeUniform));
+    model.add(Nott::Layer::FC({.in_features = hidden_dim1, .out_features = hidden_dim2}, Nott::Activation::GeLU,
+                              Nott::Initialization::HeUniform));
+    model.add(Nott::Layer::FC({.in_features = hidden_dim2, .out_features = num_classes}, Nott::Activation::Identity,
+                              Nott::Initialization::HeUniform));
     model.to(device);
 
     const int64_t samples_per_class = std::pow(2,12);
@@ -86,14 +86,14 @@ int main() {
 
     x = x.to(device);
     y = y.to(device);
-    model.set_loss(Omni::Loss::CrossEntropy({.label_smoothing=0.02f}));
-    model.set_optimizer(Omni::Optimizer::AdamW({.learning_rate=0.0004}));
+    model.set_loss(Nott::Loss::CrossEntropy({.label_smoothing=0.02f}));
+    model.set_optimizer(Nott::Optimizer::AdamW({.learning_rate=0.0004}));
     model.train(x, y, {.epoch = 20, .batch_size=64, .restore_best_state=true, .test=std::vector<at::Tensor>{x2, y2}});
-    Omni::NTK::Options options;
-    options.kernel_type = Omni::NTK::KernelType::NTK;
-    options.output_mode = Omni::NTK::OutputMode::SumOutputs;
-    options.approximation = Omni::NTK::Approximation::Exact;
-    options.memory_mode = Omni::NTK::MemoryMode::FullGPU;
+    Nott::NTK::Options options;
+    options.kernel_type = Nott::NTK::KernelType::NTK;
+    options.output_mode = Nott::NTK::OutputMode::SumOutputs;
+    options.approximation = Nott::NTK::Approximation::Exact;
+    options.memory_mode = Nott::NTK::MemoryMode::FullGPU;
     options.max_samples = x.size(0);
     options.center_kernel = true;
     options.normalize_diag = false;
@@ -105,8 +105,8 @@ int main() {
     options.stream = &std::cout;
     options.print_summary = false;
 
-    auto [xf1, yf1] = Omni::Data::Manipulation::Fraction(x, y, 0.1f);
-    auto result = Omni::NTK::Compute(model, xf1, yf1, options);
+    auto [xf1, yf1] = Nott::Data::Manipulation::Fraction(x, y, 0.1f);
+    auto result = Nott::NTK::Compute(model, xf1, yf1, options);
 
     const auto& s = result.stats;
     std::cout << "\n[NTK] ==================================================\n";

@@ -1,5 +1,5 @@
-#ifndef OMNI_PLOT_HPP
-#define OMNI_PLOT_HPP
+#ifndef Nott_PLOT_HPP
+#define Nott_PLOT_HPP
 
 #include <cstddef>
 #include <optional>
@@ -17,11 +17,11 @@
 #include "details/reliability/reliability_roc.hpp"
 #include "details/reliability/reliability_youdens.hpp"
 
-namespace Omni {
+namespace Nott {
     class Model;
 }
 
-namespace Omni::Plot {
+namespace Nott::Plot {
     namespace Training {
         struct LossOptions {
             bool learningRate{false};
@@ -199,4 +199,4 @@ namespace Omni::Plot {
     }
 }
 
-#endif //OMNI_PLOT_HPP
+#endif //Nott_PLOT_HPP

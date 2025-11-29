@@ -1,12 +1,12 @@
-#ifndef OMNI_LRSCHEDULER_HPP
-#define OMNI_LRSCHEDULER_HPP
+#ifndef Nott_LRSCHEDULER_HPP
+#define Nott_LRSCHEDULER_HPP
 // This file is an factory, must exempt it from any logical-code. For functions look into "/details"
 #include <variant>
 
 #include "details/cosineannealing.hpp"
 #include "registry.hpp"
 
-namespace Omni::LrScheduler {
+namespace Nott::LrScheduler {
     using CosineAnnealingOptions = Details::CosineAnnealingOptions;
     using CosineAnnealingDescriptor = Details::CosineAnnealingDescriptor;
 
@@ -19,4 +19,4 @@ namespace Omni::LrScheduler {
 }
 
 
-#endif //OMNI_LRSCHEDULER_HPP
+#endif //Nott_LRSCHEDULER_HPP

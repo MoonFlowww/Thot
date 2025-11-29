@@ -1,9 +1,9 @@
-#ifndef OMNI_NUCLEARNORM_HPP
-#define OMNI_NUCLEARNORM_HPP
+#ifndef Nott_NUCLEARNORM_HPP
+#define Nott_NUCLEARNORM_HPP
 
 #include <torch/torch.h>
 
-namespace Omni::Regularization::Details {
+namespace Nott::Regularization::Details {
 
     struct NuclearNormOptions {
         double strength{0.0};
@@ -33,4 +33,4 @@ namespace Omni::Regularization::Details {
 
 }
 
-#endif //OMNI_NUCLEARNORM_HPP
+#endif //Nott_NUCLEARNORM_HPP

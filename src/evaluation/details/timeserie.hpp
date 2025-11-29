@@ -1,5 +1,5 @@
-#ifndef OMNI_TIMESERIE_HPP
-#define OMNI_TIMESERIE_HPP
+#ifndef Nott_TIMESERIE_HPP
+#define Nott_TIMESERIE_HPP
 
 #include <algorithm>
 #include <cmath>
@@ -23,7 +23,7 @@
 #include "../../metric/metric.hpp"
 #include "../../utils/terminal.hpp"
 
-namespace Omni::Evaluation::Details::Timeseries {
+namespace Nott::Evaluation::Details::Timeseries {
     struct Descriptor { };
 
     struct Options {
@@ -197,7 +197,7 @@ namespace Omni::Evaluation::Details::Timeseries {
             }
         }
 
-        Omni::StreamingOptions streaming_options{};
+        Nott::StreamingOptions streaming_options{};
         if (batch_size > 0) {
             streaming_options.batch_size = batch_size;
         }
@@ -212,23 +212,23 @@ namespace Omni::Evaluation::Details::Timeseries {
         std::size_t total_points = 0;
 
         auto prepare_batch = [&](torch::Tensor input_batch, torch::Tensor target_batch)
-            -> std::optional<Omni::StreamingBatch>
+            -> std::optional<Nott::StreamingBatch>
         {
             if (!input_batch.defined() || !target_batch.defined()) {
                 return std::nullopt;
             }
 
-            Omni::StreamingBatch batch{};
+            Nott::StreamingBatch batch{};
             batch.inputs = std::move(input_batch);
             batch.targets = std::move(target_batch);
             if (batch.targets.defined()) {
-                batch.reference_targets = Omni::DeferredHostTensor::from_tensor(batch.targets, non_blocking_transfers);
+                batch.reference_targets = Nott::DeferredHostTensor::from_tensor(batch.targets, non_blocking_transfers);
             }
 
             return batch;
         };
 
-        auto process_batch = [&](torch::Tensor prediction_tensor, Omni::StreamingBatch batch) {
+        auto process_batch = [&](torch::Tensor prediction_tensor, Nott::StreamingBatch batch) {
             if (!prediction_tensor.defined()) {
                 return;
             }
@@ -236,7 +236,7 @@ namespace Omni::Evaluation::Details::Timeseries {
             auto preds = prediction_tensor.detach();
             if (!preds.device().is_cpu()) {
                 if (non_blocking_transfers) {
-                    auto deferred = Omni::DeferredHostTensor::from_tensor(preds, /*non_blocking=*/true);
+                    auto deferred = Nott::DeferredHostTensor::from_tensor(preds, /*non_blocking=*/true);
                     preds = deferred.materialize();
                 } else {
                     preds = preds.to(torch::kCPU, preds.scalar_type(), /*non_blocking=*/false);
@@ -257,7 +257,7 @@ namespace Omni::Evaluation::Details::Timeseries {
             }
             if (!target_cpu.device().is_cpu()) {
                 if (non_blocking_transfers) {
-                    auto deferred = Omni::DeferredHostTensor::from_tensor(target_cpu, /*non_blocking=*/true);
+                    auto deferred = Nott::DeferredHostTensor::from_tensor(target_cpu, /*non_blocking=*/true);
                     target_cpu = deferred.materialize();
                 } else {
                     target_cpu = target_cpu.to(torch::kCPU, target_cpu.scalar_type(), /*non_blocking=*/false);
@@ -544,4 +544,4 @@ namespace Omni::Evaluation::Details::Timeseries {
     }
 }
 
-#endif //OMNI_TIMESERIE_HPP
+#endif //Nott_TIMESERIE_HPP

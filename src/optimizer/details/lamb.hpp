@@ -1,5 +1,5 @@
-#ifndef OMNI_LAMB_HPP
-#define OMNI_LAMB_HPP
+#ifndef Nott_LAMB_HPP
+#define Nott_LAMB_HPP
 // "Large Batch Optimization for Deep Learning: Training BERT in 76 minutes" (LAMB) https://arxiv.org/pdf/1904.00962
 #include <algorithm>
 #include <cmath>
@@ -10,7 +10,7 @@
 #include <torch/optim/optimizer.h>
 #include <torch/optim/serialize.h>
 
-namespace Omni::Optimizer::Details {
+namespace Nott::Optimizer::Details {
 
     struct LAMBOptions : public torch::optim::OptimizerCloneableOptions<LAMBOptions> {
         LAMBOptions(double lr = 1e-3) : lr_(lr) {}
@@ -200,4 +200,4 @@ namespace Omni::Optimizer::Details {
 
 }
 
-#endif // OMNI_LAMB_HPP
+#endif // Nott_LAMB_HPP

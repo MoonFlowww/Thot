@@ -1,5 +1,5 @@
-#ifndef OMNI_DATA_TRANSFORM_AUGMENTATION_CUTOUT_HPP
-#define OMNI_DATA_TRANSFORM_AUGMENTATION_CUTOUT_HPP
+#ifndef Nott_DATA_TRANSFORM_AUGMENTATION_CUTOUT_HPP
+#define Nott_DATA_TRANSFORM_AUGMENTATION_CUTOUT_HPP
 
 #include <algorithm>
 #include <cstddef>
@@ -14,7 +14,7 @@
 
 #include "common.hpp"
 
-namespace Omni::Data::Transform::Augmentation {
+namespace Nott::Data::Transform::Augmentation {
     namespace Options {
         struct CutoutOptions {
             const std::vector<int64_t>& offsets;
@@ -201,4 +201,4 @@ namespace Omni::Data::Transform::Augmentation {
     }
 }
 
-#endif // OMNI_DATA_TRANSFORMS_AUGMENTATION_CUTOUT_HPP
+#endif // Nott_DATA_TRANSFORMS_AUGMENTATION_CUTOUT_HPP

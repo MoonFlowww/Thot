@@ -1,5 +1,5 @@
-#ifndef OMNI_POSITIONAL_ENCODING_HPP
-#define OMNI_POSITIONAL_ENCODING_HPP
+#ifndef Nott_POSITIONAL_ENCODING_HPP
+#define Nott_POSITIONAL_ENCODING_HPP
 // "Attention Is All You Need" (sinusoidal positional encoding) https://arxiv.org/pdf/1706.03762
 
 #include <cstddef>
@@ -12,7 +12,7 @@
 #include <torch/torch.h>
 #include "../../common/local.hpp"
 
-namespace Omni::Layer::Details {
+namespace Nott::Layer::Details {
     enum class PositionalEncodingType {
         None,
         Sinusoidal,
@@ -152,10 +152,10 @@ namespace Omni::Layer::Details {
         PositionalEncodingOptions options_{};
         torch::Tensor positional_embedding_{};
         torch::nn::Dropout dropout_{nullptr};
-        ::Omni::LocalConfig local{};
+        ::Nott::LocalConfig local{};
     };
 
     TORCH_MODULE(LearnedPositionalEncoding);
 }
 
-#endif //OMNI_POSITIONAL_ENCODING_HPP
+#endif //Nott_POSITIONAL_ENCODING_HPP

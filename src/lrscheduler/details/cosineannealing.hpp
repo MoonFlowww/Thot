@@ -1,5 +1,5 @@
-#ifndef OMNI_LRSCHEDULER_COSINEANNEALING_HPP
-#define OMNI_LRSCHEDULER_COSINEANNEALING_HPP
+#ifndef Nott_LRSCHEDULER_COSINEANNEALING_HPP
+#define Nott_LRSCHEDULER_COSINEANNEALING_HPP
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -12,7 +12,7 @@
 
 #include "common.hpp"
 
-namespace Omni::LrScheduler::Details {
+namespace Nott::LrScheduler::Details {
     struct CosineAnnealingOptions {
         std::size_t T_max{1};
         double eta_min{0.0};
@@ -93,4 +93,4 @@ namespace Omni::LrScheduler::Details {
     };
 }
 
-#endif //OMNI_LRSCHEDULER_COSINEANNEALING_HPP
+#endif //Nott_LRSCHEDULER_COSINEANNEALING_HPP

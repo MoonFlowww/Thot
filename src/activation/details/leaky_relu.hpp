@@ -1,5 +1,5 @@
-#ifndef OMNI_LEAKY_RELU_HPP
-#define OMNI_LEAKY_RELU_HPP
+#ifndef Nott_LEAKY_RELU_HPP
+#define Nott_LEAKY_RELU_HPP
 
 #include <torch/torch.h>
 
@@ -7,7 +7,7 @@
 
 #include "../activation.hpp"
 
-namespace Omni::Activation::Details {
+namespace Nott::Activation::Details {
 
     struct LeakyReLU {
         [[nodiscard]] torch::Tensor operator()(torch::Tensor input) const {
@@ -17,4 +17,4 @@ namespace Omni::Activation::Details {
 
 }
 
-#endif //OMNI_LEAKY_RELU_HPP
+#endif //Nott_LEAKY_RELU_HPP

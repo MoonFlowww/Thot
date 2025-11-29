@@ -1,12 +1,12 @@
-#ifndef OMNI_MAE_HPP
-#define OMNI_MAE_HPP
+#ifndef Nott_MAE_HPP
+#define Nott_MAE_HPP
 #include <optional>
 #include <stdexcept>
 #include <torch/torch.h>
 
 #include "helper.hpp" // reduction called in
 
-namespace Omni::Loss::Details {
+namespace Nott::Loss::Details {
     struct MAEOptions {
         Reduction reduction{Reduction::Mean};
         std::vector<double> weight{};
@@ -49,4 +49,4 @@ namespace Omni::Loss::Details {
 
 }
 
-#endif // OMNI_MAE_HPP
+#endif // Nott_MAE_HPP

@@ -1,5 +1,5 @@
-#ifndef LIBOMNI_TERMINAL_HPP
-#define LIBOMNI_TERMINAL_HPP
+#ifndef LIBNott_TERMINAL_HPP
+#define LIBNott_TERMINAL_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -7,7 +7,7 @@
 #include <string_view>
 #include <vector>
 
-namespace Omni::Utils::Terminal {
+namespace Nott::Utils::Terminal {
     // ---------- Colors ----------
     namespace Colors {
         inline constexpr std::string_view kReset = "\033[0m";
@@ -260,7 +260,7 @@ namespace Omni::Utils::Terminal {
 
 
 
-    namespace Omni::Plot::Details::Reliability::detail {
+    namespace Nott::Plot::Details::Reliability::detail {
         inline auto PickColor(std::size_t index) -> std::string
         {
             static constexpr std::array<const char*, 8> palette{
@@ -280,7 +280,7 @@ namespace Omni::Utils::Terminal {
 
 
 /* Instance:
-using namespace Omni::Utils::Terminal;
+using namespace Nott::Utils::Terminal;
 
 // Top bars
 auto r = TopBarRounded(13, Colors::kBrightYellow); // ╭━━━━━━━━━━━━━╮
@@ -293,4 +293,4 @@ auto mid = HMid(spans, Colors::kBrightGreen);                    // ┣━━━
 auto bot = HBottom(spans, Colors::kBrightGreen, FrameStyle::Box);// ┗━━━━━━┻━━━━┻━━━━━━━━┛
 
 */
-#endif // LIBOMNI_TERMINAL_HPP
+#endif // LIBNott_TERMINAL_HPP

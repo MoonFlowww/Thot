@@ -1,5 +1,5 @@
-#ifndef OMNI_BLOCK_HPP
-#define OMNI_BLOCK_HPP
+#ifndef Nott_BLOCK_HPP
+#define Nott_BLOCK_HPP
 // This file is an factory, must exempt it from any logical-code. For functions look into "/details"
 #include <cstddef>
 #include <initializer_list>
@@ -21,7 +21,7 @@
 #include "details/transformers/perceiver.hpp"
 #include "details/transformers/longformer_xl.hpp"
 
-namespace Omni::Block {
+namespace Nott::Block {
     namespace Details::Transformer::Bert {
         struct EncoderDescriptor;
     }
@@ -45,22 +45,22 @@ namespace Omni::Block {
                                     Transformer::Perceiver::EncoderDescriptor,
                                     Transformer::LongformerXL::EncoderDescriptor>;
 
-    [[nodiscard]] inline auto Sequential(std::initializer_list<::Omni::Layer::Descriptor> layers, ::Omni::LocalConfig local = {}) -> SequentialDescriptor {
+    [[nodiscard]] inline auto Sequential(std::initializer_list<::Nott::Layer::Descriptor> layers, ::Nott::LocalConfig local = {}) -> SequentialDescriptor {
         SequentialDescriptor descriptor{};
         descriptor.layers.assign(layers.begin(), layers.end());
         descriptor.local = std::move(local);
         return descriptor;
     }
 
-    [[nodiscard]] inline auto Sequential(std::vector<::Omni::Layer::Descriptor> layers, ::Omni::LocalConfig local = {}) -> SequentialDescriptor {
+    [[nodiscard]] inline auto Sequential(std::vector<::Nott::Layer::Descriptor> layers, ::Nott::LocalConfig local = {}) -> SequentialDescriptor {
         SequentialDescriptor descriptor{};
         descriptor.layers = std::move(layers);
         descriptor.local = std::move(local);
         return descriptor;
     }
 
-    [[nodiscard]] inline auto Residual(std::initializer_list<::Omni::Layer::Descriptor> layers,
-            std::size_t repeats = 1, Details::ResidualSkipOptions skip = {}, Details::ResidualOutputOptions output = {}, ::Omni::LocalConfig local = {}) -> ResidualDescriptor {
+    [[nodiscard]] inline auto Residual(std::initializer_list<::Nott::Layer::Descriptor> layers,
+            std::size_t repeats = 1, Details::ResidualSkipOptions skip = {}, Details::ResidualOutputOptions output = {}, ::Nott::LocalConfig local = {}) -> ResidualDescriptor {
         ResidualDescriptor descriptor{};
         descriptor.layers.assign(layers.begin(), layers.end());
         descriptor.repeats = repeats;
@@ -70,8 +70,8 @@ namespace Omni::Block {
         return descriptor;
     }
 
-    [[nodiscard]] inline auto Residual(std::vector<::Omni::Layer::Descriptor> layers,
-            std::size_t repeats = 1, Details::ResidualSkipOptions skip = {}, Details::ResidualOutputOptions output = {}, ::Omni::LocalConfig local = {}) -> ResidualDescriptor {
+    [[nodiscard]] inline auto Residual(std::vector<::Nott::Layer::Descriptor> layers,
+            std::size_t repeats = 1, Details::ResidualSkipOptions skip = {}, Details::ResidualOutputOptions output = {}, ::Nott::LocalConfig local = {}) -> ResidualDescriptor {
         ResidualDescriptor descriptor{};
         descriptor.layers = std::move(layers);
         descriptor.repeats = repeats;
@@ -82,4 +82,4 @@ namespace Omni::Block {
     }
 }
 
-#endif //OMNI_BLOCK_HPP
+#endif //Nott_BLOCK_HPP

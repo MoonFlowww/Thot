@@ -1,11 +1,11 @@
-#ifndef OMNI_DATA_TRANSFORM_NORMALIZATION_COMMON_HPP
-#define OMNI_DATA_TRANSFORM_NORMALIZATION_COMMON_HPP
+#ifndef Nott_DATA_TRANSFORM_NORMALIZATION_COMMON_HPP
+#define Nott_DATA_TRANSFORM_NORMALIZATION_COMMON_HPP
 #include <torch/torch.h>
 #include <vector>
 #include <algorithm>
 #include <stdexcept>
 
-namespace Omni::Data::Transform::Normalization::Details {
+namespace Nott::Data::Transform::Normalization::Details {
     inline void check_temporal_dim(const at::Tensor& x, int64_t temporal_dim) {
         TORCH_CHECK(x.defined(), "Input tensor must be defined");
         TORCH_CHECK(temporal_dim >= 0 && temporal_dim < x.dim(), "temporal_dim out of range: ", temporal_dim, " for x.dim()=", x.dim());
@@ -85,4 +85,4 @@ namespace Omni::Data::Transform::Normalization::Details {
         return std::sqrt(2.0) * at::erfinv(2.0 * v - 1.0);
     }
 }
-#endif //OMNI_DATA_TRANSFORM_NORMALIZATION_COMMON_HPP
+#endif //Nott_DATA_TRANSFORM_NORMALIZATION_COMMON_HPP

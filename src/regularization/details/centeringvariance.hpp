@@ -1,9 +1,9 @@
-#ifndef OMNI_REGULARIZATION_DETAILS_CENTERINGVARIANCE_HPP
-#define OMNI_REGULARIZATION_DETAILS_CENTERINGVARIANCE_HPP
+#ifndef Nott_REGULARIZATION_DETAILS_CENTERINGVARIANCE_HPP
+#define Nott_REGULARIZATION_DETAILS_CENTERINGVARIANCE_HPP
 
 #include <torch/torch.h>
 
-namespace Omni::Regularization::Details {
+namespace Nott::Regularization::Details {
 
     struct CenteringVarianceOptions {
         double coefficient{0.0};
@@ -30,4 +30,4 @@ namespace Omni::Regularization::Details {
 
 }
 
-#endif // OMNI_REGULARIZATION_DETAILS_CENTERINGVARIANCE_HPP
+#endif // Nott_REGULARIZATION_DETAILS_CENTERINGVARIANCE_HPP

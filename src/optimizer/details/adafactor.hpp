@@ -1,5 +1,5 @@
-#ifndef OMNI_ADAFACTOR_HPP
-#define OMNI_ADAFACTOR_HPP
+#ifndef Nott_ADAFACTOR_HPP
+#define Nott_ADAFACTOR_HPP
 // "Adafactor: Adaptive Learning Rates with Sublinear Memory Cost" https://arxiv.org/pdf/1804.04235
 #include <algorithm>
 #include <cmath>
@@ -10,7 +10,7 @@
 #include <torch/optim/optimizer.h>
 #include <torch/optim/serialize.h>
 
-namespace Omni::Optimizer::Details {
+namespace Nott::Optimizer::Details {
 
     struct AdafactorOptions : public torch::optim::OptimizerCloneableOptions<AdafactorOptions> {
         AdafactorOptions(double lr = 1e-3) : lr_(lr) {}
@@ -285,4 +285,4 @@ namespace Omni::Optimizer::Details {
 
 }
 
-#endif // OMNI_ADAFACTOR_HPP
+#endif // Nott_ADAFACTOR_HPP

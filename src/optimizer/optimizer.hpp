@@ -1,5 +1,5 @@
-#ifndef OMNI_OPTIMIZER_HPP
-#define OMNI_OPTIMIZER_HPP
+#ifndef Nott_OPTIMIZER_HPP
+#define Nott_OPTIMIZER_HPP
 #include <variant>
 
 #include "registry.hpp"
@@ -16,7 +16,7 @@
 #include "details/rmsprop.hpp"
 
 
-namespace Omni::Optimizer {
+namespace Nott::Optimizer {
     using SGDOptions = Details::SGDOptions;
     using SGDDescriptor = Details::SGDDescriptor;
 
@@ -131,4 +131,4 @@ namespace Omni::Optimizer {
 
 }
 
-#endif //OMNI_OPTIMIZER_HPP
+#endif //Nott_OPTIMIZER_HPP

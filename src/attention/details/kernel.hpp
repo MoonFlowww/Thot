@@ -1,5 +1,5 @@
-#ifndef OMNI_KERNEL_HPP
-#define OMNI_KERNEL_HPP
+#ifndef Nott_KERNEL_HPP
+#define Nott_KERNEL_HPP
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -9,11 +9,11 @@
 
 #include "../attention.hpp"
 
-namespace Omni::Attention::Details {
+namespace Nott::Attention::Details {
     class ScaledDotProductKernelImpl : public torch::nn::Module {
     public:
         explicit ScaledDotProductKernelImpl(double dropout = 0.0,
-                                            ::Omni::Attention::Variant variant = ::Omni::Attention::Variant::Full)
+                                            ::Nott::Attention::Variant variant = ::Nott::Attention::Variant::Full)
             : variant_(variant),
               dropout_(register_module("dropout", torch::nn::Dropout(torch::nn::DropoutOptions(dropout)))) {}
 
@@ -83,7 +83,7 @@ auto mask = attn_mask;
                 scores = scores + mask;
             }
 
-            if (variant_ == ::Omni::Attention::Variant::Causal) {
+            if (variant_ == ::Nott::Attention::Variant::Causal) {
                 const auto seq_len = scores.size(-1);
                 const auto tgt_len = scores.size(-2);
                 auto causal_mask = torch::ones({tgt_len, seq_len}, scores.options().dtype(torch::kBool)).triu(1);
@@ -96,10 +96,10 @@ auto mask = attn_mask;
         }
 
     private:
-        ::Omni::Attention::Variant variant_{::Omni::Attention::Variant::Full};
+        ::Nott::Attention::Variant variant_{::Nott::Attention::Variant::Full};
         torch::nn::Dropout dropout_{nullptr};
     };
 
     TORCH_MODULE(ScaledDotProductKernel);
 }
-#endif //OMNI_KERNEL_HPP
+#endif //Nott_KERNEL_HPP

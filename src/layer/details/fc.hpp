@@ -1,5 +1,5 @@
-#ifndef OMNI_FC_HPP
-#define OMNI_FC_HPP
+#ifndef Nott_FC_HPP
+#define Nott_FC_HPP
 
 #include <cstdint>
 #include <stdexcept>
@@ -15,7 +15,7 @@
 #include "../registry.hpp"
 
 
-namespace Omni::Layer::Details {
+namespace Nott::Layer::Details {
     struct FCOptions {
         std::int64_t in_features{};
         std::int64_t out_features{};
@@ -24,9 +24,9 @@ namespace Omni::Layer::Details {
 
     struct FCDescriptor {
         FCOptions options;
-        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
-        ::Omni::Initialization::Descriptor initialization{::Omni::Initialization::Default};
-        ::Omni::LocalConfig local{};
+        ::Nott::Activation::Descriptor activation{::Nott::Activation::Identity};
+        ::Nott::Initialization::Descriptor initialization{::Nott::Initialization::Default};
+        ::Nott::LocalConfig local{};
     };
     template <class Owner>
     RegisteredLayer build_registered_layer(Owner& owner, const FCDescriptor& descriptor, std::size_t index)
@@ -38,7 +38,7 @@ namespace Omni::Layer::Details {
         auto options = torch::nn::LinearOptions(descriptor.options.in_features, descriptor.options.out_features)
                             .bias(descriptor.options.bias);
         auto module = owner.register_module("fc_" + std::to_string(index), torch::nn::Linear(options));
-        ::Omni::Initialization::Details::apply_module_initialization(module, descriptor);
+        ::Nott::Initialization::Details::apply_module_initialization(module, descriptor);
 
         RegisteredLayer registered_layer{};
         registered_layer.activation = descriptor.activation.type;
@@ -49,4 +49,4 @@ namespace Omni::Layer::Details {
     }
 }
 
-#endif //OMNI_FC_HPP
+#endif //Nott_FC_HPP

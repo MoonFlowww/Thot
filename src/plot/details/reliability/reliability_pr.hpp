@@ -1,5 +1,5 @@
-#ifndef OMNI_RELIABILITY_PR_HPP
-#define OMNI_RELIABILITY_PR_HPP
+#ifndef Nott_RELIABILITY_PR_HPP
+#define Nott_RELIABILITY_PR_HPP
 
 #include <cstddef>
 #include <stdexcept>
@@ -13,13 +13,13 @@
 #include "../../../utils/gnuplot.hpp"
 #include "../reliability.hpp"
 
-namespace Omni {
+namespace Nott {
 
     class Model;
 }
 
 
-namespace Omni::Plot::Details::Reliability {
+namespace Nott::Plot::Details::Reliability {
     namespace detail {
 
         inline void RenderPRFromSeries(Model&, const Plot::Reliability::PRDescriptor& descriptor, std::vector<Curves::BinarySeries> series) {
@@ -120,7 +120,7 @@ namespace Omni::Plot::Details::Reliability {
                 style.lineWidth = 2.0;
                 style.pointType = 7;
                 style.pointSize = 1.1;
-                style.lineColor = Utils::Terminal::Omni::Plot::Details::Reliability::detail::PickColor(index);
+                style.lineColor = Utils::Terminal::Nott::Plot::Details::Reliability::detail::PickColor(index);
 
                 datasets.push_back(Utils::Gnuplot::DataSet2D{
                     std::move(recallValues),
@@ -188,4 +188,4 @@ namespace Omni::Plot::Details::Reliability {
 }
 
 
-#endif //OMNI_RELIABILITY_PR_HPP
+#endif //Nott_RELIABILITY_PR_HPP

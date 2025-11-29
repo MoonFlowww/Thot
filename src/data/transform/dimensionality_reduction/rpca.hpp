@@ -1,5 +1,5 @@
-#ifndef OMNI_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_RPCA_HPP
-#define OMNI_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_RPCA_HPP
+#ifndef Nott_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_RPCA_HPP
+#define Nott_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_RPCA_HPP
 
 #include <algorithm>
 #include <cmath>
@@ -14,7 +14,7 @@
 #include "common.hpp"
 #include "../../../core.hpp"
 
-namespace Omni::Data::Transform::DimensionalityReduction {
+namespace Nott::Data::Transform::DimensionalityReduction {
     template <bool BufferVRAM = false, class DevicePolicyT = Core::DevicePolicy<BufferVRAM>>
     [[nodiscard]] inline std::pair<torch::Tensor, torch::Tensor>
     RPCA(const torch::Tensor& input,
@@ -93,4 +93,4 @@ namespace Omni::Data::Transform::DimensionalityReduction {
     }
 }
 
-#endif // OMNI_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_RPCA_HPP
+#endif // Nott_DATA_TRANSFORM_DIMENSIONALITY_REDUCTION_RPCA_HPP
