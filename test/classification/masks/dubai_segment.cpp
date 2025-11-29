@@ -890,42 +890,6 @@ int main() {
     // std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
     // std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
 
-    constexpr int kNumSuperpixels = 16;
-
-
-    Thot::Data::Check::Size(X, "Inputs Preprocessed");
-    Thot::Data::Check::Size(Y, "Train Targets One-hot");
-
-    std::vector<Sample> samples;
-    Sample::SuperPixel superpixel{X, Y};
-    Sample::Metrics<0, 0, 0> input_metrics;
-    input_metrics.min = X.min();
-    input_metrics.max = X.max();
-    input_metrics.avg = X.mean();
-    input_metrics.std = X.std();
-    input_metrics.skew = torch::zeros_like(input_metrics.avg);
-
-    Sample::NormTarget = X.argmax(1);
-    auto input_overlay = BuildSuperpixelOverlay(X.index({0}), kNumSuperpixels);
-    auto target_overlay = BuildSuperpixelOverlay(Y.index({0}), kNumSuperpixels);
-
-    Thot::Plot::Data::Image(input_overlay.unsqueeze(0), {0}, Thot::Plot::Data::ImagePlotOptions{.layoutTitle = "Input with superpixel segmentation", .showColorBox = true});
-    Thot::Plot::Data::Image(target_overlay.unsqueeze(0),{0}, Thot::Plot::Data::ImagePlotOptions{.layoutTitle = "Raw target with superpixel segmentation", .showColorBox = true});
-
-    auto speed_field = GenerateSpeedField(ComputeDensity(X.index({0})));
-    auto speed_min = speed_field.min().item<float>();
-    auto speed_max = speed_field.max().item<float>();
-    auto speed_norm = (speed_max > speed_min) ? (speed_field - speed_min) / (speed_max - speed_min) : torch::zeros_like(speed_field);
-    auto speed_rgb = speed_norm.unsqueeze(0).repeat({3, 1, 1});
-
-    Thot::Plot::Data::Image(speed_rgb.unsqueeze(0),{0}, Thot::Plot::Data::ImagePlotOptions{.layoutTitle = "Speed generation map", .showColorBox = true});
-
-    Sample record;
-    record.superpixel = superpixel;
-    samples.push_back(std::move(record));
-
-
-
 
     auto block = [&](int in_c, int out_c) {
         return Thot::Block::Sequential({
