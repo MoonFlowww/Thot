@@ -985,7 +985,7 @@ int main() {
 
     const auto total_training_samples = X.size(0);
     const auto B = 32;
-    const auto E = 50;
+    const auto E = 5;
     const auto steps_per_epoch = static_cast<std::size_t>((total_training_samples + B - 1) / B);
     const auto total_training_steps = std::max<std::size_t>(1, E * std::max<std::size_t>(steps_per_epoch, 1));
 
@@ -999,7 +999,7 @@ int main() {
     std::vector<double> w(ptr, ptr + w_cpu.numel());
 
 
-    model.set_loss(Thot::Loss::CrossEntropy({ .weight = w }));
+    model.set_loss(Thot::Loss::CrossEntropy({ /*.weight = w*/ }));
     model.set_optimizer(
         Thot::Optimizer::AdamW({.learning_rate = 5e-5, .weight_decay = 1e-4}),
         Thot::LrScheduler::CosineAnnealing({
@@ -1019,9 +1019,9 @@ int main() {
 
     model.use_cuda(torch::cuda::is_available());
 
-    // X = X.permute({0, 2, 3, 1}).contiguous();
-    // Y = Y.permute({0, 2, 3, 1}).contiguous();
-    std::cout << "Train" << std::endl;
+
+    std::tie(X, Y) = Thot::Data::Manipulation::Fraction(X, Y, 0.1f); // 10%
+    Thot::Data::Check::Size(X, "10% X Train");
     model.train(X, Y,
         {.epoch = E,
         .batch_size = B,
@@ -1033,19 +1033,18 @@ int main() {
         });
     std::cout << "End" << std::endl;
 
-    torch::NoGradGuard guard;
-    Thot::Data::Check::Size(X, "Test Inputs");
-    Thot::Data::Check::Size(class_targets, "Test Targets");
-
-
-    model.evaluate(X, class_targets, Thot::Evaluation::Segmentation,{
+    model.evaluate(X, Y, Thot::Evaluation::Segmentation,{
         Thot::Metric::Classification::Accuracy,
         Thot::Metric::Classification::Precision,
         Thot::Metric::Classification::Recall,
         Thot::Metric::Classification::JaccardIndexMicro,
-    },{.batch_size = 8, .buffer_vram=2});
+        Thot::Metric::Classification::BoundaryIoU,
+        Thot::Metric::Classification::HausdorffDistance,
+    },{.batch_size = B, .buffer_vram=2});
 
 
+    std::tie(X, Y) = Thot::Data::Manipulation::Fraction(X, Y, 0.01f);
+    Thot::Data::Check::Size(X, "Inference");
     auto logits = model.forward(X);
     auto predicted = logits.argmax(1).to(torch::kCPU);
     auto first_pred = predicted.index({0}).contiguous();
@@ -1067,12 +1066,13 @@ int main() {
             racc[y][x][2] = rgb[2];
         }
     }
-    cv::Mat f_img(H, W, CV_8UC3, forecast_rgb.data_ptr<uint8_t>());
-    cv::Mat f_bgr;
-    cv::cvtColor(f_img, f_bgr, cv::COLOR_RGB2BGR);
-    cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/forecast_raw.png", f_bgr);
-    cv::GaussianBlur(f_bgr, f_bgr, cv::Size(), 0.83);
-    cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/forecast_smooth.png", f_bgr);
+    Thot::Plot::Data::Image(forecast_rgb.unsqueeze(0), {0}); Thot::Plot::Data::Image(Y, {0}); Thot::Plot::Data::Image(X, {0});
+    // cv::Mat f_img(H, W, CV_8UC3, forecast_rgb.data_ptr<uint8_t>());
+    // cv::Mat f_bgr;
+    // cv::cvtColor(f_img, f_bgr, cv::COLOR_RGB2BGR);
+    // cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/forecast_raw.png", f_bgr);
+    // cv::GaussianBlur(f_bgr, f_bgr, cv::Size(), 0.83);
+    // cv::imwrite("/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile 1/forecast_smooth.png", f_bgr);
 
     return 0;
 }
