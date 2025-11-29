@@ -1,5 +1,5 @@
-#ifndef THOT_RELIABILITY_ROC_HPP
-#define THOT_RELIABILITY_ROC_HPP
+#ifndef OMNI_RELIABILITY_ROC_HPP
+#define OMNI_RELIABILITY_ROC_HPP
 
 #include <array>
 #include <cstddef>
@@ -15,12 +15,12 @@
 #include "../../../utils/terminal.hpp"
 #include "../reliability.hpp"
 
-namespace Thot {
+namespace Omni {
     class Model;
 }
 
 
-namespace Thot::Plot::Details::Reliability {
+namespace Omni::Plot::Details::Reliability {
     namespace detail {
 
 
@@ -109,7 +109,7 @@ namespace Thot::Plot::Details::Reliability {
                 style.lineWidth = 2.0;
                 style.pointType = 7;
                 style.pointSize = 1.1;
-                style.lineColor = Utils::Terminal::Thot::Plot::Details::Reliability::detail::PickColor(index);
+                style.lineColor = Utils::Terminal::Omni::Plot::Details::Reliability::detail::PickColor(index);
 
                 datasets.push_back(Utils::Gnuplot::DataSet2D{
                     std::move(falsePositiveRates),
@@ -171,4 +171,4 @@ namespace Thot::Plot::Details::Reliability {
 }
 
 
-#endif //THOT_RELIABILITY_ROC_HPP
+#endif //OMNI_RELIABILITY_ROC_HPP

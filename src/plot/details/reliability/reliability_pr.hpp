@@ -1,5 +1,5 @@
-#ifndef THOT_RELIABILITY_PR_HPP
-#define THOT_RELIABILITY_PR_HPP
+#ifndef OMNI_RELIABILITY_PR_HPP
+#define OMNI_RELIABILITY_PR_HPP
 
 #include <cstddef>
 #include <stdexcept>
@@ -13,13 +13,13 @@
 #include "../../../utils/gnuplot.hpp"
 #include "../reliability.hpp"
 
-namespace Thot {
+namespace Omni {
 
     class Model;
 }
 
 
-namespace Thot::Plot::Details::Reliability {
+namespace Omni::Plot::Details::Reliability {
     namespace detail {
 
         inline void RenderPRFromSeries(Model&, const Plot::Reliability::PRDescriptor& descriptor, std::vector<Curves::BinarySeries> series) {
@@ -120,7 +120,7 @@ namespace Thot::Plot::Details::Reliability {
                 style.lineWidth = 2.0;
                 style.pointType = 7;
                 style.pointSize = 1.1;
-                style.lineColor = Utils::Terminal::Thot::Plot::Details::Reliability::detail::PickColor(index);
+                style.lineColor = Utils::Terminal::Omni::Plot::Details::Reliability::detail::PickColor(index);
 
                 datasets.push_back(Utils::Gnuplot::DataSet2D{
                     std::move(recallValues),
@@ -188,4 +188,4 @@ namespace Thot::Plot::Details::Reliability {
 }
 
 
-#endif //THOT_RELIABILITY_PR_HPP
+#endif //OMNI_RELIABILITY_PR_HPP

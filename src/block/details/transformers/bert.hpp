@@ -1,5 +1,5 @@
-#ifndef THOT_BERT_HPP
-#define THOT_BERT_HPP
+#ifndef OMNI_BERT_HPP
+#define OMNI_BERT_HPP
 // "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding" https://arxiv.org/pdf/1810.04805
 
 #include <algorithm>
@@ -22,9 +22,9 @@
 #include "../../../attention/details/head.hpp"
 #include "../../../layer/details/positional_encoding.hpp"
 
-namespace Thot::Block::Details::Transformer::Bert {
-    using PositionalEncodingType = ::Thot::Layer::Details::PositionalEncodingType;
-    using PositionalEncodingOptions = ::Thot::Layer::Details::PositionalEncodingOptions;
+namespace Omni::Block::Details::Transformer::Bert {
+    using PositionalEncodingType = ::Omni::Layer::Details::PositionalEncodingType;
+    using PositionalEncodingOptions = ::Omni::Layer::Details::PositionalEncodingOptions;
 
     struct AttentionOptions {
         std::int64_t embed_dim{768};
@@ -32,13 +32,13 @@ namespace Thot::Block::Details::Transformer::Bert {
         double dropout{0.1};
         bool bias{true};
         bool batch_first{true};
-        ::Thot::Attention::Variant variant{::Thot::Attention::Variant::Full};
+        ::Omni::Attention::Variant variant{::Omni::Attention::Variant::Full};
     };
 
     struct FeedForwardOptions {
         std::int64_t embed_dim{768};
         double mlp_ratio{4.0};
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::GeLU};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::GeLU};
         bool bias{true};
     };
 
@@ -110,8 +110,8 @@ namespace Thot::Block::Details::Transformer::Bert {
     }
 
     namespace Detail {
-        using ::Thot::Block::Details::Transformer::Classic::Detail::normalise_to_sequence;
-        using ::Thot::Block::Details::Transformer::Classic::Detail::restore_from_sequence;
+        using ::Omni::Block::Details::Transformer::Classic::Detail::normalise_to_sequence;
+        using ::Omni::Block::Details::Transformer::Classic::Detail::restore_from_sequence;
 
         class BertEmbeddingImpl : public torch::nn::Module {
         public:
@@ -296,7 +296,7 @@ namespace Thot::Block::Details::Transformer::Bert {
                 residual = output;
                 auto ff_input = options_.pre_norm ? norm2_->forward(output) : output;
                 auto hidden = linear1_->forward(ff_input);
-                hidden = ::Thot::Activation::Details::apply(descriptor_.feed_forward.activation.type, std::move(hidden));
+                hidden = ::Omni::Activation::Details::apply(descriptor_.feed_forward.activation.type, std::move(hidden));
                 if (feed_forward_dropout_) {
                     hidden = feed_forward_dropout_->forward(hidden);
                 }
@@ -391,4 +391,4 @@ namespace Thot::Block::Details::Transformer::Bert {
 
 }
 
-#endif //THOT_BERT_HPP
+#endif //OMNI_BERT_HPP

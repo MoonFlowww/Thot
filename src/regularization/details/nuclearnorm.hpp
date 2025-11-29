@@ -1,9 +1,9 @@
-#ifndef THOT_NUCLEARNORM_HPP
-#define THOT_NUCLEARNORM_HPP
+#ifndef OMNI_NUCLEARNORM_HPP
+#define OMNI_NUCLEARNORM_HPP
 
 #include <torch/torch.h>
 
-namespace Thot::Regularization::Details {
+namespace Omni::Regularization::Details {
 
     struct NuclearNormOptions {
         double strength{0.0};
@@ -33,4 +33,4 @@ namespace Thot::Regularization::Details {
 
 }
 
-#endif //THOT_NUCLEARNORM_HPP
+#endif //OMNI_NUCLEARNORM_HPP

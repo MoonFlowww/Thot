@@ -1,5 +1,5 @@
-#ifndef THOT_LAYER_S4_HPP
-#define THOT_LAYER_S4_HPP
+#ifndef OMNI_LAYER_S4_HPP
+#define OMNI_LAYER_S4_HPP
 // "Efficiently Modeling Long Sequences with Structured State Spaces" (S4) https://arxiv.org/pdf/2111.00396
 #include <cmath>
 #include <cstdint>
@@ -17,7 +17,7 @@
 #include "../../initialization/initialization.hpp"
 #include "../registry.hpp"
 
-namespace Thot::Layer::Details {
+namespace Omni::Layer::Details {
 
     enum class S4Initialization {
         HiPPO,
@@ -38,9 +38,9 @@ namespace Thot::Layer::Details {
 
     struct S4Descriptor {
         S4Options options{};
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
-        ::Thot::Initialization::Descriptor initialization{::Thot::Initialization::Default};
-        ::Thot::LocalConfig local{};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
+        ::Omni::Initialization::Descriptor initialization{::Omni::Initialization::Default};
+        ::Omni::LocalConfig local{};
     };
 
     struct S4State {
@@ -310,9 +310,9 @@ namespace Thot::Layer::Details {
             return output;
         }
 
-        void apply_initialization(const ::Thot::Initialization::Descriptor& descriptor)
+        void apply_initialization(const ::Omni::Initialization::Descriptor& descriptor)
         {
-            ::Thot::Initialization::Details::apply_module_initialization(input_projection_, descriptor);
+            ::Omni::Initialization::Details::apply_module_initialization(input_projection_, descriptor);
         }
 
     private:
@@ -530,4 +530,4 @@ namespace Thot::Layer::Details {
     }
 }
 
-#endif // THOT_LAYER_S4_HPP
+#endif // OMNI_LAYER_S4_HPP

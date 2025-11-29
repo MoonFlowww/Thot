@@ -2,8 +2,8 @@
 // -----------------------------------------------------------------------------
 // Planned workflow:
 //  - Parse CLI / configuration files and materialise a constexpr
-//    Thot::Core::CompileTimeConfig instance (likely via constexpr builders).
-//  - Call Thot::Core::make_runtime() to receive an aggregated facade exposing
+//    Omni::Core::CompileTimeConfig instance (likely via constexpr builders).
+//  - Call Omni::Core::make_runtime() to receive an aggregated facade exposing
 //    dataset loaders, network handles and training/evaluation pipelines.
 //  - Launch training/evaluation routines while measuring latency (no dynamic
 //    feature toggles – decisions already compiled into the runtime facade).

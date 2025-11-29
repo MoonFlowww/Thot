@@ -1,5 +1,5 @@
-#ifndef THOT_DATA_TRANSFORM_AUGMENTATION_CLAHE_HPP
-#define THOT_DATA_TRANSFORM_AUGMENTATION_CLAHE_HPP
+#ifndef OMNI_DATA_TRANSFORM_AUGMENTATION_CLAHE_HPP
+#define OMNI_DATA_TRANSFORM_AUGMENTATION_CLAHE_HPP
 
 #include <cstdint>
 #include <limits>
@@ -11,7 +11,7 @@
 
 #include "common.hpp"
 
-namespace Thot::Data::Transform::Augmentation {
+namespace Omni::Data::Transform::Augmentation {
     namespace Options {
         struct CLAHEOptions {
             int64_t histogram_bins = 256;
@@ -121,4 +121,4 @@ namespace Thot::Data::Transform::Augmentation {
     }
 }
 
-#endif // THOT_DATA_TRANSFORM_AUGMENTATION_CLAHE_HPP
+#endif // OMNI_DATA_TRANSFORM_AUGMENTATION_CLAHE_HPP

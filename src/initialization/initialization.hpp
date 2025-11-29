@@ -1,8 +1,8 @@
-#ifndef THOT_INITIALIZATION_HPP
-#define THOT_INITIALIZATION_HPP
+#ifndef OMNI_INITIALIZATION_HPP
+#define OMNI_INITIALIZATION_HPP
 // This file is a factory, must exempt it from any logical-code. For functions look into "/details"
 
-namespace Thot::Initialization {
+namespace Omni::Initialization {
     enum class Type {
         Default,
         XavierNormal,
@@ -28,4 +28,4 @@ namespace Thot::Initialization {
     inline constexpr Descriptor Lyapunov{Type::Lyapunov};
 }
 
-#endif //THOT_INITIALIZATION_HPP
+#endif //OMNI_INITIALIZATION_HPP

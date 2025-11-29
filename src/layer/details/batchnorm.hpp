@@ -1,5 +1,5 @@
-#ifndef THOT_BATCHNORM_HPP
-#define THOT_BATCHNORM_HPP
+#ifndef OMNI_BATCHNORM_HPP
+#define OMNI_BATCHNORM_HPP
 //https://arxiv.org/pdf/1502.03167
 #include <cstdint>
 
@@ -17,7 +17,7 @@
 #include "../../initialization/initialization.hpp"
 #include "../registry.hpp"
 
-namespace Thot::Layer::Details {
+namespace Omni::Layer::Details {
 
     struct BatchNorm2dOptions {
         std::int64_t num_features{};
@@ -29,9 +29,9 @@ namespace Thot::Layer::Details {
 
     struct BatchNorm2dDescriptor {
         BatchNorm2dOptions options{};
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
-        ::Thot::Initialization::Descriptor initialization{::Thot::Initialization::Default};
-        ::Thot::LocalConfig local{};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
+        ::Omni::Initialization::Descriptor initialization{::Omni::Initialization::Default};
+        ::Omni::LocalConfig local{};
     };
 
     template <class Owner>
@@ -48,7 +48,7 @@ namespace Thot::Layer::Details {
                             .track_running_stats(descriptor.options.track_running_stats);
 
         auto module = owner.register_module("batchnorm2d_" + std::to_string(index), torch::nn::BatchNorm2d(options));
-        ::Thot::Initialization::Details::apply_module_initialization(module, descriptor);
+        ::Omni::Initialization::Details::apply_module_initialization(module, descriptor);
 
         RegisteredLayer registered_layer{};
         registered_layer.activation = descriptor.activation.type;
@@ -60,4 +60,4 @@ namespace Thot::Layer::Details {
 
 }
 
-#endif //THOT_BATCHNORM_HPP
+#endif //OMNI_BATCHNORM_HPP

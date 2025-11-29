@@ -1,5 +1,5 @@
-#ifndef THOT_POOLING_HPP
-#define THOT_POOLING_HPP
+#ifndef OMNI_POOLING_HPP
+#define OMNI_POOLING_HPP
 #include <cstdint>
 #include <variant>
 #include <vector>
@@ -12,7 +12,7 @@
 #include "../../common/local.hpp"
 #include "../registry.hpp"
 
-namespace Thot::Layer::Details {
+namespace Omni::Layer::Details {
 
     struct MaxPool1dOptions {
         std::vector<std::int64_t> kernel_size{2};
@@ -73,8 +73,8 @@ namespace Thot::Layer::Details {
 
     struct PoolingDescriptor {
         PoolingOptions options{};
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
-        ::Thot::LocalConfig local{};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
+        ::Omni::LocalConfig local{};
     };
 
     template <class Owner>
@@ -183,4 +183,4 @@ namespace Thot::Layer::Details {
 
 }
 
-#endif //THOT_POOLING_HPP
+#endif //OMNI_POOLING_HPP

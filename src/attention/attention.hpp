@@ -1,11 +1,11 @@
-#ifndef THOT_ATTENTION_HPP
-#define THOT_ATTENTION_HPP
+#ifndef OMNI_ATTENTION_HPP
+#define OMNI_ATTENTION_HPP
 // This file is an factory, must exempt it from any logical-code. For functions look into "/details"
 
 #include <cstdint>
 #include <variant>
 
-namespace Thot::Attention {
+namespace Omni::Attention {
     enum class Variant {
         Full,
         Causal,
@@ -50,4 +50,4 @@ namespace Thot::Attention {
     }
 }
 
-#endif //THOT_ATTENTION_HPP
+#endif //OMNI_ATTENTION_HPP

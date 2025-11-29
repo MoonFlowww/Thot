@@ -1,5 +1,5 @@
-#ifndef THOT_COMMON_GRAPH_HPP
-#define THOT_COMMON_GRAPH_HPP
+#ifndef OMNI_COMMON_GRAPH_HPP
+#define OMNI_COMMON_GRAPH_HPP
 
 #include <algorithm>
 #include <cctype>
@@ -16,11 +16,11 @@
 
 #include <torch/torch.h>
 
-namespace Thot::Layer::Details {
+namespace Omni::Layer::Details {
     struct RegisteredLayer;
 }
 
-namespace Thot {
+namespace Omni {
     enum class MergePolicy {
         Strict,
         Broadcast,
@@ -334,7 +334,7 @@ namespace Thot {
         std::size_t activation_index{std::numeric_limits<std::size_t>::max()};
 
         struct ModuleData {
-            ::Thot::Layer::Details::RegisteredLayer* layer{nullptr};
+            ::Omni::Layer::Details::RegisteredLayer* layer{nullptr};
             std::size_t input_index{std::numeric_limits<std::size_t>::max()};
         };
 

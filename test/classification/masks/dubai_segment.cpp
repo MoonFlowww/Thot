@@ -1,4 +1,4 @@
-#include "../../../include/Thot.h"
+#include "../../../include/Omni.h"
 #include <array>
 #include <iostream>
 #include <tuple>
@@ -53,7 +53,32 @@ namespace {
         Metrics<0, 0, 0> metric;
         torch::Tensor NormTarget;
     };
+    torch::Tensor ColorizeClassMap(const torch::Tensor& class_map) {
+        TORCH_CHECK(class_map.dim() == 2, "Expected [H, W] class map");
 
+        auto labels = class_map.to(torch::kLong).to(torch::kCPU).contiguous();
+        const auto H = labels.size(0);
+        const auto W = labels.size(1);
+
+        torch::Tensor rgb = torch::zeros({H, W, 3}, torch::TensorOptions().dtype(torch::kUInt8));
+        auto lacc = labels.accessor<int64_t, 2>();
+        auto racc = rgb.accessor<std::uint8_t, 3>();
+
+        for (int64_t y = 0; y < H; ++y) {
+            for (int64_t x = 0; x < W; ++x) {
+                auto cls = lacc[y][x];
+                if (cls < 0 || cls >= static_cast<long>(kClassPalette.size())) {
+                    cls = 0;
+                }
+                const auto& color = kClassPalette[static_cast<std::size_t>(cls)];
+                racc[y][x][0] = color[0];
+                racc[y][x][1] = color[1];
+                racc[y][x][2] = color[2];
+            }
+        }
+
+        return rgb;
+    }
     torch::Tensor ConvertRgbMasksToOneHot(const torch::Tensor& masks) {
         TORCH_CHECK(masks.dim() == 4, "Expected [B, 3, H, W]");
         TORCH_CHECK(masks.size(1) == 3, "RGB masks must have 3 channels");
@@ -91,97 +116,100 @@ namespace {
     }
 
 
-    // multi-source Dijkstra on 4-connected grid
-    std::tuple<torch::Tensor, torch::Tensor>
-    RunGeodesicVoronoi(const torch::Tensor& dens, const std::vector<Center>& centers) {
-        TORCH_CHECK(dens.dim() == 2, "Expected [H, W] density");
-        auto dens_cpu = dens.to(torch::kFloat32).to(torch::kCPU).contiguous();
+    std::pair<torch::Tensor, torch::Tensor> RunGeodesicVoronoi(const torch::Tensor& density_hw, const std::vector<Center>& centers){
+        auto D = density_hw.to(torch::kFloat32).to(torch::kCPU).contiguous();
+        const int64_t H = D.size(0);
+        const int64_t W = D.size(1);
+        const int64_t N = static_cast<int64_t>(centers.size());
 
-        const int64_t H = dens_cpu.size(0);
-        const int64_t W = dens_cpu.size(1);
-        const int64_t M = H * W;
+        TORCH_CHECK(N > 0, "RunGeodesicVoronoi: no centers");
 
-        auto dacc = dens_cpu.accessor<float, 2>();
+        // Total density -> average A from Eq. (4)
+        float total_D = D.sum().item<float>();
+        float A = total_D / static_cast<float>(N);
 
-        std::vector<float> dist(static_cast<std::size_t>(M),
-                                std::numeric_limits<float>::infinity());
-        std::vector<int>   label(static_cast<std::size_t>(M), -1);
-        std::priority_queue<PQNode, std::vector<PQNode>, std::greater<PQNode>> pq;
+        // Gaussian for the structure term (Eq. (10))
+        auto gaussian0 = [A](float x) {
+            // σ0 = A / α; paper uses α≈0.5–1; choose 0.5 as default
+            constexpr float alpha = 0.5f;
+            float sigma0 = A / alpha;
+            if (sigma0 <= 1e-6f) return 1.0f;
+            float z = x / sigma0;
+            // un-normalized Gaussian G^0_{σ0}
+            return std::exp(-0.5f * z * z);
+        };
 
-        for (int s = 0; s < static_cast<int>(centers.size()); ++s) {
-            int sx = static_cast<int>(std::lround(centers[s].x));
-            int sy = static_cast<int>(std::lround(centers[s].y));
-            sx = std::max(0, std::min(static_cast<int>(W - 1), sx));
-            sy = std::max(0, std::min(static_cast<int>(H - 1), sy));
-            int idx = sy * static_cast<int>(W) + sx;
-            if (idx < 0 || idx >= static_cast<int>(M)) continue;
-            std::size_t midx = static_cast<std::size_t>(idx);
-            if (dist[midx] <= 0.0f) {
-                continue;
+        auto labels = torch::full({H, W}, -1,
+            torch::TensorOptions().dtype(torch::kLong).device(torch::kCPU));
+        auto dist   = torch::full({H, W}, std::numeric_limits<float>::infinity(),
+            torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
+
+        auto lacc = labels.accessor<int64_t, 2>();
+        auto tacc = dist.accessor<float, 2>();
+        auto dacc = D.accessor<float, 2>();
+
+        // area A_l(d) accumulated per label l (Eq. (10))
+        std::vector<float> area_l(N, 0.0f);
+
+        using Node = std::tuple<float,int64_t,int64_t,int64_t>; // (dist,y,x,l)
+        struct Cmp {
+            bool operator()(Node const& a, Node const& b) const {
+                return std::get<0>(a) > std::get<0>(b);
             }
-            dist[midx]  = 0.0f;
-            label[midx] = s;
-            pq.push(PQNode{0.0f, idx});
+        };
+        std::priority_queue<Node,std::vector<Node>,Cmp> pq;
+
+        // Initialize with centers
+        for (int64_t l = 0; l < N; ++l) {
+            int64_t cy = centers[l].y;
+            int64_t cx = centers[l].x;
+            if (cy < 0 || cy >= H || cx < 0 || cx >= W) continue;
+            lacc[cy][cx] = l;
+            tacc[cy][cx] = 0.0f;
+            pq.emplace(0.0f, cy, cx, l);
         }
 
-        const int dx4[4] = {1, -1, 0, 0};
-        const int dy4[4] = {0, 0, 1, -1};
+        const int dy[4] = {+1,-1,0,0};
+        const int dx[4] = {0,0,+1,-1};
 
         while (!pq.empty()) {
-            auto [d, u] = pq.top();
+            auto [cd, y, x, l] = pq.top();
             pq.pop();
-            std::size_t uidx = static_cast<std::size_t>(u);
-            if (d > dist[uidx]) continue;
+            if (cd > tacc[y][x]) continue;
 
-            int uy = u / static_cast<int>(W);
-            int ux = u % static_cast<int>(W);
-            int lu = label[uidx];
-            if (lu < 0) continue;
-
-            float d_u = dacc[uy][ux];
+            // update area_l with current pixel (Eq. (10))
+            area_l[l] += dacc[y][x];  // ∫ D(x) dx, pixel area=1
 
             for (int k = 0; k < 4; ++k) {
-                int vx = ux + dx4[k];
-                int vy = uy + dy4[k];
-                if (vx < 0 || vx >= static_cast<int>(W) ||
-                    vy < 0 || vy >= static_cast<int>(H)) {
-                    continue;
-                    }
-                int v = vy * static_cast<int>(W) + vx;
-                std::size_t vidx = static_cast<std::size_t>(v);
+                int64_t ny = y + dy[k];
+                int64_t nx = x + dx[k];
+                if (ny < 0 || ny >= H || nx < 0 || nx >= W) continue;
 
-                float d_v   = dacc[vy][vx];
-                // ∫ D(x) ds ≈ 0.5 * (D_u + D_v)
-                float cost  = 0.5f * (d_u + d_v);
-                float ndist = d + cost;
+                float Dnbr = dacc[ny][nx];
+                if (!std::isfinite(Dnbr)) continue;
 
-                if (ndist < dist[vidx]) {
-                    dist[vidx]  = ndist;
-                    label[vidx] = lu;
-                    pq.push(PQNode{ndist, v});
+                // base velocity V(x) = 1 / D(x)  (Eq. (8))
+                float Vx = 1.0f / (Dnbr + 1e-6f);
+
+                // structure term: Vl(x,d) = V(x) * G^0_{σ0}(max(0,A_l(d)-A))
+                float deltaA = std::max(0.0f, area_l[l] - A);
+                float Vl = Vx * gaussian0(deltaA);
+
+                // Eikonal step: Δd ≈ step_length / Vl  (Eq. (11))
+                float step = 1.0f;  // grid spacing
+                float nd   = cd + step / (Vl + 1e-6f);
+
+                if (nd < tacc[ny][nx]) {
+                    tacc[ny][nx] = nd;
+                    lacc[ny][nx] = l;
+                    pq.emplace(nd, ny, nx, l);
                 }
             }
         }
 
-        auto labels = torch::empty({H, W},
-            torch::TensorOptions().dtype(torch::kLong).device(torch::kCPU));
-        auto lacc = labels.accessor<int64_t, 2>();
-
-        auto geodesic = torch::empty({H, W},
-            torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
-        auto gacc = geodesic.accessor<float, 2>();
-
-        for (int64_t y = 0; y < H; ++y) {
-            for (int64_t x = 0; x < W; ++x) {
-                int idx = static_cast<int>(y * W + x);
-                std::size_t midx = static_cast<std::size_t>(idx);
-                lacc[y][x]  = static_cast<int64_t>(label[midx]);
-                gacc[y][x]  = dist[midx];
-            }
-        }
-
-        return std::make_tuple(labels, geodesic);
+        return {labels, dist};
     }
+
 
     // ==========================================
     // Structure-sensitive density D(x)
@@ -191,128 +219,130 @@ namespace {
     // - E(x) = grad / (avg_grad + gamma)
     // - D(x) = exp(E / nu)
     // ==========================================
-    torch::Tensor ComputeDensity(const torch::Tensor& img_chw) {
-        TORCH_CHECK(img_chw.dim() == 3, "Expected [C, H, W]");
-        TORCH_CHECK(img_chw.size(0) == 3, "Expected RGB image as [3, H, W]");
+    inline torch::Tensor gaussian_kernel_1d(float sigma, int radius) {
+        TORCH_CHECK(sigma > 0.0f, "sigma must be > 0");
+        TORCH_CHECK(radius > 0, "radius must be > 0");
 
-        auto img = img_chw.to(torch::kFloat32).to(torch::kCPU).contiguous();
-        const auto C = img.size(0);
-        const auto H = img.size(1);
-        const auto W = img.size(2);
-
-        // grayscale buffer
-        auto gray = torch::zeros({H, W}, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
-        auto acc  = img.accessor<float, 3>();
-        auto gacc = gray.accessor<float, 2>();
-
-        for (int64_t y = 0; y < H; ++y) {
-            for (int64_t x = 0; x < W; ++x) {
-                // assume loader gives 0–255; if it’s already 0–1, this just rescales down, still fine
-                float r = acc[0][y][x] / 255.0f;
-                float g = acc[1][y][x] / 255.0f;
-                float b = acc[2][y][x] / 255.0f;
-                gacc[y][x] = 0.2989f * r + 0.5870f * g + 0.1140f * b;
-            }
-        }
-
-
-        // Gradient magnitude via central differences
-        auto grad = torch::zeros_like(gray);
-        auto gradacc = grad.accessor<float, 2>();
-        for (int64_t y = 0; y < H; ++y) {
-            for (int64_t x = 0; x < W; ++x) {
-                int64_t xm1 = std::max<int64_t>(0, x - 1);
-                int64_t xp1 = std::min<int64_t>(W - 1, x + 1);
-                int64_t ym1 = std::max<int64_t>(0, y - 1);
-                int64_t yp1 = std::min<int64_t>(H - 1, y + 1);
-
-                float gx = gacc[y][xp1] - gacc[y][xm1];
-                float gy = gacc[yp1][x] - gacc[ym1][x];
-                gradacc[y][x] = std::sqrt(gx * gx + gy * gy);
-            }
-        }
-
-        // Local average of gradient magnitude: simple box filter radius=2
-        const int radius = 2;
-        auto grad_blur = torch::zeros_like(gray);
-        auto bacc = grad_blur.accessor<float, 2>();
-        for (int64_t y = 0; y < H; ++y) {
-            for (int64_t x = 0; x < W; ++x) {
-                double sum = 0.0;
-                int count = 0;
-                for (int dy = -radius; dy <= radius; ++dy) {
-                    int64_t yy = y + dy;
-                    if (yy < 0 || yy >= H) continue;
-                    for (int dx = -radius; dx <= radius; ++dx) {
-                        int64_t xx = x + dx;
-                        if (xx < 0 || xx >= W) continue;
-                        sum += gradacc[yy][xx];
-                        ++count;
-                    }
-                }
-                bacc[y][x] = static_cast<float>(sum / std::max(count, 1));
-            }
-        }
-
-        // E(x) = grad / (blurred_grad + gamma)
-        // D(x) = exp(E / nu)
-        constexpr float gamma = 0.12f;
-        constexpr float nu    = 1.0f;
-        auto density = torch::zeros_like(gray);
-        auto dacc = density.accessor<float, 2>();
-
-        for (int64_t y = 0; y < H; ++y) {
-            for (int64_t x = 0; x < W; ++x) {
-                float num = gradacc[y][x];
-                float den = bacc[y][x] + gamma;
-                float E   = (den > 0.0f) ? (num / den) : 0.0f;
-                if (E < 0.0f) E = 0.0f;
-                // clamp exponent so exp() doesn't blow up
-                float E_clamped = std::min(E / nu, 10.0f); // exp(10) ~ 2e4
-                dacc[y][x] = std::exp(E_clamped);
-
-            }
-        }
-
-        return density; // [H, W], float32, CPU
+        auto options = torch::TensorOptions().dtype(torch::kFloat32);
+        auto x = torch::arange(-radius, radius + 1, options);
+        auto k = torch::exp(-(x * x) / (2.0f * sigma * sigma));
+        k /= k.sum();
+        return k;
     }
 
-    // ==========================================
-    // Geodesic-based superpixels via voronoi (Dijkstra compute)
-    // - density D(x) as cost per pixel
-    // - multi-source shortest paths on 4-neighbour grid for Geodesic
-    // - w(p,q)= exp[a*||I(p)-I(q)||²]
-    // ==========================================
-    std::vector<Center> PlaceInitialSeeds(int64_t H, int64_t W, int num_superpixels) {
-        const int N = std::max(1, num_superpixels);
-        int K = std::max(2, N / 4);
+    inline torch::Tensor gaussian_blur_2d(const torch::Tensor& img_hw, float sigma) {
+        const int radius = static_cast<int>(std::ceil(3.0f * sigma));
+        auto k1d = gaussian_kernel_1d(sigma, radius);
+        auto kx  = k1d.view({1, 1, 1, -1});
+        auto ky  = k1d.view({1, 1, -1, 1});
+
+        auto x = img_hw.to(torch::kFloat32).unsqueeze(0).unsqueeze(0);
+
+        using namespace torch::nn::functional;
+        Conv2dFuncOptions opt_x;
+        opt_x = opt_x.padding({radius, 0});
+        auto tmp = conv2d(x, kx, opt_x);
+
+        Conv2dFuncOptions opt_y;
+        opt_y = opt_y.padding({0, radius});
+        auto y = conv2d(tmp, ky, opt_y);
+
+        return y.squeeze(0).squeeze(0);
+    }
+
+    torch::Tensor ComputeDensity(const torch::Tensor& img_chw) {
+        TORCH_CHECK(img_chw.dim() == 3 && img_chw.size(0) == 3,
+                    "ComputeDensity expects RGB [3,H,W]");
+
+        auto img = img_chw.to(torch::kFloat32).to(torch::kCPU).contiguous();
+        const int64_t C = img.size(0);
+        const int64_t H = img.size(1);
+        const int64_t W = img.size(2);
+
+        // 1) gradient magnitude ||∇I|| over color channels
+        auto grad_mag = torch::zeros({H, W},
+            torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
+
+        auto iacc = img.accessor<float, 3>();
+        auto gacc = grad_mag.accessor<float, 2>();
+
+        for (int64_t y = 1; y + 1 < H; ++y) {
+            for (int64_t x = 1; x + 1 < W; ++x) {
+                float gx2 = 0.0f;
+                float gy2 = 0.0f;
+                for (int64_t c = 0; c < C; ++c) {
+                    float left   = iacc[c][y][x - 1];
+                    float right  = iacc[c][y][x + 1];
+                    float up     = iacc[c][y - 1][x];
+                    float down   = iacc[c][y + 1][x];
+                    float gx     = 0.5f * (right - left);
+                    float gy     = 0.5f * (down - up);
+                    gx2         += gx * gx;
+                    gy2         += gy * gy;
+                }
+                gacc[y][x] = std::sqrt(gx2 + gy2);
+            }
+        }
+
+        // 2) normalized edge magnitude E(x)
+        constexpr float sigma = 1.0f; // G_σ in paper (tune if needed)
+        constexpr float gamma = 1e-3f; // to ignore very weak edges
+        auto g_smooth = gaussian_blur_2d(grad_mag, sigma); // Gσ * ||∇I||
+
+        auto denom = g_smooth + gamma;
+        auto E = grad_mag / denom;
+
+        // 3) density D(x) = exp(E(x) / ν)
+        constexpr float nu = 0.25f;        // scaling parameter (paper)
+        auto D = torch::exp(E / nu);       // [H, W]
+
+        return D;
+    }
+
+    std::vector<Center> PlaceInitialSeeds(int64_t H, int64_t W, int num_superpixels)
+    {
+        const int64_t N = std::max<int64_t>(1, num_superpixels);
+
+        // grid size (Sx * Sy ≈ N)
+        int64_t Sx = static_cast<int64_t>(
+            std::round(std::sqrt(static_cast<double>(N) *
+                                 static_cast<double>(W) /
+                                 std::max<int64_t>(1, H))));
+        Sx = std::max<int64_t>(1, Sx);
+        int64_t Sy = (N + Sx - 1) / Sx;
+
+        const float step_x = static_cast<float>(W) / static_cast<float>(Sx);
+        const float step_y = static_cast<float>(H) / static_cast<float>(Sy);
+
+        std::mt19937 rng(12345u);
+        std::uniform_real_distribution<float> jitter(-0.25f, 0.25f); // ±25% cell
 
         std::vector<Center> centers;
-        centers.reserve(static_cast<std::size_t>(N * 2));
+        centers.reserve(static_cast<std::size_t>(N));
 
-        double total_pixels = static_cast<double>(H * W);
-        double spacing = std::sqrt(total_pixels / static_cast<double>(K));
+        int64_t idx = 0;
+        for (int64_t j = 0; j < Sy; ++j) {
+            for (int64_t i = 0; i < Sx; ++i) {
+                if (idx >= N) break;
 
-        int grid_x = std::max(1,
-            static_cast<int>(std::round(static_cast<double>(W) / spacing)));
-        int grid_y = std::max(1,
-            static_cast<int>(std::round(static_cast<double>(H) / spacing)));
+                float cx = (i + 0.5f + jitter(rng)) * step_x;
+                float cy = (j + 0.5f + jitter(rng)) * step_y;
 
-        double step_x = static_cast<double>(W) / static_cast<double>(grid_x);
-        double step_y = static_cast<double>(H) / static_cast<double>(grid_y);
+                // clamp to valid pixel range, but keep as float
+                cx = std::clamp(cx, 0.0f, static_cast<float>(W - 1));
+                cy = std::clamp(cy, 0.0f, static_cast<float>(H - 1));
 
-        for (int gy = 0; gy < grid_y && static_cast<int>(centers.size()) < K; ++gy) {
-            for (int gx = 0; gx < grid_x && static_cast<int>(centers.size()) < K; ++gx) {
-                float sx = static_cast<float>((gx + 0.5) * step_x);
-                float sy = static_cast<float>((gy + 0.5) * step_y);
-                sx = std::max(0.0f, std::min(static_cast<float>(W - 1), sx));
-                sy = std::max(0.0f, std::min(static_cast<float>(H - 1), sy));
-                centers.push_back(Center{sx, sy});
+                // /!\ Center is (y, x) with float fields not (x, y) as Clion may say
+                centers.push_back(Center{cy, cx});
+                ++idx;
             }
+            if (idx >= N) break;
         }
 
         return centers;
     }
+
+
 
     torch::Tensor GenerateSpeedField(const torch::Tensor& density_hw) {
         TORCH_CHECK(density_hw.dim() == 2, "Expected [H, W] density");
@@ -458,11 +488,10 @@ namespace {
             std::vector<Center> next_centers;
             next_centers.reserve(S + to_split.size());
 
-            // keep all non-split centers
+            // keep all non-splitted centers
             for (int l = 0; l < S; ++l)
                 if (!marked[l]) next_centers.push_back(relocated[l]);
 
-            // split centers
             for (int l : to_split)
             {
                 if (Sw_shape[l] <= 0.0)
@@ -535,12 +564,12 @@ namespace {
         const int64_t H = dens.size(0);
         const int64_t W = dens.size(1);
 
-        const int   max_outer_iters = 20;
-        const int   min_outer_iters = 3;
+        const int max_outer_iters = 20;
+        const int min_outer_iters = 3;
         const float phi = 0.5f;
         const float Ts = 2.0f;
         const float Tc = 4.0f;
-        const int   max_splits_per_iter = 10;
+        const int max_splits_per_iter = 2;
         const float eps = 1e-6f;
 
         const int N = std::max(1, num_superpixels);
@@ -563,137 +592,126 @@ namespace {
         return labels; // [H, W], long
     }
 
-    torch::Tensor BuildRegionStatisticMapsForImage(const torch::Tensor& img_chw,
-                                                   const torch::Tensor& labels_hw) {
-        TORCH_CHECK(img_chw.dim() == 3, "Expected [C, H, W] image");
-        TORCH_CHECK(labels_hw.dim() == 2, "Expected [H, W] labels");
-        TORCH_CHECK(img_chw.size(1) == labels_hw.size(0) &&
-                    img_chw.size(2) == labels_hw.size(1),
-                    "Image and labels spatial dimensions must match");
+    std::tuple<torch::Tensor, torch::Tensor> BuildSuperpixelClassTargets(const torch::Tensor& y_chw, const torch::Tensor& labels_hw, int num_sp) {
+        TORCH_CHECK(y_chw.dim() == 3, "y_chw must be [C,H,W]");
+        TORCH_CHECK(labels_hw.dim() == 2, "labels_hw must be [H,W]");
+
+        auto y= y_chw.to(torch::kFloat32).to(torch::kCPU).contiguous();
+        auto labels = labels_hw.to(torch::kLong).to(torch::kCPU).contiguous();
+
+        const int64_t C = y.size(0);
+        const int64_t H = y.size(1);
+        const int64_t W = y.size(2);
+
+        int64_t max_label = labels.max().item<int64_t>();
+        int64_t K = max_label + 1;
+        if (K > num_sp)
+            K = num_sp;
+
+        auto counts = torch::zeros({K, C}, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
+        auto cnt_acc= counts.accessor<float, 2>();
+        auto yacc= y.accessor<float, 3>();
+        auto lacc = labels.accessor<int64_t, 2>();
+
+        for (int64_t ypix = 0; ypix < H; ++ypix) {
+            for (int64_t xpix = 0; xpix < W; ++xpix) {
+                int64_t l = lacc[ypix][xpix];
+                if (l < 0 || l >= K) {
+                    continue;
+                }
+                for (int64_t c = 0; c < C; ++c) {
+                    cnt_acc[l][c] += yacc[c][ypix][xpix];
+                }
+            }
+        }
+
+        auto sum_per_sp  = counts.sum(1, true);
+        auto norm_counts = counts / (sum_per_sp + 1e-6f);
+        auto labels_sp   = std::get<1>(norm_counts.max(1));
+
+        return {labels_sp, norm_counts};
+    }
+
+    torch::Tensor BuildSuperpixelFeatureVectors(const torch::Tensor& img_chw, const torch::Tensor& labels_hw) {
+        TORCH_CHECK(img_chw.dim() == 3 && img_chw.size(0) == 3,"BuildSuperpixelFeatureVectors expects [3,H,W]");
+        TORCH_CHECK(labels_hw.dim() == 2, "BuildSuperpixelFeatureVectors expects labels [H,W]");
 
         auto img    = img_chw.to(torch::kFloat32).to(torch::kCPU).contiguous();
         auto labels = labels_hw.to(torch::kLong).to(torch::kCPU).contiguous();
 
-        const int64_t C = img.size(0);
+        const int64_t C = img.size(0);  // 3
         const int64_t H = img.size(1);
         const int64_t W = img.size(2);
 
-        auto max_label = labels.max().item<int64_t>();
-        const int64_t K = std::max<int64_t>(0, max_label + 1);
+        // Determine number of labels K
+        int64_t max_label = labels.max().item<int64_t>();
+        int64_t K = max_label + 1;
 
-        std::vector<double> min_v(static_cast<std::size_t>(K * C), std::numeric_limits<double>::infinity());
-        std::vector<double> max_v(static_cast<std::size_t>(K * C), -std::numeric_limits<double>::infinity());
-        std::vector<double> sum(static_cast<std::size_t>(K * C), 0.0);
-        std::vector<double> sumsq(static_cast<std::size_t>(K * C), 0.0);
-        std::vector<double> sumcube(static_cast<std::size_t>(K * C), 0.0);
-        std::vector<int64_t> count(static_cast<std::size_t>(K * C), 0);
+        constexpr int kNumMetrics = 5;
+        const int64_t F = kNumMetrics * C; // 15
+
+        // accumulators per (label, channel)
+        std::vector<double> min_v(K * C,  std::numeric_limits<double>::infinity());
+        std::vector<double> max_v(K * C, -std::numeric_limits<double>::infinity());
+        std::vector<double> sum_v(K * C,  0.0);
+        std::vector<double> sum2_v(K * C, 0.0);
+        std::vector<double> sum3_v(K * C, 0.0);
+        std::vector<int64_t> cnt_v(K * C, 0);
 
         auto lacc = labels.accessor<int64_t, 2>();
-        auto iacc = img.accessor<float, 3>();
-
-        for (int64_t y = 0; y < H; ++y) {
-            for (int64_t x = 0; x < W; ++x) {
-                int64_t l = lacc[y][x];
-                if (l < 0 || l >= K) continue;
-                std::size_t base = static_cast<std::size_t>(l * C);
-                for (int64_t c = 0; c < C; ++c) {
-                    double v = static_cast<double>(iacc[c][y][x]);
-                    std::size_t idx = base + static_cast<std::size_t>(c);
-                    min_v[idx] = std::min(min_v[idx], v);
-                    max_v[idx] = std::max(max_v[idx], v);
-                    sum[idx] += v;
-                    sumsq[idx] += v * v;
-                    sumcube[idx] += v * v * v;
-                    count[idx] += 1;
-                }
-            }
-        }
-
-        std::vector<float> mean(static_cast<std::size_t>(K * C), 0.0f);
-        std::vector<float> stddev(static_cast<std::size_t>(K * C), 0.0f);
-        std::vector<float> skew(static_cast<std::size_t>(K * C), 0.0f);
-
-        for (int64_t l = 0; l < K; ++l) {
-            for (int64_t c = 0; c < C; ++c) {
-                std::size_t idx = static_cast<std::size_t>(l * C + c);
-                if (count[idx] <= 0) {
-                    min_v[idx] = 0.0;
-                    max_v[idx] = 0.0;
-                    continue;
-                }
-
-                double cnt   = static_cast<double>(count[idx]);
-                double mu    = sum[idx] / cnt;
-                double ex2   = sumsq[idx] / cnt;
-                double ex3   = sumcube[idx] / cnt;
-                double var   = std::max(0.0, ex2 - mu * mu);
-                double sigma = std::sqrt(var);
-                double c3    = ex3 - 3.0 * mu * ex2 + 2.0 * mu * mu * mu; // E[(x - mu)^3]
-
-                mean[idx]   = static_cast<float>(mu);
-                stddev[idx] = static_cast<float>(sigma);
-                skew[idx]   = (sigma > 0.0)
-                    ? static_cast<float>(c3 / (sigma * sigma * sigma))
-                    : 0.0f;
-            }
-        }
-
-        constexpr int kNumMetrics = 5; // min, max, mean, std, skew
-        auto out = torch::empty({kNumMetrics * C, H, W},
-            torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
-        auto oacc = out.accessor<float, 3>();
+        auto iacc = img.accessor<float, 3>(); // [C,H,W]
 
         for (int64_t y = 0; y < H; ++y) {
             for (int64_t x = 0; x < W; ++x) {
                 int64_t l = lacc[y][x];
                 if (l < 0 || l >= K) {
-                    for (int64_t c = 0; c < C; ++c) {
-                        for (int m = 0; m < kNumMetrics; ++m) {
-                            oacc[m * C + c][y][x] = 0.0f;
-                        }
-                    }
                     continue;
                 }
-
-                std::size_t base = static_cast<std::size_t>(l * C);
                 for (int64_t c = 0; c < C; ++c) {
-                    std::size_t idx = base + static_cast<std::size_t>(c);
-                    oacc[0 * C + c][y][x] = static_cast<float>(min_v[idx]);
-                    oacc[1 * C + c][y][x] = static_cast<float>(max_v[idx]);
-                    oacc[2 * C + c][y][x] = mean[idx];
-                    oacc[3 * C + c][y][x] = stddev[idx];
-                    oacc[4 * C + c][y][x] = skew[idx];
+                    double v = static_cast<double>(iacc[c][y][x]);
+                    std::size_t idx = static_cast<std::size_t>(l * C + c);
+
+                    min_v[idx] = std::min(min_v[idx], v);
+                    max_v[idx] = std::max(max_v[idx], v);
+                    sum_v[idx]  += v;
+                    sum2_v[idx] += v * v;
+                    sum3_v[idx] += v * v * v;
+                    cnt_v[idx]  += 1;
                 }
             }
         }
 
-        return out; // [5*C, H, W]
-    }
+        auto out = torch::empty({K, F}, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
+        auto oacc = out.accessor<float, 2>();
 
-    torch::Tensor BuildSuperpixelFeatureBatch(const torch::Tensor& batch_bchw, int num_superpixels) {
-        TORCH_CHECK(batch_bchw.dim() == 4, "Expected [B, C, H, W]");
-        TORCH_CHECK(batch_bchw.size(1) == 3, "Expected RGB images with 3 channels");
+        for (int64_t l = 0; l < K; ++l) {
+            for (int64_t c = 0; c < C; ++c) {
+                std::size_t idx = static_cast<std::size_t>(l * C + c);
+                double cnt = static_cast<double>(cnt_v[idx]);
 
-        auto batch = batch_bchw.to(torch::kFloat32).to(torch::kCPU).contiguous();
-        const int64_t B = batch.size(0);
-        const int64_t C = batch.size(1);
-        const int64_t H = batch.size(2);
-        const int64_t W = batch.size(3);
+                double mean   = (cnt > 0) ? sum_v[idx]  / cnt : 0.0;
+                double mean2  = (cnt > 0) ? sum2_v[idx] / cnt : 0.0;
+                double mean3  = (cnt > 0) ? sum3_v[idx] / cnt : 0.0;
+                double var    = std::max(0.0, mean2 - mean * mean);
+                double stddev = std::sqrt(var);
+                double skew   = 0.0;
+                if (stddev > 1e-6) {
+                    double m3_central = mean3 - 3.0 * mean * mean2 + 2.0 * mean * mean * mean;
+                    skew = m3_central / (stddev * stddev * stddev + 1e-6);
+                }
 
-        constexpr int kNumMetrics = 5;
-        auto out = torch::empty({B, kNumMetrics * C, H, W},
-            torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
-
-        for (int64_t b = 0; b < B; ++b) {
-            auto img = batch.index({b}); // [3, H, W]
-            auto density = ComputeDensity(img);              // [H, W]
-            auto labels  = ComputeSuperpixelLabels(density, num_superpixels); // [H, W]
-            auto feats = BuildRegionStatisticMapsForImage(img, labels);     // [5*C, H, W]
-            out.index_put_({b}, feats);
+                // Pack as [min, max, mean, std, skew] for this channel
+                oacc[l][0 * C + c] = static_cast<float>(min_v[idx]);
+                oacc[l][1 * C + c] = static_cast<float>(max_v[idx]);
+                oacc[l][2 * C + c] = static_cast<float>(mean);
+                oacc[l][3 * C + c] = static_cast<float>(stddev);
+                oacc[l][4 * C + c] = static_cast<float>(skew);
+            }
         }
 
-        return out;
+        return out; // [K, 15]
     }
+
 
     torch::Tensor BuildSuperpixelOverlay(const torch::Tensor& img_chw, int num_superpixels) {
         TORCH_CHECK(img_chw.dim() == 3, "Expected [C, H, W] image");
@@ -839,37 +857,63 @@ namespace {
             static_cast<int>(std::llround(rw))
         };
     }
+    std::vector<torch::Tensor> struct2train(auto samples) {
+        std::vector<torch::Tensor> xs_sp; xs_sp.reserve(samples.size());
+        std::vector<torch::Tensor> ys_sp; ys_sp.reserve(samples.size());
+        for (auto& s : samples) {
+            xs_sp.push_back(s.superpixel.input);
+            ys_sp.push_back(s.superpixel.target);
+        } return std::vector<torch::Tensor> {torch::cat(xs_sp, 0), torch::cat(ys_sp, 0)};
+    }
 
+
+
+    void savePic(torch::Tensor inp, const std::string path, const std::string kind) {
+        torch::Tensor t = inp.detach().to(torch::kCPU);
+        t = t.clamp(0, 255).to(torch::kU8);
+        torch::Tensor t_hwc = t.permute({1, 2, 0}).contiguous();
+        int H = t_hwc.size(0);
+        int W = t_hwc.size(1);
+        cv::Mat img(H, W, CV_8UC3, t_hwc.data_ptr<uint8_t>());
+        cv::Mat img_bgr;
+        cv::cvtColor(img, img_bgr, cv::COLOR_RGB2BGR);
+        cv::imwrite(path+"/"+kind+"_raw.png", img_bgr);
+        cv::GaussianBlur(img_bgr, img_bgr, cv::Size(), 0.83);
+        cv::imwrite(path+"/"+kind+"_smooth.png", img_bgr);
+    }
 }
 
 
 int main() {
-    Thot::Model model("");
+    Omni::Model model("");
     std::vector<torch::Tensor> xs;
     std::vector<torch::Tensor> ys;
 
-    for (int tile = 1; tile < 9; ++tile) { // cuts(3*3) -> Tile -> cuts(X*Y)
+    for (int tile = 1; tile < 9; ++tile) {
+        std::string path = "/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile " + std::to_string(tile);
+        // cuts(3*3) -> Tile -> cuts(X*Y)
         auto [x1, y1, x2, y2] =
-            Thot::Data::Load::Universal(
-                "/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile " + std::to_string(tile),
-                Thot::Data::Type::JPG{"images", {.grayscale = false, .normalize_colors = false, .normalize_size = true, .color_order = "RGB"}},
-                Thot::Data::Type::PNG{"masks",  {.normalize_colors = false, .normalize_size = true, .InterpolationMode = Thot::Data::Transform::Format::Options::InterpMode::Nearest, .color_order = "RGB"}},
+            Omni::Data::Load::Universal(path,
+                Omni::Data::Type::JPG{"images", {.grayscale = false, .normalize_colors = false, .normalize_size = true, .color_order = "RGB"}},
+                Omni::Data::Type::PNG{"masks",  {.normalize_colors = false, .normalize_size = true, .InterpolationMode = Omni::Data::Transform::Format::Options::InterpMode::Nearest, .color_order = "RGB"}},
                 {.train_fraction = 1.f, .test_fraction = 0.f, .shuffle = false});
 
         x1 = OriginalTile(x1);
-        Thot::Data::Check::Size(x1, ("X"+std::to_string(tile) + " Reconstructed Tile"));
+        Omni::Data::Check::Size(x1, ("X"+std::to_string(tile) + " Reconstructed Tile"));
+        savePic(x1, path, "input");
         y1 = OriginalTile(y1);
-        Thot::Data::Check::Size(x1, ("Y"+std::to_string(tile) + " Reconstructed Tile"));
+        savePic(y1, path, "target");
+        Omni::Data::Check::Size(x1, ("Y"+std::to_string(tile) + " Reconstructed Tile"));
         auto EstX= EstimCuts(x1.size(1), x1.size(2), 128);
         auto EstY= EstimCuts(y1.size(1), y1.size(2), 128);
-        std::cout << "Estimator {X,Y}: " << EstX<< std::endl;
+        std::cout << "Estimator {X,Y}: " << EstX << " || n: " << EstX[0]*EstX[1] << " + " << (EstX[0]-1)*(EstX[1]-1) << std::endl;
         x1 = Cuts(x1, EstX, true); // Estim used to minimize artefacts from Downsample
         y1 = Cuts(y1, EstY, true);
 
-        Thot::Data::Check::Size(x1, ("X"+std::to_string(tile) + " After cuts"));
-        Thot::Data::Check::Size(y1, ("Y"+std::to_string(tile) + " After cuts"));
-        x1 = Thot::Data::Transform::Format::Downsample(x1, {.size = {128, 128}, .interp = Thot::Data::Transform::Format::Options::InterpMode::Bilinear});
-        y1 = Thot::Data::Transform::Format::Downsample(y1, {.size = {128, 128}, .interp = Thot::Data::Transform::Format::Options::InterpMode::Nearest});
+        Omni::Data::Check::Size(x1, ("X"+std::to_string(tile) + " After cuts"));
+        Omni::Data::Check::Size(y1, ("Y"+std::to_string(tile) + " After cuts"));
+        x1 = Omni::Data::Transform::Format::Downsample(x1, {.size = {128, 128}, .interp = Omni::Data::Transform::Format::Options::InterpMode::Bilinear});
+        y1 = Omni::Data::Transform::Format::Downsample(y1, {.size = {128, 128}, .interp = Omni::Data::Transform::Format::Options::InterpMode::Nearest});
 
         xs.push_back(x1);
         ys.push_back(y1);
@@ -878,101 +922,151 @@ int main() {
     torch::Tensor X = torch::cat(xs, 0);
     torch::Tensor Y = torch::cat(ys, 0);
 
-    Thot::Data::Check::Size(X, "X Total");
-    Thot::Data::Check::Size(Y, "Y Total");
+    Omni::Data::Check::Size(X, "X Total");
+    Omni::Data::Check::Size(Y, "Y Total");
 
 
-    // std::tie(x1, y1) = Thot::Data::Transform::Augmentation::Flip(x1, y1, {.axes = {"x"}, .frequency = 1.f, .data_augment = true});
-    // std::tie(x1, y1) = Thot::Data::Transform::Augmentation::Flip(x1, y1, {.axes = {"y"}, .frequency = 1.f, .data_augment = true});
-    // std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, true, false});
-    // std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
-    // std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
-    // std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
-    // std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
+    // std::tie(x1, y1) = Omni::Data::Transform::Augmentation::Flip(x1, y1, {.axes = {"x"}, .frequency = 1.f, .data_augment = true});
+    // std::tie(x1, y1) = Omni::Data::Transform::Augmentation::Flip(x1, y1, {.axes = {"y"}, .frequency = 1.f, .data_augment = true});
+    // std::tie(x1, y1) = Omni::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, true, false});
+    // std::tie(x1, y1) = Omni::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
+    // std::tie(x1, y1) = Omni::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
+    // std::tie(x1, y1) = Omni::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
+    // std::tie(x1, y1) = Omni::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
+
+    constexpr int kNumSuperpixels = 8;
+
+    auto input_overlay = BuildSuperpixelOverlay(X.index({0}), kNumSuperpixels);
+    Omni::Plot::Data::Image(input_overlay.unsqueeze(0), {0}, Omni::Plot::Data::ImagePlotOptions{.layoutTitle = "Input with superpixel segmentation", .showColorBox = true});
+
+    {
+        auto img0     = X.index({0});
+        auto density  = ComputeDensity(img0);
+        auto centers0 = PlaceInitialSeeds(density.size(0), density.size(1), kNumSuperpixels);
+
+        torch::Tensor labels0, geodesic0;
+        std::tie(labels0, geodesic0) = RunGeodesicVoronoi(density, centers0);
+
+        auto d_min = geodesic0.min().item<float>();
+        auto d_max = geodesic0.max().item<float>();
+        std::cout << "geodesic min/max = " << d_min << " / " << d_max << "\n";
+
+        auto d_norm = (geodesic0 - d_min) / (d_max - d_min + 1e-6f);
+        auto d_rgb  = d_norm.unsqueeze(0).repeat({3, 1, 1});
+
+        Omni::Plot::Data::Image(
+            d_rgb.unsqueeze(0), {0},
+            Omni::Plot::Data::ImagePlotOptions{
+                .layoutTitle  = "Geodesic distance map",
+                .showColorBox = true
+            });
+    }
+
+    std::vector<Sample> samples;
+    const int64_t size = X.size(0);
+    samples.reserve(static_cast<std::size_t>(size));
+
+    auto Y_onehot = ConvertRgbMasksToOneHot(Y);
+
+    for (int64_t b = 0; b < size; ++b) {
+        // std::cout << "b[" << b << "]"<< std::endl;
+        auto img_b = X.index({b});
+        auto y_b   = Y_onehot.index({b});
+
+        auto density_b = ComputeDensity(img_b);
+        auto labels_hw = ComputeSuperpixelLabels(density_b, kNumSuperpixels);
+
+        auto sp_features = BuildSuperpixelFeatureVectors(img_b, labels_hw);
+
+        auto [labels_sp, norm_counts] = BuildSuperpixelClassTargets(y_b, labels_hw, kNumSuperpixels);
+        Sample record;
+        record.superpixel.input = sp_features;
+        record.superpixel.target = labels_sp;
+        record.NormTarget = norm_counts;
+
+        Sample::Metrics<0, 0, 0> metrics;
+        metrics.min  = sp_features.min();
+        metrics.max  = sp_features.max();
+        metrics.avg  = sp_features.mean();
+        metrics.std  = sp_features.std(false);
+        metrics.skew = torch::zeros_like(metrics.avg); // placeholder
+        record.metric = metrics;
+
+        samples.push_back(std::move(record));
+    }
 
 
     auto block = [&](int in_c, int out_c) {
-        return Thot::Block::Sequential({
-            Thot::Layer::Conv2d(
+        return Omni::Block::Sequential({
+            Omni::Layer::Conv2d(
                 {in_c, out_c, {3,3}, {1,1}, {1,1}},
-                Thot::Activation::GeLU,
-                Thot::Initialization::HeUniform
+                Omni::Activation::ReLU,
+                Omni::Initialization::HeUniform
             ),
-            Thot::Layer::Conv2d(
+            Omni::Layer::Conv2d(
                 {out_c, out_c, {3,3}, {1,1}, {1,1}},
-                Thot::Activation::GeLU,
-                Thot::Initialization::HeUniform
+                Omni::Activation::ReLU,
+                Omni::Initialization::HeUniform
             ),
         });
     };
 
     auto upblock = [&](int in_c, int out_c) {
-        return Thot::Block::Sequential({
-            Thot::Layer::Upsample({.scale = {2,2}, .mode  = Thot::UpsampleMode::Bilinear}),
-            Thot::Layer::Conv2d(
+        return Omni::Block::Sequential({
+            Omni::Layer::Upsample({.scale = {2,2}, .mode  = Omni::UpsampleMode::Bilinear}),
+            Omni::Layer::Conv2d(
                 {in_c, out_c, {3,3}, {1,1}, {1,1}},
-                Thot::Activation::GeLU,
-                Thot::Initialization::HeUniform
+                Omni::Activation::ReLU,
+                Omni::Initialization::HeUniform
             ),
         });
     };
 
-    // ENCODER
     model.add(block(3, 64), "enc1");
-    model.add(Thot::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool1");
-
+    model.add(Omni::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool1");
     model.add(block(64,  128), "enc2");
-    model.add(Thot::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool2");
-
+    model.add(Omni::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool2");
     model.add(block(128, 256), "enc3");
-    model.add(Thot::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool3");
-
+    model.add(Omni::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool3");
     model.add(block(256, 512), "enc4");
-    model.add(Thot::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool4");
+    model.add(Omni::Layer::MaxPool2d({{2, 2}, {2, 2}}), "pool4");
 
     model.add(block(512, 1024), "bottleneck");
 
-
-    //DECODERS (up to 64x64)
     model.add(upblock(1024, 512), "up4");
     model.add(block(1024, 512), "dec4");
     model.add(upblock(512, 256), "up3");
     model.add(block(512, 256), "dec3");
-
-
     model.add(upblock(256, 128), "up2");
     model.add(block(256, 128),"dec2");
     model.add(upblock(128, 64), "up1");
     model.add(block(128, 64), "dec1");
-    model.add(Thot::Layer::Conv2d({64, 6, {1, 1}, {1, 1}, {0, 0}}, Thot::Activation::Identity), "logits");
+
+    model.add(Omni::Layer::Conv2d({64, 6, {1, 1}, {1, 1}, {0, 0}}, Omni::Activation::Identity), "logits");
 
     model.links({
-        // encoder path
-        Thot::LinkSpec{Thot::Port::Input("@input"), Thot::Port::Module("enc1")},
-        Thot::LinkSpec{Thot::Port::Module("enc1"),  Thot::Port::Module("pool1")},
-        Thot::LinkSpec{Thot::Port::Module("pool1"), Thot::Port::Module("enc2")},
-        Thot::LinkSpec{Thot::Port::Module("enc2"),  Thot::Port::Module("pool2")},
-        Thot::LinkSpec{Thot::Port::Module("pool2"), Thot::Port::Module("enc3")},
-        Thot::LinkSpec{Thot::Port::Module("enc3"),  Thot::Port::Module("pool3")},
-        Thot::LinkSpec{Thot::Port::Module("pool3"), Thot::Port::Module("enc4")},
-        Thot::LinkSpec{Thot::Port::Module("enc4"),  Thot::Port::Module("pool4")},
-        Thot::LinkSpec{Thot::Port::Module("pool4"), Thot::Port::Module("bottleneck")},
+        Omni::LinkSpec{Omni::Port::Input("@input"), Omni::Port::Module("enc1")},
+        Omni::LinkSpec{Omni::Port::Module("enc1"),  Omni::Port::Module("pool1")},
+        Omni::LinkSpec{Omni::Port::Module("pool1"), Omni::Port::Module("enc2")},
+        Omni::LinkSpec{Omni::Port::Module("enc2"),  Omni::Port::Module("pool2")},
+        Omni::LinkSpec{Omni::Port::Module("pool2"), Omni::Port::Module("enc3")},
+        Omni::LinkSpec{Omni::Port::Module("enc3"),  Omni::Port::Module("pool3")},
+        Omni::LinkSpec{Omni::Port::Module("pool3"), Omni::Port::Module("enc4")},
+        Omni::LinkSpec{Omni::Port::Module("enc4"),  Omni::Port::Module("pool4")},
+        Omni::LinkSpec{Omni::Port::Module("pool4"), Omni::Port::Module("bottleneck")},
 
-        // decoder with skip
-        Thot::LinkSpec{Thot::Port::Module("bottleneck"), Thot::Port::Module("up4")},
-        Thot::LinkSpec{Thot::Port::Join({"up4", "enc4"}, Thot::MergePolicy::Stack), Thot::Port::Module("dec4")},
-        Thot::LinkSpec{Thot::Port::Module("dec4"), Thot::Port::Module("up3")},
-        Thot::LinkSpec{Thot::Port::Join({"up3", "enc3"}, Thot::MergePolicy::Stack), Thot::Port::Module("dec3")},
+        Omni::LinkSpec{Omni::Port::Module("bottleneck"), Omni::Port::Module("up4")},
+        Omni::LinkSpec{Omni::Port::Join({"up4", "enc4"}, Omni::MergePolicy::Stack), Omni::Port::Module("dec4")},
+        Omni::LinkSpec{Omni::Port::Module("dec4"), Omni::Port::Module("up3")},
+        Omni::LinkSpec{Omni::Port::Join({"up3", "enc3"}, Omni::MergePolicy::Stack), Omni::Port::Module("dec3")},
 
-        Thot::LinkSpec{Thot::Port::Module("dec3"), Thot::Port::Module("up2") },
-        Thot::LinkSpec{Thot::Port::Join({"up2", "enc2"}, Thot::MergePolicy::Stack), Thot::Port::Module("dec2")},
-        Thot::LinkSpec{Thot::Port::Module("dec2"), Thot::Port::Module("up1") },
-        Thot::LinkSpec{Thot::Port::Join({"up1", "enc1"}, Thot::MergePolicy::Stack), Thot::Port::Module("dec1")},
+        Omni::LinkSpec{Omni::Port::Module("dec3"), Omni::Port::Module("up2") },
+        Omni::LinkSpec{Omni::Port::Join({"up2", "enc2"}, Omni::MergePolicy::Stack), Omni::Port::Module("dec2")},
+        Omni::LinkSpec{Omni::Port::Module("dec2"), Omni::Port::Module("up1") },
+        Omni::LinkSpec{Omni::Port::Join({"up1", "enc1"}, Omni::MergePolicy::Stack), Omni::Port::Module("dec1")},
 
-
-        // head
-        Thot::LinkSpec{Thot::Port::Module("dec1"),   Thot::Port::Module("logits")}, // dec3
-        Thot::LinkSpec{Thot::Port::Module("logits"), Thot::Port::Output("@output")},
+        Omni::LinkSpec{Omni::Port::Module("dec1"),   Omni::Port::Module("logits")}, // dec3
+        Omni::LinkSpec{Omni::Port::Module("logits"), Omni::Port::Output("@output")},
     }, true);
 
 
@@ -981,7 +1075,7 @@ int main() {
     Y = ConvertRgbMasksToOneHot(Y);
     X= X.to(torch::kFloat32) / 255.0f;
 
-    Thot::Plot::Data::Image(X, {0, 100, 1000, 2000, 5000, 11734});
+    Omni::Plot::Data::Image(X, {0, 100, 1000, 2000, 5000, 11734});
 
     const auto total_training_samples = X.size(0);
     const auto B = 32;
@@ -999,17 +1093,17 @@ int main() {
     std::vector<double> w(ptr, ptr + w_cpu.numel());
 
 
-    model.set_loss(Thot::Loss::CrossEntropy({ /*.weight = w*/ }));
+    model.set_loss(Omni::Loss::CrossEntropy({ /*.weight = w*/ }));
     model.set_optimizer(
-        Thot::Optimizer::AdamW({.learning_rate = 5e-5, .weight_decay = 1e-4}),
-        Thot::LrScheduler::CosineAnnealing({
+        Omni::Optimizer::AdamW({.learning_rate = 5e-5, .weight_decay = 1e-4}),
+        Omni::LrScheduler::CosineAnnealing({
             .T_max = (total_training_steps),
             .eta_min = 1e-6,
             .warmup_steps = std::min<std::size_t>(steps_per_epoch * 5, total_training_steps / 5),
             .warmup_start_factor = 0.1,
         }));
 
-    model.set_regularization({Thot::Regularization::SWAG({
+    model.set_regularization({Omni::Regularization::SWAG({
         .coefficient = 5e-4,
         .variance_epsilon = 1e-6,
         .start_step = static_cast<std::size_t>(0.65 * static_cast<double>(total_training_steps)),
@@ -1020,53 +1114,42 @@ int main() {
     model.use_cuda(torch::cuda::is_available());
 
 
-    std::tie(X, Y) = Thot::Data::Manipulation::Fraction(X, Y, 0.1f); // 10%
-    Thot::Data::Check::Size(X, "10% X Train");
-    model.train(X, Y,
+    // std::tie(X, Y) = Omni::Data::Manipulation::Fraction(X, Y, 0.1f); // 10%
+    // Omni::Data::Check::Size(X, "10% X Train");
+    auto out = struct2train(samples);
+    model.train(out[0], out[1],
         {.epoch = E,
         .batch_size = B,
         .restore_best_state = true,
         .test = std::vector<at::Tensor>{X, Y},
-        .graph_mode = Thot::GraphMode::Capture,
+        .graph_mode = Omni::GraphMode::Capture,
         .enable_amp = true,
         // .memory_format = torch::MemoryFormat::ChannelsLast
         });
-    std::cout << "End" << std::endl;
 
-    model.evaluate(X, Y, Thot::Evaluation::Segmentation,{
-        Thot::Metric::Classification::Accuracy,
-        Thot::Metric::Classification::Precision,
-        Thot::Metric::Classification::Recall,
-        Thot::Metric::Classification::JaccardIndexMicro,
-        Thot::Metric::Classification::BoundaryIoU,
-        Thot::Metric::Classification::HausdorffDistance,
+    model.evaluate(out[0], out[1], Omni::Evaluation::Segmentation,{
+        Omni::Metric::Classification::Accuracy,
+        Omni::Metric::Classification::Precision,
+        Omni::Metric::Classification::Recall,
+        Omni::Metric::Classification::JaccardIndexMicro,
+        Omni::Metric::Classification::BoundaryIoU,
+        Omni::Metric::Classification::HausdorffDistance,
     },{.batch_size = B, .buffer_vram=2});
 
 
-    std::tie(X, Y) = Thot::Data::Manipulation::Fraction(X, Y, 0.01f);
-    Thot::Data::Check::Size(X, "Inference");
+    std::tie(X, Y) = Omni::Data::Manipulation::Fraction(out[0], out[1], 0.01f);
+    Omni::Data::Check::Size(X, "Inference");
     auto logits = model.forward(X);
     auto predicted = logits.argmax(1).to(torch::kCPU);
     auto first_pred = predicted.index({0}).contiguous();
+    auto forecast_rgb = ColorizeClassMap(first_pred);
 
-    const auto H = static_cast<int>(first_pred.size(0));
-    const auto W = static_cast<int>(first_pred.size(1));
+    auto ground_truth = Y.argmax(1).to(torch::kCPU);
+    auto gt_rgb = ColorizeClassMap(ground_truth.index({0}).contiguous());
 
-    torch::Tensor forecast_rgb = torch::zeros({H, W, 3}, torch::TensorOptions().dtype(torch::kUInt8));
-    auto pacc = first_pred.accessor<long, 2>();
-    auto racc = forecast_rgb.accessor<std::uint8_t, 3>();
-    for (int y = 0; y < H; ++y) {
-        for (int x = 0; x < W; ++x) {
-            auto cls = pacc[y][x];
-            if (cls < 0 || cls >= static_cast<long>(kClassPalette.size()))
-                cls = 0;
-            const auto& rgb = kClassPalette[static_cast<std::size_t>(cls)];
-            racc[y][x][0] = rgb[0];
-            racc[y][x][1] = rgb[1];
-            racc[y][x][2] = rgb[2];
-        }
-    }
-    Thot::Plot::Data::Image(forecast_rgb.unsqueeze(0), {0}); Thot::Plot::Data::Image(Y, {0}); Thot::Plot::Data::Image(X, {0});
+    Omni::Plot::Data::Image(forecast_rgb, {0});
+    Omni::Plot::Data::Image(gt_rgb, {0});
+    Omni::Plot::Data::Image(X, {0});
     // cv::Mat f_img(H, W, CV_8UC3, forecast_rgb.data_ptr<uint8_t>());
     // cv::Mat f_bgr;
     // cv::cvtColor(f_img, f_bgr, cv::COLOR_RGB2BGR);
@@ -1195,7 +1278,7 @@ Epoch [47/50] | Train loss: 0.013382 | Test loss: 0.012975 | ΔLoss: -0.000519 (
 Epoch [48/50] | Train loss: 0.013139 | Test loss: 0.012817 | ΔLoss: -0.000158 (∇) | duration: 96.08sec
 Epoch [49/50] | Train loss: 0.012878 | Test loss: 0.012620 | ΔLoss: -0.000197 (∇) | duration: 96.08sec
 Epoch [50/50] | Train loss: 0.012654 | Test loss: 0.012409 | ΔLoss: -0.000211 (∇) | duration: 97.82sec
-[Thot] Reloading best state of the network...
+[Omni] Reloading best state of the network...
 End
 Test Inputs: (11735, 3, 128, 128)
 Test Targets: (11735, 128, 128)

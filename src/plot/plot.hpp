@@ -1,5 +1,5 @@
-#ifndef THOT_PLOT_HPP
-#define THOT_PLOT_HPP
+#ifndef OMNI_PLOT_HPP
+#define OMNI_PLOT_HPP
 
 #include <cstddef>
 #include <optional>
@@ -17,11 +17,11 @@
 #include "details/reliability/reliability_roc.hpp"
 #include "details/reliability/reliability_youdens.hpp"
 
-namespace Thot {
+namespace Omni {
     class Model;
 }
 
-namespace Thot::Plot {
+namespace Omni::Plot {
     namespace Training {
         struct LossOptions {
             bool learningRate{false};
@@ -199,4 +199,4 @@ namespace Thot::Plot {
     }
 }
 
-#endif //THOT_PLOT_HPP
+#endif //OMNI_PLOT_HPP

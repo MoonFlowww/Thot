@@ -1,7 +1,7 @@
-#ifndef THOT_LRSCHEDULER_COMMON_HPP
-#define THOT_LRSCHEDULER_COMMON_HPP
+#ifndef OMNI_LRSCHEDULER_COMMON_HPP
+#define OMNI_LRSCHEDULER_COMMON_HPP
 
-namespace Thot::LrScheduler::Details {
+namespace Omni::LrScheduler::Details {
 
     class Scheduler {
     public:
@@ -9,6 +9,6 @@ namespace Thot::LrScheduler::Details {
         virtual void step() = 0;
     };
 
-}  // namespace Thot::LrScheduler::Details
+}  // namespace Omni::LrScheduler::Details
 
-#endif //THOT_LRSCHEDULER_COMMON_HPP
+#endif //OMNI_LRSCHEDULER_COMMON_HPP

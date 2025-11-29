@@ -4,11 +4,11 @@ The activation module exposes a `Descriptor` wrapper over the `Activation::Type`
 enumeration. Each helper constant (for example `Activation::GeLU`) simply
 pre-fills that descriptor so it can be threaded through layer builders or
 blocks – you
-select the strategy by passing one of the `Thot::Activation::*` constants
+select the strategy by passing one of the `Omni::Activation::*` constants
 when building your model.
 
 ```cpp
-model.add(Thot::Layer::FC({...}, Thot::Activation::ReLU, Thot::Initialization::HeUniform));
+model.add(Omni::Layer::FC({...}, Omni::Activation::ReLU, Omni::Initialization::HeUniform));
 ```
 
 ## Available activations
@@ -37,4 +37,4 @@ validation is still recommended when wiring them into layer pipelines.
 
 #### HyperLinks related:
 - [Docs/Introduction](../../README.md) (`model.add()`)
-- [Docs/Initialization](../initialization/README.md) (`Thot::Initialization::*`)
+- [Docs/Initialization](../initialization/README.md) (`Omni::Initialization::*`)

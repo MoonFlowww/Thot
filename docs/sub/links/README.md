@@ -1,7 +1,7 @@
 ## Routing with `Model::links`
 
 ### Ports, joins, and policies
-Custom routing is defined as a list of `Thot::LinkSpec` pairs. Each pair links a
+Custom routing is defined as a list of `Omni::LinkSpec` pairs. Each pair links a
 source port to a target port. Ports can reference inputs, outputs, modules, or
 join buffers:
 
@@ -80,27 +80,27 @@ and explicitly linking the branches into a Vision Transformer head, while also
 opting into CUDA graph capture for the final plan.[Test/Cifar10: CIFAR routing example](../../../test/classification/images/cifar10.cpp#L144-L165)
 
 ## Worked example
-The snippet below rewires a four-layer network: it forks the flow after ConvEntry into two independent branches at `Level 2` and merges them at `Level 3` with a `Stack` join (`Thot::MergePolicy::Stack`).
+The snippet below rewires a four-layer network: it forks the flow after ConvEntry into two independent branches at `Level 2` and merges them at `Level 3` with a `Stack` join (`Omni::MergePolicy::Stack`).
 ```cpp
 //model.add(..., "_name_"); Name is optional
-model.add(Thot::Layer::Conv2d({3, 32, {3, 3}}), "ConvEntry");
-model.add(Thot::Layer::Conv2d({32, 64, {3, 3}}), "ConvPath1");
-model.add(Thot::Layer::MaxPool2d({{2, 2}}), "MpPath2");
-model.add(Thot::Layer::FC({64 * 16 * 16, 10}, Thot::Activation::Identity, Thot::Initialization::HeNormal), "FCExit");
+model.add(Omni::Layer::Conv2d({3, 32, {3, 3}}), "ConvEntry");
+model.add(Omni::Layer::Conv2d({32, 64, {3, 3}}), "ConvPath1");
+model.add(Omni::Layer::MaxPool2d({{2, 2}}), "MpPath2");
+model.add(Omni::Layer::FC({64 * 16 * 16, 10}, Omni::Activation::Identity, Omni::Initialization::HeNormal), "FCExit");
 
 model.links({
     //Level 1 (Input)
-    Thot::LinkSpec{Thot::Port::Input("@input"), Thot::Port::Module("ConvEntry")},
+    Omni::LinkSpec{Omni::Port::Input("@input"), Omni::Port::Module("ConvEntry")},
 
     //Level 2 (Multi Channels)
-    Thot::LinkSpec{Thot::Port::Module("ConvEntry"), Thot::Port::Module("ConvPath1")}, // path #1
-    Thot::LinkSpec{Thot::Port::Module("ConvEntry"), Thot::Port::Module("MpPath2")}, // path #2
+    Omni::LinkSpec{Omni::Port::Module("ConvEntry"), Omni::Port::Module("ConvPath1")}, // path #1
+    Omni::LinkSpec{Omni::Port::Module("ConvEntry"), Omni::Port::Module("MpPath2")}, // path #2
 
     //Level 3 (Merge Channels)
-    Thot::LinkSpec{Thot::Port::Join({"ConvPath1", "MpPath2"}, Thot::MergePolicy::Stack), Thot::Port::Module("FCExit")}, // join
+    Omni::LinkSpec{Omni::Port::Join({"ConvPath1", "MpPath2"}, Omni::MergePolicy::Stack), Omni::Port::Module("FCExit")}, // join
 
     //Level 4 (Output)
-    Thot::LinkSpec{Thot::Port::Module("FCExit"), Thot::Port::Output("@output")},
+    Omni::LinkSpec{Omni::Port::Module("FCExit"), Omni::Port::Output("@output")},
 });
 ```
 

@@ -1,5 +1,5 @@
-#ifndef THOT_CALIBRATION_HPP
-#define THOT_CALIBRATION_HPP
+#ifndef OMNI_CALIBRATION_HPP
+#define OMNI_CALIBRATION_HPP
 // This file is an factory, must exempt it from any logical-code. For functions look into "/details"
 
 #include <algorithm>
@@ -23,7 +23,7 @@
 #include "../utils/gnuplot.hpp"
 
 
-namespace Thot::Calibration {
+namespace Omni::Calibration {
     template <class...>
     inline constexpr bool always_false_v = false;
 
@@ -538,4 +538,4 @@ namespace Thot::Calibration {
 }
 
 
-#endif //THOT_CALIBRATION_HPP
+#endif //OMNI_CALIBRATION_HPP

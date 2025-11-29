@@ -1,5 +1,5 @@
-#ifndef THOT_MARGIN_RANKING_HPP
-#define THOT_MARGIN_RANKING_HPP
+#ifndef OMNI_MARGIN_RANKING_HPP
+#define OMNI_MARGIN_RANKING_HPP
 
 #include <optional>
 #include <stdexcept>
@@ -8,7 +8,7 @@
 
 #include "reduction.hpp"
 
-namespace Thot::Loss::Details {
+namespace Omni::Loss::Details {
     struct MarginRankingOptions {
         Reduction reduction{Reduction::Mean};
         double margin{0.0};
@@ -85,4 +85,4 @@ namespace Thot::Loss::Details {
 
 }
 
-#endif // THOT_MARGIN_RANKING_HPP
+#endif // OMNI_MARGIN_RANKING_HPP

@@ -1,5 +1,5 @@
-#ifndef THOT_DSILU_HPP
-#define THOT_DSILU_HPP
+#ifndef OMNI_DSILU_HPP
+#define OMNI_DSILU_HPP
 
 #include <torch/torch.h>
 
@@ -7,7 +7,7 @@
 
 #include "../activation.hpp"
 
-namespace Thot::Activation::Details {
+namespace Omni::Activation::Details {
     struct dSiLU {
         [[nodiscard]] torch::Tensor operator()(torch::Tensor input) const {
             auto tensor = std::move(input);
@@ -17,4 +17,4 @@ namespace Thot::Activation::Details {
     };
 }
 
-#endif //THOT_DSILU_HPP
+#endif //OMNI_DSILU_HPP

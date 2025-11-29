@@ -1,5 +1,5 @@
-#ifndef THOT_MAMBA_HPP
-#define THOT_MAMBA_HPP
+#ifndef OMNI_MAMBA_HPP
+#define OMNI_MAMBA_HPP
 //https://arxiv.org/pdf/2312.00752
 // "Mamba: Linear-Time Sequence Modeling with Selective State Spaces" — Gu et al., 2023 (arXiv:2312.00752).
 // Implements the selective state space sequence model with convolutional gating and RMS normalization
@@ -16,7 +16,7 @@
 
 #include <torch/torch.h>
 
-namespace Thot::Block::Details::Transformer::Mamba {
+namespace Omni::Block::Details::Transformer::Mamba {
     enum class NormalizationOrder {
         Pre,
         Post,
@@ -590,4 +590,4 @@ namespace Thot::Block::Details::Transformer::Mamba {
 }
 
 
-#endif //THOT_MAMBA_HPP
+#endif //OMNI_MAMBA_HPP

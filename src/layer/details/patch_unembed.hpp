@@ -1,5 +1,5 @@
-#ifndef THOT_PATCH_UNEMBED_HPP
-#define THOT_PATCH_UNEMBED_HPP
+#ifndef OMNI_PATCH_UNEMBED_HPP
+#define OMNI_PATCH_UNEMBED_HPP
 
 #include <cstdint>
 #include <stdexcept>
@@ -13,7 +13,7 @@
 #include "../../common/local.hpp"
 #include "../registry.hpp"
 
-namespace Thot::Layer::Details {
+namespace Omni::Layer::Details {
 
     struct PatchUnembedOptions {
         std::int64_t channels{1};
@@ -99,8 +99,8 @@ namespace Thot::Layer::Details {
 
     struct PatchUnembedDescriptor {
         PatchUnembedOptions options{};
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
-        ::Thot::LocalConfig local{};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
+        ::Omni::LocalConfig local{};
     };
 
     template <class Owner>
@@ -118,4 +118,4 @@ namespace Thot::Layer::Details {
 
 }
 
-#endif //THOT_PATCH_UNEMBED_HPP
+#endif //OMNI_PATCH_UNEMBED_HPP

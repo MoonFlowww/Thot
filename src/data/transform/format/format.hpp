@@ -1,5 +1,5 @@
-#ifndef THOT_DATA_TRANSFORM_FORMAT_HPP
-#define THOT_DATA_TRANSFORM_FORMAT_HPP
+#ifndef OMNI_DATA_TRANSFORM_FORMAT_HPP
+#define OMNI_DATA_TRANSFORM_FORMAT_HPP
 
 #include <array>
 #include <optional>
@@ -9,7 +9,7 @@
 #include <torch/torch.h>
 #include <torch/nn/functional.h>
 
-namespace Thot::Data::Transform::Format {
+namespace Omni::Data::Transform::Format {
     namespace Options {
 
         enum class InterpMode {
@@ -127,4 +127,4 @@ namespace Thot::Data::Transform::Format {
     }
 }
 
-#endif // THOT_DATA_TRANSFORM_FORMAT_HPP
+#endif // OMNI_DATA_TRANSFORM_FORMAT_HPP

@@ -1,5 +1,5 @@
-#ifndef THOT_DATA_TRANSFORM_AUGMENTATION_REGISTRY_HPP
-#define THOT_DATA_TRANSFORM_AUGMENTATION_REGISTRY_HPP
+#ifndef OMNI_DATA_TRANSFORM_AUGMENTATION_REGISTRY_HPP
+#define OMNI_DATA_TRANSFORM_AUGMENTATION_REGISTRY_HPP
 
 #include "atmospheric_drift.hpp"
 #include "chromatic_aberration.hpp"
@@ -12,4 +12,4 @@
 #include "random_brightness_contrast.hpp"
 #include "sun_angle_jitter.hpp"
 
-#endif // THOT_DATA_TRANSFORM_AUGMENTATION_REGISTRY_HPP
+#endif // OMNI_DATA_TRANSFORM_AUGMENTATION_REGISTRY_HPP

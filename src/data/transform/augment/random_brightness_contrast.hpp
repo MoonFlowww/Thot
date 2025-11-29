@@ -1,5 +1,5 @@
-#ifndef THOT_DATA_TRANSFORM_AUGMENTATION_RANDOM_BRIGHTNESS_CONTRAST_HPP
-#define THOT_DATA_TRANSFORM_AUGMENTATION_RANDOM_BRIGHTNESS_CONTRAST_HPP
+#ifndef OMNI_DATA_TRANSFORM_AUGMENTATION_RANDOM_BRIGHTNESS_CONTRAST_HPP
+#define OMNI_DATA_TRANSFORM_AUGMENTATION_RANDOM_BRIGHTNESS_CONTRAST_HPP
 
 #include <optional>
 
@@ -7,7 +7,7 @@
 
 #include "common.hpp"
 
-namespace Thot::Data::Transform::Augmentation {
+namespace Omni::Data::Transform::Augmentation {
     namespace Options {
         struct RandomBrightnessContrastOptions {
             double brightness_delta = 0.15;
@@ -38,4 +38,4 @@ namespace Thot::Data::Transform::Augmentation {
     }
 }
 
-#endif // THOT_DATA_TRANSFORM_AUGMENTATION_RANDOM_BRIGHTNESS_CONTRAST_HPP
+#endif // OMNI_DATA_TRANSFORM_AUGMENTATION_RANDOM_BRIGHTNESS_CONTRAST_HPP

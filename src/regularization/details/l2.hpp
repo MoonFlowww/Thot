@@ -1,9 +1,9 @@
-#ifndef THOT_L2_HPP
-#define THOT_L2_HPP
+#ifndef OMNI_L2_HPP
+#define OMNI_L2_HPP
 
 #include <torch/torch.h>
 
-namespace Thot::Regularization::Details {
+namespace Omni::Regularization::Details {
 
     struct L2Options {
         double coefficient{0.0};
@@ -25,4 +25,4 @@ namespace Thot::Regularization::Details {
 
 }
 
-#endif //THOT_L2_HPP
+#endif //OMNI_L2_HPP

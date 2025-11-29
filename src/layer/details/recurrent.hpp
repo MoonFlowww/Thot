@@ -1,5 +1,5 @@
-#ifndef THOT_RECURRENT_HPP
-#define THOT_RECURRENT_HPP
+#ifndef OMNI_RECURRENT_HPP
+#define OMNI_RECURRENT_HPP
 
 #include <algorithm>
 #include <cctype>
@@ -20,7 +20,7 @@
 #include "../registry.hpp"
 
 
-namespace Thot::Layer::Details {
+namespace Omni::Layer::Details {
 
     // -------- Options --------
     struct RNNOptions {
@@ -66,30 +66,30 @@ namespace Thot::Layer::Details {
     // -------- Descriptors (carry Activation/Initialization + Local flags) --------
     struct RNNDescriptor {
         RNNOptions options{};
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
-        ::Thot::Initialization::Descriptor initialization{::Thot::Initialization::Default};
-        ::Thot::LocalConfig local{};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
+        ::Omni::Initialization::Descriptor initialization{::Omni::Initialization::Default};
+        ::Omni::LocalConfig local{};
     };
 
     struct LSTMDescriptor {
         LSTMOptions options{};
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
-        ::Thot::Initialization::Descriptor initialization{::Thot::Initialization::Default};
-        ::Thot::LocalConfig local{};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
+        ::Omni::Initialization::Descriptor initialization{::Omni::Initialization::Default};
+        ::Omni::LocalConfig local{};
     };
 
     struct GRUDescriptor {
         GRUOptions options{};
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
-        ::Thot::Initialization::Descriptor initialization{::Thot::Initialization::Default};
-        ::Thot::LocalConfig local{};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
+        ::Omni::Initialization::Descriptor initialization{::Omni::Initialization::Default};
+        ::Omni::LocalConfig local{};
     };
 
     struct xLSTMDescriptor {
         xLSTMOptions options{};
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
-        ::Thot::Initialization::Descriptor initialization{::Thot::Initialization::Default};
-        ::Thot::LocalConfig local{};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
+        ::Omni::Initialization::Descriptor initialization{::Omni::Initialization::Default};
+        ::Omni::LocalConfig local{};
     };
 
     // -------- Internal detail helpers --------
@@ -260,7 +260,7 @@ namespace Thot::Layer::Details {
 
     } // namespace Detail
 
-    // Expose xLSTM in Thot::Layer::Details scope while keeping the impl in ::Detail
+    // Expose xLSTM in Omni::Layer::Details scope while keeping the impl in ::Detail
     using Detail::xLSTMImpl;
     TORCH_MODULE(xLSTM);
 
@@ -272,7 +272,7 @@ namespace Thot::Layer::Details {
     {
         auto module = owner.register_module("recurrent_" + std::to_string(index), torch::nn::RNN(Detail::to_torch_rnn_options(descriptor.options)));
 
-        if constexpr (requires(Owner& o, torch::nn::Module& m, ::Thot::Initialization::Descriptor d) {
+        if constexpr (requires(Owner& o, torch::nn::Module& m, ::Omni::Initialization::Descriptor d) {
                           o.apply_initialization(m, d);
                       }) {
             owner.apply_initialization(*module, descriptor.initialization);
@@ -298,7 +298,7 @@ namespace Thot::Layer::Details {
         auto module = owner.register_module("recurrent_" + std::to_string(index), torch::nn::LSTM(Detail::to_torch_lstm_options(descriptor.options)));
 
         // Optional initialization hook at Model level
-        if constexpr (requires(Owner& o, torch::nn::Module& m, ::Thot::Initialization::Descriptor d) {
+        if constexpr (requires(Owner& o, torch::nn::Module& m, ::Omni::Initialization::Descriptor d) {
             o.apply_initialization(m, d);
         }) {
             owner.apply_initialization(*module, descriptor.initialization);
@@ -338,7 +338,7 @@ namespace Thot::Layer::Details {
             }
         }
 
-        if constexpr (requires(Owner& o, torch::nn::Module& m, ::Thot::Initialization::Descriptor d) {
+        if constexpr (requires(Owner& o, torch::nn::Module& m, ::Omni::Initialization::Descriptor d) {
                           o.apply_initialization(m, d);
                       }) {
             owner.apply_initialization(*module, descriptor.initialization);
@@ -366,7 +366,7 @@ namespace Thot::Layer::Details {
         // Build our wrapper (still uses torch::nn::LSTM underneath)
         auto module = owner.register_module("recurrent_" + std::to_string(index), xLSTM(descriptor.options));
 
-        if constexpr (requires(Owner& o, torch::nn::Module& m, ::Thot::Initialization::Descriptor d) {
+        if constexpr (requires(Owner& o, torch::nn::Module& m, ::Omni::Initialization::Descriptor d) {
             o.apply_initialization(m, d);
         }) {
             owner.apply_initialization(*module, descriptor.initialization);
@@ -390,4 +390,4 @@ namespace Thot::Layer::Details {
 
 }
 
-#endif // THOT_RECURRENT_HPP
+#endif // OMNI_RECURRENT_HPP

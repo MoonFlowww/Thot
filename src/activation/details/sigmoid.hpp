@@ -1,5 +1,5 @@
-#ifndef THOT_SIGMOID_HPP
-#define THOT_SIGMOID_HPP
+#ifndef OMNI_SIGMOID_HPP
+#define OMNI_SIGMOID_HPP
 
 #include <torch/torch.h>
 
@@ -7,7 +7,7 @@
 
 #include "../activation.hpp"
 
-namespace Thot::Activation::Details {
+namespace Omni::Activation::Details {
     struct Sigmoid {
         [[nodiscard]] torch::Tensor operator()(torch::Tensor input) const {
             return torch::sigmoid(std::move(input));
@@ -15,4 +15,4 @@ namespace Thot::Activation::Details {
     };
 }
 
-#endif //THOT_SIGMOID_HPP
+#endif //OMNI_SIGMOID_HPP

@@ -1,5 +1,5 @@
-#ifndef THOT_LATENT_ATTENTION_HPP
-#define THOT_LATENT_ATTENTION_HPP
+#ifndef OMNI_LATENT_ATTENTION_HPP
+#define OMNI_LATENT_ATTENTION_HPP
 #include <cstdint>
 #include <stdexcept>
 #include <utility>
@@ -9,7 +9,7 @@
 #include "../attention.hpp"
 #include "kernel.hpp"
 
-namespace Thot::Attention::Details {
+namespace Omni::Attention::Details {
     struct MultiHeadLatentAttentionOptions {
         std::int64_t embed_dim{};
         std::int64_t num_heads{1};
@@ -17,7 +17,7 @@ namespace Thot::Attention::Details {
         double dropout{0.0};
         bool bias{true};
         bool batch_first{true};
-        ::Thot::Attention::Variant variant{::Thot::Attention::Variant::Full};
+        ::Omni::Attention::Variant variant{::Omni::Attention::Variant::Full};
     };
 
     class MultiHeadLatentAttentionImpl : public torch::nn::Module {
@@ -137,4 +137,4 @@ namespace Thot::Attention::Details {
     TORCH_MODULE(MultiHeadLatentAttention);
 }
 
-#endif // THOT_LATENT_ATTENTION_HPP
+#endif // OMNI_LATENT_ATTENTION_HPP

@@ -1,5 +1,5 @@
-#ifndef THOT_LAYER_HPP
-#define THOT_LAYER_HPP
+#ifndef OMNI_LAYER_HPP
+#define OMNI_LAYER_HPP
 // This file is a factory, must exempt it from any logical-code. For functions look into "/details"
 #include <variant>
 #include <vector>
@@ -20,7 +20,7 @@
 
 #include "registry.hpp"
 
-namespace Thot::Layer {
+namespace Omni::Layer {
     using FCOptions = Details::FCOptions;
     using FCDescriptor = Details::FCDescriptor;
 
@@ -105,32 +105,32 @@ namespace Thot::Layer {
                                     DownsampleDescriptor>;
 
     [[nodiscard]] inline auto FC(const FCOptions& options,
-                                 ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
-                                 ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default, ::Thot::LocalConfig local = {}) -> FCDescriptor {
+                                 ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
+                                 ::Omni::Initialization::Descriptor initialization = ::Omni::Initialization::Default, ::Omni::LocalConfig local = {}) -> FCDescriptor {
         return {options, activation, initialization, std::move(local)};
     }
 
     [[nodiscard]] inline auto Conv1d(const Conv1dOptions& options,
-                                 ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
-                                 ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default,
-                                 ::Thot::LocalConfig local = {}) -> Conv1dDescriptor{
+                                 ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
+                                 ::Omni::Initialization::Descriptor initialization = ::Omni::Initialization::Default,
+                                 ::Omni::LocalConfig local = {}) -> Conv1dDescriptor{
         return {options, activation, initialization, std::move(local)};
     }
 
-    [[nodiscard]] inline auto Conv2d(const Conv2dOptions& options, ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
-                                     ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default, ::Thot::LocalConfig local = {}) -> Conv2dDescriptor {
+    [[nodiscard]] inline auto Conv2d(const Conv2dOptions& options, ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
+                                     ::Omni::Initialization::Descriptor initialization = ::Omni::Initialization::Default, ::Omni::LocalConfig local = {}) -> Conv2dDescriptor {
         return {options, activation, initialization, std::move(local)};
     }
 
     [[nodiscard]] inline auto BatchNorm2d(const BatchNorm2dOptions& options,
-                                              ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
-                                              ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default, ::Thot::LocalConfig local = {}) -> BatchNorm2dDescriptor {
+                                              ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
+                                              ::Omni::Initialization::Descriptor initialization = ::Omni::Initialization::Default, ::Omni::LocalConfig local = {}) -> BatchNorm2dDescriptor {
         return {options, activation, initialization, std::move(local)};
     }
 
     [[nodiscard]] inline auto MaxPool1d(const MaxPool1dOptions& options,
-                                        ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
-                                        ::Thot::LocalConfig local = {}) -> PoolingDescriptor {
+                                        ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
+                                        ::Omni::LocalConfig local = {}) -> PoolingDescriptor {
         PoolingDescriptor descriptor{};
         descriptor.options = options;
         descriptor.activation = activation;
@@ -139,8 +139,8 @@ namespace Thot::Layer {
     }
 
     [[nodiscard]] inline auto AvgPool1d(const AvgPool1dOptions& options,
-                                        ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
-                                        ::Thot::LocalConfig local = {}) -> PoolingDescriptor {
+                                        ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
+                                        ::Omni::LocalConfig local = {}) -> PoolingDescriptor {
         PoolingDescriptor descriptor{};
         descriptor.options = options;
         descriptor.activation = activation;
@@ -149,8 +149,8 @@ namespace Thot::Layer {
     }
 
     [[nodiscard]] inline auto AdaptiveAvgPool1d(const AdaptiveAvgPool1dOptions& options,
-                                                ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
-                                                ::Thot::LocalConfig local = {}) -> PoolingDescriptor {
+                                                ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
+                                                ::Omni::LocalConfig local = {}) -> PoolingDescriptor {
         PoolingDescriptor descriptor{};
         descriptor.options = options;
         descriptor.activation = activation;
@@ -159,8 +159,8 @@ namespace Thot::Layer {
     }
 
     [[nodiscard]] inline auto AdaptiveMaxPool1d(const AdaptiveMaxPool1dOptions& options,
-                                                ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
-                                                ::Thot::LocalConfig local = {}) -> PoolingDescriptor {
+                                                ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
+                                                ::Omni::LocalConfig local = {}) -> PoolingDescriptor {
         PoolingDescriptor descriptor{};
         descriptor.options = options;
         descriptor.activation = activation;
@@ -169,7 +169,7 @@ namespace Thot::Layer {
     }
 
     [[nodiscard]] inline auto MaxPool2d(const MaxPool2dOptions& options,
-                                        ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,  ::Thot::LocalConfig local = {}) -> PoolingDescriptor {
+                                        ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,  ::Omni::LocalConfig local = {}) -> PoolingDescriptor {
         PoolingDescriptor descriptor{};
         descriptor.options = options;
         descriptor.activation = activation;
@@ -178,7 +178,7 @@ namespace Thot::Layer {
     }
 
     [[nodiscard]] inline auto AvgPool2d(const AvgPool2dOptions& options,
-                                        ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,  ::Thot::LocalConfig local = {}) -> PoolingDescriptor {
+                                        ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,  ::Omni::LocalConfig local = {}) -> PoolingDescriptor {
         PoolingDescriptor descriptor{};
         descriptor.options = options;
         descriptor.activation = activation;
@@ -187,7 +187,7 @@ namespace Thot::Layer {
     }
 
     [[nodiscard]] inline auto AdaptiveAvgPool2d(const AdaptiveAvgPool2dOptions& options,
-                                                ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,  ::Thot::LocalConfig local = {}) -> PoolingDescriptor {
+                                                ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,  ::Omni::LocalConfig local = {}) -> PoolingDescriptor {
         PoolingDescriptor descriptor{};
         descriptor.options = options;
         descriptor.activation = activation;
@@ -196,7 +196,7 @@ namespace Thot::Layer {
     }
 
     [[nodiscard]] inline auto AdaptiveMaxPool2d(const AdaptiveMaxPool2dOptions& options,
-                                                ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,  ::Thot::LocalConfig local = {}) -> PoolingDescriptor {
+                                                ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,  ::Omni::LocalConfig local = {}) -> PoolingDescriptor {
         PoolingDescriptor descriptor{};
         descriptor.options = options;
         descriptor.activation = activation;
@@ -204,78 +204,78 @@ namespace Thot::Layer {
         return descriptor;
     }
 
-    [[nodiscard]] inline auto HardDropout(const HardDropoutOptions& options, ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,  ::Thot::LocalConfig local = {}) -> HardDropoutDescriptor {
+    [[nodiscard]] inline auto HardDropout(const HardDropoutOptions& options, ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,  ::Omni::LocalConfig local = {}) -> HardDropoutDescriptor {
         return {options, activation, std::move(local)};
     }
 
-    [[nodiscard]] inline auto SoftDropout(const SoftDropoutOptions& options, ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity, ::Thot::LocalConfig local = {}) -> SoftDropoutDescriptor {
+    [[nodiscard]] inline auto SoftDropout(const SoftDropoutOptions& options, ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity, ::Omni::LocalConfig local = {}) -> SoftDropoutDescriptor {
         return {options, activation, std::move(local)};
     }
 
     [[nodiscard]] inline auto Flatten(const FlattenOptions& options = {},
-                                      ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,  ::Thot::LocalConfig local = {}) -> FlattenDescriptor {
+                                      ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,  ::Omni::LocalConfig local = {}) -> FlattenDescriptor {
         return {options, activation, std::move(local)};
     }
 
-    [[nodiscard]] inline auto Upsample(const UpsampleOptions& options = {}, ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity, ::Thot::LocalConfig local = {}) -> UpsampleDescriptor {
+    [[nodiscard]] inline auto Upsample(const UpsampleOptions& options = {}, ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity, ::Omni::LocalConfig local = {}) -> UpsampleDescriptor {
         return {options, activation, std::move(local)};
     }
 
-    [[nodiscard]] inline auto Downsample(const DownsampleOptions& options = {}, ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity, ::Thot::LocalConfig local = {}) -> DownsampleDescriptor {
+    [[nodiscard]] inline auto Downsample(const DownsampleOptions& options = {}, ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity, ::Omni::LocalConfig local = {}) -> DownsampleDescriptor {
         return {options, activation, std::move(local)};
     }
 
     [[nodiscard]] inline auto RNN(const RNNOptions& options,
-                                   ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
-                                   ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default,
-                                   ::Thot::LocalConfig local = {}) -> RNNDescriptor {
+                                   ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
+                                   ::Omni::Initialization::Descriptor initialization = ::Omni::Initialization::Default,
+                                   ::Omni::LocalConfig local = {}) -> RNNDescriptor {
         return {options, activation, initialization, std::move(local)};
     }
 
     [[nodiscard]] inline auto LSTM(const LSTMOptions& options,
-                                    ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
-                                    ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default,
-                                    ::Thot::LocalConfig local = {}) -> LSTMDescriptor {
+                                    ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
+                                    ::Omni::Initialization::Descriptor initialization = ::Omni::Initialization::Default,
+                                    ::Omni::LocalConfig local = {}) -> LSTMDescriptor {
         return {options, activation, initialization, std::move(local)};
     }
     [[nodiscard]] inline auto xLSTM(const xLSTMOptions& options,
-                                    ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
-                                    ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default,
-                                    ::Thot::LocalConfig local = {}) -> xLSTMDescriptor {
+                                    ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
+                                    ::Omni::Initialization::Descriptor initialization = ::Omni::Initialization::Default,
+                                    ::Omni::LocalConfig local = {}) -> xLSTMDescriptor {
         return {options, activation, initialization, std::move(local)};
     }
 
 
     [[nodiscard]] inline auto GRU(const GRUOptions& options,
-                                   ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
-                                   ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default,
-                                   ::Thot::LocalConfig local = {}) -> GRUDescriptor {
+                                   ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
+                                   ::Omni::Initialization::Descriptor initialization = ::Omni::Initialization::Default,
+                                   ::Omni::LocalConfig local = {}) -> GRUDescriptor {
         return {options, activation, initialization, std::move(local)};
     }
 
 
 
     [[nodiscard]] inline auto S4(const S4Options& options,
-                              ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
-                              ::Thot::Initialization::Descriptor initialization = ::Thot::Initialization::Default,
-                              ::Thot::LocalConfig local = {}) -> S4Descriptor {
+                              ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
+                              ::Omni::Initialization::Descriptor initialization = ::Omni::Initialization::Default,
+                              ::Omni::LocalConfig local = {}) -> S4Descriptor {
         return {options, activation, initialization, std::move(local)};
     }
 
 
     [[nodiscard]] inline auto Reduce(const ReduceOptions& options = {},
-                                 ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
-                                 ::Thot::LocalConfig local = {}) -> ReduceDescriptor {
+                                 ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
+                                 ::Omni::LocalConfig local = {}) -> ReduceDescriptor {
         return {options, activation, std::move(local)};
     }
 
     [[nodiscard]] inline auto PatchUnembed(const PatchUnembedOptions& options = {},
-                                 ::Thot::Activation::Descriptor activation = ::Thot::Activation::Identity,
-                                 ::Thot::LocalConfig local = {}) -> PatchUnembedDescriptor {
+                                 ::Omni::Activation::Descriptor activation = ::Omni::Activation::Identity,
+                                 ::Omni::LocalConfig local = {}) -> PatchUnembedDescriptor {
         return {options, activation, std::move(local)};
     }
 
 
 }
 
-#endif //THOT_LAYER_HPP
+#endif //OMNI_LAYER_HPP

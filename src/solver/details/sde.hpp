@@ -1,11 +1,11 @@
-#ifndef THOT_SOLVER_DETAILS_SDE_HPP
-#define THOT_SOLVER_DETAILS_SDE_HPP
+#ifndef OMNI_SOLVER_DETAILS_SDE_HPP
+#define OMNI_SOLVER_DETAILS_SDE_HPP
 
 
 #include <cmath>
 #include <stdexcept>
 
-namespace Thot::Solver::Details {
+namespace Omni::Solver::Details {
     inline torch::Tensor integrate_sde(const Descriptor& descriptor,
                                        torch::Tensor state,
                                        const BaseStep& base_step) {
@@ -54,4 +54,4 @@ namespace Thot::Solver::Details {
         }
     }
 }
-#endif // THOT_SOLVER_DETAILS_SDE_HPP
+#endif // OMNI_SOLVER_DETAILS_SDE_HPP

@@ -1,5 +1,5 @@
-#ifndef THOT_PLUSPLUS_HPP
-#define THOT_PLUSPLUS_HPP
+#ifndef OMNI_PLUSPLUS_HPP
+#define OMNI_PLUSPLUS_HPP
 //https://arxiv.org/pdf/2003.04974
 // "Transformer++: Improving Parallelism, Efficiency and Performance of Transformer Models"
 // Enhanced encoder/decoder stack adding auxiliary attention pathways and adaptive routing for efficient sequence modeling.
@@ -28,9 +28,9 @@
 #include "../blocks/residual.hpp"
 #include "../blocks/sequential.hpp"
 
-namespace Thot::Block::Details::Transformer::PlusPlus {
-    using PositionalEncodingType = ::Thot::Layer::Details::PositionalEncodingType;
-    using PositionalEncodingOptions = ::Thot::Layer::Details::PositionalEncodingOptions;
+namespace Omni::Block::Details::Transformer::PlusPlus {
+    using PositionalEncodingType = ::Omni::Layer::Details::PositionalEncodingType;
+    using PositionalEncodingOptions = ::Omni::Layer::Details::PositionalEncodingOptions;
 
     struct AuxiliaryHeadOptions {
         bool enabled{false};
@@ -44,7 +44,7 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
         double dropout{0.0};
         bool bias{true};
         bool batch_first{true};
-        ::Thot::Attention::Variant variant{::Thot::Attention::Variant::Full};
+        ::Omni::Attention::Variant variant{::Omni::Attention::Variant::Full};
         bool use_convolution{true};
         std::int64_t convolution_kernel_size{3};
         std::int64_t convolution_groups{0};
@@ -54,9 +54,9 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
     struct FeedForwardOptions {
         std::int64_t embed_dim{512};
         double mlp_ratio{4.0};
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::GeLU};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::GeLU};
         bool bias{true};
-        ::Thot::Initialization::Descriptor initialization{::Thot::Initialization::Default};
+        ::Omni::Initialization::Descriptor initialization{::Omni::Initialization::Default};
     };
 
     struct LayerNormOptions {
@@ -65,7 +65,7 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
     };
 
     struct HybridAttentionDescriptor {
-        ::Thot::Attention::Descriptor attention{};
+        ::Omni::Attention::Descriptor attention{};
         bool use_convolution{true};
         std::int64_t convolution_kernel_size{3};
         std::int64_t convolution_groups{0};
@@ -74,9 +74,9 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
 
     struct EncoderLayerDescriptor {
         HybridAttentionDescriptor hybrid_attention{};
-        ::Thot::Layer::Descriptor attention_dropout{};
-        std::vector<::Thot::Layer::Descriptor> feed_forward{};
-        ::Thot::Layer::Descriptor feed_forward_dropout{};
+        ::Omni::Layer::Descriptor attention_dropout{};
+        std::vector<::Omni::Layer::Descriptor> feed_forward{};
+        ::Omni::Layer::Descriptor feed_forward_dropout{};
     };
 
     struct EncoderOptions {
@@ -116,30 +116,30 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
         for (std::size_t index = 0; index < options.layers; ++index) {
             EncoderLayerDescriptor layer{};
 
-            ::Thot::Attention::MultiHeadOptions attention_descriptor_options{};
+            ::Omni::Attention::MultiHeadOptions attention_descriptor_options{};
             attention_descriptor_options.embed_dim = attention_options.embed_dim;
             attention_descriptor_options.num_heads = attention_options.num_heads;
             attention_descriptor_options.dropout = attention_options.dropout;
             attention_descriptor_options.bias = attention_options.bias;
             attention_descriptor_options.batch_first = attention_options.batch_first;
             attention_descriptor_options.variant = attention_options.variant;
-            layer.hybrid_attention.attention = ::Thot::Attention::MultiHead(attention_descriptor_options);
+            layer.hybrid_attention.attention = ::Omni::Attention::MultiHead(attention_descriptor_options);
             layer.hybrid_attention.use_convolution = attention_options.use_convolution;
             layer.hybrid_attention.convolution_kernel_size = attention_options.convolution_kernel_size;
             layer.hybrid_attention.convolution_groups = attention_options.convolution_groups;
             layer.hybrid_attention.convolution_dropout = attention_options.convolution_dropout;
 
-            layer.attention_dropout = ::Thot::Layer::HardDropout({attention_options.dropout});
+            layer.attention_dropout = ::Omni::Layer::HardDropout({attention_options.dropout});
 
-            ::Thot::Layer::FCOptions fc1_options{feed_forward.embed_dim, hidden_dim, feed_forward.bias};
-            layer.feed_forward.emplace_back(::Thot::Layer::FC(
+            ::Omni::Layer::FCOptions fc1_options{feed_forward.embed_dim, hidden_dim, feed_forward.bias};
+            layer.feed_forward.emplace_back(::Omni::Layer::FC(
                 fc1_options, feed_forward.activation, feed_forward.initialization));
 
-            ::Thot::Layer::FCOptions fc2_options{hidden_dim, feed_forward.embed_dim, feed_forward.bias};
-            layer.feed_forward.emplace_back(::Thot::Layer::FC(
-                fc2_options, ::Thot::Activation::Identity, feed_forward.initialization));
+            ::Omni::Layer::FCOptions fc2_options{hidden_dim, feed_forward.embed_dim, feed_forward.bias};
+            layer.feed_forward.emplace_back(::Omni::Layer::FC(
+                fc2_options, ::Omni::Activation::Identity, feed_forward.initialization));
 
-            layer.feed_forward_dropout = ::Thot::Layer::HardDropout({options.dropout});
+            layer.feed_forward_dropout = ::Omni::Layer::HardDropout({options.dropout});
 
             descriptor.layers.emplace_back(std::move(layer));
         }
@@ -149,11 +149,11 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
 
     struct DecoderLayerDescriptor {
         HybridAttentionDescriptor self_attention{};
-        ::Thot::Layer::Descriptor self_attention_dropout{};
-        ::Thot::Attention::Descriptor cross_attention{};
-        ::Thot::Layer::Descriptor cross_attention_dropout{};
-        std::vector<::Thot::Layer::Descriptor> feed_forward{};
-        ::Thot::Layer::Descriptor feed_forward_dropout{};
+        ::Omni::Layer::Descriptor self_attention_dropout{};
+        ::Omni::Attention::Descriptor cross_attention{};
+        ::Omni::Layer::Descriptor cross_attention_dropout{};
+        std::vector<::Omni::Layer::Descriptor> feed_forward{};
+        ::Omni::Layer::Descriptor feed_forward_dropout{};
     };
 
     struct DecoderOptions {
@@ -198,39 +198,39 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
         for (std::size_t index = 0; index < options.layers; ++index) {
             DecoderLayerDescriptor layer{};
 
-            ::Thot::Attention::MultiHeadOptions self_attention_descriptor_options{};
+            ::Omni::Attention::MultiHeadOptions self_attention_descriptor_options{};
             self_attention_descriptor_options.embed_dim = self_attention.embed_dim;
             self_attention_descriptor_options.num_heads = self_attention.num_heads;
             self_attention_descriptor_options.dropout = self_attention.dropout;
             self_attention_descriptor_options.bias = self_attention.bias;
             self_attention_descriptor_options.batch_first = self_attention.batch_first;
             self_attention_descriptor_options.variant = self_attention.variant;
-            layer.self_attention.attention = ::Thot::Attention::MultiHead(self_attention_descriptor_options);
+            layer.self_attention.attention = ::Omni::Attention::MultiHead(self_attention_descriptor_options);
             layer.self_attention.use_convolution = self_attention.use_convolution;
             layer.self_attention.convolution_kernel_size = self_attention.convolution_kernel_size;
             layer.self_attention.convolution_groups = self_attention.convolution_groups;
             layer.self_attention.convolution_dropout = self_attention.convolution_dropout;
-            layer.self_attention_dropout = ::Thot::Layer::HardDropout({self_attention.dropout});
+            layer.self_attention_dropout = ::Omni::Layer::HardDropout({self_attention.dropout});
 
-            ::Thot::Attention::MultiHeadOptions cross_attention_descriptor_options{};
+            ::Omni::Attention::MultiHeadOptions cross_attention_descriptor_options{};
             cross_attention_descriptor_options.embed_dim = cross_attention.embed_dim;
             cross_attention_descriptor_options.num_heads = cross_attention.num_heads;
             cross_attention_descriptor_options.dropout = cross_attention.dropout;
             cross_attention_descriptor_options.bias = cross_attention.bias;
             cross_attention_descriptor_options.batch_first = cross_attention.batch_first;
             cross_attention_descriptor_options.variant = cross_attention.variant;
-            layer.cross_attention = ::Thot::Attention::MultiHead(cross_attention_descriptor_options);
-            layer.cross_attention_dropout = ::Thot::Layer::HardDropout({cross_attention.dropout});
+            layer.cross_attention = ::Omni::Attention::MultiHead(cross_attention_descriptor_options);
+            layer.cross_attention_dropout = ::Omni::Layer::HardDropout({cross_attention.dropout});
 
-            ::Thot::Layer::FCOptions fc1_options{feed_forward.embed_dim, hidden_dim, feed_forward.bias};
-            layer.feed_forward.emplace_back(::Thot::Layer::FC(
+            ::Omni::Layer::FCOptions fc1_options{feed_forward.embed_dim, hidden_dim, feed_forward.bias};
+            layer.feed_forward.emplace_back(::Omni::Layer::FC(
                 fc1_options, feed_forward.activation, feed_forward.initialization));
 
-            ::Thot::Layer::FCOptions fc2_options{hidden_dim, feed_forward.embed_dim, feed_forward.bias};
-            layer.feed_forward.emplace_back(::Thot::Layer::FC(
-                fc2_options, ::Thot::Activation::Identity, feed_forward.initialization));
+            ::Omni::Layer::FCOptions fc2_options{hidden_dim, feed_forward.embed_dim, feed_forward.bias};
+            layer.feed_forward.emplace_back(::Omni::Layer::FC(
+                fc2_options, ::Omni::Activation::Identity, feed_forward.initialization));
 
-            layer.feed_forward_dropout = ::Thot::Layer::HardDropout({options.dropout});
+            layer.feed_forward_dropout = ::Omni::Layer::HardDropout({options.dropout});
 
             descriptor.layers.emplace_back(std::move(layer));
         }
@@ -452,7 +452,7 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
                         "Hybrid attention requires a positive embedding dimension.");
                 }
 
-                attention_ = ::Thot::Attention::Details::register_attention(*this, "self_attention", std::move(descriptor.attention));
+                attention_ = ::Omni::Attention::Details::register_attention(*this, "self_attention", std::move(descriptor.attention));
 
                 if (use_convolution_) {
                     if (descriptor.convolution_kernel_size <= 0) {
@@ -481,7 +481,7 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
             }
 
             torch::Tensor forward(const torch::Tensor& query, const torch::Tensor& key, const torch::Tensor& value, const torch::Tensor& attn_mask, const torch::Tensor& key_padding_mask) {
-                auto attention = ::Thot::Attention::Details::forward_attention(attention_, query, key, value, attn_mask, key_padding_mask);
+                auto attention = ::Omni::Attention::Details::forward_attention(attention_, query, key, value, attn_mask, key_padding_mask);
 
                 if (use_convolution_ && convolution_) {
                     auto context = query.transpose(1, 2);
@@ -503,7 +503,7 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
 
         private:
             bool use_convolution_{false};
-            ::Thot::Attention::Details::AttentionModule attention_{};
+            ::Omni::Attention::Details::AttentionModule attention_{};
             torch::nn::Conv1d convolution_{nullptr};
             torch::nn::Dropout convolution_dropout_{nullptr};
             torch::Tensor conv_alpha_{};
@@ -535,10 +535,10 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
                     HybridAttention(std::move(descriptor.hybrid_attention), embed_dim_));
 
                 std::size_t module_index = 0;
-                auto register_layer = [&](::Thot::Layer::Descriptor layer_descriptor) {
+                auto register_layer = [&](::Omni::Layer::Descriptor layer_descriptor) {
                     return std::visit(
                         [&](const auto& concrete_descriptor) {
-                            return ::Thot::Layer::Details::build_registered_layer(
+                            return ::Omni::Layer::Details::build_registered_layer(
                                 *this, concrete_descriptor, module_index++);
                         },
                         std::move(layer_descriptor));
@@ -569,7 +569,7 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
                     normalised, normalised, normalised, attn_mask, key_padding_mask);
                 if (attention_dropout_.forward) {
                     attention = attention_dropout_.forward(std::move(attention));
-                    attention = ::Thot::Activation::Details::apply(
+                    attention = ::Omni::Activation::Details::apply(
                         attention_dropout_.activation, std::move(attention));
                 }
                 output = residual + attention;
@@ -581,12 +581,12 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
                         continue;
                     }
                     feed_forward = layer.forward(std::move(feed_forward));
-                    feed_forward = ::Thot::Activation::Details::apply(
+                    feed_forward = ::Omni::Activation::Details::apply(
                         layer.activation, std::move(feed_forward));
                 }
                 if (feed_forward_dropout_.forward) {
                     feed_forward = feed_forward_dropout_.forward(std::move(feed_forward));
-                    feed_forward = ::Thot::Activation::Details::apply(
+                    feed_forward = ::Omni::Activation::Details::apply(
                         feed_forward_dropout_.activation, std::move(feed_forward));
                 }
 
@@ -600,9 +600,9 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
             HybridAttention attention_{nullptr};
             torch::nn::LayerNorm norm1_{nullptr};
             torch::nn::LayerNorm norm2_{nullptr};
-            ::Thot::Layer::Details::RegisteredLayer attention_dropout_{};
-            std::vector<::Thot::Layer::Details::RegisteredLayer> feed_forward_layers_{};
-            ::Thot::Layer::Details::RegisteredLayer feed_forward_dropout_{};
+            ::Omni::Layer::Details::RegisteredLayer attention_dropout_{};
+            std::vector<::Omni::Layer::Details::RegisteredLayer> feed_forward_layers_{};
+            ::Omni::Layer::Details::RegisteredLayer feed_forward_dropout_{};
         };
 
         TORCH_MODULE(TransformerPlusPlusEncoderLayer);
@@ -694,13 +694,13 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
                     "self_attention",
                     HybridAttention(std::move(descriptor.self_attention), embed_dim_));
 
-                cross_attention_ = ::Thot::Attention::Details::register_attention(*this, "cross_attention", std::move(descriptor.cross_attention));
+                cross_attention_ = ::Omni::Attention::Details::register_attention(*this, "cross_attention", std::move(descriptor.cross_attention));
 
                 std::size_t module_index = 0;
-                auto register_layer = [&](::Thot::Layer::Descriptor layer_descriptor) {
+                auto register_layer = [&](::Omni::Layer::Descriptor layer_descriptor) {
                     return std::visit(
                         [&](const auto& concrete_descriptor) {
-                            return ::Thot::Layer::Details::build_registered_layer(
+                            return ::Omni::Layer::Details::build_registered_layer(
                                 *this, concrete_descriptor, module_index++);
                         },
                         std::move(layer_descriptor));
@@ -733,17 +733,17 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
                     normalised, normalised, normalised, tgt_mask, tgt_key_padding_mask);
                 if (self_attention_dropout_.forward) {
                     self_attention = self_attention_dropout_.forward(std::move(self_attention));
-                    self_attention = ::Thot::Activation::Details::apply(
+                    self_attention = ::Omni::Activation::Details::apply(
                         self_attention_dropout_.activation, std::move(self_attention));
                 }
                 auto output = residual + self_attention;
 
                 residual = output;
                 auto cross_input = norm2_->forward(output);
-                auto cross_attention = ::Thot::Attention::Details::forward_attention(cross_attention_, cross_input, memory, memory, memory_mask, memory_key_padding_mask);
+                auto cross_attention = ::Omni::Attention::Details::forward_attention(cross_attention_, cross_input, memory, memory, memory_mask, memory_key_padding_mask);
                 if (cross_attention_dropout_.forward) {
                     cross_attention = cross_attention_dropout_.forward(std::move(cross_attention));
-                    cross_attention = ::Thot::Activation::Details::apply(
+                    cross_attention = ::Omni::Activation::Details::apply(
                         cross_attention_dropout_.activation, std::move(cross_attention));
                 }
                 output = residual + cross_attention;
@@ -755,12 +755,12 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
                         continue;
                     }
                     feed_forward = layer.forward(std::move(feed_forward));
-                    feed_forward = ::Thot::Activation::Details::apply(
+                    feed_forward = ::Omni::Activation::Details::apply(
                         layer.activation, std::move(feed_forward));
                 }
                 if (feed_forward_dropout_.forward) {
                     feed_forward = feed_forward_dropout_.forward(std::move(feed_forward));
-                    feed_forward = ::Thot::Activation::Details::apply(
+                    feed_forward = ::Omni::Activation::Details::apply(
                         feed_forward_dropout_.activation, std::move(feed_forward));
                 }
 
@@ -772,14 +772,14 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
             std::int64_t embed_dim_{};
             LayerNormOptions layer_norm_options_{};
             HybridAttention self_attention_{nullptr};
-            ::Thot::Attention::Details::AttentionModule cross_attention_{};
+            ::Omni::Attention::Details::AttentionModule cross_attention_{};
             torch::nn::LayerNorm norm1_{nullptr};
             torch::nn::LayerNorm norm2_{nullptr};
             torch::nn::LayerNorm norm3_{nullptr};
-            ::Thot::Layer::Details::RegisteredLayer self_attention_dropout_{};
-            ::Thot::Layer::Details::RegisteredLayer cross_attention_dropout_{};
-            std::vector<::Thot::Layer::Details::RegisteredLayer> feed_forward_layers_{};
-            ::Thot::Layer::Details::RegisteredLayer feed_forward_dropout_{};
+            ::Omni::Layer::Details::RegisteredLayer self_attention_dropout_{};
+            ::Omni::Layer::Details::RegisteredLayer cross_attention_dropout_{};
+            std::vector<::Omni::Layer::Details::RegisteredLayer> feed_forward_layers_{};
+            ::Omni::Layer::Details::RegisteredLayer feed_forward_dropout_{};
         };
 
         TORCH_MODULE(TransformerPlusPlusDecoderLayer);
@@ -931,4 +931,4 @@ namespace Thot::Block::Details::Transformer::PlusPlus {
     using TransformerPlusPlusEncoder = Detail::TransformerPlusPlusEncoder;
     using TransformerPlusPlusDecoder = Detail::TransformerPlusPlusDecoder;
 }
-#endif //THOT_PLUSPLUS_HPP
+#endif //OMNI_PLUSPLUS_HPP

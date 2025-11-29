@@ -1,5 +1,5 @@
-#ifndef THOT_ADAGRAD_HPP
-#define THOT_ADAGRAD_HPP
+#ifndef OMNI_ADAGRAD_HPP
+#define OMNI_ADAGRAD_HPP
 
 
 
@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <memory>
 
-namespace Thot::Optimizer::Details {
+namespace Omni::Optimizer::Details {
 
     struct AdagradOptions {
         double learning_rate{1e-2};
@@ -143,4 +143,4 @@ namespace Thot::Optimizer::Details {
 
 }
 
-#endif // THOT_ADAGRAD_HPP
+#endif // OMNI_ADAGRAD_HPP

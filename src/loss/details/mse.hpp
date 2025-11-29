@@ -1,12 +1,12 @@
-#ifndef THOT_MSE_HPP
-#define THOT_MSE_HPP
+#ifndef OMNI_MSE_HPP
+#define OMNI_MSE_HPP
 
 #include <optional>
 #include <stdexcept>
 #include <torch/torch.h>
 #include "helper.hpp"
 
-namespace Thot::Loss::Details {
+namespace Omni::Loss::Details {
 
     namespace F = torch::nn::functional;
 
@@ -62,4 +62,4 @@ namespace Thot::Loss::Details {
 
 
 
-#endif // THOT_MSE_HPP
+#endif // OMNI_MSE_HPP

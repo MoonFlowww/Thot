@@ -1,4 +1,4 @@
-#include "../../../include/Thot.h"
+#include "../../../include/Omni.h"
 #include <torch/torch.h>
 #include <chrono>
 
@@ -312,7 +312,7 @@ int main() {
     auto t1 = std::chrono::high_resolution_clock::now();
 
     auto [x1, y1, x2, y2] =
-        Thot::Data::Load::ETTh("/home/moonfloww/Projects/DATASETS/ETT/ETTh1/ETTh1.csv", 0.5, 0.1f, true);
+        Omni::Data::Load::ETTh("/home/moonfloww/Projects/DATASETS/ETT/ETTh1/ETTh1.csv", 0.5, 0.1f, true);
 
     auto acf   = SSA::autocorrelation_fft(x1);
     auto tau_c = SSA::choose_tau(acf, x1.size(0), x1);
@@ -322,7 +322,7 @@ int main() {
     auto comps = SSA::extract(x1, tau_c);
     for (size_t i = 0; i < comps.size(); ++i) {
         std::cout << "Series " << i << " -> " << comps[i].sizes() << std::endl;
-        Thot::Plot::Data::Timeserie{comps[i]};
+        Omni::Plot::Data::Timeserie{comps[i]};
     }
 
     std::cout << "Total time: " << std::chrono::duration_cast<std::chrono::milliseconds>(

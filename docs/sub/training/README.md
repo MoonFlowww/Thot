@@ -1,6 +1,6 @@
 # Training Loop
 
-Thot's `Model::train` orchestrates dataset streaming, optimisation, and telemetry
+Omni's `Model::train` orchestrates dataset streaming, optimisation, and telemetry
 capture. You can either pass a packed dataset (`std::vector` of `{inputs,
 targets}` pairs) or raw tensors. Training requires an optimizer and a loss
 descriptor to be set beforehand (see [Docs/Optimizer](../optimizer/README.md) and
@@ -21,10 +21,10 @@ descriptor to be set beforehand (see [Docs/Optimizer](../optimizer/README.md) an
 | `validation` / `test` | Optional `{inputs, targets}` tensors evaluated at the end of each epoch. Validation is used if test is absent. |
 | `graph_mode` | Choose between `GraphMode::Disabled`, `GraphMode::Capture`, and `GraphMode::Replay` (see below). |
 | `enable_amp` | Turn on automatic mixed precision (AMP) when CUDA is available. |
-| `memory_format` | Request `torch::MemoryFormat::ChannelsLast`; Thot only applies it when convolutional layers and CUDA are present. |
+| `memory_format` | Request `torch::MemoryFormat::ChannelsLast`; Omni only applies it when convolutional layers and CUDA are present. |
 
 Validation/test splits are supplied as `std::vector<torch::Tensor>{inputs,
-targets}` to preserve ownership and allow Thot to reuse contiguous host buffers.
+targets}` to preserve ownership and allow Omni to reuse contiguous host buffers.
 
 ## Graph capture and streaming
 
@@ -55,22 +55,22 @@ cheap to log or feed into [Docs/Plot](../plot/README.md). When `monitor` is `tru
 progress is streamed to the provided `std::ostream` with non-blocking CUDA event
 handling to avoid stalling the training loop.
 
-### Manual training loop (“semi Thot”)
+### Manual training loop (“semi Omni”)
 
-Thot keeps the underlying LibTorch modules exposed, so you can orchestrate a
+Omni keeps the underlying LibTorch modules exposed, so you can orchestrate a
 training loop manually when you need custom control flow (curriculum learning,
 reinforcement updates, mixed dataloaders, etc.). The model still constructs the
 network graph and owns the optimizer/loss descriptors, but you steer the forward
 and backward passes yourself:
 
 ```cpp
-Thot::Model model("ManualMLP");
-model.add(Thot::Layer::FC({784, 512, /*bias=*/true}, Thot::Activation::ReLU));
-model.add(Thot::Layer::FC({512, 256, /*bias=*/true}, Thot::Activation::ReLU));
-model.add(Thot::Layer::FC({256, 10, /*bias=*/true}, Thot::Activation::Identity));
+Omni::Model model("ManualMLP");
+model.add(Omni::Layer::FC({784, 512, /*bias=*/true}, Omni::Activation::ReLU));
+model.add(Omni::Layer::FC({512, 256, /*bias=*/true}, Omni::Activation::ReLU));
+model.add(Omni::Layer::FC({256, 10, /*bias=*/true}, Omni::Activation::Identity));
 
-model.set_optimizer(Thot::Optimizer::Adam({.learning_rate = 1e-3}));
-const auto cross_entropy = Thot::Loss::CrossEntropy({});
+model.set_optimizer(Omni::Optimizer::Adam({.learning_rate = 1e-3}));
+const auto cross_entropy = Omni::Loss::CrossEntropy({});
 model.set_loss(cross_entropy);
 
 for (auto epoch = 0; epoch < max_epochs; ++epoch) {
@@ -80,7 +80,7 @@ for (auto epoch = 0; epoch < max_epochs; ++epoch) {
 
         model.zero_grad();                                 // clear stale gradients
         auto logits = model.forward(inputs);               // forward pass through the DAG
-        auto loss = Thot::Loss::Details::compute(          // reuse Thot loss helpers
+        auto loss = Omni::Loss::Details::compute(          // reuse Omni loss helpers
             cross_entropy, logits, targets);
         loss.backward();                                   // populate gradients
         model.step();                                      // step optimizer (+ scheduler if set)
@@ -88,12 +88,12 @@ for (auto epoch = 0; epoch < max_epochs; ++epoch) {
 }
 ```
 When your minibatches originate on the host, you can overlap page-locking with
-compute by calling `Thot::async_pin_memory` before transferring the tensors to
+compute by calling `Omni::async_pin_memory` before transferring the tensors to
 the device:
 
 ```cpp
 auto stage_for_device = [&](torch::Tensor tensor) {
-    auto pinned = Thot::async_pin_memory(std::move(tensor));
+    auto pinned = Omni::async_pin_memory(std::move(tensor));
     auto host   = pinned.materialize();
     const bool non_blocking = model.device().is_cuda() && host.is_pinned();
     return host.to(model.device(), host.scalar_type(), non_blocking);
@@ -106,10 +106,10 @@ auto targets = stage_for_device(minibatch_targets);
   `Model::train` would; this keeps AMP, calibration hooks, and CUDA graph capture
   available when you enable them via `ForwardOptions`.
 - **Backward.** Loss tensors expose the standard `.backward()` API. You can mix
-  Thot descriptors with custom reductions, attach gradient hooks, or integrate
+  Omni descriptors with custom reductions, attach gradient hooks, or integrate
   reinforcement learning signals before calling backward.
 - **Optimizer step.** `model.step()` respects global and local optimizers plus
-  schedulers. Use it when you still want Thot to handle learning-rate policies;
+  schedulers. Use it when you still want Omni to handle learning-rate policies;
   call `model.optimizer().step()` directly only if you intend to bypass
   scheduler bookkeeping.
 
@@ -124,7 +124,7 @@ loop structure.
 
 - **Staging observer.** `Model::set_staging_observer` lets you inspect every
   batch transferred to the device (for debugging augmentations or data quality).
-- **Memory format.** Before the first epoch, Thot propagates the requested memory
+- **Memory format.** Before the first epoch, Omni propagates the requested memory
   format to convolutional layers and residual projections so weight tensors match
   the layout of incoming batches.
 - **Regularization integration.** Regularisation descriptors registered via

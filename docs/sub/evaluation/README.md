@@ -1,6 +1,6 @@
 # Evaluation Pipelines
 
-`Thot::Evaluation` provides templated `Evaluate` helpers for supervised models.
+`Omni::Evaluation` provides templated `Evaluate` helpers for supervised models.
 Each invocation streams batches through the network, accumulates metrics, and
 prints human-readable tables if enabled. Two descriptors exist today:
 `Evaluation::Classification` and `Evaluation::Timeseries`.
@@ -8,19 +8,19 @@ prints human-readable tables if enabled. Two descriptors exist today:
 ## Common workflow
 
 ```cpp
-auto report = Thot::Evaluation::Evaluate(
+auto report = Omni::Evaluation::Evaluate(
     model, inputs, targets,
-    Thot::Evaluation::Classification,
-    {Thot::Metric::Classification::Accuracy,
-     Thot::Metric::Classification::F1,
-     Thot::Metric::Classification::ExpectedCalibrationError},
+    Omni::Evaluation::Classification,
+    {Omni::Metric::Classification::Accuracy,
+     Omni::Metric::Classification::F1,
+     Omni::Metric::Classification::ExpectedCalibrationError},
     {.batch_size = 128, .calibration_bins = 20});
     
 // Or
-auto report = model.evaluate(test_images, test_labels, Thot::Evaluation::Classification,{
-    Thot::Metric::Classification::Accuracy,
-    Thot::Metric::Classification::F1,
-    Thot::Metric::Classification::ExpectedCalibrationError}, 
+auto report = model.evaluate(test_images, test_labels, Omni::Evaluation::Classification,{
+    Omni::Metric::Classification::Accuracy,
+    Omni::Metric::Classification::F1,
+    Omni::Metric::Classification::ExpectedCalibrationError}, 
     {.batch_size = 64, .calibration_bins = 20});
 ```
 

@@ -1,5 +1,5 @@
-#ifndef THOT_GNUPLOT_HPP
-#define THOT_GNUPLOT_HPP
+#ifndef OMNI_GNUPLOT_HPP
+#define OMNI_GNUPLOT_HPP
 
 #include <algorithm>
 #include <cstdio>
@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 #include <iomanip>
-namespace Thot::Utils {
+namespace Omni::Utils {
     class Gnuplot {
     public:
         enum class PlotMode {
@@ -723,4 +723,4 @@ namespace Thot::Utils {
     };
 }
 
-#endif // THOT_GNUPLOT_HPP
+#endif // OMNI_GNUPLOT_HPP

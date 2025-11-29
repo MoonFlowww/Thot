@@ -1,5 +1,5 @@
-#ifndef LIBTHOT_PROGRESSBAR_HPP
-#define LIBTHOT_PROGRESSBAR_HPP
+#ifndef LIBOMNI_PROGRESSBAR_HPP
+#define LIBOMNI_PROGRESSBAR_HPP
 
 #include <algorithm>
 #include <cmath>
@@ -9,7 +9,7 @@
 #include <sstream>
 #include <string>
 
-namespace Thot::Utils {
+namespace Omni::Utils {
     class ProgressBar {
     public:
         ProgressBar(std::int64_t total, std::string label, std::size_t width = 30)
@@ -115,4 +115,4 @@ namespace Thot::Utils {
     };
 }
 
-#endif // LIBTHOT_PROGRESSBAR_HPP
+#endif // LIBOMNI_PROGRESSBAR_HPP

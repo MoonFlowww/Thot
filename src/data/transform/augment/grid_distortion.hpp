@@ -1,5 +1,5 @@
-#ifndef THOT_DATA_TRANSFORM_AUGMENTATION_GRID_DISTORTION_HPP
-#define THOT_DATA_TRANSFORM_AUGMENTATION_GRID_DISTORTION_HPP
+#ifndef OMNI_DATA_TRANSFORM_AUGMENTATION_GRID_DISTORTION_HPP
+#define OMNI_DATA_TRANSFORM_AUGMENTATION_GRID_DISTORTION_HPP
 
 #include <cstdint>
 #include <optional>
@@ -10,7 +10,7 @@
 
 #include "common.hpp"
 
-namespace Thot::Data::Transform::Augmentation {
+namespace Omni::Data::Transform::Augmentation {
     namespace Options {
         struct GridDistortionOptions {
             double distort_limit = 0.08;
@@ -57,4 +57,4 @@ namespace Thot::Data::Transform::Augmentation {
     }
 }
 
-#endif // THOT_DATA_TRANSFORM_AUGMENTATION_GRID_DISTORTION_HPP
+#endif // OMNI_DATA_TRANSFORM_AUGMENTATION_GRID_DISTORTION_HPP

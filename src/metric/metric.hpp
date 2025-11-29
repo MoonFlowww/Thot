@@ -1,7 +1,7 @@
-#ifndef THOT_METRIC_HPP
-#define THOT_METRIC_HPP
+#ifndef OMNI_METRIC_HPP
+#define OMNI_METRIC_HPP
 // This file is an factory, must exempt it from any logical-code. For functions look into "/details"
-namespace Thot::Metric::Classification {
+namespace Omni::Metric::Classification {
     enum class Kind {
         Accuracy,
         AUCROC,
@@ -123,7 +123,7 @@ namespace Thot::Metric::Classification {
     inline constexpr Descriptor BoundaryIoU{Kind::BoundaryIoU};
 }
 
-namespace Thot::Metric::Timeseries {
+namespace Omni::Metric::Timeseries {
     enum class Kind {
         MeanAbsoluteError,
         MeanAbsolutePercentageError,
@@ -243,4 +243,4 @@ namespace Thot::Metric::Timeseries {
 }
 
 
-#endif //THOT_METRIC_HPP
+#endif //OMNI_METRIC_HPP

@@ -1,12 +1,12 @@
-#ifndef THOT_MAE_HPP
-#define THOT_MAE_HPP
+#ifndef OMNI_MAE_HPP
+#define OMNI_MAE_HPP
 #include <optional>
 #include <stdexcept>
 #include <torch/torch.h>
 
 #include "helper.hpp" // reduction called in
 
-namespace Thot::Loss::Details {
+namespace Omni::Loss::Details {
     struct MAEOptions {
         Reduction reduction{Reduction::Mean};
         std::vector<double> weight{};
@@ -49,4 +49,4 @@ namespace Thot::Loss::Details {
 
 }
 
-#endif // THOT_MAE_HPP
+#endif // OMNI_MAE_HPP

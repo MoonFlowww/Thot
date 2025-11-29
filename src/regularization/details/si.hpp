@@ -1,9 +1,9 @@
-#ifndef THOT_SI_HPP
-#define THOT_SI_HPP
+#ifndef OMNI_SI_HPP
+#define OMNI_SI_HPP
 //https://arxiv.org/pdf/1703.04200
 #include <torch/torch.h>
 
-namespace Thot::Regularization::Details {
+namespace Omni::Regularization::Details {
 
     struct SIOptions {
         double strength{0.0};
@@ -44,4 +44,4 @@ namespace Thot::Regularization::Details {
 
 }
 
-#endif //THOT_SI_HPP
+#endif //OMNI_SI_HPP

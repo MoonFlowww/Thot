@@ -1,5 +1,5 @@
-#ifndef THOT_SOPHIA_HPP
-#define THOT_SOPHIA_HPP
+#ifndef OMNI_SOPHIA_HPP
+#define OMNI_SOPHIA_HPP
 // Sophia G and H
 //https://arxiv.org/pdf/2305.14342
 #include <algorithm>
@@ -12,7 +12,7 @@
 #include <torch/optim/serialize.h>
 #include <torch/utils.h>
 
-namespace Thot::Optimizer::Details {
+namespace Omni::Optimizer::Details {
     struct SophiaGOptions : public torch::optim::OptimizerCloneableOptions<SophiaGOptions> {
         SophiaGOptions(double lr = 1e-4) : lr_(lr) {}
 
@@ -287,4 +287,4 @@ namespace Thot::Optimizer::Details {
     using SophiaG = detail::SophiaImpl<SophiaGOptions, detail::GaussNewtonHessian>;
     using SophiaH = detail::SophiaImpl<SophiaHOptions, detail::HessianDiagonal>;
 }
-#endif //THOT_SOPHIA_HPP
+#endif //OMNI_SOPHIA_HPP

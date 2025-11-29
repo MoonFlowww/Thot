@@ -3,10 +3,10 @@
 #include <vector>
 #include <torch/torch.h>
 #include <utility>
-#include "../../../include/Thot.h"
+#include "../../../include/Omni.h"
 
 int main() {
-    Thot::Model model("Debug_CIFAR");
+    Omni::Model model("Debug_CIFAR");
     model.use_cuda(torch::cuda::is_available());
 
     const int64_t N = 200000;
@@ -15,52 +15,52 @@ int main() {
     const int64_t steps_per_epoch = (N + B - 1) / B;
 
     
-    model.add(Thot::Block::Sequential({
-        Thot::Layer::Conv2d({3, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false}, Thot::Activation::Identity, Thot::Initialization::HeNormal),
-        Thot::Layer::BatchNorm2d({64, 1e-5, 0.1, true, true}, Thot::Activation::SiLU),
-        Thot::Layer::Conv2d({64, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal),
-        Thot::Layer::BatchNorm2d({64, 1e-5, 0.1, true, true}, Thot::Activation::SiLU),
-        Thot::Layer::MaxPool2d({{2, 2}, {2, 2}})
+    model.add(Omni::Block::Sequential({
+        Omni::Layer::Conv2d({3, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false}, Omni::Activation::Identity, Omni::Initialization::HeNormal),
+        Omni::Layer::BatchNorm2d({64, 1e-5, 0.1, true, true}, Omni::Activation::SiLU),
+        Omni::Layer::Conv2d({64, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true}, Omni::Activation::Identity, Omni::Initialization::HeNormal),
+        Omni::Layer::BatchNorm2d({64, 1e-5, 0.1, true, true}, Omni::Activation::SiLU),
+        Omni::Layer::MaxPool2d({{2, 2}, {2, 2}})
     }));
 
-    model.add(Thot::Layer::HardDropout({ .probability = 0.3 }));
+    model.add(Omni::Layer::HardDropout({ .probability = 0.3 }));
 
-    model.add(Thot::Block::Residual({
-        Thot::Layer::Conv2d({64, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false}, Thot::Activation::Identity, Thot::Initialization::HeNormal),
-        Thot::Layer::BatchNorm2d({64, 1e-5, 0.1, true, true}, Thot::Activation::SiLU),
-        Thot::Layer::Conv2d({64, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal)
-    }, 3, {}, { .final_activation = Thot::Activation::SiLU }));
+    model.add(Omni::Block::Residual({
+        Omni::Layer::Conv2d({64, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false}, Omni::Activation::Identity, Omni::Initialization::HeNormal),
+        Omni::Layer::BatchNorm2d({64, 1e-5, 0.1, true, true}, Omni::Activation::SiLU),
+        Omni::Layer::Conv2d({64, 64, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true}, Omni::Activation::Identity, Omni::Initialization::HeNormal)
+    }, 3, {}, { .final_activation = Omni::Activation::SiLU }));
 
-    model.add(Thot::Block::Residual({
-        Thot::Layer::Conv2d({64, 128, {3, 3}, {2, 2}, {1, 1}, {1, 1}, 1, false}, Thot::Activation::Identity, Thot::Initialization::HeNormal),
-        Thot::Layer::BatchNorm2d({128, 1e-5, 0.1, true, true}, Thot::Activation::SiLU),
-        Thot::Layer::Conv2d({128, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal)
-    }, 1, {.projection = Thot::Layer::Conv2d({64, 128, {1, 1}, {2, 2}, {0, 0}, {1, 1}, 1, false}, Thot::Activation::Identity, Thot::Initialization::HeNormal)}, { .final_activation = Thot::Activation::SiLU }));
+    model.add(Omni::Block::Residual({
+        Omni::Layer::Conv2d({64, 128, {3, 3}, {2, 2}, {1, 1}, {1, 1}, 1, false}, Omni::Activation::Identity, Omni::Initialization::HeNormal),
+        Omni::Layer::BatchNorm2d({128, 1e-5, 0.1, true, true}, Omni::Activation::SiLU),
+        Omni::Layer::Conv2d({128, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, true}, Omni::Activation::Identity, Omni::Initialization::HeNormal)
+    }, 1, {.projection = Omni::Layer::Conv2d({64, 128, {1, 1}, {2, 2}, {0, 0}, {1, 1}, 1, false}, Omni::Activation::Identity, Omni::Initialization::HeNormal)}, { .final_activation = Omni::Activation::SiLU }));
 
-    model.add(Thot::Layer::HardDropout({ .probability = 0.3 }));
+    model.add(Omni::Layer::HardDropout({ .probability = 0.3 }));
 
-    model.add(Thot::Block::Sequential({
-        Thot::Layer::Conv2d({128, 256, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false}, Thot::Activation::Identity, Thot::Initialization::HeNormal),
-        Thot::Layer::BatchNorm2d({256, 1e-5, 0.1, true, true}, Thot::Activation::SiLU),
-        Thot::Layer::AdaptiveAvgPool2d({{1, 1}})
+    model.add(Omni::Block::Sequential({
+        Omni::Layer::Conv2d({128, 256, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false}, Omni::Activation::Identity, Omni::Initialization::HeNormal),
+        Omni::Layer::BatchNorm2d({256, 1e-5, 0.1, true, true}, Omni::Activation::SiLU),
+        Omni::Layer::AdaptiveAvgPool2d({{1, 1}})
     }));
 
-    model.add(Thot::Block::Sequential({
-        Thot::Layer::Conv2d({256, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false}, Thot::Activation::Identity, Thot::Initialization::HeNormal),
-        Thot::Layer::BatchNorm2d({128, 1e-5, 0.1, true, true}, Thot::Activation::SiLU),
-        Thot::Layer::AdaptiveAvgPool2d({{1, 1}})
+    model.add(Omni::Block::Sequential({
+        Omni::Layer::Conv2d({256, 128, {3, 3}, {1, 1}, {1, 1}, {1, 1}, 1, false}, Omni::Activation::Identity, Omni::Initialization::HeNormal),
+        Omni::Layer::BatchNorm2d({128, 1e-5, 0.1, true, true}, Omni::Activation::SiLU),
+        Omni::Layer::AdaptiveAvgPool2d({{1, 1}})
     }));
 
-    model.add(Thot::Layer::Flatten());
+    model.add(Omni::Layer::Flatten());
 
-    model.add(Thot::Layer::FC({128, 512, true}, Thot::Activation::SiLU, Thot::Initialization::HeNormal));
-    model.add(Thot::Layer::HardDropout({.probability = 0.5}));
-    model.add(Thot::Layer::FC({512, 10, true}, Thot::Activation::Identity, Thot::Initialization::HeNormal));
+    model.add(Omni::Layer::FC({128, 512, true}, Omni::Activation::SiLU, Omni::Initialization::HeNormal));
+    model.add(Omni::Layer::HardDropout({.probability = 0.5}));
+    model.add(Omni::Layer::FC({512, 10, true}, Omni::Activation::Identity, Omni::Initialization::HeNormal));
 
 
     model.set_optimizer(
-        Thot::Optimizer::AdamW({.learning_rate=1e-4, .weight_decay=5e-4}),
-            Thot::LrScheduler::CosineAnnealing({
+        Omni::Optimizer::AdamW({.learning_rate=1e-4, .weight_decay=5e-4}),
+            Omni::LrScheduler::CosineAnnealing({
             .T_max = static_cast<size_t>(epochs*0.85) * steps_per_epoch,
             .eta_min = 1e-5,
             .warmup_steps = 5*static_cast<size_t>(steps_per_epoch),
@@ -68,34 +68,34 @@ int main() {
         })
     );
 
-    model.set_loss(Thot::Loss::CrossEntropy({.label_smoothing=0.02f}));
+    model.set_loss(Omni::Loss::CrossEntropy({.label_smoothing=0.02f}));
 
-    model.set_regularization({ Thot::Regularization::SWAG({
+    model.set_regularization({ Omni::Regularization::SWAG({
         .coefficient = 1e-3,
         .variance_epsilon = 1e-6,
         .start_step = static_cast<size_t>(0.85 * (steps_per_epoch*epochs)),
         .accumulation_stride = static_cast<size_t>(steps_per_epoch),
         .max_snapshots = 20,
-    }), Thot::Regularization::VAT({5})});
+    }), Omni::Regularization::VAT({5})});
 
 
     
 
-    auto [x1, y1, x2, y2] = Thot::Data::Load::CIFAR10("/home/moonfloww/Projects/DATASETS/Image/CIFAR10", 1.f, 1.f, true);
-    auto [validation_images, validation_labels] = Thot::Data::Manipulation::Fraction(x2, y2, 0.1f);
-    Thot::Data::Check::Size(x1, "Raw");
-    std::tie(x1, y1) = Thot::Data::Transform::Augmentation::CLAHE(x1, y1, {256, 2.f, {4,4}, 1.f, true});
-    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {12, 12}, {-1,-1,-1}, .5f, false, false});
-    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {12, 12}, {-1,-1,-1}, 1.f, false, false});
-    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {6, 6}, {-1,-1,-1}, 1.f, false, false});
-    std::tie(x1, y1) = Thot::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {6, 6}, {-1,-1,-1}, 1.f, false, false});
-    std::tie(x1, y1) = Thot::Data::Manipulation::Shuffle(x1, y1);
+    auto [x1, y1, x2, y2] = Omni::Data::Load::CIFAR10("/home/moonfloww/Projects/DATASETS/Image/CIFAR10", 1.f, 1.f, true);
+    auto [validation_images, validation_labels] = Omni::Data::Manipulation::Fraction(x2, y2, 0.1f);
+    Omni::Data::Check::Size(x1, "Raw");
+    std::tie(x1, y1) = Omni::Data::Transform::Augmentation::CLAHE(x1, y1, {256, 2.f, {4,4}, 1.f, true});
+    std::tie(x1, y1) = Omni::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {12, 12}, {-1,-1,-1}, .5f, false, false});
+    std::tie(x1, y1) = Omni::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {12, 12}, {-1,-1,-1}, 1.f, false, false});
+    std::tie(x1, y1) = Omni::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {6, 6}, {-1,-1,-1}, 1.f, false, false});
+    std::tie(x1, y1) = Omni::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {6, 6}, {-1,-1,-1}, 1.f, false, false});
+    std::tie(x1, y1) = Omni::Data::Manipulation::Shuffle(x1, y1);
 
-    std::tie(x1, y1) = Thot::Data::Manipulation::Flip(x1, y1, {{"x"}, 1.f, true, false});
-    std::tie(x1, y1) = Thot::Data::Manipulation::Shuffle(x1, y1);
+    std::tie(x1, y1) = Omni::Data::Manipulation::Flip(x1, y1, {{"x"}, 1.f, true, false});
+    std::tie(x1, y1) = Omni::Data::Manipulation::Shuffle(x1, y1);
 
-    Thot::Data::Check::Size(x1, "Augmented");
-    Thot::Plot::Data::Image(x1, {1,2,3,4,5,6,7,8,9}); //idx
+    Omni::Data::Check::Size(x1, "Augmented");
+    Omni::Plot::Data::Image(x1, {1,2,3,4,5,6,7,8,9}); //idx
 
     model.train(x1, y1, {
         .epoch = static_cast<std::size_t>(epochs),
@@ -103,32 +103,32 @@ int main() {
         .shuffle = false,
         .restore_best_state = true,
         .test = std::vector<at::Tensor>{validation_images, validation_labels},
-        .graph_mode = Thot::GraphMode::Capture,
+        .graph_mode = Omni::GraphMode::Capture,
         .enable_amp=true,
         .memory_format = torch::MemoryFormat::ChannelsLast}
     );
 
 
-    model.evaluate(x2, y2, Thot::Evaluation::Classification,{
-        Thot::Metric::Classification::Accuracy,
-        Thot::Metric::Classification::Precision,
-        Thot::Metric::Classification::Recall,
-        Thot::Metric::Classification::F1,
-        Thot::Metric::Classification::TruePositiveRate,
-        Thot::Metric::Classification::TrueNegativeRate,
-        Thot::Metric::Classification::Top1Error,
-        Thot::Metric::Classification::ExpectedCalibrationError,
-        Thot::Metric::Classification::MaximumCalibrationError,
-        Thot::Metric::Classification::CohensKappa,
-        Thot::Metric::Classification::LogLoss,
-        Thot::Metric::Classification::BrierScore,
-        Thot::Metric::Classification::Informedness
+    model.evaluate(x2, y2, Omni::Evaluation::Classification,{
+        Omni::Metric::Classification::Accuracy,
+        Omni::Metric::Classification::Precision,
+        Omni::Metric::Classification::Recall,
+        Omni::Metric::Classification::F1,
+        Omni::Metric::Classification::TruePositiveRate,
+        Omni::Metric::Classification::TrueNegativeRate,
+        Omni::Metric::Classification::Top1Error,
+        Omni::Metric::Classification::ExpectedCalibrationError,
+        Omni::Metric::Classification::MaximumCalibrationError,
+        Omni::Metric::Classification::CohensKappa,
+        Omni::Metric::Classification::LogLoss,
+        Omni::Metric::Classification::BrierScore,
+        Omni::Metric::Classification::Informedness
     }, {.batch_size = 64});
 
-    Thot::Plot::Render(model, Thot::Plot::Reliability::GradCAM({.samples = 4, .random = false, .normalize = true, .overlay = true}),
+    Omni::Plot::Render(model, Omni::Plot::Reliability::GradCAM({.samples = 4, .random = false, .normalize = true, .overlay = true}),
         validation_images,validation_labels);
 
-    //Thot::Plot::Render(model, Thot::Plot::Reliability::LIME({.random = true, .normalize = true, .showWeights = true}),
+    //Omni::Plot::Render(model, Omni::Plot::Reliability::LIME({.random = true, .normalize = true, .showWeights = true}),
     //    validation_images, validation_labels);
 
     return 0;

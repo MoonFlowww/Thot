@@ -1,5 +1,5 @@
-#ifndef THOT_MANIPULATION_HPP
-#define THOT_MANIPULATION_HPP
+#ifndef OMNI_MANIPULATION_HPP
+#define OMNI_MANIPULATION_HPP
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -31,19 +31,19 @@
 #include "augment/sun_angle_jitter.hpp"
 #include "normalization/registry.hpp"
 
-namespace Thot::Data::Manipulation {
-    using ::Thot::Data::Transform::Augmentation::AtmosphericDrift;
-    using ::Thot::Data::Transform::Augmentation::ChromaticAberration;
-    using ::Thot::Data::Transform::Augmentation::CLAHE;
-    using ::Thot::Data::Transform::Augmentation::CloudOcclusion;
-    using ::Thot::Data::Transform::Augmentation::Cutout;
-    using ::Thot::Data::Transform::Augmentation::Flip;
-    using ::Thot::Data::Transform::Augmentation::GridDistortion;
-    using ::Thot::Data::Transform::Augmentation::OpticalDistortion;
-    using ::Thot::Data::Transform::Augmentation::RandomBrightnessContrast;
-    using ::Thot::Data::Transform::Augmentation::SunAngleJitter;
+namespace Omni::Data::Manipulation {
+    using ::Omni::Data::Transform::Augmentation::AtmosphericDrift;
+    using ::Omni::Data::Transform::Augmentation::ChromaticAberration;
+    using ::Omni::Data::Transform::Augmentation::CLAHE;
+    using ::Omni::Data::Transform::Augmentation::CloudOcclusion;
+    using ::Omni::Data::Transform::Augmentation::Cutout;
+    using ::Omni::Data::Transform::Augmentation::Flip;
+    using ::Omni::Data::Transform::Augmentation::GridDistortion;
+    using ::Omni::Data::Transform::Augmentation::OpticalDistortion;
+    using ::Omni::Data::Transform::Augmentation::RandomBrightnessContrast;
+    using ::Omni::Data::Transform::Augmentation::SunAngleJitter;
 
-    namespace Normalization = ::Thot::Data::Transform::Normalization;
+    namespace Normalization = ::Omni::Data::Transform::Normalization;
 
     //Fisher-Yates
     inline std::pair<torch::Tensor, torch::Tensor> Shuffle(const torch::Tensor& inputs, const torch::Tensor& targets, const std::optional<std::uint64_t>& seed = std::nullopt) {
@@ -147,7 +147,7 @@ namespace Thot::Data::Manipulation {
 
 }
 
-namespace Thot::Data::Check {
+namespace Omni::Data::Check {
     struct ImbalanceReport {
         torch::Tensor train_counts;
         torch::Tensor test_counts;
@@ -270,4 +270,4 @@ namespace Thot::Data::Check {
     }
 }
 
-#endif //THOT_MANIPULATION_HPP
+#endif //OMNI_MANIPULATION_HPP

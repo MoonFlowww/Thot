@@ -1,5 +1,5 @@
-#ifndef THOT_BLOCK_DETAILS_SEQUENTIAL_HPP
-#define THOT_BLOCK_DETAILS_SEQUENTIAL_HPP
+#ifndef OMNI_BLOCK_DETAILS_SEQUENTIAL_HPP
+#define OMNI_BLOCK_DETAILS_SEQUENTIAL_HPP
 
 #include <vector>
 #include <torch/torch.h>
@@ -9,21 +9,21 @@
 #include "../../../common/local.hpp"
 #include "../../../layer/layer.hpp"
 
-namespace Thot::Block::Details {
+namespace Omni::Block::Details {
 
     struct SequentialDescriptor {
-        std::vector<::Thot::Layer::Descriptor> layers{};
-        ::Thot::LocalConfig local{};
+        std::vector<::Omni::Layer::Descriptor> layers{};
+        ::Omni::LocalConfig local{};
     };
 
     class SequentialBlockModuleImpl : public torch::nn::Module {
     public:
-        explicit SequentialBlockModuleImpl(std::vector<::Thot::Layer::Descriptor> layers)
+        explicit SequentialBlockModuleImpl(std::vector<::Omni::Layer::Descriptor> layers)
         {
             std::size_t index{0};
             block_layers_.reserve(layers.size());
             for (auto& descriptor : layers) {
-                auto registered_layer = ::Thot::Layer::Details::build_registered_layer(*this, descriptor, index++);
+                auto registered_layer = ::Omni::Layer::Details::build_registered_layer(*this, descriptor, index++);
                 block_layers_.push_back(std::move(registered_layer));
             }
         }
@@ -33,17 +33,17 @@ namespace Thot::Block::Details {
             auto output = std::move(input);
             for (auto& layer : block_layers_) {
                 output = layer.forward(std::move(output));
-                output = ::Thot::Activation::Details::apply(layer.activation, std::move(output));
+                output = ::Omni::Activation::Details::apply(layer.activation, std::move(output));
             }
             return output;
         }
 
     private:
-        std::vector<::Thot::Layer::Details::RegisteredLayer> block_layers_{};
+        std::vector<::Omni::Layer::Details::RegisteredLayer> block_layers_{};
     };
 
     TORCH_MODULE(SequentialBlockModule);
 
 }
 
-#endif // THOT_BLOCK_DETAILS_SEQUENTIAL_HPP
+#endif // OMNI_BLOCK_DETAILS_SEQUENTIAL_HPP

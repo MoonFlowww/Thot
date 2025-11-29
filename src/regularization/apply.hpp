@@ -1,5 +1,5 @@
-#ifndef THOT_REGULARIZATION_APPLY_HPP
-#define THOT_REGULARIZATION_APPLY_HPP
+#ifndef OMNI_REGULARIZATION_APPLY_HPP
+#define OMNI_REGULARIZATION_APPLY_HPP
 
 #include <torch/torch.h>
 #include <type_traits>
@@ -14,7 +14,7 @@
 
 #include "regularization.hpp"
 
-namespace Thot::Regularization {
+namespace Omni::Regularization {
     namespace detail {
         template <class...>
         inline constexpr bool always_false_v = false;
@@ -231,4 +231,4 @@ namespace Thot::Regularization {
             std::move(descriptor));
     }
 }
-#endif // THOT_REGULARIZATION_APPLY_HPP
+#endif // OMNI_REGULARIZATION_APPLY_HPP

@@ -1,5 +1,5 @@
-#ifndef THOT_REGULARIZATION_HPP
-#define THOT_REGULARIZATION_HPP
+#ifndef OMNI_REGULARIZATION_HPP
+#define OMNI_REGULARIZATION_HPP
 // This file is an factory, must exempt it from any logical-code. For functions look into "/details"
 #include <variant>
 
@@ -30,7 +30,7 @@
 #include "details/vat.hpp"
 #include "details/wgangp.hpp"
 
-namespace Thot::Regularization {
+namespace Omni::Regularization {
 
     using L1Options = Details::L1Options;
     using L1Descriptor = Details::L1Descriptor;
@@ -256,4 +256,4 @@ namespace Thot::Regularization {
 
 }
 
-#endif //THOT_REGULARIZATION_HPP
+#endif //OMNI_REGULARIZATION_HPP

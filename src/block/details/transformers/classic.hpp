@@ -1,5 +1,5 @@
-#ifndef THOT_CLASSIC_HPP
-#define THOT_CLASSIC_HPP
+#ifndef OMNI_CLASSIC_HPP
+#define OMNI_CLASSIC_HPP
 
 // "Attention Is All You Need" — Vaswani et al., NeurIPS 2017 (arXiv:1706.03762).
 // Canonical encoder/decoder transformer with multi-head self-attention, position encodings,
@@ -30,9 +30,9 @@
 #include "../blocks/residual.hpp"
 #include "../blocks/sequential.hpp"
 
-namespace Thot::Block::Details::Transformer::Classic {
-    using PositionalEncodingType = ::Thot::Layer::Details::PositionalEncodingType;
-    using PositionalEncodingOptions = ::Thot::Layer::Details::PositionalEncodingOptions;
+namespace Omni::Block::Details::Transformer::Classic {
+    using PositionalEncodingType = ::Omni::Layer::Details::PositionalEncodingType;
+    using PositionalEncodingOptions = ::Omni::Layer::Details::PositionalEncodingOptions;
 
     struct AttentionOptions {
         std::int64_t embed_dim{512};
@@ -40,15 +40,15 @@ namespace Thot::Block::Details::Transformer::Classic {
         double dropout{0.0};
         bool bias{true};
         bool batch_first{true};
-        ::Thot::Attention::Variant variant{::Thot::Attention::Variant::Full};
+        ::Omni::Attention::Variant variant{::Omni::Attention::Variant::Full};
     };
 
     struct FeedForwardOptions {
         std::int64_t embed_dim{512};
         double mlp_ratio{4.0};
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::GeLU};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::GeLU};
         bool bias{true};
-        ::Thot::Initialization::Descriptor initialization{::Thot::Initialization::Default};
+        ::Omni::Initialization::Descriptor initialization{::Omni::Initialization::Default};
     };
 
     struct LayerNormOptions {
@@ -59,10 +59,10 @@ namespace Thot::Block::Details::Transformer::Classic {
 
 
     struct EncoderLayerDescriptor {
-        ::Thot::Attention::Descriptor attention;
-        ::Thot::Layer::Descriptor attention_dropout;
-        std::vector<::Thot::Layer::Descriptor> feed_forward;
-        ::Thot::Layer::Descriptor feed_forward_dropout;
+        ::Omni::Attention::Descriptor attention;
+        ::Omni::Layer::Descriptor attention_dropout;
+        std::vector<::Omni::Layer::Descriptor> feed_forward;
+        ::Omni::Layer::Descriptor feed_forward_dropout;
     };
 
     struct EncoderOptions {
@@ -99,24 +99,24 @@ namespace Thot::Block::Details::Transformer::Classic {
         for (std::size_t index = 0; index < options.layers; ++index) {
             EncoderLayerDescriptor layer{};
 
-            ::Thot::Attention::MultiHeadOptions attention_descriptor_options{};
+            ::Omni::Attention::MultiHeadOptions attention_descriptor_options{};
             attention_descriptor_options.embed_dim = attention_options.embed_dim;
             attention_descriptor_options.num_heads = attention_options.num_heads;
             attention_descriptor_options.dropout = attention_options.dropout;
             attention_descriptor_options.bias = attention_options.bias;
             attention_descriptor_options.batch_first = attention_options.batch_first;
             attention_descriptor_options.variant = attention_options.variant;
-            layer.attention = ::Thot::Attention::MultiHead(attention_descriptor_options);
+            layer.attention = ::Omni::Attention::MultiHead(attention_descriptor_options);
 
-            layer.attention_dropout = ::Thot::Layer::HardDropout({attention_options.dropout});
+            layer.attention_dropout = ::Omni::Layer::HardDropout({attention_options.dropout});
 
-            ::Thot::Layer::FCOptions fc1_options{feed_forward.embed_dim, hidden_dim, feed_forward.bias};
-            layer.feed_forward.emplace_back(::Thot::Layer::FC(fc1_options, feed_forward.activation, feed_forward.initialization));
+            ::Omni::Layer::FCOptions fc1_options{feed_forward.embed_dim, hidden_dim, feed_forward.bias};
+            layer.feed_forward.emplace_back(::Omni::Layer::FC(fc1_options, feed_forward.activation, feed_forward.initialization));
 
-            ::Thot::Layer::FCOptions fc2_options{hidden_dim, feed_forward.embed_dim, feed_forward.bias};
-            layer.feed_forward.emplace_back(::Thot::Layer::FC(fc2_options, ::Thot::Activation::Identity, feed_forward.initialization));
+            ::Omni::Layer::FCOptions fc2_options{hidden_dim, feed_forward.embed_dim, feed_forward.bias};
+            layer.feed_forward.emplace_back(::Omni::Layer::FC(fc2_options, ::Omni::Activation::Identity, feed_forward.initialization));
 
-            layer.feed_forward_dropout = ::Thot::Layer::HardDropout({options.dropout});
+            layer.feed_forward_dropout = ::Omni::Layer::HardDropout({options.dropout});
 
             descriptor.layers.emplace_back(std::move(layer));
         }
@@ -125,12 +125,12 @@ namespace Thot::Block::Details::Transformer::Classic {
     }
 
     struct DecoderLayerDescriptor {
-        ::Thot::Attention::Descriptor self_attention;
-        ::Thot::Layer::Descriptor self_attention_dropout;
-        ::Thot::Attention::Descriptor cross_attention;
-        ::Thot::Layer::Descriptor cross_attention_dropout;
-        std::vector<::Thot::Layer::Descriptor> feed_forward;
-        ::Thot::Layer::Descriptor feed_forward_dropout;
+        ::Omni::Attention::Descriptor self_attention;
+        ::Omni::Layer::Descriptor self_attention_dropout;
+        ::Omni::Attention::Descriptor cross_attention;
+        ::Omni::Layer::Descriptor cross_attention_dropout;
+        std::vector<::Omni::Layer::Descriptor> feed_forward;
+        ::Omni::Layer::Descriptor feed_forward_dropout;
     };
 
     struct DecoderOptions {
@@ -170,33 +170,33 @@ namespace Thot::Block::Details::Transformer::Classic {
         for (std::size_t index = 0; index < options.layers; ++index) {
             DecoderLayerDescriptor layer{};
 
-            ::Thot::Attention::MultiHeadOptions self_attention_descriptor_options{};
+            ::Omni::Attention::MultiHeadOptions self_attention_descriptor_options{};
             self_attention_descriptor_options.embed_dim = self_attention.embed_dim;
             self_attention_descriptor_options.num_heads = self_attention.num_heads;
             self_attention_descriptor_options.dropout = self_attention.dropout;
             self_attention_descriptor_options.bias = self_attention.bias;
             self_attention_descriptor_options.batch_first = self_attention.batch_first;
             self_attention_descriptor_options.variant = self_attention.variant;
-            layer.self_attention = ::Thot::Attention::MultiHead(self_attention_descriptor_options);
-            layer.self_attention_dropout = ::Thot::Layer::HardDropout({self_attention.dropout});
+            layer.self_attention = ::Omni::Attention::MultiHead(self_attention_descriptor_options);
+            layer.self_attention_dropout = ::Omni::Layer::HardDropout({self_attention.dropout});
 
-            ::Thot::Attention::MultiHeadOptions cross_attention_descriptor_options{};
+            ::Omni::Attention::MultiHeadOptions cross_attention_descriptor_options{};
             cross_attention_descriptor_options.embed_dim = cross_attention.embed_dim;
             cross_attention_descriptor_options.num_heads = cross_attention.num_heads;
             cross_attention_descriptor_options.dropout = cross_attention.dropout;
             cross_attention_descriptor_options.bias = cross_attention.bias;
             cross_attention_descriptor_options.batch_first = cross_attention.batch_first;
             cross_attention_descriptor_options.variant = cross_attention.variant;
-            layer.cross_attention = ::Thot::Attention::MultiHead(cross_attention_descriptor_options);
-            layer.cross_attention_dropout = ::Thot::Layer::HardDropout({cross_attention.dropout});
+            layer.cross_attention = ::Omni::Attention::MultiHead(cross_attention_descriptor_options);
+            layer.cross_attention_dropout = ::Omni::Layer::HardDropout({cross_attention.dropout});
 
-            ::Thot::Layer::FCOptions fc1_options{feed_forward.embed_dim, hidden_dim, feed_forward.bias};
-            layer.feed_forward.emplace_back(::Thot::Layer::FC(fc1_options, feed_forward.activation, feed_forward.initialization));
+            ::Omni::Layer::FCOptions fc1_options{feed_forward.embed_dim, hidden_dim, feed_forward.bias};
+            layer.feed_forward.emplace_back(::Omni::Layer::FC(fc1_options, feed_forward.activation, feed_forward.initialization));
 
-            ::Thot::Layer::FCOptions fc2_options{hidden_dim, feed_forward.embed_dim, feed_forward.bias};
-            layer.feed_forward.emplace_back(::Thot::Layer::FC(fc2_options, ::Thot::Activation::Identity, feed_forward.initialization));
+            ::Omni::Layer::FCOptions fc2_options{hidden_dim, feed_forward.embed_dim, feed_forward.bias};
+            layer.feed_forward.emplace_back(::Omni::Layer::FC(fc2_options, ::Omni::Activation::Identity, feed_forward.initialization));
 
-            layer.feed_forward_dropout = ::Thot::Layer::HardDropout({options.dropout});
+            layer.feed_forward_dropout = ::Omni::Layer::HardDropout({options.dropout});
 
             descriptor.layers.emplace_back(std::move(layer));
         }
@@ -403,13 +403,13 @@ namespace Thot::Block::Details::Transformer::Classic {
                 norm1_ = register_module("norm1", torch::nn::LayerNorm(norm_options));
                 norm2_ = register_module("norm2", torch::nn::LayerNorm(norm_options));
 
-                attention_ = ::Thot::Attention::Details::register_attention(*this, "self_attention", std::move(descriptor.attention));
+                attention_ = ::Omni::Attention::Details::register_attention(*this, "self_attention", std::move(descriptor.attention));
 
                 std::size_t module_index = 0;
-                auto register_layer = [&](::Thot::Layer::Descriptor layer_descriptor) {
+                auto register_layer = [&](::Omni::Layer::Descriptor layer_descriptor) {
                     return std::visit(
                         [&](const auto& concrete_descriptor) {
-                            return ::Thot::Layer::Details::build_registered_layer(*this,
+                            return ::Omni::Layer::Details::build_registered_layer(*this,
                                                                                   concrete_descriptor,
                                                                                   module_index++);
                         },
@@ -434,10 +434,10 @@ namespace Thot::Block::Details::Transformer::Classic {
 
                 auto residual = output;
                 auto normalised = norm1_->forward(residual);
-                auto attention = ::Thot::Attention::Details::forward_attention(attention_, normalised, normalised, normalised, attn_mask, key_padding_mask);
+                auto attention = ::Omni::Attention::Details::forward_attention(attention_, normalised, normalised, normalised, attn_mask, key_padding_mask);
                 if (attention_dropout_.forward) {
                     attention = attention_dropout_.forward(std::move(attention));
-                    attention = ::Thot::Activation::Details::apply(attention_dropout_.activation, std::move(attention));
+                    attention = ::Omni::Activation::Details::apply(attention_dropout_.activation, std::move(attention));
                 }
                 output = residual + attention;
 
@@ -448,11 +448,11 @@ namespace Thot::Block::Details::Transformer::Classic {
                         continue;
                     }
                     feed_forward = layer.forward(std::move(feed_forward));
-                    feed_forward = ::Thot::Activation::Details::apply(layer.activation, std::move(feed_forward));
+                    feed_forward = ::Omni::Activation::Details::apply(layer.activation, std::move(feed_forward));
                 }
                 if (feed_forward_dropout_.forward) {
                     feed_forward = feed_forward_dropout_.forward(std::move(feed_forward));
-                    feed_forward = ::Thot::Activation::Details::apply(feed_forward_dropout_.activation,
+                    feed_forward = ::Omni::Activation::Details::apply(feed_forward_dropout_.activation,
                                                                       std::move(feed_forward));
                 }
 
@@ -463,12 +463,12 @@ namespace Thot::Block::Details::Transformer::Classic {
         private:
             std::int64_t embed_dim_{};
             LayerNormOptions layer_norm_options_{};
-            ::Thot::Attention::Details::AttentionModule attention_{};
+            ::Omni::Attention::Details::AttentionModule attention_{};
             torch::nn::LayerNorm norm1_{nullptr};
             torch::nn::LayerNorm norm2_{nullptr};
-            ::Thot::Layer::Details::RegisteredLayer attention_dropout_{};
-            std::vector<::Thot::Layer::Details::RegisteredLayer> feed_forward_layers_{};
-            ::Thot::Layer::Details::RegisteredLayer feed_forward_dropout_{};
+            ::Omni::Layer::Details::RegisteredLayer attention_dropout_{};
+            std::vector<::Omni::Layer::Details::RegisteredLayer> feed_forward_layers_{};
+            ::Omni::Layer::Details::RegisteredLayer feed_forward_dropout_{};
         };
 
         TORCH_MODULE(TransformerEncoderLayer);
@@ -549,15 +549,15 @@ namespace Thot::Block::Details::Transformer::Classic {
                 norm2_ = register_module("norm2", torch::nn::LayerNorm(norm_options));
                 norm3_ = register_module("norm3", torch::nn::LayerNorm(norm_options));
 
-                self_attention_ = ::Thot::Attention::Details::register_attention(*this, "self_attention", std::move(descriptor.self_attention));
+                self_attention_ = ::Omni::Attention::Details::register_attention(*this, "self_attention", std::move(descriptor.self_attention));
 
-                cross_attention_ = ::Thot::Attention::Details::register_attention(*this, "cross_attention", std::move(descriptor.cross_attention));
+                cross_attention_ = ::Omni::Attention::Details::register_attention(*this, "cross_attention", std::move(descriptor.cross_attention));
 
                 std::size_t module_index = 0;
-                auto register_layer = [&](::Thot::Layer::Descriptor layer_descriptor) {
+                auto register_layer = [&](::Omni::Layer::Descriptor layer_descriptor) {
                     return std::visit(
                         [&](const auto& concrete_descriptor) {
-                            return ::Thot::Layer::Details::build_registered_layer(
+                            return ::Omni::Layer::Details::build_registered_layer(
                                 *this, concrete_descriptor, module_index++);
                         },
                         std::move(layer_descriptor));
@@ -587,10 +587,10 @@ namespace Thot::Block::Details::Transformer::Classic {
 
                 auto residual = output;
                 auto self_norm = norm1_->forward(residual);
-                auto self_attention = ::Thot::Attention::Details::forward_attention(self_attention_, self_norm, self_norm, self_norm, tgt_mask, tgt_key_padding_mask);
+                auto self_attention = ::Omni::Attention::Details::forward_attention(self_attention_, self_norm, self_norm, self_norm, tgt_mask, tgt_key_padding_mask);
                 if (self_attention_dropout_.forward) {
                     self_attention = self_attention_dropout_.forward(std::move(self_attention));
-                    self_attention = ::Thot::Activation::Details::apply(
+                    self_attention = ::Omni::Activation::Details::apply(
                         self_attention_dropout_.activation, std::move(self_attention));
                 }
                 output = residual + self_attention;
@@ -598,10 +598,10 @@ namespace Thot::Block::Details::Transformer::Classic {
                 if (memory.defined()) {
                     residual = output;
                     auto cross_norm = norm2_->forward(output);
-                    auto cross_attention = ::Thot::Attention::Details::forward_attention(cross_attention_, cross_norm, memory, memory, memory_mask, memory_key_padding_mask);
+                    auto cross_attention = ::Omni::Attention::Details::forward_attention(cross_attention_, cross_norm, memory, memory, memory_mask, memory_key_padding_mask);
                     if (cross_attention_dropout_.forward) {
                         cross_attention = cross_attention_dropout_.forward(std::move(cross_attention));
-                        cross_attention = ::Thot::Activation::Details::apply(
+                        cross_attention = ::Omni::Activation::Details::apply(
                             cross_attention_dropout_.activation, std::move(cross_attention));
                     }
                     output = residual + cross_attention;
@@ -614,12 +614,12 @@ namespace Thot::Block::Details::Transformer::Classic {
                         continue;
                     }
                     feed_forward = layer.forward(std::move(feed_forward));
-                    feed_forward = ::Thot::Activation::Details::apply(
+                    feed_forward = ::Omni::Activation::Details::apply(
                         layer.activation, std::move(feed_forward));
                 }
                 if (feed_forward_dropout_.forward) {
                     feed_forward = feed_forward_dropout_.forward(std::move(feed_forward));
-                    feed_forward = ::Thot::Activation::Details::apply(
+                    feed_forward = ::Omni::Activation::Details::apply(
                         feed_forward_dropout_.activation, std::move(feed_forward));
                 }
 
@@ -630,15 +630,15 @@ namespace Thot::Block::Details::Transformer::Classic {
         private:
             std::int64_t embed_dim_{};
             LayerNormOptions layer_norm_options_{};
-            ::Thot::Attention::Details::AttentionModule self_attention_{};
-            ::Thot::Attention::Details::AttentionModule cross_attention_{};
+            ::Omni::Attention::Details::AttentionModule self_attention_{};
+            ::Omni::Attention::Details::AttentionModule cross_attention_{};
             torch::nn::LayerNorm norm1_{nullptr};
             torch::nn::LayerNorm norm2_{nullptr};
             torch::nn::LayerNorm norm3_{nullptr};
-            ::Thot::Layer::Details::RegisteredLayer self_attention_dropout_{};
-            ::Thot::Layer::Details::RegisteredLayer cross_attention_dropout_{};
-            std::vector<::Thot::Layer::Details::RegisteredLayer> feed_forward_layers_{};
-            ::Thot::Layer::Details::RegisteredLayer feed_forward_dropout_{};
+            ::Omni::Layer::Details::RegisteredLayer self_attention_dropout_{};
+            ::Omni::Layer::Details::RegisteredLayer cross_attention_dropout_{};
+            std::vector<::Omni::Layer::Details::RegisteredLayer> feed_forward_layers_{};
+            ::Omni::Layer::Details::RegisteredLayer feed_forward_dropout_{};
         };
 
         TORCH_MODULE(TransformerDecoderLayer);
@@ -728,4 +728,4 @@ namespace Thot::Block::Details::Transformer::Classic {
     using TransformerDecoder = Detail::TransformerDecoder;
 }
 
-#endif //THOT_CLASSIC_HPP
+#endif //OMNI_CLASSIC_HPP

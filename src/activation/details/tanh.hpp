@@ -1,5 +1,5 @@
-#ifndef THOT_TANH_HPP
-#define THOT_TANH_HPP
+#ifndef OMNI_TANH_HPP
+#define OMNI_TANH_HPP
 
 #include <torch/torch.h>
 
@@ -7,7 +7,7 @@
 
 #include "../activation.hpp"
 
-namespace Thot::Activation::Details {
+namespace Omni::Activation::Details {
 
     struct Tanh {
         [[nodiscard]] torch::Tensor operator()(torch::Tensor input) const {
@@ -17,4 +17,4 @@ namespace Thot::Activation::Details {
 
 }
 
-#endif //THOT_TANH_HPP
+#endif //OMNI_TANH_HPP

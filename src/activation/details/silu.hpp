@@ -1,5 +1,5 @@
-#ifndef THOT_SILU_HPP
-#define THOT_SILU_HPP
+#ifndef OMNI_SILU_HPP
+#define OMNI_SILU_HPP
 // "Searching for Activation Functions" (original SiLU/Swish proposal) https://arxiv.org/pdf/1710.05941
 #include <torch/torch.h>
 
@@ -7,7 +7,7 @@
 
 #include "../activation.hpp"
 
-namespace Thot::Activation::Details {
+namespace Omni::Activation::Details {
 
     struct SiLU {
         [[nodiscard]] torch::Tensor operator()(torch::Tensor input) const {
@@ -17,4 +17,4 @@ namespace Thot::Activation::Details {
 
 }
 
-#endif //THOT_SILU_HPP
+#endif //OMNI_SILU_HPP

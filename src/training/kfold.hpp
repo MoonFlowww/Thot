@@ -1,5 +1,5 @@
-#ifndef THOT_KFOLD_HPP
-#define THOT_KFOLD_HPP
+#ifndef OMNI_KFOLD_HPP
+#define OMNI_KFOLD_HPP
 
 #include <algorithm>
 #include <numeric>
@@ -13,7 +13,7 @@
 
 #include <torch/torch.h>
 
-namespace Thot {
+namespace Omni {
     namespace Kfold {
         struct ClassicOptions {
             int64_t folds{5};
@@ -253,4 +253,4 @@ namespace Thot {
     }
 }
 
-#endif //THOT_KFOLD_HPP
+#endif //OMNI_KFOLD_HPP

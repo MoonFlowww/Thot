@@ -1,12 +1,12 @@
-#ifndef THOT_SFGE_HPP
-#define THOT_SFGE_HPP
+#ifndef OMNI_SFGE_HPP
+#define OMNI_SFGE_HPP
 
 #include <torch/torch.h>
 
 #include <numeric>
 #include <vector>
 
-namespace Thot::Regularization::Details {
+namespace Omni::Regularization::Details {
 
     struct SFGEOptions {
         double coefficient{0.0};
@@ -61,4 +61,4 @@ namespace Thot::Regularization::Details {
 
 }
 
-#endif // THOT_SFGE_HPP
+#endif // OMNI_SFGE_HPP

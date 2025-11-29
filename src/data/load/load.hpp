@@ -1,5 +1,5 @@
-#ifndef THOT_LOAD_HPP
-#define THOT_LOAD_HPP
+#ifndef OMNI_LOAD_HPP
+#define OMNI_LOAD_HPP
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -32,7 +32,7 @@
 #include "../../core.hpp"
 #include "types.hpp"
 #include "../transform/format/format.hpp"
-namespace Thot::Data::Load {
+namespace Omni::Data::Load {
     namespace Details {
         inline std::string trim_copy(const std::string& value)
         {
@@ -885,7 +885,7 @@ namespace Thot::Data::Load {
                             }
 
                             if (rows_to_remove > 0 || cols_to_remove > 0) {
-                                std::cout << "[Thot::Load::Universal]-> normalize_size applied on sample " << i << " (" << rows << "x" << cols
+                                std::cout << "[Omni::Load::Universal]-> normalize_size applied on sample " << i << " (" << rows << "x" << cols
                                           << " -> " << (target_size)[0] << "x" << (target_size)[1]
                                           << "): removed " << rows_to_remove << " rows and "
                                           << cols_to_remove << " columns\n";
@@ -894,18 +894,18 @@ namespace Thot::Data::Load {
                             const bool needs_downscale = rows > (target_size)[0] || cols > (target_size)[1];
                             const bool needs_upscale = rows < (target_size)[0] || cols < (target_size)[1];
 
-                            Thot::Data::Transform::Format::Options::ScaleOptions options;
+                            Omni::Data::Transform::Format::Options::ScaleOptions options;
                             options.size = std::vector<int>{static_cast<int>((target_size)[0]), static_cast<int>((target_size)[1])};
                             options.interp = image_params.InterpolationMode;
                             if (needs_downscale && !needs_upscale) {
-                                working = Thot::Data::Transform::Format::Downsample(working, options);
+                                working = Omni::Data::Transform::Format::Downsample(working, options);
                             } else if (needs_upscale && !needs_downscale) {
-                                working = Thot::Data::Transform::Format::Upsample(working, options);
+                                working = Omni::Data::Transform::Format::Upsample(working, options);
                             } else if (needs_downscale) {
                                 // Mixed dimensions larger/smaller: treat as downscale to avoid overshooting.
-                                working = Thot::Data::Transform::Format::Downsample(working, options);
+                                working = Omni::Data::Transform::Format::Downsample(working, options);
                             } else if (needs_upscale) {
-                                working = Thot::Data::Transform::Format::Upsample(working, options);
+                                working = Omni::Data::Transform::Format::Upsample(working, options);
                             }
                         }
 
@@ -1984,4 +1984,4 @@ namespace Thot::Data::Load {
 
 }
 
-#endif //THOT_LOAD_HPP
+#endif //OMNI_LOAD_HPP

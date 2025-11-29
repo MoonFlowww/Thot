@@ -1,5 +1,5 @@
-#ifndef THOT_LRSCHEDULER_REGISTRY_HPP
-#define THOT_LRSCHEDULER_REGISTRY_HPP
+#ifndef OMNI_LRSCHEDULER_REGISTRY_HPP
+#define OMNI_LRSCHEDULER_REGISTRY_HPP
 
 #include <memory>
 #include <type_traits>
@@ -8,7 +8,7 @@
 
 #include "details/cosineannealing.hpp"
 
-namespace Thot::LrScheduler::Details {
+namespace Omni::LrScheduler::Details {
     template <class Owner, class Descriptor>
     std::unique_ptr<Scheduler> build_scheduler(Owner&, torch::optim::Optimizer&, const Descriptor&) {
         static_assert(sizeof(Descriptor) == 0, "Unsupported scheduler descriptor provided to build_scheduler.");
@@ -21,4 +21,4 @@ namespace Thot::LrScheduler::Details {
     }
 }
 
-#endif //THOT_LRSCHEDULER_REGISTRY_HPP
+#endif //OMNI_LRSCHEDULER_REGISTRY_HPP

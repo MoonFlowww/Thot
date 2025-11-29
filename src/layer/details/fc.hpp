@@ -1,5 +1,5 @@
-#ifndef THOT_FC_HPP
-#define THOT_FC_HPP
+#ifndef OMNI_FC_HPP
+#define OMNI_FC_HPP
 
 #include <cstdint>
 #include <stdexcept>
@@ -15,7 +15,7 @@
 #include "../registry.hpp"
 
 
-namespace Thot::Layer::Details {
+namespace Omni::Layer::Details {
     struct FCOptions {
         std::int64_t in_features{};
         std::int64_t out_features{};
@@ -24,9 +24,9 @@ namespace Thot::Layer::Details {
 
     struct FCDescriptor {
         FCOptions options;
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
-        ::Thot::Initialization::Descriptor initialization{::Thot::Initialization::Default};
-        ::Thot::LocalConfig local{};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
+        ::Omni::Initialization::Descriptor initialization{::Omni::Initialization::Default};
+        ::Omni::LocalConfig local{};
     };
     template <class Owner>
     RegisteredLayer build_registered_layer(Owner& owner, const FCDescriptor& descriptor, std::size_t index)
@@ -38,7 +38,7 @@ namespace Thot::Layer::Details {
         auto options = torch::nn::LinearOptions(descriptor.options.in_features, descriptor.options.out_features)
                             .bias(descriptor.options.bias);
         auto module = owner.register_module("fc_" + std::to_string(index), torch::nn::Linear(options));
-        ::Thot::Initialization::Details::apply_module_initialization(module, descriptor);
+        ::Omni::Initialization::Details::apply_module_initialization(module, descriptor);
 
         RegisteredLayer registered_layer{};
         registered_layer.activation = descriptor.activation.type;
@@ -49,4 +49,4 @@ namespace Thot::Layer::Details {
     }
 }
 
-#endif //THOT_FC_HPP
+#endif //OMNI_FC_HPP

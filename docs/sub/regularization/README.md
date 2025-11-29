@@ -1,8 +1,8 @@
 # Regularization Descriptors
-Regularizers in Thot are descriptors that wrap an option struct together with a
+Regularizers in Omni are descriptors that wrap an option struct together with a
 `Details::*` implementation. Descriptors can be attached either globally through
 `Model::set_regularization` or scoped to individual layers via
-[`Thot::LocalConfig`](../local/README.md). During
+[`Omni::LocalConfig`](../local/README.md). During
 [Docs/Training](../training/README.md) the engine evaluates every descriptor once per
 step while remaining compatible with CUDA graph capture.
 
@@ -14,8 +14,8 @@ Apply regularizers to the whole model by passing a vector of descriptors to
 
 ```cpp
 model.set_regularization({ /*vector field*/
-    Thot::Regularization::L2({.coefficient = 5e-5}),
-    Thot::Regularization::ElasticNet({
+    Omni::Regularization::L2({.coefficient = 5e-5}),
+    Omni::Regularization::ElasticNet({
         .l1_coefficient = 2e-6,
         .l2_coefficient = 5e-6,
     }),
@@ -23,12 +23,12 @@ model.set_regularization({ /*vector field*/
 ```
 
 To localise penalties, include them in the `regularization` field of a
-[`Thot::LocalConfig`](../local/README.md):
+[`Omni::LocalConfig`](../local/README.md):
 
 ```cpp
-Thot::LocalConfig decoder_scope{
+Omni::LocalConfig decoder_scope{
     .regularization = { /*vector field*/
-        Thot::Regularization::MaxNorm({
+        Omni::Regularization::MaxNorm({
             .coefficient = 1.0,
             .max_norm = 3.0,
             .dim = 0,
@@ -36,9 +36,9 @@ Thot::LocalConfig decoder_scope{
     },
 };
 
-model.add(Thot::Layer::FC({512, 256, /*bias*/ true},
-                          Thot::Activation::SiLU,
-                          Thot::Initialization::KaimingUniform,
+model.add(Omni::Layer::FC({512, 256, /*bias*/ true},
+                          Omni::Activation::SiLU,
+                          Omni::Initialization::KaimingUniform,
                           decoder_scope),
           "decoder_fc");
 ```
@@ -54,32 +54,32 @@ so you can spot the available options at a glance:
 
 ```cpp
 constexpr std::array kAllRegularizers{
-    Thot::Regularization::L1(),
-    Thot::Regularization::ElasticNet(),
-    Thot::Regularization::GroupLasso(),
-    Thot::Regularization::StructuredL2(),
-    Thot::Regularization::L0HardConcrete(),
-    Thot::Regularization::Orthogonality(),
-    Thot::Regularization::SpectralNorm(),
-    Thot::Regularization::MaxNorm(),
-    Thot::Regularization::KLSparsity(),
-    Thot::Regularization::DeCov(),
-    Thot::Regularization::CenteringVariance(),
-    Thot::Regularization::JacobianNorm(),
-    Thot::Regularization::WGANGP(),
-    Thot::Regularization::R1(),
-    Thot::Regularization::R2(),
-    Thot::Regularization::TRADES(),
-    Thot::Regularization::VAT(),
-    Thot::Regularization::L2(),
-    Thot::Regularization::EWC(),
-    Thot::Regularization::MAS(),
-    Thot::Regularization::SI(),
-    Thot::Regularization::NuclearNorm(),
-    Thot::Regularization::SWA(),
-    Thot::Regularization::SWAG(),
-    Thot::Regularization::FGE(),
-    Thot::Regularization::SFGE(),
+    Omni::Regularization::L1(),
+    Omni::Regularization::ElasticNet(),
+    Omni::Regularization::GroupLasso(),
+    Omni::Regularization::StructuredL2(),
+    Omni::Regularization::L0HardConcrete(),
+    Omni::Regularization::Orthogonality(),
+    Omni::Regularization::SpectralNorm(),
+    Omni::Regularization::MaxNorm(),
+    Omni::Regularization::KLSparsity(),
+    Omni::Regularization::DeCov(),
+    Omni::Regularization::CenteringVariance(),
+    Omni::Regularization::JacobianNorm(),
+    Omni::Regularization::WGANGP(),
+    Omni::Regularization::R1(),
+    Omni::Regularization::R2(),
+    Omni::Regularization::TRADES(),
+    Omni::Regularization::VAT(),
+    Omni::Regularization::L2(),
+    Omni::Regularization::EWC(),
+    Omni::Regularization::MAS(),
+    Omni::Regularization::SI(),
+    Omni::Regularization::NuclearNorm(),
+    Omni::Regularization::SWA(),
+    Omni::Regularization::SWAG(),
+    Omni::Regularization::FGE(),
+    Omni::Regularization::SFGE(),
 };
 ```
 | Descriptor | Category | Key options (default) |

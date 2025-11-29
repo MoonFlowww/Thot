@@ -1,8 +1,8 @@
-#ifndef THOT_LOSS_HELPER_HPP
-#define THOT_LOSS_HELPER_HPP
+#ifndef OMNI_LOSS_HELPER_HPP
+#define OMNI_LOSS_HELPER_HPP
 #include "reduction.hpp"
 
-namespace Thot::Loss::Details {
+namespace Omni::Loss::Details {
 
     inline torch::Tensor apply_reduction_weighted(torch::Tensor loss, const torch::Tensor& weight, Reduction reduction) {
         auto w = weight.to(loss.options()).expand_as(loss);
@@ -21,4 +21,4 @@ namespace Thot::Loss::Details {
         }
     }
 }
-#endif //THOT_LOSS_HELPER_HPP
+#endif //OMNI_LOSS_HELPER_HPP

@@ -1,5 +1,5 @@
-#ifndef THOT_SMOOTH_L1_HPP
-#define THOT_SMOOTH_L1_HPP
+#ifndef OMNI_SMOOTH_L1_HPP
+#define OMNI_SMOOTH_L1_HPP
 
 #include <optional>
 #include <stdexcept>
@@ -7,7 +7,7 @@
 
 #include "helper.hpp"
 
-namespace Thot::Loss::Details {
+namespace Omni::Loss::Details {
     struct SmoothL1Options {
         Reduction reduction{Reduction::Mean};
         std::vector<double> weight{};
@@ -53,4 +53,4 @@ namespace Thot::Loss::Details {
 
 }
 
-#endif // THOT_SMOOTH_L1_HPP
+#endif // OMNI_SMOOTH_L1_HPP

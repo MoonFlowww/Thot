@@ -1,5 +1,5 @@
-#ifndef THOT_ADAM_HPP
-#define THOT_ADAM_HPP
+#ifndef OMNI_ADAM_HPP
+#define OMNI_ADAM_HPP
 // Adam: https://arxiv.org/pdf/1412.6980
 // AdamW: https://arxiv.org/pdf/1711.05101
 // Adan: https://arxiv.org/pdf/2208.06677
@@ -13,7 +13,7 @@
 #include <memory>
 #include <vector>
 
-namespace Thot::Optimizer::Details {
+namespace Omni::Optimizer::Details {
 
     struct AdamOptions {
         double learning_rate{1e-3};
@@ -251,6 +251,6 @@ namespace Thot::Optimizer::Details {
 
     using AdamWOptimizer = AdamW;
 
-} // namespace Thot::Optimizer::Details
+} // namespace Omni::Optimizer::Details
 
-#endif // THOT_ADAM_HPP
+#endif // OMNI_ADAM_HPP

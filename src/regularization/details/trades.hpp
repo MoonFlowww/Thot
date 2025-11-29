@@ -1,11 +1,11 @@
-#ifndef THOT_REGULARIZATION_DETAILS_TRADES_HPP
-#define THOT_REGULARIZATION_DETAILS_TRADES_HPP
+#ifndef OMNI_REGULARIZATION_DETAILS_TRADES_HPP
+#define OMNI_REGULARIZATION_DETAILS_TRADES_HPP
 // "Theoretically Principled Trade-off between Robustness and Accuracy" (TRADES) https://arxiv.org/pdf/1901.08573
 #include <torch/torch.h>
 
 #include "common.hpp"
 
-namespace Thot::Regularization::Details {
+namespace Omni::Regularization::Details {
 
     struct TRADESOptions {
         double coefficient{0.0};
@@ -40,4 +40,4 @@ namespace Thot::Regularization::Details {
 
 }
 
-#endif // THOT_REGULARIZATION_DETAILS_TRADES_HPP
+#endif // OMNI_REGULARIZATION_DETAILS_TRADES_HPP

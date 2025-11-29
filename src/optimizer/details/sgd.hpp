@@ -1,5 +1,5 @@
-#ifndef THOT_SGD_HPP
-#define THOT_SGD_HPP
+#ifndef OMNI_SGD_HPP
+#define OMNI_SGD_HPP
 
 #include <stdexcept>
 #include <torch/torch.h>
@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <memory>
 
-namespace Thot::Optimizer::Details {
+namespace Omni::Optimizer::Details {
 
     struct SGDOptions {
         double learning_rate{1e-2};
@@ -131,6 +131,6 @@ namespace Thot::Optimizer::Details {
 
     using SGDOptimizer = SGD;
 
-} // namespace Thot::Optimizer::Details
+} // namespace Omni::Optimizer::Details
 
-#endif //THOT_SGD_HPP
+#endif //OMNI_SGD_HPP

@@ -1,5 +1,5 @@
-#ifndef THOT_OPTIMIZER_REGISTRY_HPP
-#define THOT_OPTIMIZER_REGISTRY_HPP
+#ifndef OMNI_OPTIMIZER_REGISTRY_HPP
+#define OMNI_OPTIMIZER_REGISTRY_HPP
 
 
 #include <memory>
@@ -17,7 +17,7 @@
 #include "details/lion.hpp"
 #include "details/rmsprop.hpp"
 
-namespace Thot::Optimizer::Details {
+namespace Omni::Optimizer::Details {
     template <class Owner, class Descriptor>
     std::unique_ptr<torch::optim::Optimizer> build_optimizer(Owner&, const Descriptor&) {
         static_assert(sizeof(Descriptor) == 0, "Unsupported optimizer descriptor provided to build_optimizer.");
@@ -96,4 +96,4 @@ namespace Thot::Optimizer::Details {
     }
 }
 
-#endif // THOT_OPTIMIZER_REGISTRY_HPP
+#endif // OMNI_OPTIMIZER_REGISTRY_HPP

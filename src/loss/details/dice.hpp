@@ -1,5 +1,5 @@
-#ifndef THOT_LOSS_DICE_HPP
-#define THOT_LOSS_DICE_HPP
+#ifndef OMNI_LOSS_DICE_HPP
+#define OMNI_LOSS_DICE_HPP
 
 #include <optional>
 #include <stdexcept>
@@ -7,7 +7,7 @@
 
 #include "reduction.hpp"
 
-namespace Thot::Loss::Details {
+namespace Omni::Loss::Details {
 
     struct DiceOptions {
         Reduction reduction{Reduction::Mean};
@@ -67,4 +67,4 @@ namespace Thot::Loss::Details {
 
 }
 
-#endif // THOT_LOSS_DICE_HPP
+#endif // OMNI_LOSS_DICE_HPP

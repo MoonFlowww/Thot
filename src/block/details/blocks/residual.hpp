@@ -1,5 +1,5 @@
-#ifndef THOT_BLOCK_DETAILS_RESIDUAL_HPP
-#define THOT_BLOCK_DETAILS_RESIDUAL_HPP
+#ifndef OMNI_BLOCK_DETAILS_RESIDUAL_HPP
+#define OMNI_BLOCK_DETAILS_RESIDUAL_HPP
 
 #include <cstddef>
 #include <optional>
@@ -14,22 +14,22 @@
 #include "../../../activation/apply.hpp"
 #include "../../../layer/layer.hpp"
 
-namespace Thot::Block::Details {
+namespace Omni::Block::Details {
     struct ResidualSkipOptions {
-        std::optional<::Thot::Layer::Descriptor> projection{};
+        std::optional<::Omni::Layer::Descriptor> projection{};
     };
 
     struct ResidualOutputOptions {
-        ::Thot::Activation::Descriptor final_activation{::Thot::Activation::Identity};
+        ::Omni::Activation::Descriptor final_activation{::Omni::Activation::Identity};
         double dropout{0.0};
     };
 
     struct ResidualDescriptor {
-        std::vector<::Thot::Layer::Descriptor> layers{};
+        std::vector<::Omni::Layer::Descriptor> layers{};
         std::size_t repeats{1};
         ResidualSkipOptions skip{};
         ResidualOutputOptions output{};
-        ::Thot::LocalConfig local{};
+        ::Omni::LocalConfig local{};
     };
 
     class ResidualBlockImpl : public torch::nn::Module {
@@ -47,17 +47,17 @@ namespace Thot::Block::Details {
             std::size_t module_index = 0;
             block_layers_.reserve(descriptor.repeats);
             for (std::size_t repeat = 0; repeat < descriptor.repeats; ++repeat) {
-                std::vector<::Thot::Layer::Details::RegisteredLayer> registered_layers{};
+                std::vector<::Omni::Layer::Details::RegisteredLayer> registered_layers{};
                 registered_layers.reserve(descriptor.layers.size());
                 for (const auto& layer_descriptor : descriptor.layers) {
-                    registered_layers.push_back(::Thot::Layer::Details::build_registered_layer(
+                    registered_layers.push_back(::Omni::Layer::Details::build_registered_layer(
                         *this, layer_descriptor, module_index++));
                 }
                 block_layers_.emplace_back(std::move(registered_layers));
             }
 
             if (descriptor.skip.projection.has_value()) {
-                projection_layer_ = ::Thot::Layer::Details::build_registered_layer(
+                projection_layer_ = ::Omni::Layer::Details::build_registered_layer(
                     *this, *descriptor.skip.projection, module_index++);
             }
 
@@ -93,13 +93,13 @@ namespace Thot::Block::Details {
 
                 for (const auto& layer : layers) {
                     branch = layer.forward(std::move(branch));
-                    branch = ::Thot::Activation::Details::apply(layer.activation, std::move(branch));
+                    branch = ::Omni::Activation::Details::apply(layer.activation, std::move(branch));
                 }
 
                 auto skip_connection = residual;
                 if (projection_layer_.has_value()) {
                     skip_connection = projection_layer_->forward(std::move(skip_connection));
-                    skip_connection = ::Thot::Activation::Details::apply(
+                    skip_connection = ::Omni::Activation::Details::apply(
                         projection_layer_->activation, std::move(skip_connection));
                 }
 
@@ -129,7 +129,7 @@ namespace Thot::Block::Details {
                 }
 
                 branch = std::move(branch) + std::move(skip_connection);
-                branch = ::Thot::Activation::Details::apply(final_activation_, std::move(branch));
+                branch = ::Omni::Activation::Details::apply(final_activation_, std::move(branch));
                 if (dropout_) {
                     branch = dropout_->forward(branch);
                 }
@@ -166,7 +166,7 @@ namespace Thot::Block::Details {
             }
         }
 
-        void apply_tensor_memory_format_to_layer(::Thot::Layer::Details::RegisteredLayer& layer)
+        void apply_tensor_memory_format_to_layer(::Omni::Layer::Details::RegisteredLayer& layer)
         {
             if (!layer.module) {
                 return;
@@ -191,13 +191,13 @@ namespace Thot::Block::Details {
                 apply_tensor_memory_format_to_layer(*projection_layer_);
             }
         }
-        std::vector<std::vector<::Thot::Layer::Details::RegisteredLayer>> block_layers_{};
-        std::optional<::Thot::Layer::Details::RegisteredLayer> projection_layer_{};
-        ::Thot::Activation::Type final_activation_{::Thot::Activation::Type::Identity};
+        std::vector<std::vector<::Omni::Layer::Details::RegisteredLayer>> block_layers_{};
+        std::optional<::Omni::Layer::Details::RegisteredLayer> projection_layer_{};
+        ::Omni::Activation::Type final_activation_{::Omni::Activation::Type::Identity};
         torch::nn::Dropout dropout_{nullptr};
         torch::MemoryFormat preferred_tensor_memory_format_{torch::MemoryFormat::Contiguous};
     };
 
     TORCH_MODULE(ResidualBlock);
 }
-#endif // THOT_BLOCK_DETAILS_RESIDUAL_HPP
+#endif // OMNI_BLOCK_DETAILS_RESIDUAL_HPP

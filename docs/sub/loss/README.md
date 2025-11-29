@@ -3,7 +3,7 @@
 Loss descriptors wrap LibTorch criterion implementations so they can be stored
 inside model graphs, attached to [Docs/Local](../local/README.md) scopes, and reused
 across [Docs/Training](../training/README.md) sessions. Every helper in
-`Thot::Loss` returns a stateless descriptor; the runtime picks the correct
+`Omni::Loss` returns a stateless descriptor; the runtime picks the correct
 implementation at compile time through `std::variant` visitation.
 
 ## Shared conventions
@@ -37,12 +37,12 @@ implementation at compile time through `std::variant` visitation.
 
 ```cpp
 #include <torch/torch.h>
-#include <Thot.h>
+#include <Omni.h>
 
-Thot::Model model{/* module configuration */};
+Omni::Model model{/* module configuration */};
 
-model.set_loss(Thot::Loss::CrossEntropy({
-    .reduction = Thot::Loss::Reduction::Mean,
+model.set_loss(Omni::Loss::CrossEntropy({
+    .reduction = Omni::Loss::Reduction::Mean,
     .use_weight = true,
     .label_smoothing = 0.05
 }));

@@ -1,5 +1,5 @@
-#ifndef THOT_TYPES_HPP
-#define THOT_TYPES_HPP
+#ifndef OMNI_TYPES_HPP
+#define OMNI_TYPES_HPP
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -9,7 +9,7 @@
 
 #include "../transform/format/format.hpp"
 
-namespace Thot::Data::Type {
+namespace Omni::Data::Type {
     enum class ImageRescaleMode {
         None,
         Downscale,
@@ -119,4 +119,4 @@ namespace Thot::Data::Type {
 
     };
 }
-#endif //THOT_TYPES_HPP
+#endif //OMNI_TYPES_HPP

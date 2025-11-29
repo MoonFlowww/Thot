@@ -1,5 +1,5 @@
-#ifndef THOT_GLU_HPP
-#define THOT_GLU_HPP
+#ifndef OMNI_GLU_HPP
+#define OMNI_GLU_HPP
 // "Language Modeling with Gated Convolutional Networks" (GLU activation) https://arxiv.org/pdf/1612.08083
 
 #include <torch/torch.h>
@@ -8,7 +8,7 @@
 
 #include "../activation.hpp"
 
-namespace Thot::Activation::Details {
+namespace Omni::Activation::Details {
 
     struct GLU {
         [[nodiscard]] torch::Tensor operator()(torch::Tensor input) const {
@@ -22,4 +22,4 @@ namespace Thot::Activation::Details {
 
 }
 
-#endif //THOT_GLU_HPP
+#endif //OMNI_GLU_HPP

@@ -1,5 +1,5 @@
-#ifndef THOT_SWIGLU_HPP
-#define THOT_SWIGLU_HPP
+#ifndef OMNI_SWIGLU_HPP
+#define OMNI_SWIGLU_HPP
 // "PaLM: Scaling Language Modeling with Pathways" (introduces SwiGLU) https://arxiv.org/pdf/2204.02311
 #include <torch/torch.h>
 
@@ -8,7 +8,7 @@
 
 #include "../activation.hpp"
 
-namespace Thot::Activation::Details {
+namespace Omni::Activation::Details {
 
     struct SwiGLU {
         [[nodiscard]] torch::Tensor operator()(torch::Tensor input) const {
@@ -26,4 +26,4 @@ namespace Thot::Activation::Details {
 
 }
 
-#endif //THOT_SWIGLU_HPP
+#endif //OMNI_SWIGLU_HPP

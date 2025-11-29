@@ -1,5 +1,5 @@
-#ifndef THOT_DATA_TRANSFORM_AUGMENTATION_ATMOSPHERIC_DRIFT_HPP
-#define THOT_DATA_TRANSFORM_AUGMENTATION_ATMOSPHERIC_DRIFT_HPP
+#ifndef OMNI_DATA_TRANSFORM_AUGMENTATION_ATMOSPHERIC_DRIFT_HPP
+#define OMNI_DATA_TRANSFORM_AUGMENTATION_ATMOSPHERIC_DRIFT_HPP
 
 #include <array>
 #include <optional>
@@ -10,7 +10,7 @@
 
 #include "common.hpp"
 
-namespace Thot::Data::Transform::Augmentation {
+namespace Omni::Data::Transform::Augmentation {
     namespace Options {
         struct AtmosphericDriftOptions {
             std::array<double, 3> atmospheric_color = {0.9, 0.95, 1.0};
@@ -57,4 +57,4 @@ namespace Thot::Data::Transform::Augmentation {
     }
 }
 
-#endif // THOT_DATA_TRANSFORM_AUGMENTATION_ATMOSPHERIC_DRIFT_HPP
+#endif // OMNI_DATA_TRANSFORM_AUGMENTATION_ATMOSPHERIC_DRIFT_HPP

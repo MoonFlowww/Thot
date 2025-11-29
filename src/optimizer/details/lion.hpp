@@ -1,5 +1,5 @@
-#ifndef THOT_LION_HPP
-#define THOT_LION_HPP
+#ifndef OMNI_LION_HPP
+#define OMNI_LION_HPP
 // "Symbolic Discovery of Optimization Algorithms" (Lion) https://arxiv.org/pdf/2302.06675
 #include <algorithm>
 #include <cmath>
@@ -10,7 +10,7 @@
 #include <torch/optim/optimizer.h>
 #include <torch/optim/serialize.h>
 
-namespace Thot::Optimizer::Details {
+namespace Omni::Optimizer::Details {
 
     struct LionOptions : public torch::optim::OptimizerCloneableOptions<LionOptions> {
         LionOptions(double lr = 1e-4) : lr_(lr) {}
@@ -163,4 +163,4 @@ namespace Thot::Optimizer::Details {
 
 }
 
-#endif // THOT_LION_HPP
+#endif // OMNI_LION_HPP

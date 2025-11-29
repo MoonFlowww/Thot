@@ -1,5 +1,5 @@
-#ifndef THOT_TEMPERATURE_SCALING_HPP
-#define THOT_TEMPERATURE_SCALING_HPP
+#ifndef OMNI_TEMPERATURE_SCALING_HPP
+#define OMNI_TEMPERATURE_SCALING_HPP
 #include <atomic>
 #include <memory>
 #include <stdexcept>
@@ -132,4 +132,4 @@ namespace Details {
     }
 
 }
-#endif //THOT_TEMPERATURE_SCALING_HPP
+#endif //OMNI_TEMPERATURE_SCALING_HPP

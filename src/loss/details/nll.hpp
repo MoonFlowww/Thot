@@ -1,5 +1,5 @@
-#ifndef THOT_NLL_HPP
-#define THOT_NLL_HPP
+#ifndef OMNI_NLL_HPP
+#define OMNI_NLL_HPP
 
 #include <optional>
 #include <stdexcept>
@@ -7,7 +7,7 @@
 
 #include "reduction.hpp"
 
-namespace Thot::Loss::Details {
+namespace Omni::Loss::Details {
     struct NegativeLogLikelihoodOptions {
         Reduction reduction{Reduction::Mean};
         std::vector<double> weight{};
@@ -41,4 +41,4 @@ namespace Thot::Loss::Details {
 
 }
 
-#endif // THOT_NLL_HPP
+#endif // OMNI_NLL_HPP

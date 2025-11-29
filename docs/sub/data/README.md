@@ -1,6 +1,6 @@
 # Data Loading, Manipulation, and Diagnostics
 
-The `Thot::Data` toolbox wraps dataset ingestion, augmentation, repair, and
+The `Omni::Data` toolbox wraps dataset ingestion, augmentation, repair, and
 analysis helpers so you can prepare tensors before handing them to
 [Docs/Training](../training/README.md) or [Docs/Evaluation](../evaluation/README.md).
 Factories live under `src/data/details` and are split into four main groups:
@@ -31,7 +31,7 @@ at the default (`false`) to receive CPU tensors.
   Instantiates descriptor-driven readers for CSV/txt/bin sources, stacks
   tensors, optionally shuffles them, then
   applies the requested `Type::GlobalParameters` split.
-  - `Thot::Data::Type` exposes a collection of declarative descriptors so the
+  - `Omni::Data::Type` exposes a collection of declarative descriptors so the
       universal loader can reason about heterogeneous sources:
   - `Type::CSV{"dataset.csv", {.columns = {"x0", "x1"}}}` – pick specific
     columns by header (or index) and stream them as `float32` features.
@@ -105,7 +105,7 @@ deterministic by accepting optional seeds where appropriate.
 
 ### Formatting & resampling
 
-The `Thot::Data::Transform::Format` namespace surfaces two convenience wrappers
+The `Omni::Data::Transform::Format` namespace surfaces two convenience wrappers
 that mirror the new `Layer::Upsample/Downsample` descriptors but can be used on
 raw tensors:
 

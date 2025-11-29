@@ -1,5 +1,5 @@
-#ifndef THOT_LONGFORMER_XL_HPP
-#define THOT_LONGFORMER_XL_HPP
+#ifndef OMNI_LONGFORMER_XL_HPP
+#define OMNI_LONGFORMER_XL_HPP
 // "Longformer: The Long-Document Transformer" — Beltagy https://arxiv.org/pdf/2004.05150
 // and "Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context" https://arxiv.org/pdf/1901.02860
 // Sliding-window self-attention with optional segment-level recurrence for long-context sequence modeling.
@@ -21,9 +21,9 @@
 #include "../../../activation/activation.hpp"
 #include "../../../activation/apply.hpp"
 
-namespace Thot::Block::Details::Transformer::LongformerXL {
-    using ::Thot::Block::Details::Transformer::Classic::Detail::normalise_to_sequence;
-    using ::Thot::Block::Details::Transformer::Classic::Detail::restore_from_sequence;
+namespace Omni::Block::Details::Transformer::LongformerXL {
+    using ::Omni::Block::Details::Transformer::Classic::Detail::normalise_to_sequence;
+    using ::Omni::Block::Details::Transformer::Classic::Detail::restore_from_sequence;
 
     struct AttentionOptions {
         std::int64_t embed_dim{768};
@@ -36,7 +36,7 @@ namespace Thot::Block::Details::Transformer::LongformerXL {
     struct FeedForwardOptions {
         std::int64_t embed_dim{768};
         double mlp_ratio{4.0};
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::GeLU};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::GeLU};
         bool bias{true};
         double dropout{0.0};
     };
@@ -226,7 +226,7 @@ namespace Thot::Block::Details::Transformer::LongformerXL {
                 residual = output;
                 auto ff_input = options_.pre_norm ? norm2_->forward(output) : output;
                 auto hidden = linear1_->forward(ff_input);
-                hidden = ::Thot::Activation::Details::apply(descriptor_.feed_forward.activation.type, std::move(hidden));
+                hidden = ::Omni::Activation::Details::apply(descriptor_.feed_forward.activation.type, std::move(hidden));
                 if (feed_forward_dropout_) {
                     hidden = feed_forward_dropout_->forward(hidden);
                 }
@@ -326,4 +326,4 @@ namespace Thot::Block::Details::Transformer::LongformerXL {
 
 }
 
-#endif //THOT_LONGFORMER_XL_HPP
+#endif //OMNI_LONGFORMER_XL_HPP

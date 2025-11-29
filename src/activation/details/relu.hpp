@@ -1,5 +1,5 @@
-#ifndef THOT_RELU_HPP
-#define THOT_RELU_HPP
+#ifndef OMNI_RELU_HPP
+#define OMNI_RELU_HPP
 
 #include <torch/torch.h>
 
@@ -7,7 +7,7 @@
 
 #include "../activation.hpp"
 
-namespace Thot::Activation::Details {
+namespace Omni::Activation::Details {
     struct ReLU {
         [[nodiscard]] torch::Tensor operator()(torch::Tensor input) const {
             return torch::relu(std::move(input));
@@ -17,4 +17,4 @@ namespace Thot::Activation::Details {
 
 }
 
-#endif //THOT_RELU_HPP
+#endif //OMNI_RELU_HPP

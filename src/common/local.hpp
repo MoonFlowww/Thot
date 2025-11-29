@@ -1,5 +1,5 @@
-#ifndef THOT_COMMON_LOCAL_HPP
-#define THOT_COMMON_LOCAL_HPP
+#ifndef OMNI_COMMON_LOCAL_HPP
+#define OMNI_COMMON_LOCAL_HPP
 
 #include <optional>
 #include <vector>
@@ -8,12 +8,12 @@
 #include "../optimizer/optimizer.hpp"
 #include "../regularization/regularization.hpp"
 
-namespace Thot {
+namespace Omni {
     struct LocalConfig {
-        std::optional<::Thot::Optimizer::Descriptor> optimizer{};
-        std::optional<::Thot::Loss::Descriptor> loss{};
-        std::vector<::Thot::Regularization::Descriptor> regularization{};
+        std::optional<::Omni::Optimizer::Descriptor> optimizer{};
+        std::optional<::Omni::Loss::Descriptor> loss{};
+        std::vector<::Omni::Regularization::Descriptor> regularization{};
     };
 }
 
-#endif // THOT_COMMON_LOCAL_HPP
+#endif // OMNI_COMMON_LOCAL_HPP

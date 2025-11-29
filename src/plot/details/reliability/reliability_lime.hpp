@@ -1,5 +1,5 @@
-#ifndef THOT_RELIABILITY_LIME_HPP
-#define THOT_RELIABILITY_LIME_HPP
+#ifndef OMNI_RELIABILITY_LIME_HPP
+#define OMNI_RELIABILITY_LIME_HPP
 
 #include <algorithm>
 #include <cstddef>
@@ -21,7 +21,7 @@
 #include "../../../utils/gnuplot.hpp"
 #include "reliability_curve_utils.hpp"
 
-namespace Thot::Plot::Details::Reliability {
+namespace Omni::Plot::Details::Reliability {
     namespace detail {
         inline auto ComputeLIMEWeights(torch::Tensor masks,
                                        torch::Tensor outputs,
@@ -76,7 +76,7 @@ namespace Thot::Plot::Details::Reliability {
 
             if (show_weights) {
                 std::ostringstream stream;
-                stream << "[Thot] LIME top features for sample " << sample_index << ":\n";
+                stream << "[Omni] LIME top features for sample " << sample_index << ":\n";
                 for (const auto& [feature, weight] : importances) {
                     stream << "  feature " << feature << ": " << std::fixed << std::setprecision(6)
                            << weight << '\n';
@@ -199,4 +199,4 @@ namespace Thot::Plot::Details::Reliability {
     }
 }
 
-#endif // THOT_RELIABILITY_LIME_HPP
+#endif // OMNI_RELIABILITY_LIME_HPP

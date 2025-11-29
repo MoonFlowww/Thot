@@ -1,5 +1,5 @@
-#ifndef THOT_LOSS_HPP
-#define THOT_LOSS_HPP
+#ifndef OMNI_LOSS_HPP
+#define OMNI_LOSS_HPP
 // This file is a factory, must exempt it from any logical-code. For functions look into "/details"
 #include <variant>
 
@@ -19,7 +19,7 @@
 #include "details/tversky.hpp"
 #include "details/lovasz_softmax.hpp"
 
-namespace Thot::Loss {
+namespace Omni::Loss {
     using Reduction = Details::Reduction;
 
     using Descriptor = std::variant<
@@ -86,4 +86,4 @@ namespace Thot::Loss {
     }
 }
 
-#endif //THOT_LOSS_HPP
+#endif //OMNI_LOSS_HPP

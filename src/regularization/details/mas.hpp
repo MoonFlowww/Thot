@@ -1,9 +1,9 @@
-#ifndef THOT_MAS_HPP
-#define THOT_MAS_HPP
+#ifndef OMNI_MAS_HPP
+#define OMNI_MAS_HPP
 //https://arxiv.org/pdf/1711.09601
 #include <torch/torch.h>
 
-namespace Thot::Regularization::Details {
+namespace Omni::Regularization::Details {
 
     struct MASOptions {
         double strength{0.0};
@@ -41,4 +41,4 @@ namespace Thot::Regularization::Details {
     }
 
 }
-#endif //THOT_MAS_HPP
+#endif //OMNI_MAS_HPP

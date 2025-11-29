@@ -1,5 +1,5 @@
-#ifndef THOT_LAYER_REGISTRY_HPP
-#define THOT_LAYER_REGISTRY_HPP
+#ifndef OMNI_LAYER_REGISTRY_HPP
+#define OMNI_LAYER_REGISTRY_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -12,7 +12,7 @@
 #include <stdexcept>
 
 
-namespace Thot::Layer::Details {
+namespace Omni::Layer::Details {
     template <class Impl>
     [[nodiscard]] inline std::shared_ptr<torch::nn::Module>
     to_shared_module_ptr(const torch::nn::ModuleHolder<Impl>& holder)
@@ -71,9 +71,9 @@ namespace Thot::Layer::Details {
         }
 
         ForwardBinding forward{};
-        ::Thot::Activation::Type activation{::Thot::Activation::Type::Identity};
+        ::Omni::Activation::Type activation{::Omni::Activation::Type::Identity};
         std::shared_ptr<torch::nn::Module> module{};
-        ::Thot::LocalConfig local{};
+        ::Omni::LocalConfig local{};
         std::string name{};
         RegisteredLayer() = default;
 
@@ -202,4 +202,4 @@ namespace Thot::Layer::Details {
 
 
 }
-#endif // THOT_LAYER_REGISTRY_HPP
+#endif // OMNI_LAYER_REGISTRY_HPP

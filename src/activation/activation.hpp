@@ -1,8 +1,8 @@
-#ifndef THOT_ACTIVATION_HPP
-#define THOT_ACTIVATION_HPP
+#ifndef OMNI_ACTIVATION_HPP
+#define OMNI_ACTIVATION_HPP
 // This file is a factory, must exempt it from any logical-code. For functions look into "/details"
 
-namespace Thot::Activation {
+namespace Omni::Activation {
     enum class Type {
         Identity,
         ReLU,
@@ -40,4 +40,4 @@ namespace Thot::Activation {
     inline constexpr Descriptor Swish{Type::Swish};
 }
 
-#endif //THOT_ACTIVATION_HPP
+#endif //OMNI_ACTIVATION_HPP

@@ -1,5 +1,5 @@
-#ifndef THOT_LAYER_RESIZING_HPP
-#define THOT_LAYER_RESIZING_HPP
+#ifndef OMNI_LAYER_RESIZING_HPP
+#define OMNI_LAYER_RESIZING_HPP
 
 #include <cstdint>
 #include <stdexcept>
@@ -13,7 +13,7 @@
 #include "../../common/local.hpp"
 #include "../registry.hpp"
 
-namespace Thot {
+namespace Omni {
     enum class UpsampleMode {
         Nearest,
         Bilinear,
@@ -27,7 +27,7 @@ namespace Thot {
     };
 }
 
-namespace Thot::Layer::Details {
+namespace Omni::Layer::Details {
 
     inline torch::nn::functional::InterpolateFuncOptions::mode_t to_interpolate_mode(UpsampleMode mode)
     {
@@ -146,14 +146,14 @@ namespace Thot::Layer::Details {
 
     struct UpsampleDescriptor {
         UpsampleOptions options{};
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
-        ::Thot::LocalConfig local{};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
+        ::Omni::LocalConfig local{};
     };
 
     struct DownsampleDescriptor {
         DownsampleOptions options{};
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
-        ::Thot::LocalConfig local{};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
+        ::Omni::LocalConfig local{};
     };
 
     template <class Owner>
@@ -183,4 +183,4 @@ namespace Thot::Layer::Details {
     }
 }
 
-#endif // THOT_LAYER_RESIZING_HPP
+#endif // OMNI_LAYER_RESIZING_HPP

@@ -1,5 +1,5 @@
-#ifndef THOT_DATA_TRANSFORM_AUGMENTATION_CLOUD_OCCLUSION_HPP
-#define THOT_DATA_TRANSFORM_AUGMENTATION_CLOUD_OCCLUSION_HPP
+#ifndef OMNI_DATA_TRANSFORM_AUGMENTATION_CLOUD_OCCLUSION_HPP
+#define OMNI_DATA_TRANSFORM_AUGMENTATION_CLOUD_OCCLUSION_HPP
 
 #include <array>
 #include <optional>
@@ -10,7 +10,7 @@
 
 #include "common.hpp"
 
-namespace Thot::Data::Transform::Augmentation {
+namespace Omni::Data::Transform::Augmentation {
     namespace Options {
         struct CloudOcclusionOptions {
             int64_t max_clouds = 4;
@@ -72,4 +72,4 @@ namespace Thot::Data::Transform::Augmentation {
     }
 }
 
-#endif // THOT_DATA_TRANSFORM_AUGMENTATION_CLOUD_OCCLUSION_HPP
+#endif // OMNI_DATA_TRANSFORM_AUGMENTATION_CLOUD_OCCLUSION_HPP

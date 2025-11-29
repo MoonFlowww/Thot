@@ -1,6 +1,6 @@
 # Layers Reference
 
-The `Thot::Layer` namespace exposes typed factory helpers that wrap LibTorch
+The `Omni::Layer` namespace exposes typed factory helpers that wrap LibTorch
 modules with the framework's activation, initialization, and locality wiring.  
 Each helper follows the `Layer(options, activation, initialization, local)`
 signature (activation defaults to `Identity`, initialization to
@@ -11,24 +11,24 @@ of their option structures.
 ## Usage
 
 ```cpp
-Thot::Model model("Classifier");
-model.add("fc1", Thot::Layer::FC(
+Omni::Model model("Classifier");
+model.add("fc1", Omni::Layer::FC(
     {.in_features = 128, .out_features = 64, .bias = true},               // options struct
-    Thot::Activation::ReLU,                                               // activation override
-    Thot::Initialization::HeNormal,                                       // w&B initialisation
-    {.optimizer = Thot::Optimizer::AdamW({.learning_rate = 1e-3})}        // optional local config
+    Omni::Activation::ReLU,                                               // activation override
+    Omni::Initialization::HeNormal,                                       // w&B initialisation
+    {.optimizer = Omni::Optimizer::AdamW({.learning_rate = 1e-3})}        // optional local config
 ));
 ```
 
 The descriptor tuple mirrors the common calling pattern used throughout the
 framework: an options aggregate for the underlying LibTorch module, followed by
 an activation decorator, an initialization policy, and (optionally) a
-`Thot::LocalConfig` carrying per-layer/per-block overrides.
+`Omni::LocalConfig` carrying per-layer/per-block overrides.
 
 
 ## Linear
 
-### `Thot::Layer::FC(...)`
+### `Omni::Layer::FC(...)`
 *Options type:* `FCOptions`
 - `in_features` *(int64)* – number of input features. Must be positive.
 - `out_features` *(int64)* – number of output features. Must be positive.
@@ -36,7 +36,7 @@ an activation decorator, an initialization policy, and (optionally) a
 
 ## Convolution
 
-### `Thot::Layer::Conv1d(...)`
+### `Omni::Layer::Conv1d(...)`
 *Options type:* `Conv1dOptions`
 - `in_channels` *(int64)* – number of input channels. Must be positive.
 - `out_channels` *(int64)* – number of output channels. Must be positive.
@@ -52,7 +52,7 @@ an activation decorator, an initialization policy, and (optionally) a
 - `padding_mode` *(string, default: `"zeros"`)* – one of `zeros`, `reflect`,
   `replicate`, or `circular`.
 
-### `Thot::Layer::Conv2d(...)`
+### `Omni::Layer::Conv2d(...)`
 *Options type:* `Conv2dOptions`
 - `in_channels` *(int64)* – number of input channels. Must be positive.
 - `out_channels` *(int64)* – number of output channels. Must be positive.
@@ -67,7 +67,7 @@ an activation decorator, an initialization policy, and (optionally) a
 
 ## Normalization
 
-### `Thot::Layer::BatchNorm2d(...)`
+### `Omni::Layer::BatchNorm2d(...)`
 *Options type:* `BatchNorm2dOptions`
 - `num_features` *(int64)* – channel dimension to normalize. Must be positive.
 - `eps` *(double, default: `1e-5`)* – numerical stability term added to the
@@ -83,7 +83,7 @@ Pooling layers share the `PoolingDescriptor` wrapper and therefore the same
 optional activation/local hooks. Each option structure maps directly to a
 LibTorch pooling module.
 
-### `Thot::Layer::MaxPool1d(...)`
+### `Omni::Layer::MaxPool1d(...)`
 *Options type:* `MaxPool1dOptions`
 - `kernel_size` *(vector<int64>, default: `{2}`)* – window size.
 - `stride` *(vector<int64>)* – optional stride; defaults to kernel size when
@@ -93,7 +93,7 @@ LibTorch pooling module.
 - `ceil_mode` *(bool, default: `false`)* – use `ceil` instead of `floor` when
   computing the output length.
 
-### `Thot::Layer::AvgPool1d(...)`
+### `Omni::Layer::AvgPool1d(...)`
 *Options type:* `AvgPool1dOptions`
 - `kernel_size` *(vector<int64>, default: `{2}`)* – window size.
 - `stride` *(vector<int64>)* – optional stride.
@@ -102,15 +102,15 @@ LibTorch pooling module.
 - `count_include_pad` *(bool, default: `false`)* – include padded zeros in the
   average.
 
-### `Thot::Layer::AdaptiveAvgPool1d`
+### `Omni::Layer::AdaptiveAvgPool1d`
 *Options type:* `AdaptiveAvgPool1dOptions`
 - `output_size` *(vector<int64>, default: `{1}`)* – requested output length.
 
-### `Thot::Layer::AdaptiveMaxPool1d`
+### `Omni::Layer::AdaptiveMaxPool1d`
 *Options type:* `AdaptiveMaxPool1dOptions`
 - `output_size` *(vector<int64>, default: `{1}`)* – requested output length.
 
-### `Thot::Layer::MaxPool2d(...)`
+### `Omni::Layer::MaxPool2d(...)`
 *Options type:* `MaxPool2dOptions`
 - `kernel_size` *(vector<int64>, default: `{2, 2}`)* – spatial window.
 - `stride` *(vector<int64>)* – optional stride; defaults to kernel size when
@@ -119,7 +119,7 @@ LibTorch pooling module.
 - `dilation` *(vector<int64>, default: `{1, 1}`)* – dilation factor.
 - `ceil_mode` *(bool, default: `false`)* – use `ceil` output shape.
 
-### `Thot::Layer::AvgPool2d(...)`
+### `Omni::Layer::AvgPool2d(...)`
 *Options type:* `AvgPool2dOptions`
 - `kernel_size` *(vector<int64>, default: `{2, 2}`)* – spatial window.
 - `stride` *(vector<int64>)* – optional stride.
@@ -128,26 +128,26 @@ LibTorch pooling module.
 - `count_include_pad` *(bool, default: `false`)* – include padded zeros in the
   average.
 
-### `Thot::Layer::AdaptiveAvgPool2d(...)`
+### `Omni::Layer::AdaptiveAvgPool2d(...)`
 *Options type:* `AdaptiveAvgPool2dOptions`
 - `output_size` *(vector<int64>, default: `{1, 1}`)* – requested output height
   and width.
 
-### `Thot::Layer::AdaptiveMaxPool2d(...)`
+### `Omni::Layer::AdaptiveMaxPool2d(...)`
 *Options type:* `AdaptiveMaxPool2dOptions`
 - `output_size` *(vector<int64>, default: `{1, 1}`)* – requested output height
   and width.
 
 ## Dropout
 
-### `Thot::Layer::HardDropout(...)`
+### `Omni::Layer::HardDropout(...)`
 *Options type:* `HardDropoutOptions`
 - `probability` *(double, default: `0.5`)* – probability of masking a unit.
   Must lie in `[0, 1)`.
 - `inplace` *(bool, default: `false`)* – modify the input tensor in-place when
   gradients are not required.
 
-### `Thot::Layer::SoftDropout(...)`
+### `Omni::Layer::SoftDropout(...)`
 *Options type:* `SoftDropoutOptions`
 - `probability` *(double, default: `0.5`)* – probability of sampling the noisy
   branch. Must lie in `[0, 1)` and strictly less than `1`.
@@ -161,7 +161,7 @@ LibTorch pooling module.
 
 ## Shape
 
-### `Thot::Layer::Flatten(...)`
+### `Omni::Layer::Flatten(...)`
 *Options type:* `FlattenOptions`
 - `start_dim` *(int64, default: `1`)* – first dimension to flatten.
 - `end_dim` *(int64, default: `-1`)* – last dimension to flatten. Accepts
@@ -175,7 +175,7 @@ of the graph. They are particularly handy when you need to harmonize feature map
 resolutions inside multi-branch CNNs or ViT-style backbones without switching to
 custom blocks.
 
-### `Thot::Layer::Upsample(...)`
+### `Omni::Layer::Upsample(...)`
 *Options type:* `UpsampleOptions`
 - `scale` *(vector<double>, default: `{2.0, 2.0}`)* – multiplicative factors per
   spatial dimension. Provide as many entries as there are spatial axes.
@@ -186,7 +186,7 @@ custom blocks.
 - `recompute_scale_factor` *(bool, default: `false`)* – instruct LibTorch to
   recompute scaling each forward pass instead of caching derived sizes.
 
-### `Thot::Layer::Downsample(...)`
+### `Omni::Layer::Downsample(...)`
 *Options type:* `DownsampleOptions`
 - `scale` *(vector<double>, default: `{2.0, 2.0}`)* – ratio between the input
   and desired output. Values are inverted internally so `2.0` halves the spatial
@@ -203,7 +203,7 @@ custom blocks.
 All recurrent descriptors accept the usual activation/initialization overrides
 and honor the `local` configuration flags in addition to the options listed.
 
-### `Thot::Layer::RNN(...)`
+### `Omni::Layer::RNN(...)`
 *Options type:* `RNNOptions`
 - `input_size` *(int64)* – features per input step. Must be positive.
 - `hidden_size` *(int64)* – hidden state size. Must be positive.
@@ -216,7 +216,7 @@ and honor the `local` configuration flags in addition to the options listed.
 - `nonlinearity` *(string, default: `"tanh"`)* – activation for the recurrent
   cell (`"tanh"` or `"relu"`).
 
-### `Thot::Layer::LSTM(...)`
+### `Omni::Layer::LSTM(...)`
 *Options type:* `LSTMOptions`
 - `input_size` *(int64)* – features per time-step. Must be positive.
 - `hidden_size` *(int64)* – hidden state size. Must be positive.
@@ -233,14 +233,14 @@ and honor the `local` configuration flags in addition to the options listed.
   CUDA.
 - `benchmark_cudnn` *(bool, default: `true`)* – enable cuDNN benchmarking.
 
-### `Thot::Layer::xLSTM(...)`
+### `Omni::Layer::xLSTM(...)`
 *Options type:* `xLSTMOptions` (alias of `LSTMOptions`)
 
 In addition to the `LSTMOptions` fields above, the implementation honours the
 `forget_gate_bias`, `allow_tf32`, and `benchmark_cudnn` knobs while keeping LibTorch
 compatibility.
 
-### `Thot::Layer::GRU(...)`
+### `Omni::Layer::GRU(...)`
 *Options type:* `GRUOptions`
 - `input_size` *(int64)* – features per time-step. Must be positive.
 - `hidden_size` *(int64)* – hidden state size. Must be positive.
@@ -257,7 +257,7 @@ compatibility.
 
 ## Sequence State-Space
 
-### `Thot::Layer::S4(...)`
+### `Omni::Layer::S4(...)`
 *Options type:* `S4Options`
 - `input_size` *(int64)* – features per input step. Must be positive.
 - `state_size` *(int64)* – size of the internal state vector. Must be positive.
@@ -276,7 +276,7 @@ compatibility.
 
 ## Tensor Reduction
 
-### `Thot::Layer::Reduce(...)`
+### `Omni::Layer::Reduce(...)`
 *Options type:* `ReduceOptions`
 - `op` *(enum, default: `Mean`)* – reduction op (`Sum`, `Mean`, `Max`, `Min`).
 - `dims` *(vector<int64>)* – axes to reduce. Empty list reduces across all
@@ -286,7 +286,7 @@ compatibility.
 
 ## Vision Utilities
 
-### `Thot::Layer::PatchUnembed(...)`
+### `Omni::Layer::PatchUnembed(...)`
 *Options type:* `PatchUnembedOptions`
 - `channels` *(int64, default: `1`)* – number of channels represented by each
   token.
@@ -313,8 +313,8 @@ experiment.
 
 #### HyperLinks related:
 - [Docs/Introduction](../../README.md) (`model.add()`)
-- [Docs/Activations](../activation/README.md) (`Thot::Activation::*`)
-- [Docs/Initialization](../initialization/README.md) (`Thot::Initialization::*`)
+- [Docs/Activations](../activation/README.md) (`Omni::Activation::*`)
+- [Docs/Initialization](../initialization/README.md) (`Omni::Initialization::*`)
 - [Docs/Local](../local/README.md) (`model.links()`)
 
 

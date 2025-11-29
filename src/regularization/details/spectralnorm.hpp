@@ -1,11 +1,11 @@
-#ifndef THOT_REGULARIZATION_DETAILS_SPECTRALNORM_HPP
-#define THOT_REGULARIZATION_DETAILS_SPECTRALNORM_HPP
+#ifndef OMNI_REGULARIZATION_DETAILS_SPECTRALNORM_HPP
+#define OMNI_REGULARIZATION_DETAILS_SPECTRALNORM_HPP
 // "Spectral Normalization for Generative Adversarial Networks" https://arxiv.org/pdf/1802.05957
 #include <torch/torch.h>
 
 #include <tuple>
 
-namespace Thot::Regularization::Details {
+namespace Omni::Regularization::Details {
 
     struct SpectralNormOptions {
         double coefficient{0.0};
@@ -39,4 +39,4 @@ namespace Thot::Regularization::Details {
 
 }
 
-#endif // THOT_REGULARIZATION_DETAILS_SPECTRALNORM_HPP
+#endif // OMNI_REGULARIZATION_DETAILS_SPECTRALNORM_HPP

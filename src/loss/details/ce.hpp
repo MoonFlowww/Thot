@@ -1,5 +1,5 @@
-#ifndef THOT_CE_HPP
-#define THOT_CE_HPP
+#ifndef OMNI_CE_HPP
+#define OMNI_CE_HPP
 #include <optional>
 #include <stdexcept>
 #include <torch/torch.h>
@@ -7,7 +7,7 @@
 
 #include "reduction.hpp"
 
-namespace Thot::Loss::Details {
+namespace Omni::Loss::Details {
     struct CrossEntropyOptions {
         Reduction reduction{Reduction::Mean};
         std::vector<double> weight{};
@@ -36,4 +36,4 @@ namespace Thot::Loss::Details {
         return torch::nn::functional::cross_entropy(prediction, target, opts);
     }
 }
-#endif //THOT_CE_HPP
+#endif //OMNI_CE_HPP

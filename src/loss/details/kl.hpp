@@ -1,5 +1,5 @@
-#ifndef THOT_LOSS_KL_HPP
-#define THOT_LOSS_KL_HPP
+#ifndef OMNI_LOSS_KL_HPP
+#define OMNI_LOSS_KL_HPP
 #include <optional>
 #include <stdexcept>
 
@@ -7,7 +7,7 @@
 
 #include "reduction.hpp"
 
-namespace Thot::Loss::Details {
+namespace Omni::Loss::Details {
     struct KLDivOptions {
         Reduction reduction{Reduction::Mean};
         bool log_target{false};
@@ -53,4 +53,4 @@ namespace Thot::Loss::Details {
         return torch::nn::functional::kl_div(input, tgt, opts);
     }
 }
-#endif //THOT_LOSS_KL_HPP
+#endif //OMNI_LOSS_KL_HPP

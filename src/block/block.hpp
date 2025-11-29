@@ -1,5 +1,5 @@
-#ifndef THOT_BLOCK_HPP
-#define THOT_BLOCK_HPP
+#ifndef OMNI_BLOCK_HPP
+#define OMNI_BLOCK_HPP
 // This file is an factory, must exempt it from any logical-code. For functions look into "/details"
 #include <cstddef>
 #include <initializer_list>
@@ -21,7 +21,7 @@
 #include "details/transformers/perceiver.hpp"
 #include "details/transformers/longformer_xl.hpp"
 
-namespace Thot::Block {
+namespace Omni::Block {
     namespace Details::Transformer::Bert {
         struct EncoderDescriptor;
     }
@@ -45,22 +45,22 @@ namespace Thot::Block {
                                     Transformer::Perceiver::EncoderDescriptor,
                                     Transformer::LongformerXL::EncoderDescriptor>;
 
-    [[nodiscard]] inline auto Sequential(std::initializer_list<::Thot::Layer::Descriptor> layers, ::Thot::LocalConfig local = {}) -> SequentialDescriptor {
+    [[nodiscard]] inline auto Sequential(std::initializer_list<::Omni::Layer::Descriptor> layers, ::Omni::LocalConfig local = {}) -> SequentialDescriptor {
         SequentialDescriptor descriptor{};
         descriptor.layers.assign(layers.begin(), layers.end());
         descriptor.local = std::move(local);
         return descriptor;
     }
 
-    [[nodiscard]] inline auto Sequential(std::vector<::Thot::Layer::Descriptor> layers, ::Thot::LocalConfig local = {}) -> SequentialDescriptor {
+    [[nodiscard]] inline auto Sequential(std::vector<::Omni::Layer::Descriptor> layers, ::Omni::LocalConfig local = {}) -> SequentialDescriptor {
         SequentialDescriptor descriptor{};
         descriptor.layers = std::move(layers);
         descriptor.local = std::move(local);
         return descriptor;
     }
 
-    [[nodiscard]] inline auto Residual(std::initializer_list<::Thot::Layer::Descriptor> layers,
-            std::size_t repeats = 1, Details::ResidualSkipOptions skip = {}, Details::ResidualOutputOptions output = {}, ::Thot::LocalConfig local = {}) -> ResidualDescriptor {
+    [[nodiscard]] inline auto Residual(std::initializer_list<::Omni::Layer::Descriptor> layers,
+            std::size_t repeats = 1, Details::ResidualSkipOptions skip = {}, Details::ResidualOutputOptions output = {}, ::Omni::LocalConfig local = {}) -> ResidualDescriptor {
         ResidualDescriptor descriptor{};
         descriptor.layers.assign(layers.begin(), layers.end());
         descriptor.repeats = repeats;
@@ -70,8 +70,8 @@ namespace Thot::Block {
         return descriptor;
     }
 
-    [[nodiscard]] inline auto Residual(std::vector<::Thot::Layer::Descriptor> layers,
-            std::size_t repeats = 1, Details::ResidualSkipOptions skip = {}, Details::ResidualOutputOptions output = {}, ::Thot::LocalConfig local = {}) -> ResidualDescriptor {
+    [[nodiscard]] inline auto Residual(std::vector<::Omni::Layer::Descriptor> layers,
+            std::size_t repeats = 1, Details::ResidualSkipOptions skip = {}, Details::ResidualOutputOptions output = {}, ::Omni::LocalConfig local = {}) -> ResidualDescriptor {
         ResidualDescriptor descriptor{};
         descriptor.layers = std::move(layers);
         descriptor.repeats = repeats;
@@ -82,4 +82,4 @@ namespace Thot::Block {
     }
 }
 
-#endif //THOT_BLOCK_HPP
+#endif //OMNI_BLOCK_HPP

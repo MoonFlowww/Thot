@@ -1,6 +1,6 @@
 # Saving and Loading Models
 
-Thot serialises models as a pair of files inside the target directory:
+Omni serialises models as a pair of files inside the target directory:
 
 - `architecture.json` – human-readable description of the module graph, including
   block/layer descriptors, `LocalConfig` overrides, loss/optimizer/regularisation
@@ -8,10 +8,10 @@ Thot serialises models as a pair of files inside the target directory:
 - `parameters.binary` – TorchScript archive containing module parameters and
   buffers.
 
-Invoke `Model::save(path)` after building your network; Thot ensures the target
+Invoke `Model::save(path)` after building your network; Omni ensures the target
 folder exists and will prompt before overwriting when the directory already
 exists. Confirming the prompt causes the existing files to be rewritten in
-place—Thot does not create temporary files or offer atomic guarantees for the
+place—Omni does not create temporary files or offer atomic guarantees for the
 update. During `Model::load`:
 
 1. `architecture.json` is parsed and replayed by calling `Model::add()` for each
@@ -20,7 +20,7 @@ update. During `Model::load`:
    attachments are restored before parameters are loaded.
 3. `parameters.binary` is read into a validation archive to verify every
    parameter/buffer key and tensor shape matches the freshly constructed model.
-   Thot raises explicit errors when shapes diverge, preventing silent corruption.
+   Omni raises explicit errors when shapes diverge, preventing silent corruption.
 4. Once validated, tensors are loaded into the module and `configure_step_impl()`
    is invoked to rebuild execution plans, CUDA graphs, and regularisation state.
 

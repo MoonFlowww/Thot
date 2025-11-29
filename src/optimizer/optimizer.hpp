@@ -1,5 +1,5 @@
-#ifndef THOT_OPTIMIZER_HPP
-#define THOT_OPTIMIZER_HPP
+#ifndef OMNI_OPTIMIZER_HPP
+#define OMNI_OPTIMIZER_HPP
 #include <variant>
 
 #include "registry.hpp"
@@ -16,7 +16,7 @@
 #include "details/rmsprop.hpp"
 
 
-namespace Thot::Optimizer {
+namespace Omni::Optimizer {
     using SGDOptions = Details::SGDOptions;
     using SGDDescriptor = Details::SGDDescriptor;
 
@@ -131,4 +131,4 @@ namespace Thot::Optimizer {
 
 }
 
-#endif //THOT_OPTIMIZER_HPP
+#endif //OMNI_OPTIMIZER_HPP

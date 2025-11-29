@@ -1,4 +1,4 @@
-#ifndef THOT_CCE_HPP
-#define THOT_CCE_HPP
+#ifndef OMNI_CCE_HPP
+#define OMNI_CCE_HPP
 
-#endif //THOT_CCE_HPP
+#endif //OMNI_CCE_HPP

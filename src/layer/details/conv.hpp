@@ -1,5 +1,5 @@
-#ifndef THOT_CONV_HPP
-#define THOT_CONV_HPP
+#ifndef OMNI_CONV_HPP
+#define OMNI_CONV_HPP
 //https://hal.science/hal-05083427/document
 #include <cstdint>
 #include <string>
@@ -13,7 +13,7 @@
 #include "../../common/local.hpp"
 #include "../registry.hpp"
 
-namespace Thot::Layer::Details {
+namespace Omni::Layer::Details {
 
 
     struct Conv1dOptions {
@@ -30,9 +30,9 @@ namespace Thot::Layer::Details {
 
     struct Conv1dDescriptor {
         Conv1dOptions options{};
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
-        ::Thot::Initialization::Descriptor initialization{::Thot::Initialization::Default};
-        ::Thot::LocalConfig local{};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
+        ::Omni::Initialization::Descriptor initialization{::Omni::Initialization::Default};
+        ::Omni::LocalConfig local{};
     };
 
 
@@ -50,9 +50,9 @@ namespace Thot::Layer::Details {
 
     struct Conv2dDescriptor {
         Conv2dOptions options{};
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
-        ::Thot::Initialization::Descriptor initialization{::Thot::Initialization::Default};
-        ::Thot::LocalConfig local{};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
+        ::Omni::Initialization::Descriptor initialization{::Omni::Initialization::Default};
+        ::Omni::LocalConfig local{};
     };
 
     template <typename T, typename = void>
@@ -126,7 +126,7 @@ namespace Thot::Layer::Details {
                 apply_memory_format(module, torch::MemoryFormat::ChannelsLast);
             }
         }
-        ::Thot::Initialization::Details::apply_module_initialization(module, descriptor);
+        ::Omni::Initialization::Details::apply_module_initialization(module, descriptor);
 
         RegisteredLayer registered_layer{};
         registered_layer.activation = descriptor.activation.type;
@@ -180,7 +180,7 @@ namespace Thot::Layer::Details {
                 apply_memory_format(module, torch::MemoryFormat::ChannelsLast);
             }
         }
-        ::Thot::Initialization::Details::apply_module_initialization(module, descriptor);
+        ::Omni::Initialization::Details::apply_module_initialization(module, descriptor);
 
         RegisteredLayer registered_layer{};
         registered_layer.activation = descriptor.activation.type;
@@ -192,4 +192,4 @@ namespace Thot::Layer::Details {
 
 }
 
-#endif //THOT_CONV_HPP
+#endif //OMNI_CONV_HPP

@@ -1,5 +1,5 @@
-#ifndef THOT_LAYER_REDUCE_HPP
-#define THOT_LAYER_REDUCE_HPP
+#ifndef OMNI_LAYER_REDUCE_HPP
+#define OMNI_LAYER_REDUCE_HPP
 #include <algorithm>
 #include <cstdint>
 #include <numeric>
@@ -12,7 +12,7 @@
 #include "../../common/local.hpp"
 #include "../registry.hpp"
 
-namespace Thot::Layer::Details {
+namespace Omni::Layer::Details {
 
     enum class ReduceOp {
         Sum,
@@ -124,8 +124,8 @@ namespace Thot::Layer::Details {
 
     struct ReduceDescriptor {
         ReduceOptions options{};
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
-        ::Thot::LocalConfig local{};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
+        ::Omni::LocalConfig local{};
     };
 
     template <class Owner>
@@ -142,4 +142,4 @@ namespace Thot::Layer::Details {
     }
 
 }
-#endif //THOT_LAYER_REDUCE_HPP
+#endif //OMNI_LAYER_REDUCE_HPP

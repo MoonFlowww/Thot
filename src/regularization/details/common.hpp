@@ -1,5 +1,5 @@
-#ifndef THOT_REGULARIZATION_DETAILS_COMMON_HPP
-#define THOT_REGULARIZATION_DETAILS_COMMON_HPP
+#ifndef OMNI_REGULARIZATION_DETAILS_COMMON_HPP
+#define OMNI_REGULARIZATION_DETAILS_COMMON_HPP
 
 #include <torch/torch.h>
 
@@ -7,7 +7,7 @@
 #include <numeric>
 #include <vector>
 
-namespace Thot::Regularization::Details::detail {
+namespace Omni::Regularization::Details::detail {
 
     [[nodiscard]] inline torch::Tensor zeros_like_optional(const torch::Tensor& reference)
     {
@@ -35,4 +35,4 @@ namespace Thot::Regularization::Details::detail {
 
 }
 
-#endif // THOT_REGULARIZATION_DETAILS_COMMON_HPP
+#endif // OMNI_REGULARIZATION_DETAILS_COMMON_HPP

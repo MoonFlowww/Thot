@@ -1,5 +1,5 @@
-#ifndef THOT_MUON_HPP
-#define THOT_MUON_HPP
+#ifndef OMNI_MUON_HPP
+#define OMNI_MUON_HPP
 // Muon, AdaMuon, MuonManifold
 // Muon: https://arxiv.org/pdf/2502.16982
 // AdaMuon: https://arxiv.org/pdf/2507.11005
@@ -16,7 +16,7 @@
 #include <torch/optim/optimizer.h>
 #include <torch/optim/serialize.h>
 
-namespace Thot::Optimizer::Details {
+namespace Omni::Optimizer::Details {
 
     namespace detail {
         namespace muon {
@@ -547,4 +547,4 @@ namespace Thot::Optimizer::Details {
     using MuonManifold = detail::MuonOptimizerImpl<MuonManifoldOptions, MuonManifoldState, muon_manifold_step_>;
 }
 
-#endif //THOT_MUON_HPP
+#endif //OMNI_MUON_HPP

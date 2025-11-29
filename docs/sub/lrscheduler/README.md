@@ -1,6 +1,6 @@
 # Learning Rate Schedulers
 
-Schedulers in `Thot::LrScheduler` are thin descriptors layered on top of LibTorch
+Schedulers in `Omni::LrScheduler` are thin descriptors layered on top of LibTorch
 optimizers. Pair them with [Docs/Optimizer](../optimizer/README.md) descriptors via
 `Model::set_optimizer` or `LocalConfig` to control the learning rate schedule per
 module.
@@ -29,10 +29,10 @@ When you advance the scheduler once per optimizer update, express `T_max` and
 number of batches.
 
 ```cpp
-Thot::Model model("CosineWarmup");
+Omni::Model model("CosineWarmup");
 
 model.set_optimizer(
-    Thot::Optimizer::AdamW({
+    Omni::Optimizer::AdamW({
         .learning_rate = 3e-4,
         .beta1 = 0.9,
         .beta2 = 0.999,
@@ -40,7 +40,7 @@ model.set_optimizer(
         .weight_decay = 1e-2,
         .amsgrad = false,
     }),
-    Thot::LrScheduler::CosineAnnealing({
+    Omni::LrScheduler::CosineAnnealing({
         .T_max = steps_per_epoch * epochs,
         .eta_min = 3e-6,
         .warmup_steps = 5 * steps_per_epoch,

@@ -1,5 +1,5 @@
-#ifndef THOT_RELIABILITY_GRADCAM_HPP
-#define THOT_RELIABILITY_GRADCAM_HPP
+#ifndef OMNI_RELIABILITY_GRADCAM_HPP
+#define OMNI_RELIABILITY_GRADCAM_HPP
 
 #include <algorithm>
 #include <array>
@@ -19,9 +19,9 @@
 #include "../data.hpp"
 #include "reliability_curve_utils.hpp"
 
-namespace Thot::Plot::Details::Reliability {
+namespace Omni::Plot::Details::Reliability {
     namespace detail {
-        inline auto ResolveModules(Thot::Model& model) -> std::vector<std::shared_ptr<torch::nn::Module>>
+        inline auto ResolveModules(Omni::Model& model) -> std::vector<std::shared_ptr<torch::nn::Module>>
         {
             auto modules = model.modules(/*include_self=*/false);
             std::vector<std::shared_ptr<torch::nn::Module>> filtered;
@@ -39,7 +39,7 @@ namespace Thot::Plot::Details::Reliability {
 
 
 
-        inline auto ResolveTargetLayer(Thot::Model& model,
+        inline auto ResolveTargetLayer(Omni::Model& model,
                                        std::optional<std::size_t> requested)
             -> std::shared_ptr<torch::nn::Module>
         {
@@ -318,4 +318,4 @@ namespace Thot::Plot::Details::Reliability {
         (void)images;
     }
 }
-#endif // THOT_RELIABILITY_GRADCAM_HPP
+#endif // OMNI_RELIABILITY_GRADCAM_HPP

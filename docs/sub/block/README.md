@@ -1,6 +1,6 @@
 # Block Containers and Transformer Blueprints
 
-The `Thot::Block` namespace bundles higher-level containers that stitch layers
+The `Omni::Block` namespace bundles higher-level containers that stitch layers
 into reusable macro-architectures. Blocks honour the same activation,
 initialization, and [Docs/Local](../local/README.md) overrides accepted by individual
 [Docs/Layers](../layer/README.md), letting you mix coarse and fine-grained
@@ -21,44 +21,44 @@ Build a residual-flavoured sequential block and register it on a model with the 
 
 Sequential Block:
 ```cpp
-Thot::Model model("resnet_tiny");
+Omni::Model model("resnet_tiny");
 
-model.add(Thot::Block::Sequential({
-    Thot::Layer::Conv2d(
-        Thot::Layer::Conv2dOptions{
+model.add(Omni::Block::Sequential({
+    Omni::Layer::Conv2d(
+        Omni::Layer::Conv2dOptions{
             .in_channels = 3,
             .out_channels = 64,
             .kernel_size = {3, 3},
             .stride = {1, 1},
             .padding = {1, 1}
         },
-        Thot::Activation::ReLU),
-    Thot::Layer::BatchNorm2d(Thot::Layer::BatchNorm2dOptions{.num_features = 64}),
-    Thot::Layer::Conv2d(
-        Thot::Layer::Conv2dOptions{
+        Omni::Activation::ReLU),
+    Omni::Layer::BatchNorm2d(Omni::Layer::BatchNorm2dOptions{.num_features = 64}),
+    Omni::Layer::Conv2d(
+        Omni::Layer::Conv2dOptions{
             .in_channels = 64,
             .out_channels = 64,
             .kernel_size = {3, 3},
             .stride = {1, 1},
             .padding = {1, 1}
         },
-        Thot::Activation::ReLU)
+        Omni::Activation::ReLU)
 }));
 ```
 Residual Block:
 ```cpp
-model.add(Thot::Block::Residual({
-    Thot::Layer::Conv2d(
-        Thot::Layer::Conv2dOptions{
+model.add(Omni::Block::Residual({
+    Omni::Layer::Conv2d(
+        Omni::Layer::Conv2dOptions{
             .in_channels = 64,
             .out_channels = 64,
             .kernel_size = {3, 3},
             .stride = {1, 1},
             .padding = {1, 1}
         },
-        Thot::Activation::ReLU),
-    Thot::Layer::Conv2d(
-        Thot::Layer::Conv2dOptions{
+        Omni::Activation::ReLU),
+    Omni::Layer::Conv2d(
+        Omni::Layer::Conv2dOptions{
             .in_channels = 64,
             .out_channels = 64,
             .kernel_size = {3, 3},

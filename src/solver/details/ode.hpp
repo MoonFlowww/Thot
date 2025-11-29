@@ -1,10 +1,10 @@
-#ifndef THOT_SOLVER_DETAILS_ODE_HPP
-#define THOT_SOLVER_DETAILS_ODE_HPP
+#ifndef OMNI_SOLVER_DETAILS_ODE_HPP
+#define OMNI_SOLVER_DETAILS_ODE_HPP
 
 #include <cmath>
 #include <stdexcept>
 
-namespace Thot::Solver::Details {
+namespace Omni::Solver::Details {
 
     inline torch::Tensor integrate_ode(const Descriptor& descriptor,
                                        torch::Tensor state,
@@ -44,4 +44,4 @@ namespace Thot::Solver::Details {
 
 }
 
-#endif // THOT_SOLVER_DETAILS_ODE_HPP
+#endif // OMNI_SOLVER_DETAILS_ODE_HPP

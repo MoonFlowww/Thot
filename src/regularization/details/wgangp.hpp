@@ -1,9 +1,9 @@
-#ifndef THOT_REGULARIZATION_DETAILS_WGANGP_HPP
-#define THOT_REGULARIZATION_DETAILS_WGANGP_HPP
+#ifndef OMNI_REGULARIZATION_DETAILS_WGANGP_HPP
+#define OMNI_REGULARIZATION_DETAILS_WGANGP_HPP
 
 #include <torch/torch.h>
 
-namespace Thot::Regularization::Details {
+namespace Omni::Regularization::Details {
 
     struct WGANGPOptions {
         double coefficient{0.0};
@@ -29,4 +29,4 @@ namespace Thot::Regularization::Details {
 
 }
 
-#endif // THOT_REGULARIZATION_DETAILS_WGANGP_HPP
+#endif // OMNI_REGULARIZATION_DETAILS_WGANGP_HPP

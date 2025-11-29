@@ -1,9 +1,9 @@
-#ifndef THOT_REGULARIZATION_DETAILS_ELASTICNET_HPP
-#define THOT_REGULARIZATION_DETAILS_ELASTICNET_HPP
+#ifndef OMNI_REGULARIZATION_DETAILS_ELASTICNET_HPP
+#define OMNI_REGULARIZATION_DETAILS_ELASTICNET_HPP
 
 #include <torch/torch.h>
 
-namespace Thot::Regularization::Details {
+namespace Omni::Regularization::Details {
 
     struct ElasticNetOptions {
         double l1_coefficient{0.0};
@@ -33,4 +33,4 @@ namespace Thot::Regularization::Details {
 
 }
 
-#endif // THOT_REGULARIZATION_DETAILS_ELASTICNET_HPP
+#endif // OMNI_REGULARIZATION_DETAILS_ELASTICNET_HPP

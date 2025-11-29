@@ -1,5 +1,5 @@
-#ifndef THOT_LRSCHEDULER_COSINEANNEALING_HPP
-#define THOT_LRSCHEDULER_COSINEANNEALING_HPP
+#ifndef OMNI_LRSCHEDULER_COSINEANNEALING_HPP
+#define OMNI_LRSCHEDULER_COSINEANNEALING_HPP
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -12,7 +12,7 @@
 
 #include "common.hpp"
 
-namespace Thot::LrScheduler::Details {
+namespace Omni::LrScheduler::Details {
     struct CosineAnnealingOptions {
         std::size_t T_max{1};
         double eta_min{0.0};
@@ -93,4 +93,4 @@ namespace Thot::LrScheduler::Details {
     };
 }
 
-#endif //THOT_LRSCHEDULER_COSINEANNEALING_HPP
+#endif //OMNI_LRSCHEDULER_COSINEANNEALING_HPP

@@ -1,11 +1,11 @@
-#ifndef THOT_DATA_TRANSFORM_NORMALIZATION_EHLERS_HPP
-#define THOT_DATA_TRANSFORM_NORMALIZATION_EHLERS_HPP
+#ifndef OMNI_DATA_TRANSFORM_NORMALIZATION_EHLERS_HPP
+#define OMNI_DATA_TRANSFORM_NORMALIZATION_EHLERS_HPP
 
 #include <torch/torch.h>
 #include "common.hpp"
 
 
-namespace Thot::Data::Transform::Normalization {
+namespace Omni::Data::Transform::Normalization {
 
     // Fisher transform on a bounded oscillator x in (-1,1).
     namespace Options {
@@ -27,4 +27,4 @@ namespace Thot::Data::Transform::Normalization {
     //TODO: Implement Ehler loops for 2d timeseries
 }
 
-#endif // THOT_DATA_TRANSFORM_NORMALIZATION_EHLERS_HPP
+#endif // OMNI_DATA_TRANSFORM_NORMALIZATION_EHLERS_HPP

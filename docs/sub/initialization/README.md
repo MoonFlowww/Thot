@@ -1,13 +1,13 @@
 # Parameter Initialization
 
-Thot exposes a small set of ready-made initialization descriptors that can be
+Omni exposes a small set of ready-made initialization descriptors that can be
 attached to any layer or block descriptor. Each descriptor is a thin wrapper
 around the corresponding LibTorch initializer and is completely stateless – you
-select the strategy by passing one of the `Thot::Initialization::*` constants
+select the strategy by passing one of the `Omni::Initialization::*` constants
 when building your model.
 
 ```cpp
-model.add(Thot::Layer::FC({...}, Thot::Activation::ReLU, Thot::Initialization::HeUniform));
+model.add(Omni::Layer::FC({...}, Omni::Activation::ReLU, Omni::Initialization::HeUniform));
 ```
 
 ## Available descriptors
@@ -31,5 +31,5 @@ change).
 
 #### HyperLinks related:
 - [Docs/Introduction](../../README.md) (`model.add()`)
-- [Docs/Activations](../activation/README.md) (`Thot::Activation::*`)
+- [Docs/Activations](../activation/README.md) (`Omni::Activation::*`)
 

@@ -1,5 +1,5 @@
-#ifndef THOT_FLATTEN_HPP
-#define THOT_FLATTEN_HPP
+#ifndef OMNI_FLATTEN_HPP
+#define OMNI_FLATTEN_HPP
 #include <cstdint>
 #include <utility>
 
@@ -9,7 +9,7 @@
 #include "../../common/local.hpp"
 #include "../registry.hpp"
 
-namespace Thot::Layer::Details {
+namespace Omni::Layer::Details {
 
     struct FlattenOptions {
         std::int64_t start_dim{1};
@@ -51,8 +51,8 @@ namespace Thot::Layer::Details {
 
     struct FlattenDescriptor {
         FlattenOptions options{};
-        ::Thot::Activation::Descriptor activation{::Thot::Activation::Identity};
-        ::Thot::LocalConfig local{};
+        ::Omni::Activation::Descriptor activation{::Omni::Activation::Identity};
+        ::Omni::LocalConfig local{};
     };
 
     template <class Owner>
@@ -70,4 +70,4 @@ namespace Thot::Layer::Details {
 
 }
 
-#endif //THOT_FLATTEN_HPP
+#endif //OMNI_FLATTEN_HPP

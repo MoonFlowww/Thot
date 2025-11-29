@@ -1,5 +1,5 @@
-#ifndef THOT_COSINE_EMBEDDING_HPP
-#define THOT_COSINE_EMBEDDING_HPP
+#ifndef OMNI_COSINE_EMBEDDING_HPP
+#define OMNI_COSINE_EMBEDDING_HPP
 
 #include <optional>
 #include <stdexcept>
@@ -9,7 +9,7 @@
 //TODO: rework
 // - using single path : std::visit([&](const auto& d){ return Loss::Details::compute(d, prediction, target, weight); }, *loss_descriptor_);
 //      --> Cos Embedd expect 2 inputs
-namespace Thot::Loss::Details {
+namespace Omni::Loss::Details {
 
     struct CosineEmbeddingOptions {
         Reduction reduction{Reduction::Mean};
@@ -63,4 +63,4 @@ namespace Thot::Loss::Details {
 
 }
 
-#endif // THOT_COSINE_EMBEDDING_HPP
+#endif // OMNI_COSINE_EMBEDDING_HPP

@@ -1,11 +1,11 @@
-#ifndef THOT_REGULARIZATION_DETAILS_MAXNORM_HPP
-#define THOT_REGULARIZATION_DETAILS_MAXNORM_HPP
+#ifndef OMNI_REGULARIZATION_DETAILS_MAXNORM_HPP
+#define OMNI_REGULARIZATION_DETAILS_MAXNORM_HPP
 
 #include <torch/torch.h>
 
 #include "common.hpp"
 
-namespace Thot::Regularization::Details {
+namespace Omni::Regularization::Details {
 
     struct MaxNormOptions {
         double coefficient{0.0};
@@ -37,4 +37,4 @@ namespace Thot::Regularization::Details {
 
 }
 
-#endif // THOT_REGULARIZATION_DETAILS_MAXNORM_HPP
+#endif // OMNI_REGULARIZATION_DETAILS_MAXNORM_HPP

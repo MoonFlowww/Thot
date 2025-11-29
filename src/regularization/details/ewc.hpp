@@ -1,9 +1,9 @@
-#ifndef THOT_EWC_HPP
-#define THOT_EWC_HPP
+#ifndef OMNI_EWC_HPP
+#define OMNI_EWC_HPP
 // https://arxiv.org/pdf/1612.00796
 #include <torch/torch.h>
 
-namespace Thot::Regularization::Details {
+namespace Omni::Regularization::Details {
 
     struct EWCOptions {
         double strength{0.0};
@@ -42,4 +42,4 @@ namespace Thot::Regularization::Details {
 
 }
 
-#endif //THOT_EWC_HPP
+#endif //OMNI_EWC_HPP

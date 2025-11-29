@@ -1,12 +1,12 @@
-#ifndef THOT_RMSPROP_HPP
-#define THOT_RMSPROP_HPP
+#ifndef OMNI_RMSPROP_HPP
+#define OMNI_RMSPROP_HPP
 
 #include <torch/torch.h>
 #include <vector>
 #include <algorithm>
 #include <memory>
 
-namespace Thot::Optimizer::Details {
+namespace Omni::Optimizer::Details {
 
     struct RMSpropOptions {
         double learning_rate{1e-2};
@@ -166,4 +166,4 @@ namespace Thot::Optimizer::Details {
 
 }
 
-#endif // THOT_RMSPROP_HPP
+#endif // OMNI_RMSPROP_HPP
