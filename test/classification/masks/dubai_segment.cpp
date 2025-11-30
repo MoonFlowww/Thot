@@ -974,14 +974,47 @@ int main() {
 
         auto geodesic_clean = geodesic0.where(finite_mask, torch::full_like(geodesic0, replacement));
 
-        float d_min = 0.0f;
-        float d_max = 0.0f;
-        if (finite_vals.numel() > 0) {
-            d_min = finite_vals.min().item<float>();
-            d_max = finite_vals.max().item<float>();
-        }
-        std::cout << "geodesic min/max = " << d_min << " / " << d_max << "\n";
+        float d_min  = 0.0f;
+        float d_max  = 0.0f;
+        float d_mean = 0.0f;
+        float d_std  = 0.0f;
+        float p05    = 0.0f;
+        float p20    = 0.0f;
+        float p50    = 0.0f;
+        float p80    = 0.0f;
+        float p95    = 0.0f;
+        float p99    = 0.0f;
 
+        if (finite_vals.numel() > 0) {
+            d_min  = finite_vals.min().item<float>();
+            d_max  = finite_vals.max().item<float>();
+            d_mean = finite_vals.mean().item<float>();
+            d_std  = finite_vals.std().item<float>();
+
+            auto q = torch::tensor({0.05, 0.20, 0.50, 0.80, 0.95, 0.99}, torch::TensorOptions().dtype(finite_vals.scalar_type()).device(finite_vals.device()));
+            auto q_values = torch::quantile(finite_vals, q);
+
+            p05 = q_values[0].item<float>();
+            p20 = q_values[1].item<float>();
+            p50 = q_values[2].item<float>();
+            p80 = q_values[3].item<float>();
+            p95 = q_values[4].item<float>();
+            p99 = q_values[5].item<float>();
+        }
+
+
+        std::cout << std::fixed << std::setprecision(6);
+        std::cout << "geodesic0 stats (finite values only):\n";
+        std::cout << "  min  : " << d_min  << "\n";
+        std::cout << "  max  : " << d_max  << "\n";
+        std::cout << "  mean : " << d_mean << "\n";
+        std::cout << "  std  : " << d_std  << "\n";
+        std::cout << "  p05  : " << p05    << "\n";
+        std::cout << "  p20  : " << p20    << "\n";
+        std::cout << "  p50  : " << p50    << "\n";
+        std::cout << "  p80  : " << p80    << "\n";
+        std::cout << "  p95  : " << p95    << "\n";
+        std::cout << "  p99  : " << p99    << "\n";
         float range = d_max - d_min;
         auto d_norm = range > 1e-12f ? (geodesic_clean - d_min) / range : torch::zeros_like(geodesic_clean);
         auto d_rgb  = d_norm.unsqueeze(0).repeat({3, 1, 1});
