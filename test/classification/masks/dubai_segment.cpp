@@ -945,11 +945,22 @@ int main() {
         torch::Tensor labels0, geodesic0;
         std::tie(labels0, geodesic0) = RunGeodesicVoronoi(density, centers0);
 
-        auto d_min = geodesic0.min().item<float>();
-        auto d_max = geodesic0.max().item<float>();
+        auto finite_mask = torch::isfinite(geodesic0);
+        auto finite_vals = geodesic0.masked_select(finite_mask);
+        float replacement = finite_vals.numel() > 0 ? finite_vals.max().item<float>() : 0.0f;
+
+        auto geodesic_clean = geodesic0.where(finite_mask, torch::full_like(geodesic0, replacement));
+
+        float d_min = 0.0f;
+        float d_max = 0.0f;
+        if (finite_vals.numel() > 0) {
+            d_min = finite_vals.min().item<float>();
+            d_max = finite_vals.max().item<float>();
+        }
         std::cout << "geodesic min/max = " << d_min << " / " << d_max << "\n";
 
-        auto d_norm = (geodesic0 - d_min) / (d_max - d_min + 1e-6f);
+        float range = d_max - d_min;
+        auto d_norm = range > 1e-12f ? (geodesic_clean - d_min) / range : torch::zeros_like(geodesic_clean);
         auto d_rgb  = d_norm.unsqueeze(0).repeat({3, 1, 1});
 
         Nott::Plot::Data::Image(
