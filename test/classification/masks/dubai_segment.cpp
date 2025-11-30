@@ -116,47 +116,44 @@ namespace {
     }
 
 
-    std::pair<torch::Tensor, torch::Tensor> RunGeodesicVoronoi(const torch::Tensor& density_hw, const std::vector<Center>& centers) {
-        constexpr float D_eps = 1e-6f;
-        // D(x): geodesic density as defined in the paper (Eq. (2))
-        auto D = density_hw.to(torch::kFloat32).to(torch::kCPU).contiguous();
+    // centers[l] must have fields .y and .x (int64-compatible).
+    std::pair<torch::Tensor, torch::Tensor>
+    RunGeodesicVoronoi(const torch::Tensor& density_hw,
+                            const std::vector<Center>& centers)
+    {
+        using torch::indexing::None;
 
-        // Replace non-finite densities to prevent zero-velocity regions that
-        // yield infinite geodesic distances. We use the maximum finite density
-        // (or 1.0 if none) as a conservative fallback and clamp the minimum to
-        // D_eps.
-        auto finite_mask  = torch::isfinite(D);
-        auto finite_vals  = D.masked_select(finite_mask);
+        constexpr double D_eps = 1e-6;
 
-        // Replace non-finite densities with a robust fallback and clamp outliers
-        // to keep the velocity field well-behaved. Large densities shrink the
-        // velocity (V = 1/D) and produce enormous geodesic distances; we cap
-        // densities to a high percentile of the finite values instead of the
-        // absolute maximum to avoid a handful of extreme pixels dominating the
-        // field. Similarly, we keep a conservative positive floor to avoid
-        // zero-velocity regions.
-        float fallback_D = 1.0f;
-        float max_D_cap  = 1.0f;
+        TORCH_CHECK(density_hw.dim() == 2, "RunGeodesicVoronoi: density must be 2D (H×W)");
 
-        if (finite_vals.numel() > 0) {
-            auto q = torch::tensor({0.95, 0.99}, torch::TensorOptions()
-                .dtype(finite_vals.scalar_type())
-                .device(finite_vals.device()));
-            auto qv = torch::quantile(finite_vals, q);
+        // Work in double on CPU for numerical robustness
+        auto D = density_hw.to(torch::kFloat64).to(torch::kCPU).contiguous();
 
-            // 95th percentile is a stable replacement for bad pixels; 99th
-            // percentile sets an upper cap for the remaining densities.
-            fallback_D = qv[0].item<float>();
-            max_D_cap  = qv[1].item<float>();
+        // ---------------------------------------------------------------------
+        // 1) Sanitize and normalize density D(x)
+        // ---------------------------------------------------------------------
+        auto finite_mask = torch::isfinite(D);
+        auto finite_vals = D.masked_select(finite_mask);
+        TORCH_CHECK(finite_vals.numel() > 0, "RunGeodesicVoronoi: density has no finite values");
 
-            fallback_D = std::max(fallback_D, D_eps);
-            max_D_cap  = std::max(max_D_cap, fallback_D);
-        }
+        auto q = torch::tensor({0.01, 0.50, 0.99},
+                               torch::TensorOptions().dtype(torch::kFloat64)
+                                                     .device(torch::kCPU));
+        auto qv = torch::quantile(finite_vals, q);
 
+        double D_lo  = std::max(qv[0].item<double>(), D_eps);
+        double D_med = std::max(qv[1].item<double>(), D_lo);
+        double D_hi  = std::max(qv[2].item<double>(), D_med);
+
+        double fallback_D = D_med;
+
+        // Replace non-finite with median and clamp robustly
         D = D.where(finite_mask, torch::full_like(D, fallback_D));
-        D = torch::clamp(D, D_eps, max_D_cap);
+        D = torch::clamp(D, D_lo, D_hi);
 
-        TORCH_CHECK(D.dim() == 2, "RunGeodesicVoronoi: density must be 2D (H×W)");
+        // Normalize so that median(D) ≈ 1 (only rescales all distances)
+        D = D / D_med;
 
         const int64_t H = D.size(0);
         const int64_t W = D.size(1);
@@ -164,36 +161,51 @@ namespace {
 
         TORCH_CHECK(N > 0, "RunGeodesicVoronoi: no centers");
 
-        // Total density and average density area A (Eq. (4))
-        float total_D = D.sum().item<float>();
-        float A = total_D / static_cast<float>(N);
+        // Total density and A as in the paper
+        double total_D = D.sum().item<double>();
+        double A = total_D / static_cast<double>(N);
 
-        // Unnormalized Gaussian G^0_{σ0} used in the structure term (Eq. (10))
-        auto gaussian0 = [A](float x) {
-            constexpr float alpha = 0.5f;   // α ∈ [0.5, 1] as in the paper
-            constexpr float eps   = 1e-12f;
-            float sigma0 = A / alpha;       // σ0 = A / α
-            if (sigma0 <= eps) return 1.0f;
-            float z = x / sigma0;
-            return std::exp(-0.5f * z * z); // unnormalized Gaussian
+        // ---------------------------------------------------------------------
+        // 2) Structure-sensitive Gaussian term G^0_{σ0}
+        // ---------------------------------------------------------------------
+        auto gaussian0 = [A](double x) {
+            constexpr double alpha = 0.5;   // α ∈ [0.5, 1]
+            constexpr double eps   = 1e-12;
+            double sigma0 = A / alpha;      // σ0 = A / α
+            if (sigma0 <= eps)
+                return 1.0;                 // degenerate case: fall back to V(x)
+
+            double z        = x / sigma0;
+            double exponent = -0.5 * z * z;
+
+            // Very negative exponent would underflow to 0 in double anyway;
+            // leave it and clamp later.
+            if (exponent < -80.0)
+                return 0.0;
+
+            return std::exp(exponent);
         };
 
-        auto labels = torch::full(
-            {H, W}, -1,
-            torch::TensorOptions().dtype(torch::kLong).device(torch::kCPU));
+        // ---------------------------------------------------------------------
+        // 3) Outputs: labels and geodesic distances
+        // ---------------------------------------------------------------------
+        auto labels = torch::full({H, W}, -1,
+                                  torch::TensorOptions().dtype(torch::kLong)
+                                                        .device(torch::kCPU));
 
-        auto dist = torch::full(
-            {H, W}, std::numeric_limits<float>::infinity(),
-            torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
+        auto dist = torch::full({H, W},
+                                std::numeric_limits<double>::infinity(),
+                                torch::TensorOptions().dtype(torch::kFloat64)
+                                                      .device(torch::kCPU));
 
         auto lacc = labels.accessor<int64_t, 2>();
-        auto tacc = dist.accessor<float, 2>();
-        auto dacc = D.accessor<float, 2>();
+        auto tacc = dist.accessor<double,  2>();
+        auto dacc = D    .accessor<double,  2>();
 
-        // A_l(d) accumulated per label l (Eq. (10))
-        std::vector<float> area_l(N, 0.0f);
+        // A_l(d) per label l
+        std::vector<double> area_l(N, 0.0);
 
-        using Node = std::tuple<float,int64_t,int64_t,int64_t>; // (dist, y, x, l)
+        using Node = std::tuple<double, int64_t, int64_t, int64_t>; // (dist, y, x, l)
         struct Cmp {
             bool operator()(const Node& a, const Node& b) const {
                 return std::get<0>(a) > std::get<0>(b);
@@ -201,32 +213,34 @@ namespace {
         };
         std::priority_queue<Node, std::vector<Node>, Cmp> pq;
 
-        // Initialize with centers
+        // Initialize queue with centers
         for (int64_t l = 0; l < N; ++l) {
             int64_t cy = centers[l].y;
             int64_t cx = centers[l].x;
             if (cy < 0 || cy >= H || cx < 0 || cx >= W)
                 continue;
             lacc[cy][cx] = l;
-            tacc[cy][cx] = 0.0f;
-            pq.emplace(0.0f, cy, cx, l);
+            tacc[cy][cx] = 0.0;
+            pq.emplace(0.0, cy, cx, l);
         }
 
         const int dy[4] = {+1, -1,  0,  0};
         const int dx[4] = { 0,  0, +1, -1};
 
-        constexpr float g_min = 1e-3f;     // numerical floor for Gaussian
+        constexpr double g_min = 1e-4;   // floor for Gaussian term
 
-        // Multi-source Dijkstra as fast-marching approximation
+        // ---------------------------------------------------------------------
+        // 4) Multi-source Dijkstra / fast-marching
+        // ---------------------------------------------------------------------
         while (!pq.empty()) {
             auto [cd, y, x, l] = pq.top();
             pq.pop();
 
-            // Skip outdated node
+            // Skip outdated queue entries
             if (cd > tacc[y][x])
                 continue;
 
-            // Update A_l(d) with current pixel (Eq. (10)): A_l += D(x)
+            // Update A_l(d) with current pixel
             area_l[l] += dacc[y][x];
 
             for (int k = 0; k < 4; ++k) {
@@ -235,25 +249,24 @@ namespace {
                 if (ny < 0 || ny >= H || nx < 0 || nx >= W)
                     continue;
 
-                float Dnbr = dacc[ny][nx];
+                double Dnbr = dacc[ny][nx];
                 if (!std::isfinite(Dnbr))
                     continue;
 
-                float Dsafe = std::max(Dnbr, D_eps);
+                double Dsafe = std::max(Dnbr, D_eps);
 
-                // Base velocity V(x) = 1 / D(x) (Eq. (8))
-                float Vx = 1.0f / Dsafe;
+                // Base velocity V(x) = 1 / D(x)
+                double Vx = 1.0 / Dsafe;
 
-                // Structure-sensitive velocity term (Eq. (10))
-                float deltaA = std::max(0.0f, area_l[l] - A);
-                float g = gaussian0(deltaA);
-                if (g < g_min) g = g_min;   // prevent vanishing velocity
+                // Structure-sensitive factor
+                double deltaA = std::max(0.0, area_l[l] - A);
+                double g      = gaussian0(deltaA);
+                if (g < g_min)
+                    g = g_min;
 
-                float Vl = Vx * g;
-
-                // Eikonal step: Δd ≈ step_length / V_l (Eq. (11))
-                float step = 1.0f;          // grid spacing
-                float nd   = cd + step / Vl;
+                double Vl   = Vx * g;
+                double step = 1.0;        // grid spacing
+                double nd   = cd + step / Vl;
 
                 if (nd < tacc[ny][nx]) {
                     tacc[ny][nx] = nd;
@@ -263,8 +276,11 @@ namespace {
             }
         }
 
-        return {labels, dist};
+        // Return distances as float32 if desired
+        auto dist_f = dist.to(torch::kFloat32);
+        return {labels, dist_f};
     }
+
 
 
     // ==========================================
@@ -988,7 +1004,7 @@ int main() {
     // std::tie(x1, y1) = Nott::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
     // std::tie(x1, y1) = Nott::Data::Manipulation::Cutout(x1, y1, {{-1, -1}, {32, 32}, {-1,-1,-1}, 1.f, false, false});
 
-    constexpr int kNumSuperpixels = 8;
+    constexpr int kNumSuperpixels = 16;
 
     auto input_overlay = BuildSuperpixelOverlay(X.index({0}), kNumSuperpixels);
     Nott::Plot::Data::Image(input_overlay.unsqueeze(0), {0}, Nott::Plot::Data::ImagePlotOptions{.layoutTitle = "Input with superpixel segmentation", .showColorBox = true});
