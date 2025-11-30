@@ -119,41 +119,34 @@ namespace {
     // centers[l] must have fields .y and .x (int64-compatible).
     std::pair<torch::Tensor, torch::Tensor>
     RunGeodesicVoronoi(const torch::Tensor& density_hw,
-                            const std::vector<Center>& centers)
+                       const std::vector<Center>& centers)
     {
         using torch::indexing::None;
 
         constexpr double D_eps = 1e-6;
 
-        TORCH_CHECK(density_hw.dim() == 2, "RunGeodesicVoronoi: density must be 2D (H×W)");
+        TORCH_CHECK(density_hw.dim() == 2,
+                    "RunGeodesicVoronoi: density must be 2D (H×W)");
 
-        // Work in double on CPU for numerical robustness
+        // Work in double on CPU
         auto D = density_hw.to(torch::kFloat64).to(torch::kCPU).contiguous();
 
         // ---------------------------------------------------------------------
-        // 1) Sanitize and normalize density D(x)
+        // 1) Minimal sanitization of D(x)
         // ---------------------------------------------------------------------
         auto finite_mask = torch::isfinite(D);
         auto finite_vals = D.masked_select(finite_mask);
-        TORCH_CHECK(finite_vals.numel() > 0, "RunGeodesicVoronoi: density has no finite values");
 
-        auto q = torch::tensor({0.01, 0.50, 0.99},
-                               torch::TensorOptions().dtype(torch::kFloat64)
-                                                     .device(torch::kCPU));
-        auto qv = torch::quantile(finite_vals, q);
+        TORCH_CHECK(finite_vals.numel() > 0,
+                    "RunGeodesicVoronoi: density has no finite values");
 
-        double D_lo  = std::max(qv[0].item<double>(), D_eps);
-        double D_med = std::max(qv[1].item<double>(), D_lo);
-        double D_hi  = std::max(qv[2].item<double>(), D_med);
+        // Use median of finite values as a robust fallback for bad pixels
+        auto median_t = std::get<0>(finite_vals.median(/*dim=*/0, /*keepdim=*/false));
+        double fallback_D = std::max(median_t.item<double>(), D_eps);
 
-        double fallback_D = D_med;
-
-        // Replace non-finite with median and clamp robustly
+        // Replace non-finite with fallback, clamp only the minimum
         D = D.where(finite_mask, torch::full_like(D, fallback_D));
-        D = torch::clamp(D, D_lo, D_hi);
-
-        // Normalize so that median(D) ≈ 1 (only rescales all distances)
-        D = D / D_med;
+        D = torch::clamp_min(D, D_eps);
 
         const int64_t H = D.size(0);
         const int64_t W = D.size(1);
@@ -177,12 +170,7 @@ namespace {
 
             double z        = x / sigma0;
             double exponent = -0.5 * z * z;
-
-            // Very negative exponent would underflow to 0 in double anyway;
-            // leave it and clamp later.
-            if (exponent < -80.0)
-                return 0.0;
-
+            // Use double; underflow to ~0 only for very large |z|
             return std::exp(exponent);
         };
 
@@ -276,10 +264,11 @@ namespace {
             }
         }
 
-        // Return distances as float32 if desired
+        // Return distances as float32 if that’s what the rest of your pipeline uses
         auto dist_f = dist.to(torch::kFloat32);
         return {labels, dist_f};
     }
+
 
 
 
@@ -327,15 +316,30 @@ namespace {
                     "ComputeDensity expects RGB [3,H,W]");
 
         auto img = img_chw.to(torch::kFloat32).to(torch::kCPU).contiguous();
-        const int64_t C = img.size(0);
         const int64_t H = img.size(1);
         const int64_t W = img.size(2);
+
+        // Convert to Lab so chroma differences contribute strongly to ||∇I||.
+        // This avoids treating e.g. "green water vs white sand" as similar when
+        // luminance is close but colors differ significantly.
+        auto img_hwc = img.permute({1, 2, 0}).contiguous();
+        cv::Mat img_rgb(H, W, CV_32FC3, img_hwc.data_ptr<float>());
+        cv::Mat img_lab;
+        cv::cvtColor(img_rgb, img_lab, cv::COLOR_RGB2Lab);
+        auto img_lab_tensor = torch::from_blob(
+            img_lab.data,
+            {H, W, 3},
+            torch::TensorOptions().dtype(torch::kFloat32));
+
+        // Clone to own memory because the cv::Mat buffer will go out of scope.
+        auto img_for_grad = img_lab_tensor.clone().permute({2, 0, 1}).contiguous();
+        const int64_t C = img_for_grad.size(0);
 
         // 1) gradient magnitude ||∇I|| over color channels
         auto grad_mag = torch::zeros({H, W},
             torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
 
-        auto iacc = img.accessor<float, 3>();
+        auto iacc = img_for_grad.accessor<float, 3>();
         auto gacc = grad_mag.accessor<float, 2>();
 
         for (int64_t y = 1; y + 1 < H; ++y) {
