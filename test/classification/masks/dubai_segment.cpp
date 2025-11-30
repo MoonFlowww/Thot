@@ -116,29 +116,33 @@ namespace {
     }
 
 
-    std::pair<torch::Tensor, torch::Tensor> RunGeodesicVoronoi(
-        const torch::Tensor& density_hw,
-        const std::vector<Center>& centers)
-    {
-        // density_hw: D(x) from Eq. (2), shape [H,W]
+    std::pair<torch::Tensor, torch::Tensor> RunGeodesicVoronoi(const torch::Tensor& density_hw, const std::vector<Center>& centers) {
+        // D(x): geodesic density as defined in the paper (Eq. (2))
         auto D = density_hw.to(torch::kFloat32)
-                            .to(torch::kCPU)
-                            .contiguous();
+                             .to(torch::kCPU)
+                             .contiguous();
 
-        TORCH_CHECK(D.dim() == 2,
-                    "RunGeodesicVoronoi: density must be 2D [H,W]");
+        TORCH_CHECK(D.dim() == 2, "RunGeodesicVoronoi: density must be 2D (H×W)");
 
         const int64_t H = D.size(0);
         const int64_t W = D.size(1);
         const int64_t N = static_cast<int64_t>(centers.size());
+
         TORCH_CHECK(N > 0, "RunGeodesicVoronoi: no centers");
 
-        // Optional: normalize density so that mean(D) ≈ 1.
-        // This only rescales distances, not the labels.
-        float mean_D = D.mean().item<float>();
-        if (std::isfinite(mean_D) && mean_D > 0.0f) {
-            D.div_(mean_D);
-        }
+        // Total density and average density area A (Eq. (4))
+        float total_D = D.sum().item<float>();
+        float A = total_D / static_cast<float>(N);
+
+        // Unnormalized Gaussian G^0_{σ0} used in the structure term (Eq. (10))
+        auto gaussian0 = [A](float x) {
+            constexpr float alpha = 0.5f;   // α ∈ [0.5, 1] as in the paper
+            constexpr float eps   = 1e-12f;
+            float sigma0 = A / alpha;       // σ0 = A / α
+            if (sigma0 <= eps) return 1.0f;
+            float z = x / sigma0;
+            return std::exp(-0.5f * z * z); // unnormalized Gaussian
+        };
 
         auto labels = torch::full(
             {H, W}, -1,
@@ -152,9 +156,12 @@ namespace {
         auto tacc = dist.accessor<float, 2>();
         auto dacc = D.accessor<float, 2>();
 
-        using Node = std::tuple<float,int64_t,int64_t,int64_t>; // (dist,y,x,l)
+        // A_l(d) accumulated per label l (Eq. (10))
+        std::vector<float> area_l(N, 0.0f);
+
+        using Node = std::tuple<float,int64_t,int64_t,int64_t>; // (dist, y, x, l)
         struct Cmp {
-            bool operator()(Node const& a, Node const& b) const {
+            bool operator()(const Node& a, const Node& b) const {
                 return std::get<0>(a) > std::get<0>(b);
             }
         };
@@ -173,16 +180,21 @@ namespace {
 
         const int dy[4] = {+1, -1,  0,  0};
         const int dx[4] = { 0,  0, +1, -1};
-        constexpr float D_eps = 1e-6f;
 
-        // Multi-source Dijkstra: Eikonal V(x)|∇Dg| = 1 with V(x) = 1/D(x)
-        // => incremental cost ≈ D(x) per grid step.
+        constexpr float D_eps = 1e-6f;     // avoid division by zero
+        constexpr float g_min = 1e-3f;     // numerical floor for Gaussian
+
+        // Multi-source Dijkstra as fast-marching approximation
         while (!pq.empty()) {
             auto [cd, y, x, l] = pq.top();
             pq.pop();
 
+            // Skip outdated node
             if (cd > tacc[y][x])
-                continue; // outdated entry
+                continue;
+
+            // Update A_l(d) with current pixel (Eq. (10)): A_l += D(x)
+            area_l[l] += dacc[y][x];
 
             for (int k = 0; k < 4; ++k) {
                 int64_t ny = y + dy[k];
@@ -194,8 +206,21 @@ namespace {
                 if (!std::isfinite(Dnbr))
                     continue;
 
-                float cost = std::max(Dnbr, D_eps); // integrate D(x) along path
-                float nd   = cd + cost;
+                float Dsafe = std::max(Dnbr, D_eps);
+
+                // Base velocity V(x) = 1 / D(x) (Eq. (8))
+                float Vx = 1.0f / Dsafe;
+
+                // Structure-sensitive velocity term (Eq. (10))
+                float deltaA = std::max(0.0f, area_l[l] - A);
+                float g = gaussian0(deltaA);
+                if (g < g_min) g = g_min;   // prevent vanishing velocity
+
+                float Vl = Vx * g;
+
+                // Eikonal step: Δd ≈ step_length / V_l (Eq. (11))
+                float step = 1.0f;          // grid spacing
+                float nd   = cd + step / Vl;
 
                 if (nd < tacc[ny][nx]) {
                     tacc[ny][nx] = nd;
@@ -207,7 +232,6 @@ namespace {
 
         return {labels, dist};
     }
-
 
 
     // ==========================================
