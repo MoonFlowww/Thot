@@ -117,10 +117,44 @@ namespace {
 
 
     std::pair<torch::Tensor, torch::Tensor> RunGeodesicVoronoi(const torch::Tensor& density_hw, const std::vector<Center>& centers) {
+        constexpr float D_eps = 1e-6f;
         // D(x): geodesic density as defined in the paper (Eq. (2))
-        auto D = density_hw.to(torch::kFloat32)
-                             .to(torch::kCPU)
-                             .contiguous();
+        auto D = density_hw.to(torch::kFloat32).to(torch::kCPU).contiguous();
+
+        // Replace non-finite densities to prevent zero-velocity regions that
+        // yield infinite geodesic distances. We use the maximum finite density
+        // (or 1.0 if none) as a conservative fallback and clamp the minimum to
+        // D_eps.
+        auto finite_mask  = torch::isfinite(D);
+        auto finite_vals  = D.masked_select(finite_mask);
+
+        // Replace non-finite densities with a robust fallback and clamp outliers
+        // to keep the velocity field well-behaved. Large densities shrink the
+        // velocity (V = 1/D) and produce enormous geodesic distances; we cap
+        // densities to a high percentile of the finite values instead of the
+        // absolute maximum to avoid a handful of extreme pixels dominating the
+        // field. Similarly, we keep a conservative positive floor to avoid
+        // zero-velocity regions.
+        float fallback_D = 1.0f;
+        float max_D_cap  = 1.0f;
+
+        if (finite_vals.numel() > 0) {
+            auto q = torch::tensor({0.95, 0.99}, torch::TensorOptions()
+                .dtype(finite_vals.scalar_type())
+                .device(finite_vals.device()));
+            auto qv = torch::quantile(finite_vals, q);
+
+            // 95th percentile is a stable replacement for bad pixels; 99th
+            // percentile sets an upper cap for the remaining densities.
+            fallback_D = qv[0].item<float>();
+            max_D_cap  = qv[1].item<float>();
+
+            fallback_D = std::max(fallback_D, D_eps);
+            max_D_cap  = std::max(max_D_cap, fallback_D);
+        }
+
+        D = D.where(finite_mask, torch::full_like(D, fallback_D));
+        D = torch::clamp(D, D_eps, max_D_cap);
 
         TORCH_CHECK(D.dim() == 2, "RunGeodesicVoronoi: density must be 2D (H×W)");
 
@@ -181,7 +215,6 @@ namespace {
         const int dy[4] = {+1, -1,  0,  0};
         const int dx[4] = { 0,  0, +1, -1};
 
-        constexpr float D_eps = 1e-6f;     // avoid division by zero
         constexpr float g_min = 1e-3f;     // numerical floor for Gaussian
 
         // Multi-source Dijkstra as fast-marching approximation
