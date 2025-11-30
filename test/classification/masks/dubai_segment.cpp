@@ -332,8 +332,7 @@ namespace {
                 cx = std::clamp(cx, 0.0f, static_cast<float>(W - 1));
                 cy = std::clamp(cy, 0.0f, static_cast<float>(H - 1));
 
-                // /!\ Center is (y, x) with float fields not (x, y) as Clion may say
-                centers.push_back(Center{cy, cx});
+                centers.push_back(Center{cx, cy});
                 ++idx;
             }
             if (idx >= N) break;
@@ -921,7 +920,6 @@ int main() {
     } std::cout << "\n" <<std::endl;
     torch::Tensor X = torch::cat(xs, 0);
     torch::Tensor Y = torch::cat(ys, 0);
-
     Nott::Data::Check::Size(X, "X Total");
     Nott::Data::Check::Size(Y, "Y Total");
 
@@ -1193,12 +1191,12 @@ int main() {
             Default Cuts:
                 - More base-samples [Acc]
                 - Lower Amount of Details [Acc]
-                - Maintaining the Quality of Information [Acc]
+                - Maintaining the Quality of Information [Acc] [(x/T)&(y/T)] -> bilinear
                 - Lower Resolution [Latency]
 
             SubCuts:
                 - Maximization of Base-Samples [Acc]
-                - Redundant information can only appear twice in the dataset, but never at the same position on the image (always TopLeft vs BottomRight || TopRight vs BottomLeft)  leading to P(Overfit)⁻  [Acc]
+                - Redundant information can only appear twice in the dataset, but never at the same position on the image (always TopLeft vs BottomRight || TopRight vs BottomLeft)  leading to P(Overfit)⁻ + Conv=Sum[Freq(window)]=> taking neighbors and not all neurons to all neurons [Acc]
 
         Geodesic-Based Voronoi Diagram:
             - Able to use metrics as input (no Pics) [Lat+Acc]
@@ -1207,12 +1205,14 @@ int main() {
                 -> 28223 times less output neurons
             - Easy fix of argmax via smoothing during Cuts recreation (Async Post Process) [Acc]
 
+
+
         In Production:
             - Easy setup of asyncs for data Pre/Post-process
             - Superpixel computed by batches (With Hardware, even able to compute Superpixels from multiples Cuts inside a unique Batch)
             - Lightning fast Infra
             - Readable Infra (Data Cutting & Geodesic-Voronoi)
-            - Voronoi make pre-segmentation of labels without Regression nor Data-Leakage
+            - Voronoi make pre-segmentation of labels without Learning nor Data-Leakage
 
 
 
