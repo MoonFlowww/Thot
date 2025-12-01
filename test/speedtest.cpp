@@ -253,7 +253,7 @@ namespace LatencyUtils {
 
 
 
-    StepLatencyStats build_stats_from_samples(const std::string& title, const std::vector<double>& samples, std::size_t warmup_steps = 100, double tukey_k = 0.98) {
+    StepLatencyStats build_stats_from_samples(const std::string& title, const std::vector<double>& samples, std::size_t warmup_steps = 100, double tukey_k = 0.99) {
         StepLatencyStats stats{title};
 
         if (samples.size() <= warmup_steps)
@@ -288,7 +288,7 @@ namespace LatencyUtils {
             stats.median_ms = quantile_linear(filtered, 0.50);
             stats.p10_ms    = quantile_linear(filtered, 0.10);
             stats.p90_ms    = quantile_linear(filtered, 0.90);
-            stats.p98_ms    = quantile_linear(filtered, 0.98);
+            stats.p98_ms    = quantile_linear(filtered, 0.99);
             stats.mode_ms   = estimate_mode_from_sorted(filtered);
         }
 
@@ -314,7 +314,7 @@ inline Nott::Loss::Details::CrossEntropyDescriptor set(Nott::Model& model, const
     model.add(Nott::Layer::FC({524, 126},  Nott::Activation::ReLU,  Nott::Initialization::HeUniform));
     model.add(Nott::Layer::FC({126, 10},   Nott::Activation::Identity, Nott::Initialization::HeUniform));
 
-    model.set_optimizer(Nott::Optimizer::SGD({.learning_rate = 1e-3}));
+    model.set_optimizer(Nott::Optimizer::SGD({.learning_rate = 1e-3f, .momentum = 0.9, .nesterov = true}));
     const auto ce = Nott::Loss::CrossEntropy({.label_smoothing = 0.02f});
     model.set_loss(ce);
     model.use_cuda(device);
@@ -438,13 +438,21 @@ static ClassificationMetrics evaluate_classifier(ForwardFn&& forward_fn, const t
 
 
 int main() {
-    auto [x1, y1, x2, y2] = Nott::Data::Load::MNIST("/home/moonfloww/Projects/DATASETS/Image/MNIST", 1.f, 1.f, true);
+    auto t1 = std::chrono::high_resolution_clock::now();
+    const float freq = 1.f;
+    auto [x1, y1, x2, y2] = Nott::Data::Load::MNIST("/home/moonfloww/Projects/DATASETS/Image/MNIST", freq, 1.f, true);
     const bool IsCuda = torch::cuda::is_available();
-    const int64_t epochs= 100;
+    const int64_t epochs= 10;
     const int64_t B= 64;
     const int64_t num_classes = 10;
     const int64_t N= x1.size(0);
     Nott::Data::Check::Size(x1);
+
+    std::cout << "Setup:"
+        <<"\n    Samples: " << freq*60000 << " (" << freq*100<<"%)"
+        <<"\n    Epochs:  " << epochs
+        <<"\n    Batchs:  " << B
+        <<"\n    Steps:   " << (epochs*((N + B - 1) / B))<< std::endl;
 
     const int64_t steps_per_epoch = (N + B - 1) / B;
     const std::size_t total_steps_estimate = static_cast<std::size_t>(epochs * steps_per_epoch);
@@ -467,7 +475,7 @@ int main() {
     Nott::Model model1("");
     set(model1, IsCuda); // define the network
     model1.clear_training_telemetry(); // not necessary
-    model1.train(x1, y1, {.epoch = epochs, .batch_size = B, .monitor = false , .enable_amp = false});
+    model1.train(x1, y1, {.epoch = epochs, .batch_size = B, .monitor = true, .buffer_vram=2, .enable_amp = true});
 
     const auto& telemetry = model1.training_telemetry();
     for (const auto& epoch : telemetry.epochs()) {
@@ -493,8 +501,7 @@ int main() {
         }
     }
     model1.eval();
-    Nott_prebuilt_metrics = evaluate_classifier(
-        [&](const torch::Tensor& inputs) { return model1.forward(inputs); }, x2, y2, B, IsCuda, num_classes);
+    Nott_prebuilt_metrics = evaluate_classifier([&](const torch::Tensor& inputs) { return model1.forward(inputs); }, x2, y2, B, IsCuda, num_classes);
 
 
     // 50% Nott (manual training loop using Nott modelf
@@ -502,16 +509,21 @@ int main() {
     Nott::Model model2("");
     const auto ce = set(model2, IsCuda); // define the network
     model2.clear_training_telemetry(); // not necessary
+
     for (int64_t e = 0; e < epochs; ++e) {
-        for (int64_t i = 0; i < N; i += B) { auto step_start = std::chrono::high_resolution_clock::now();
+        for (int64_t i = 0; i < N; i += B) {
+            auto step_start = std::chrono::high_resolution_clock::now();
             const int64_t end = std::min(i + B, N);
 
-            auto inputs  = x1.index({torch::indexing::Slice(i, end)}).to(torch::kCUDA); //stage_for_device(x1.index({torch::indexing::Slice(i, end)}), IsCuda);
-            auto targets = y1.index({torch::indexing::Slice(i, end)}).to(torch::kCUDA); //stage_for_device(y1.index({torch::indexing::Slice(i, end)}), IsCuda);
+            auto inputs  = x1.index({torch::indexing::Slice(i, end)}).to(torch::kCUDA);
+            auto targets = y1.index({torch::indexing::Slice(i, end)}).to(torch::kCUDA);
 
             model2.zero_grad();
             auto logits = model2.forward(inputs);
             auto loss   = Nott::Loss::Details::compute(ce, logits, targets);
+
+            if (i==0) std::cout << "Epoch " << e << " loss = " << loss.item<double>() << std::endl;
+
             loss.backward();
             model2.step();
 
@@ -520,6 +532,7 @@ int main() {
             Nott_custom_samples.push_back(step_ms);
         }
     }
+
     model2.eval();
     Nott_custom_metrics = evaluate_classifier(
         [&](const torch::Tensor& inputs) { return model2.forward(inputs); }, x2, y2, B, IsCuda, num_classes);
@@ -530,9 +543,9 @@ int main() {
 
     Net net;
     net->to(torch::kCUDA);
-    torch::optim::SGD optimizer(net->parameters(), torch::optim::SGDOptions(0.1).momentum(0.9).nesterov(true) );
+    torch::optim::SGD optimizer(net->parameters(), torch::optim::SGDOptions(1e-3f).momentum(0.9).nesterov(true));
 
-    torch::nn::CrossEntropyLoss criterion(torch::nn::CrossEntropyLossOptions().label_smoothing(0.0));
+    torch::nn::CrossEntropyLoss criterion(torch::nn::CrossEntropyLossOptions().label_smoothing(0.02f));
     net->train();
 
     for (int64_t e = 0; e < epochs; ++e) {
@@ -544,7 +557,8 @@ int main() {
 
             optimizer.zero_grad();
             auto logits = net->forward(inputs);
-            auto loss = criterion(logits, targets)/static_cast<double>(B);
+            auto loss = criterion(logits, targets);///static_cast<double>(B)
+            if (i==0) std::cout << "Epoch " << e << " loss = " << loss.item<double>() << std::endl;
             loss.backward();
             optimizer.step();
             auto step_end = std::chrono::high_resolution_clock::now();
@@ -560,13 +574,13 @@ int main() {
     std::cout << "\n\n\n";
 
     const LatencyUtils::StepLatencyStats Nott_prebuilt_stats =
-        LatencyUtils::build_stats_from_samples("Nott Train() (warmup+Tukey 0.98)", Nott_prebuilt_samples, 200, 0.98);
+        LatencyUtils::build_stats_from_samples("Nott Train() (warmup+Tukey 0.99)", Nott_prebuilt_samples, 200, 0.99);
 
     const LatencyUtils::StepLatencyStats Nott_custom_stats =
-        LatencyUtils::build_stats_from_samples("Nott + Custom Train() (warmup+Tukey 0.98)", Nott_custom_samples, 200, 0.98);
+        LatencyUtils::build_stats_from_samples("Nott + Custom Train() (warmup+Tukey 0.99)", Nott_custom_samples, 200, 0.99);
 
     const LatencyUtils::StepLatencyStats libtorch_stats =
-        LatencyUtils::build_stats_from_samples("Libtorch Raw (warmup+Tukey 0.98)", libtorch_samples, 200, 0.98);
+        LatencyUtils::build_stats_from_samples("Libtorch Raw (warmup+Tukey 0.99)", libtorch_samples, 200, 0.99);
 
     print_stats(Nott_prebuilt_stats);
     print_stats(Nott_custom_stats);
@@ -593,5 +607,6 @@ int main() {
     print_metrics("Nott Custom Train()", Nott_custom_metrics);
     print_metrics("LibTorch", libtorch_metrics);
 
+    std::cout << "\n\n [Nott]Total Runtime: " << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now()-t1).count()/60.0f << "min"<< std::endl;
     return 0;
 }

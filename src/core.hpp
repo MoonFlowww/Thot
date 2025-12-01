@@ -2931,6 +2931,79 @@ namespace Nott {
             return stream.str();
         }
 
+        struct BatchSignature {
+            GraphTensorSignature inputs{};
+            GraphTensorSignature targets{};
+
+            [[nodiscard]] static BatchSignature from_tensors(const torch::Tensor& inputs, const torch::Tensor& targets)
+            {
+                BatchSignature signature{};
+                signature.inputs = describe_tensor_signature(inputs);
+                signature.targets = describe_tensor_signature(targets);
+                return signature;
+            }
+
+            [[nodiscard]] bool matches(const torch::Tensor& inputs, const torch::Tensor& targets) const
+            {
+                return tensor_matches_signature(inputs, this->inputs)
+                    && tensor_matches_signature(targets, this->targets);
+            }
+
+            bool operator==(const BatchSignature& other) const noexcept
+            {
+                return signatures_equal(inputs, other.inputs) && signatures_equal(targets, other.targets);
+            }
+
+            struct Hash {
+                std::size_t operator()(const BatchSignature& signature) const noexcept
+                {
+                    std::size_t seed = 0;
+                    BatchSignature::hash_signature(seed, signature.inputs);
+                    BatchSignature::hash_signature(seed, signature.targets);
+                    return seed;
+                }
+            };
+
+        private:
+            friend struct Hash;
+
+            static void hash_combine(std::size_t& seed, std::size_t value) noexcept
+            {
+                seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            }
+
+            static void hash_signature(std::size_t& seed, const GraphTensorSignature& signature) noexcept
+            {
+                hash_combine(seed, static_cast<std::size_t>(signature.dtype));
+                hash_combine(seed, static_cast<std::size_t>(signature.device.type()));
+                hash_combine(seed, static_cast<std::size_t>(signature.device.index()));
+                hash_combine(seed, signature.shape.size());
+                for (const auto dimension : signature.shape) {
+                    hash_combine(seed, static_cast<std::size_t>(dimension));
+                }
+            }
+
+            static bool tensor_matches_signature(const torch::Tensor& tensor, const GraphTensorSignature& signature)
+            {
+                if (tensor.device() != signature.device || tensor.scalar_type() != signature.dtype) {
+                    return false;
+                }
+
+                const auto dimensions = tensor.dim();
+                if (static_cast<std::size_t>(dimensions) != signature.shape.size()) {
+                    return false;
+                }
+
+                for (std::int64_t index = 0; index < dimensions; ++index) {
+                    if (tensor.size(index) != signature.shape[index]) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+        };
+
         void ensure_graph_regularization_metadata_capacity(GraphMode mode) const
         {
             if (mode == GraphMode::Disabled) {
@@ -4039,8 +4112,9 @@ namespace Nott {
 
                 const bool regularization_active = model.has_regularization();
 
-                std::unordered_map<std::string, bool> graph_capture_ready{};
-                std::optional<std::string> active_graph_signature{};
+                std::unordered_map<BatchSignature, bool, BatchSignature::Hash> graph_capture_ready{};
+                std::unordered_map<std::int64_t, BatchSignature> batch_signature_cache{};
+                std::optional<BatchSignature> active_graph_signature{};
 
                 struct PendingEpochLog {
                     std::size_t epoch_index{};
@@ -4285,20 +4359,19 @@ namespace Nott {
                         return std::pair<torch::Tensor, torch::Tensor>{std::move(batch_inputs), std::move(batch_targets)};
                     };
 
-                    auto describe_tensor_signature = [](const torch::Tensor& tensor) {
-                        std::ostringstream stream;
-                        stream << tensor.device().str() << ';' << static_cast<int>(tensor.scalar_type());
-                        stream << ';' << tensor.dim();
-                        for (const auto dimension : tensor.sizes()) {
-                            stream << ',' << dimension;
+                    auto resolve_batch_signature = [&](std::int64_t batch_size,
+                                                       const torch::Tensor& inputs,
+                                                       const torch::Tensor& targets) -> const BatchSignature& {
+                        auto iterator = batch_signature_cache.find(batch_size);
+                        if (iterator == batch_signature_cache.end()) {
+                            iterator = batch_signature_cache.emplace(batch_size, BatchSignature::from_tensors(inputs, targets)).first;
+                            return iterator->second;
                         }
-                        return stream.str();
-                    };
+                        if (!iterator->second.matches(inputs, targets)) {
+                            iterator->second = BatchSignature::from_tensors(inputs, targets);
+                        }
 
-                    auto describe_batch_signature = [&](const torch::Tensor& inputs, const torch::Tensor& targets) {
-                        std::ostringstream stream;
-                        stream << describe_tensor_signature(inputs) << '|' << describe_tensor_signature(targets);
-                        return stream.str();
+                        return iterator->second;
                     };
 
                     auto process_batch = [&](torch::Tensor batch_inputs, torch::Tensor batch_targets) {
@@ -4325,25 +4398,21 @@ namespace Nott {
 
                         while (true) {
                             GraphMode batch_graph_mode = graph_mode;
-                            std::optional<std::string> batch_signature{};
+                            const BatchSignature* batch_signature{nullptr};
 
                             if (graph_mode == GraphMode::Capture) {
-                                batch_signature = describe_batch_signature(batch_inputs, batch_targets);
+                                const auto& resolved_signature = resolve_batch_signature(current_batch, batch_inputs, batch_targets);
+                                batch_signature = &resolved_signature;
 
                                 bool capture_ready = false;
-                                if (batch_signature) {
-                                    if (active_graph_signature && *active_graph_signature == *batch_signature) {
-                                        auto readiness = graph_capture_ready.find(*batch_signature);
-                                        capture_ready = (readiness != graph_capture_ready.end()) && readiness->second;
-                                    }
+                                if (batch_signature && active_graph_signature && *active_graph_signature == *batch_signature) {
+                                    auto readiness = graph_capture_ready.find(*batch_signature);
+                                    capture_ready = (readiness != graph_capture_ready.end()) && readiness->second;
                                 }
 
                                 if (!capture_ready) {
                                     batch_graph_mode = GraphMode::Capture;
 
-                                    if (!batch_signature) {
-                                        throw std::runtime_error("Failed to describe CUDA graph batch signature.");
-                                    }
 
                                     graph_capture_ready[*batch_signature] = false;
 
@@ -4382,10 +4451,6 @@ namespace Nott {
                                 break;
                             } catch (const std::runtime_error&) {
                                 if (!(graph_mode == GraphMode::Capture)) {
-                                    throw;
-                                }
-
-                                if (!batch_signature) {
                                     throw;
                                 }
 

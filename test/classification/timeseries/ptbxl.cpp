@@ -331,11 +331,11 @@ int main() {
         const auto& f = folds[fold];
         std::cout << "\n========== Fold " << (fold + 1) << "/" << kFolds << " ==========\n";
 
-        auto x_train = train_signals.index_select(0, f.train_indices);
-        auto y_train = dataset.train.labels.index_select(0, f.train_indices);
+        auto x_train= train_signals.index_select(0, f.train_indices);
+        auto y_train= dataset.train.labels.index_select(0, f.train_indices);
 
-        auto x_val   = train_signals.index_select(0, f.val_indices);
-        auto y_val   = dataset.train.labels.index_select(0, f.val_indices);
+        auto x_val= train_signals.index_select(0, f.val_indices);
+        auto y_val= dataset.train.labels.index_select(0, f.val_indices);
 
         Nott::Data::Check::Size(x_train, "Fold train signals");
         Nott::Data::Check::Size(y_train, "Fold train labels");
