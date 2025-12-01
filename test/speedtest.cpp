@@ -574,13 +574,13 @@ int main() {
     std::cout << "\n\n\n";
 
     const LatencyUtils::StepLatencyStats Nott_prebuilt_stats =
-        LatencyUtils::build_stats_from_samples("Nott Train() (warmup+Tukey 0.99)", Nott_prebuilt_samples, 200, 0.99);
+        LatencyUtils::build_stats_from_samples("Nott Train() (warmup+Tukey 0.99)", Nott_prebuilt_samples, 200, 1);
 
     const LatencyUtils::StepLatencyStats Nott_custom_stats =
-        LatencyUtils::build_stats_from_samples("Nott + Custom Train() (warmup+Tukey 0.99)", Nott_custom_samples, 200, 0.99);
+        LatencyUtils::build_stats_from_samples("Nott + Custom Train() (warmup+Tukey 0.99)", Nott_custom_samples, 200, 1);
 
     const LatencyUtils::StepLatencyStats libtorch_stats =
-        LatencyUtils::build_stats_from_samples("Libtorch Raw (warmup+Tukey 0.99)", libtorch_samples, 200, 0.99);
+        LatencyUtils::build_stats_from_samples("Libtorch Raw (warmup+Tukey 0.99)", libtorch_samples, 200, 1);
 
     print_stats(Nott_prebuilt_stats);
     print_stats(Nott_custom_stats);
@@ -591,9 +591,9 @@ int main() {
         return (lhs - rhs) / rhs * 100.0;
     };
 
-    const double NottPreBuild = Nott_prebuilt_stats.average_ms();
-    const double Nottcustom = Nott_custom_stats.average_ms();
-    const double LibTorchRaw  = libtorch_stats.average_ms();
+    const double NottPreBuild = Nott_prebuilt_stats.steps_per_second();
+    const double Nottcustom = Nott_custom_stats.steps_per_second();
+    const double LibTorchRaw  = libtorch_stats.steps_per_second();
 
 
     std::cout << "\n\nOverhead %" << std::endl;
