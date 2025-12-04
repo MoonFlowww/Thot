@@ -9,10 +9,6 @@ set(CMAKE_CUDA_STANDARD 20)
 add_compile_options(
         $<$<CONFIG:Release>:-O3>
 )
-add_compile_options(
-        $<$<CONFIG:Debug>:-O3>
-)
-
 
 set(_libtorch_root "/opt/libtorch")
 if (EXISTS "${_libtorch_root}/share/cmake/Torch/TorchConfig.cmake")
@@ -104,7 +100,7 @@ target_link_libraries(Nott "${TORCH_LIBRARIES}" Boost::filesystem ${OpenCV_LIBS}
 target_include_directories(Nott PUBLIC ${CMAKE_SOURCE_DIR}/include ${TORCH_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS})
 
 #Test
-add_executable(test_Nott  test/speedtest.cpp #classification/masks/dubai_segment.cpp #analysis/ntk.cpp #classification/timeseries/ptbxl.cpp #regression/timeseries/etth.cpp #
+add_executable(test_Nott  test/classification/masks/dubai_segment.cpp #analysis/ntk.cpp #classification/timeseries/ptbxl.cpp #regression/timeseries/etth.cpp #
         src/block/details/blocks/residual.hpp
         src/block/details/blocks/sequential.hpp
         src/lrscheduler/details/common.hpp

@@ -253,7 +253,7 @@ namespace LatencyUtils {
 
 
 
-    StepLatencyStats build_stats_from_samples(const std::string& title, const std::vector<double>& samples, std::size_t warmup_steps = 100, double tukey_k = 0.99) {
+    StepLatencyStats build_stats_from_samples(const std::string& title, const std::vector<double>& samples, std::size_t warmup_steps = 100, double tukey_k = 1.f) {
         StepLatencyStats stats{title};
 
         if (samples.size() <= warmup_steps)
@@ -266,21 +266,28 @@ namespace LatencyUtils {
             return stats;
         }
 
-        // For Tukey fence, we use a sorted copy of the tail
+        const bool use_tukey = tukey_k >= 0.0;
         std::vector<double> sorted = tail;
-        std::sort(sorted.begin(), sorted.end());
+        if (use_tukey)
+            std::sort(sorted.begin(), sorted.end());
 
-        const TukeyFence fence = compute_tukey_fence(sorted, tukey_k);
-
-        // Keep only inliers and feed them to the online stats
         std::vector<double> filtered;
         filtered.reserve(sorted.size());
 
-        for (double v : tail) {
-            if (v < fence.lower || v > fence.upper)
-                continue;
-            stats.record(v);
-            filtered.push_back(v);
+        if (use_tukey) {
+            const TukeyFence fence = compute_tukey_fence(sorted, tukey_k);
+
+            for (double v : tail) {
+                if (v < fence.lower || v > fence.upper)
+                    continue;
+                stats.record(v);
+                filtered.push_back(v);
+            }
+        } else {
+            for (double v : tail) {
+                stats.record(v);
+                filtered.push_back(v);
+            }
         }
 
         if (!filtered.empty()) {
@@ -288,7 +295,7 @@ namespace LatencyUtils {
             stats.median_ms = quantile_linear(filtered, 0.50);
             stats.p10_ms    = quantile_linear(filtered, 0.10);
             stats.p90_ms    = quantile_linear(filtered, 0.90);
-            stats.p98_ms    = quantile_linear(filtered, 0.99);
+            stats.p98_ms    = quantile_linear(filtered, false);
             stats.mode_ms   = estimate_mode_from_sorted(filtered);
         }
 
@@ -475,7 +482,7 @@ int main() {
     Nott::Model model1("");
     set(model1, IsCuda); // define the network
     model1.clear_training_telemetry(); // not necessary
-    model1.train(x1, y1, {.epoch = epochs, .batch_size = B, .monitor = true, .buffer_vram=2, .enable_amp = true});
+    model1.train(x1, y1, {.epoch = epochs, .batch_size = B, .shuffle=false, .monitor = true, .buffer_vram=2, .graph_mode = Nott::GraphMode::Disabled, .enable_amp = true, .memory_format = torch::MemoryFormat::Preserve});
 
     const auto& telemetry = model1.training_telemetry();
     for (const auto& epoch : telemetry.epochs()) {
@@ -574,13 +581,13 @@ int main() {
     std::cout << "\n\n\n";
 
     const LatencyUtils::StepLatencyStats Nott_prebuilt_stats =
-        LatencyUtils::build_stats_from_samples("Nott Train() (warmup+Tukey 0.99)", Nott_prebuilt_samples, 200, 1);
+        LatencyUtils::build_stats_from_samples("Nott Train() (Tukey false)", Nott_prebuilt_samples, 200, -1);
 
     const LatencyUtils::StepLatencyStats Nott_custom_stats =
-        LatencyUtils::build_stats_from_samples("Nott + Custom Train() (warmup+Tukey 0.99)", Nott_custom_samples, 200, 1);
+        LatencyUtils::build_stats_from_samples("Nott + Custom Train() (Tukey false)", Nott_custom_samples, 200, -1);
 
     const LatencyUtils::StepLatencyStats libtorch_stats =
-        LatencyUtils::build_stats_from_samples("Libtorch Raw (warmup+Tukey 0.99)", libtorch_samples, 200, 1);
+        LatencyUtils::build_stats_from_samples("Libtorch Raw (Tukey false)", libtorch_samples, 200, -1);
 
     print_stats(Nott_prebuilt_stats);
     print_stats(Nott_custom_stats);

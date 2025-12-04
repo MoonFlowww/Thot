@@ -35,14 +35,7 @@ namespace Nott::Plot::Details::Reliability {
             return filtered;
         }
 
-
-
-
-
-        inline auto ResolveTargetLayer(Nott::Model& model,
-                                       std::optional<std::size_t> requested)
-            -> std::shared_ptr<torch::nn::Module>
-        {
+        inline auto ResolveTargetLayer(Nott::Model& model, std::optional<std::size_t> requested) -> std::shared_ptr<torch::nn::Module> {
             auto modules = ResolveModules(model);
             if (modules.empty()) {
                 throw std::runtime_error("Model does not expose any modules.");
@@ -122,8 +115,7 @@ namespace Nott::Plot::Details::Reliability {
             const auto height = normalized.size(0);
             const auto width = normalized.size(1);
 
-            auto colored = torch::empty({3, height, width},
-                                        torch::TensorOptions().dtype(torch::kFloat32));
+            auto colored = torch::empty({3, height, width}, torch::TensorOptions().dtype(torch::kFloat32));
             auto src = normalized.accessor<float, 2>();
             auto dst = colored.accessor<float, 3>();
 
@@ -146,18 +138,14 @@ namespace Nott::Plot::Details::Reliability {
             return colored;
         }
 
-        inline auto OverlayHeatmap(const torch::Tensor& base,
-                                   const torch::Tensor& heatmap,
-                                   double alpha) -> torch::Tensor
-        {
+        inline auto OverlayHeatmap(const torch::Tensor& base, const torch::Tensor& heatmap, double alpha) -> torch::Tensor {
             auto basePrepared = EnsureThreeChannel(base);
             auto heatmapPrepared = ApplyColormap(heatmap);
             auto blended = (1.0 - alpha) * basePrepared + alpha * heatmapPrepared;
             return blended.clamp(0.0, 1.0);
         }
 
-        inline auto ToTitles(std::size_t sample_index, bool overlay) -> std::vector<std::string>
-        {
+        inline auto ToTitles(std::size_t sample_index, bool overlay) -> std::vector<std::string> {
             std::vector<std::string> titles;
             titles.emplace_back("Sample " + std::to_string(sample_index) + " – input");
             titles.emplace_back("Sample " + std::to_string(sample_index) + " – Grad-CAM");
