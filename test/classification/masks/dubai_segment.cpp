@@ -12,7 +12,8 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
-
+#include <torch/torch.h>
+#include <opencv2/opencv.hpp>
 namespace {
     constexpr std::array<std::array<std::uint8_t, 3>, 6> kClassPalette{{
         std::array<std::uint8_t, 3>{60, 16, 152},
@@ -83,6 +84,592 @@ namespace {
 
         return one_hot;
     }
+    struct SuperpixelParams {
+        int desired_superpixels;
+        double nu;
+        double sigma;
+        double gamma;
+        double phi;
+        double alpha;
+        double lambda;
+        double Tc;
+        double Ts;
+        int max_iterations;
+        int max_splits;
+        double energy_tolerance;
+    };
+
+    struct SuperpixelSegmentationResult {
+        cv::Mat labels; // CV_32S
+        std::vector<cv::Point2f> centers;
+        std::vector<cv::Mat> distance_maps; // One per center, CV_32F
+    };
+
+    cv::Mat ComputeColorGradientMagnitude(const cv::Mat& bgr32f) {
+        // bgr32f: CV_32FC3, range [0,1]
+        std::vector<cv::Mat> ch;
+        cv::split(bgr32f, ch); // B,G,R
+
+        cv::Mat grad2 = cv::Mat::zeros(bgr32f.size(), CV_32F);
+
+        for (int c = 0; c < 3; ++c) {
+            cv::Mat gx, gy;
+            cv::Sobel(ch[c], gx, CV_32F, 1, 0, 3);
+            cv::Sobel(ch[c], gy, CV_32F, 0, 1, 3);
+            cv::Mat mag_c;
+            cv::magnitude(gx, gy, mag_c);
+            grad2 += mag_c.mul(mag_c); // sum of squared magnitudes
+        }
+
+        cv::Mat grad;
+        cv::sqrt(grad2, grad);
+        return grad;
+    }
+
+
+    void ComputeDensityAndSpeed(const cv::Mat& image, const SuperpixelParams& params, cv::Mat& density, cv::Mat& base_speed, double& total_density) {
+        cv::Mat img32f;
+        if (image.channels() == 3) {
+            image.convertTo(img32f, CV_32F, 1.0 / 255.0);
+        } else {
+            cv::Mat tmp;
+            image.convertTo(tmp, CV_32F, 1.0 / 255.0);
+            cv::cvtColor(tmp, img32f, cv::COLOR_GRAY2BGR);
+        }
+
+        cv::Mat grad = ComputeColorGradientMagnitude(img32f);
+
+        cv::Mat grad_smooth;
+        cv::GaussianBlur(grad, grad_smooth, cv::Size(), params.sigma);
+
+        cv::Mat edge_measure = grad / (grad_smooth + params.gamma);
+
+        cv::exp(edge_measure / params.nu, density);   // D(x) = exp(E/nu)
+        base_speed = 1.0 / density;                  // V(x) = 1 / D(x)
+
+        total_density = cv::sum(density)[0];
+    }
+
+
+    std::vector<cv::Point2f> InitializeCenters(
+        const cv::Mat& image,
+        int desired_superpixels,
+        std::mt19937& rng
+    ) {
+        const int rows = image.rows;
+        const int cols = image.cols;
+        const int total_pixels = rows * cols;
+        const double step = std::sqrt(static_cast<double>(total_pixels) / static_cast<double>(desired_superpixels));
+
+        std::uniform_real_distribution<float> jitter(-0.25f * static_cast<float>(step), 0.25f * static_cast<float>(step));
+
+        std::vector<cv::Point2f> centers;
+        for (double y = step / 2.0; y < rows; y += step) {
+            for (double x = step / 2.0; x < cols; x += step) {
+                centers.emplace_back(
+                    static_cast<float>(std::clamp(x + jitter(rng), 0.0, static_cast<double>(cols - 1))),
+                    static_cast<float>(std::clamp(y + jitter(rng), 0.0, static_cast<double>(rows - 1))));
+            }
+        }
+
+        if (centers.size() > static_cast<std::size_t>(desired_superpixels)) {
+            centers.resize(static_cast<std::size_t>(desired_superpixels));
+        }
+
+        return centers;
+    }
+
+    struct Node {
+        int y;
+        int x;
+        float cost;
+        bool operator<(const Node& other) const { return cost > other.cost; }
+    };
+
+    cv::Mat FastMarching(
+        const cv::Mat& base_speed,
+        const cv::Mat& density,
+        const cv::Point& center,
+        double avg_area,
+        double alpha
+    ) {
+        const int rows = base_speed.rows;
+        const int cols = base_speed.cols;
+
+        cv::Mat dist(rows, cols, CV_32F, cv::Scalar(std::numeric_limits<float>::infinity()));
+        cv::Mat finalized(rows, cols, CV_8U, cv::Scalar(0));
+        std::priority_queue<Node> queue;
+
+        const double sigma0 = std::max(1e-6, avg_area / std::max(alpha, 1e-6));
+        double area_reached = 0.0;
+        std::vector<std::pair<float, double>> cumulative_area_by_distance;
+        cumulative_area_by_distance.reserve(static_cast<std::size_t>(rows * cols));
+
+        auto area_at_distance = [&](float distance) {
+            auto it = std::upper_bound(
+                cumulative_area_by_distance.begin(),
+                cumulative_area_by_distance.end(),
+                distance,
+                [](float d, const std::pair<float, double>& entry) {
+                    return d < entry.first;
+                });
+            if (it == cumulative_area_by_distance.begin()) {
+                return 0.0;
+            }
+            return std::prev(it)->second;
+        };
+
+        dist.at<float>(center) = 0.0f;
+        queue.push(Node{center.y, center.x, 0.0f});
+
+        const std::array<std::pair<int, int>, 8> directions{{
+            {1, 0}, {-1, 0}, {0, 1}, {0, -1},
+            {1, 1}, {1, -1}, {-1, 1}, {-1, -1}
+        }};
+
+        while (!queue.empty()) {
+            const auto current = queue.top();
+            queue.pop();
+
+            if (current.cost > dist.at<float>(current.y, current.x) || finalized.at<std::uint8_t>(current.y, current.x)) {
+                continue;
+            }
+
+            finalized.at<std::uint8_t>(current.y, current.x) = 1;
+            area_reached += static_cast<double>(density.at<float>(current.y, current.x));
+            cumulative_area_by_distance.emplace_back(current.cost, area_reached);
+
+            for (const auto& dir : directions) {
+                const int ny = current.y + dir.first;
+                const int nx = current.x + dir.second;
+                if (ny < 0 || ny >= rows || nx < 0 || nx >= cols) {
+                    continue;
+                }
+
+                if (finalized.at<std::uint8_t>(ny, nx)) {
+                    continue;
+                }
+
+                const float step = (dir.first == 0 || dir.second == 0) ? 1.0f : static_cast<float>(std::sqrt(2.0));
+                const float base_v = std::max(base_speed.at<float>(ny, nx), 1e-6f);
+
+                float tentative = current.cost + step / base_v;
+                for (int refine = 0; refine < 2; ++refine) {
+                    const double base_area = area_at_distance(tentative);
+                    const double area_tentative = base_area + static_cast<double>(density.at<float>(ny, nx));
+                    const double delta = std::max(0.0, area_tentative - avg_area);
+                    const double gaussian = std::exp(-(delta * delta) / (2.0 * sigma0 * sigma0));
+                    const float v = static_cast<float>(base_v * gaussian);
+                    const float updated = current.cost + step / v;
+                    if (std::abs(updated - tentative) < 1e-6f) {
+                        tentative = updated;
+                        break;
+                    }
+                    tentative = updated;
+                }
+
+                float& best = dist.at<float>(ny, nx);
+                if (tentative < best) {
+                    best = tentative;
+                    queue.push(Node{ny, nx, tentative});
+                }
+            }
+        }
+
+        return dist;
+    }
+
+    std::vector<cv::Mat> ComputeDistanceMaps(
+        const cv::Mat& base_speed,
+        const cv::Mat& density,
+        const std::vector<cv::Point2f>& centers,
+        double avg_area,
+        double alpha
+    ) {
+        std::vector<cv::Mat> distance_maps;
+        distance_maps.reserve(centers.size());
+
+        for (std::size_t idx = 0; idx < centers.size(); ++idx) {
+            cv::Point center_i(static_cast<int>(std::round(centers[idx].x)), static_cast<int>(std::round(centers[idx].y)));
+            center_i.x = std::clamp(center_i.x, 0, base_speed.cols - 1);
+            center_i.y = std::clamp(center_i.y, 0, base_speed.rows - 1);
+            distance_maps.push_back(FastMarching(base_speed, density, center_i, avg_area, alpha));
+        }
+
+        return distance_maps;
+    }
+
+    void AssignLabels(
+        const std::vector<cv::Mat>& distance_maps,
+        cv::Mat& labels,
+        cv::Mat& min_distance
+    ) {
+        const int rows = distance_maps.front().rows;
+        const int cols = distance_maps.front().cols;
+        labels = cv::Mat(rows, cols, CV_32S, cv::Scalar(-1));
+        min_distance = cv::Mat(rows, cols, CV_32F, cv::Scalar(std::numeric_limits<float>::infinity()));
+
+        for (std::size_t idx = 0; idx < distance_maps.size(); ++idx) {
+            for (int y = 0; y < rows; ++y) {
+                const float* dist_ptr = distance_maps[idx].ptr<float>(y);
+                float* min_ptr = min_distance.ptr<float>(y);
+                int* label_ptr = labels.ptr<int>(y);
+                for (int x = 0; x < cols; ++x) {
+                    const float d = dist_ptr[x];
+                    if (d < min_ptr[x]) {
+                        min_ptr[x] = d;
+                        label_ptr[x] = static_cast<int>(idx);
+                    }
+                }
+            }
+        }
+    }
+
+    std::vector<double> ComputeAreas(const cv::Mat& labels, const cv::Mat& density, int superpixel_count) {
+        std::vector<double> areas(static_cast<std::size_t>(superpixel_count), 0.0);
+        for (int y = 0; y < labels.rows; ++y) {
+            const int* lbl_ptr = labels.ptr<int>(y);
+            const float* dens_ptr = density.ptr<float>(y);
+            for (int x = 0; x < labels.cols; ++x) {
+                const int lbl = lbl_ptr[x];
+                if (lbl >= 0 && lbl < superpixel_count) {
+                    areas[static_cast<std::size_t>(lbl)] += dens_ptr[x];
+                }
+            }
+        }
+        return areas;
+    }
+
+    double ComputeEnergy(const cv::Mat& labels, const std::vector<cv::Mat>& distance_maps, const SuperpixelParams& params, const std::vector<double>& areas, double avg_area) {
+        const int rows = labels.rows;
+        const int cols = labels.cols;
+        const int superpixel_count = static_cast<int>(areas.size());
+
+        double E_image = 0.0;
+
+        for (int l = 0; l < superpixel_count; ++l) {
+            const cv::Mat& dist_l = distance_maps[static_cast<std::size_t>(l)];
+            for (int y = 0; y < rows; ++y) {
+                const int* lbl_ptr = labels.ptr<int>(y);
+                const float* d_ptr  = dist_l.ptr<float>(y);
+                for (int x = 0; x < cols; ++x) {
+                    if (lbl_ptr[x] != l) {
+                        continue;
+                    }
+                    const double d = static_cast<double>(d_ptr[x]);        // Dg(cl, x)
+                    const double w = std::exp(-d / std::max(1e-6, params.phi)); // Wx
+                    E_image += w * d * d;
+                }
+            }
+        }
+
+        double E_structure = 0.0;
+        for (double area : areas) {
+            const double diff = area - avg_area;
+            E_structure += diff * diff;
+        }
+
+        return E_image + params.alpha * E_structure;
+    }
+
+
+    void RelocateCenters(std::vector<cv::Point2f>& centers, const cv::Mat& labels, const std::vector<cv::Mat>& distance_maps, const SuperpixelParams& params) {
+        const int rows = labels.rows;
+        const int cols = labels.cols;
+        const int superpixel_count = static_cast<int>(centers.size());
+
+        std::vector<cv::Point2f> new_centers(superpixel_count, cv::Point2f(0.0f, 0.0f));
+        std::vector<double> weights(superpixel_count, 0.0);
+
+        for (int l = 0; l < superpixel_count; ++l) {
+            const cv::Mat& dist_l = distance_maps[static_cast<std::size_t>(l)];
+            const cv::Point2f c = centers[static_cast<std::size_t>(l)];
+
+            for (int y = 0; y < rows; ++y) {
+                const int* lbl_ptr = labels.ptr<int>(y);
+                const float* d_ptr = dist_l.ptr<float>(y);
+
+                for (int x = 0; x < cols; ++x) {
+                    if (lbl_ptr[x] != l) {
+                        continue;
+                    }
+
+                    const float d = d_ptr[x]; // Dg(cl, x)
+                    if (d <= 0.0f || !std::isfinite(d)) {
+                        continue;
+                    }
+
+                    const float dx = static_cast<float>(x) - c.x;
+                    const float dy = static_cast<float>(y) - c.y;
+                    const float spatial = std::max(std::sqrt(dx * dx + dy * dy), 1e-6f);
+
+                    const float w_x = std::exp(-d / static_cast<float>(params.phi)); // Wx
+                    const float w   = w_x * d / spatial;
+
+                    new_centers[static_cast<std::size_t>(l)].x += w * static_cast<float>(x);
+                    new_centers[static_cast<std::size_t>(l)].y += w * static_cast<float>(y);
+                    weights[static_cast<std::size_t>(l)]      += w;
+                }
+            }
+        }
+
+        for (int l = 0; l < superpixel_count; ++l) {
+            if (weights[static_cast<std::size_t>(l)] > 1e-6) {
+                centers[static_cast<std::size_t>(l)].x =
+                    new_centers[static_cast<std::size_t>(l)].x / static_cast<float>(weights[static_cast<std::size_t>(l)]);
+                centers[static_cast<std::size_t>(l)].y =
+                    new_centers[static_cast<std::size_t>(l)].y / static_cast<float>(weights[static_cast<std::size_t>(l)]);
+            }
+        }
+    }
+
+
+    void AttemptSplits(
+        std::vector<cv::Point2f>& centers,
+        const cv::Mat& labels,
+        const std::vector<cv::Mat>& distance_maps,
+        const cv::Mat& density,
+        const cv::Mat& image_lab,
+        const std::vector<double>& areas,
+        double avg_area,
+        const SuperpixelParams& params
+    ) {
+        const int superpixel_count = static_cast<int>(centers.size());
+        if (superpixel_count >= params.max_splits + params.desired_superpixels) {
+            return;
+        }
+
+        std::vector<cv::Point2f> new_centers;
+        bool split_happened = false;
+
+        struct RegionInfo {
+            int index;
+            double area;
+            cv::Point2f center;
+            cv::Vec2d principal_normal;
+            std::vector<cv::Point> points;
+        };
+        std::vector<RegionInfo> regions;
+        regions.reserve(superpixel_count);
+
+        for (int i = 0; i < superpixel_count; ++i) {
+            std::vector<cv::Point> points;
+            points.reserve(labels.rows * labels.cols / std::max(1, superpixel_count));
+            for (int y = 0; y < labels.rows; ++y) {
+                const int* lbl_ptr = labels.ptr<int>(y);
+                for (int x = 0; x < labels.cols; ++x) {
+                    if (lbl_ptr[x] == i) {
+                        points.emplace_back(x, y);
+                    }
+                }
+            }
+
+            if (points.size() < 4) {
+                continue;
+            }
+
+            cv::Scalar mean, stddev;
+            std::vector<cv::Vec3f> colors;
+            colors.reserve(points.size());
+            for (const auto& p : points) {
+                colors.push_back(image_lab.at<cv::Vec3f>(p));
+            }
+            cv::meanStdDev(colors, mean, stddev);
+            const double color_std = (stddev[0] + stddev[1] + stddev[2]) / 3.0;
+
+            cv::Mat cov = cv::Mat::zeros(2, 2, CV_64F);
+            const cv::Point2f c = centers[static_cast<std::size_t>(i)];
+            for (const auto& p : points) {
+                const double gdist = distance_maps[static_cast<std::size_t>(i)].at<float>(p);
+                const double dx = static_cast<double>(p.x) - c.x;
+                const double dy = static_cast<double>(p.y) - c.y;
+                const double norm = std::max(dx * dx + dy * dy, 1e-6);
+                const double weight = (gdist * gdist) / norm;
+                cov.at<double>(0, 0) += weight * dx * dx;
+                cov.at<double>(0, 1) += weight * dx * dy;
+                cov.at<double>(1, 0) += weight * dy * dx;
+                cov.at<double>(1, 1) += weight * dy * dy;
+            }
+
+            cv::Mat eigenvalues, eigenvectors;
+            cv::eigen(cov, eigenvalues, eigenvectors);
+
+            const double eig1 = eigenvalues.at<double>(0);
+            const double eig2 = std::max(eigenvalues.at<double>(1), 1e-9);
+            const double shape_ratio = eig1 / eig2;
+            const double C_shape = std::max(shape_ratio, params.lambda * color_std);
+            const double C_size = areas[static_cast<std::size_t>(i)] / std::max(avg_area, 1e-9);
+
+            if (C_shape <= params.Tc && C_size <= params.Ts) {
+                regions.push_back(RegionInfo{i, areas[static_cast<std::size_t>(i)], c,
+                                             cv::Vec2d(eigenvectors.at<double>(0, 0), eigenvectors.at<double>(0, 1)),
+                                             std::move(points)});
+                continue;
+            }
+
+            const cv::Vec2d normal(eigenvectors.at<double>(0, 0), eigenvectors.at<double>(0, 1));
+            std::vector<cv::Point> part1, part2;
+            part1.reserve(points.size());
+            part2.reserve(points.size());
+            for (const auto& p : points) {
+                cv::Vec2d diff(static_cast<double>(p.x) - c.x, static_cast<double>(p.y) - c.y);
+                const double proj = diff.dot(normal);
+                if (proj > 0) {
+                    part1.push_back(p);
+                } else if (proj < 0) {
+                    part2.push_back(p);
+                }
+            }
+
+            auto compute_new_center = [&](const std::vector<cv::Point>& pts) -> std::optional<cv::Point2f> {
+                double wsum = 0.0;
+                cv::Point2d accum(0.0, 0.0);
+                for (const auto& p : pts) {
+                    const double gdist = distance_maps[static_cast<std::size_t>(i)].at<float>(p);
+                    const double dx = static_cast<double>(p.x) - c.x;
+                    const double dy = static_cast<double>(p.y) - c.y;
+                    const double spatial = std::max(std::sqrt(dx * dx + dy * dy), 1e-6);
+                    const double w = gdist / spatial;
+                    wsum += w;
+                    accum.x += w * p.x;
+                    accum.y += w * p.y;
+                }
+                if (wsum < 1e-6) {
+                    return std::nullopt;
+                }
+                return cv::Point2f(static_cast<float>(accum.x / wsum), static_cast<float>(accum.y / wsum));
+            };
+
+            if (!part1.empty()) {
+                if (auto c1 = compute_new_center(part1)) {
+                    new_centers.push_back(*c1);
+                }
+            }
+            if (!part2.empty()) {
+                if (auto c2 = compute_new_center(part2)) {
+                    new_centers.push_back(*c2);
+                }
+            }
+
+            split_happened = split_happened || !part1.empty() || !part2.empty();
+        }
+
+        if (!split_happened && static_cast<int>(centers.size()) < params.desired_superpixels) {
+            std::sort(regions.begin(), regions.end(), [&](const RegionInfo& a, const RegionInfo& b) {
+                return a.area > b.area;
+            });
+
+            auto partition_region = [&](const RegionInfo& region) {
+                const cv::Point2f c = region.center;
+                std::vector<cv::Point> part1, part2;
+                part1.reserve(region.points.size());
+                part2.reserve(region.points.size());
+                for (const auto& p : region.points) {
+                    cv::Vec2d diff(static_cast<double>(p.x) - c.x, static_cast<double>(p.y) - c.y);
+                    const double proj = diff.dot(region.principal_normal);
+                    if (proj > 0) {
+                        part1.push_back(p);
+                    } else if (proj < 0) {
+                        part2.push_back(p);
+                    }
+                }
+
+                auto compute_new_center = [&](const std::vector<cv::Point>& pts) -> std::optional<cv::Point2f> {
+                    double wsum = 0.0;
+                    cv::Point2d accum(0.0, 0.0);
+                    for (const auto& p : pts) {
+                        const double gdist = distance_maps[static_cast<std::size_t>(region.index)].at<float>(p);
+                        const double dx = static_cast<double>(p.x) - c.x;
+                        const double dy = static_cast<double>(p.y) - c.y;
+                        const double spatial = std::max(std::sqrt(dx * dx + dy * dy), 1e-6);
+                        const double w = gdist / spatial;
+                        wsum += w;
+                        accum.x += w * p.x;
+                        accum.y += w * p.y;
+                    }
+                    if (wsum < 1e-6) {
+                        return std::nullopt;
+                    }
+                    return cv::Point2f(static_cast<float>(accum.x / wsum), static_cast<float>(accum.y / wsum));
+                };
+
+                if (!part1.empty()) {
+                    if (auto c1 = compute_new_center(part1)) {
+                        new_centers.push_back(*c1);
+                    }
+                }
+                if (!part2.empty()) {
+                    if (auto c2 = compute_new_center(part2)) {
+                        new_centers.push_back(*c2);
+                    }
+                }
+            };
+
+            const int max_additional = std::min(params.max_splits,
+                                                 params.desired_superpixels - static_cast<int>(centers.size()));
+            for (int k = 0; k < max_additional && k < static_cast<int>(regions.size()); ++k) {
+                partition_region(regions[static_cast<std::size_t>(k)]);
+                if (static_cast<int>(centers.size() + new_centers.size()) >= params.desired_superpixels + params.max_splits) {
+                    break;
+                }
+            }
+        }
+
+        for (const auto& nc : new_centers) {
+            centers.push_back(nc);
+            if (static_cast<int>(centers.size()) >= params.desired_superpixels + params.max_splits) {
+                break;
+            }
+        }
+    }
+
+    SuperpixelSegmentationResult RunSuperpixelSegmentation(const cv::Mat& bgr_image, const SuperpixelParams& params) {
+        cv::Mat density, base_speed;
+        double total_density = 0.0;
+        ComputeDensityAndSpeed(bgr_image, params, density, base_speed, total_density);
+
+        std::mt19937 rng(42);
+        auto centers = InitializeCenters(bgr_image, params.desired_superpixels, rng);
+        std::vector<double> areas(centers.size(), total_density / std::max(1, params.desired_superpixels));
+
+        cv::Mat labels, min_distance;
+        cv::Mat lab_image;
+        cv::cvtColor(bgr_image, lab_image, cv::COLOR_BGR2Lab);
+        lab_image.convertTo(lab_image, CV_32F, 1.0 / 255.0);
+
+        double prev_energy = std::numeric_limits<double>::infinity();
+        const double energy_tolerance = std::max(params.energy_tolerance, 0.0);
+
+        for (int iter = 0; iter < params.max_iterations; ++iter) {
+            const double avg_area = total_density / std::max<std::size_t>(1, centers.size());
+            auto distance_maps = ComputeDistanceMaps(base_speed, density, centers, avg_area, params.alpha);
+            AssignLabels(distance_maps, labels, min_distance);
+
+            areas = ComputeAreas(labels, density, static_cast<int>(centers.size()));
+            RelocateCenters(centers, labels, distance_maps, params);
+            AttemptSplits(centers, labels, distance_maps, density, lab_image, areas, avg_area, params);
+
+            const double updated_avg_area = total_density / std::max<std::size_t>(1, centers.size());
+            distance_maps = ComputeDistanceMaps(base_speed, density, centers, updated_avg_area, params.alpha);
+            AssignLabels(distance_maps, labels, min_distance);
+            areas = ComputeAreas(labels, density, static_cast<int>(centers.size()));
+            const double energy = ComputeEnergy(labels, distance_maps, params, areas, updated_avg_area);
+
+            if (std::isfinite(prev_energy)) {
+                const double rel_change = std::abs(energy - prev_energy) / std::max(prev_energy, 1e-9);
+                if (rel_change < energy_tolerance) {
+                    break;
+                }
+            }
+            prev_energy = energy;
+        }
+
+        const double final_avg_area = total_density / std::max<std::size_t>(1, centers.size());
+        auto final_distance_maps = ComputeDistanceMaps(base_speed, density, centers, final_avg_area, params.alpha);
+        AssignLabels(final_distance_maps, labels, min_distance);
+
+        return SuperpixelSegmentationResult{labels, centers, final_distance_maps};
+    }
 
     torch::Tensor OriginalTile(torch::Tensor&x) {
         std::vector<torch::Tensor> rows; rows.reserve(3);
@@ -141,15 +728,283 @@ namespace {
             static_cast<int>(std::llround(rw))
         };
     }
-    std::vector<torch::Tensor> struct2train(auto samples) {
-        std::vector<torch::Tensor> xs_sp; xs_sp.reserve(samples.size());
-        std::vector<torch::Tensor> ys_sp; ys_sp.reserve(samples.size());
-        for (auto& s : samples) {
-            xs_sp.push_back(s.superpixel.input);
-            ys_sp.push_back(s.superpixel.target);
-        } return std::vector<torch::Tensor> {torch::cat(xs_sp, 0), torch::cat(ys_sp, 0)};
+
+
+    struct SuperpixelSegmentationResult;
+    struct SuperpixelSegmentationResult;
+
+    struct SuperpixelParams;
+    struct SuperpixelSegmentationResult;
+    SuperpixelSegmentationResult RunSuperpixelSegmentation(
+        const cv::Mat& bgr_image,
+        const SuperpixelParams& params);
+
+
+    inline cv::Mat TensorCHWToBGRMat(const torch::Tensor& chw)
+    {
+        TORCH_CHECK(chw.dim() == 3, "Expected [C,H,W] tensor");
+        TORCH_CHECK(chw.size(0) == 3, "Expected C=3");
+
+        torch::Tensor cpu = chw.detach().to(torch::kCPU).contiguous();
+
+        const int C = static_cast<int>(cpu.size(0));
+        const int H = static_cast<int>(cpu.size(1));
+        const int W = static_cast<int>(cpu.size(2));
+        (void)C;
+
+        torch::Tensor hwc = cpu.permute({1, 2, 0}).contiguous(); // [H,W,3]
+
+        cv::Mat rgb;
+        if (hwc.scalar_type() == torch::kUInt8) {
+            rgb = cv::Mat(H, W, CV_8UC3, hwc.data_ptr<uint8_t>()).clone();
+        } else if (hwc.scalar_type() == torch::kFloat32) {
+            torch::Tensor hwc_u8 = hwc.mul(255.0).clamp(0.0, 255.0).to(torch::kUInt8).contiguous();
+            rgb = cv::Mat(H, W, CV_8UC3, hwc_u8.data_ptr<uint8_t>()).clone();
+        } else if (hwc.scalar_type() == torch::kFloat64) {
+            torch::Tensor hwc_f32 = hwc.to(torch::kFloat32);
+            torch::Tensor hwc_u8  = hwc_f32.mul(255.0).clamp(0.0, 255.0).to(torch::kUInt8).contiguous();
+            rgb = cv::Mat(H, W, CV_8UC3, hwc_u8.data_ptr<uint8_t>()).clone();
+        } else {
+            TORCH_CHECK(false, "Unsupported tensor dtype for image conversion");
+        }
+
+        cv::Mat bgr;
+        cv::cvtColor(rgb, bgr, cv::COLOR_RGB2BGR); // PyTorch usually stores RGB
+        return bgr;
+    }
+    inline std::vector<SuperpixelSegmentationResult> RunSuperpixelsOnBatch(const torch::Tensor& images, const SuperpixelParams& params) {
+        TORCH_CHECK(images.dim() == 4, "Expected [N,C,H,W] tensor");
+
+        const int64_t N = images.size(0);
+        const int64_t C = images.size(1);
+        TORCH_CHECK(C == 3, "Expected 3 channels (RGB)");
+
+        std::vector<SuperpixelSegmentationResult> results;
+        results.reserve(static_cast<std::size_t>(N));
+
+        for (int64_t n = 0; n < N; ++n) {
+            // images[n] is [C,H,W]
+            torch::Tensor sample_chw = images[n];
+
+            cv::Mat bgr_img = TensorCHWToBGRMat(sample_chw);
+            SuperpixelSegmentationResult res = RunSuperpixelSegmentation(bgr_img, params);
+            results.emplace_back(std::move(res));
+        }
+
+        return results;
     }
 
+    SuperpixelSegmentationResult RunSuperpixelSegmentation(
+        const cv::Mat& bgr_image,
+        const SuperpixelParams& params);
+
+    // ---- Helper: Tensor [C,H,W] -> BGR cv::Mat --------------------------------
+
+
+
+    inline torch::Tensor ComputeSuperpixelRGBStats(
+        const torch::Tensor& input_chw,
+        const cv::Mat& labels,
+        int num_superpixels)
+    {
+        TORCH_CHECK(input_chw.dim() == 3, "input_chw must be [3,H,W]");
+        TORCH_CHECK(input_chw.size(0) == 3, "input_chw must have 3 channels");
+        TORCH_CHECK(labels.type() == CV_32S, "labels must be CV_32S");
+
+        const int H = static_cast<int>(input_chw.size(1));
+        const int W = static_cast<int>(input_chw.size(2));
+        TORCH_CHECK(labels.rows == H && labels.cols == W, "labels size must match input spatial size");
+
+        torch::Tensor in_cpu = input_chw.detach().to(torch::kCPU).contiguous().to(torch::kFloat32);
+        auto in = in_cpu.accessor<float,3>(); // [3,H,W]
+
+        const int C = 3;
+        const int S = num_superpixels;
+
+        const int SC = S * C;
+
+        std::vector<int64_t> count(SC, 0);
+        std::vector<double> sum(SC, 0.0);
+        std::vector<double> sum2(SC, 0.0);
+        std::vector<double> sum3(SC, 0.0);
+        std::vector<double> minv(SC, std::numeric_limits<double>::infinity());
+        std::vector<double> maxv(SC, -std::numeric_limits<double>::infinity());
+
+        for (int y = 0; y < H; ++y) {
+            const int* lbl_ptr = labels.ptr<int>(y);
+            for (int x = 0; x < W; ++x) {
+                const int sid = lbl_ptr[x];
+                if (sid < 0 || sid >= S) {
+                    continue;
+                }
+                for (int c = 0; c < C; ++c) {
+                    const double v = static_cast<double>(in[c][y][x]);
+                    const int idx = sid * C + c;
+
+                    count[idx] += 1;
+                    sum[idx]   += v;
+                    sum2[idx]  += v * v;
+                    sum3[idx]  += v * v * v;
+                    if (v < minv[idx]) minv[idx] = v;
+                    if (v > maxv[idx]) maxv[idx] = v;
+                }
+            }
+        }
+
+        torch::Tensor feats = torch::empty({S, 5 * C}, torch::TensorOptions().dtype(torch::kFloat32));
+        auto F = feats.accessor<float,2>(); // [S, 15]
+
+        const double eps = 1e-12;
+
+        for (int s = 0; s < S; ++s) {
+            for (int c = 0; c < C; ++c) {
+                const int idx = s * C + c;
+                const int64_t n = count[idx];
+
+                double mean = 0.0;
+                double std  = 0.0;
+                double skew = 0.0;
+                double mn   = 0.0;
+                double mx   = 0.0;
+
+                if (n > 0) {
+                    const double inv_n = 1.0 / static_cast<double>(n);
+                    const double m1 = sum[idx]  * inv_n;
+                    const double m2 = sum2[idx] * inv_n;
+                    const double m3 = sum3[idx] * inv_n;
+
+                    const double var = std::max(m2 - m1 * m1, 0.0);
+                    const double sigma = std::sqrt(var + eps);
+
+                    const double mu3 = m3 - 3.0 * m1 * m2 + 2.0 * m1 * m1 * m1;
+                    const double skewness = mu3 / std::pow(sigma + eps, 3.0);
+
+                    mean = m1;
+                    std  = sigma;
+                    skew = skewness;
+                    mn   = minv[idx];
+                    mx   = maxv[idx];
+                } else {
+                    // empty superpixel: set all stats to 0
+                    mean = std = skew = mn = mx = 0.0;
+                }
+
+                const int base = c * 5;
+                F[s][base + 0] = static_cast<float>(mn);   // MIN
+                F[s][base + 1] = static_cast<float>(mx);   // MAX
+                F[s][base + 2] = static_cast<float>(mean); // AVG
+                F[s][base + 3] = static_cast<float>(std);  // STD
+                F[s][base + 4] = static_cast<float>(skew); // SKEW
+            }
+        }
+
+        return feats; // [S, 15]
+    }
+    inline torch::Tensor ComputeSuperpixelTargets(
+        const torch::Tensor& target_chw,
+        const cv::Mat& labels,
+        int num_superpixels)
+    {
+        TORCH_CHECK(target_chw.dim() == 3, "target_chw must be [K,H,W]");
+        TORCH_CHECK(labels.type() == CV_32S, "labels must be CV_32S");
+
+        const int K = static_cast<int>(target_chw.size(0));
+        const int H = static_cast<int>(target_chw.size(1));
+        const int W = static_cast<int>(target_chw.size(2));
+
+        TORCH_CHECK(labels.rows == H && labels.cols == W, "labels size must match target spatial size");
+
+        torch::Tensor tgt_cpu = target_chw.detach().to(torch::kCPU).contiguous().to(torch::kFloat32);
+        auto T = tgt_cpu.accessor<float,3>(); // [K,H,W]
+
+        const int S = num_superpixels;
+        std::vector<double> sum_class(S * K, 0.0);
+
+        for (int y = 0; y < H; ++y) {
+            const int* lbl_ptr = labels.ptr<int>(y);
+            for (int x = 0; x < W; ++x) {
+                const int sid = lbl_ptr[x];
+                if (sid < 0 || sid >= S) {
+                    continue;
+                }
+                for (int k = 0; k < K; ++k) {
+                    const double v = static_cast<double>(T[k][y][x]);
+                    sum_class[sid * K + k] += v;
+                }
+            }
+        }
+
+        torch::Tensor y = torch::empty({S}, torch::TensorOptions().dtype(torch::kLong));
+        auto y_data = y.data_ptr<int64_t>();
+
+        for (int s = 0; s < S; ++s) {
+            int best_k = 0;
+            double best_val = -std::numeric_limits<double>::infinity();
+            for (int k = 0; k < K; ++k) {
+                const double v = sum_class[s * K + k];
+                if (v > best_val) {
+                    best_val = v;
+                    best_k = k;
+                }
+            }
+            y_data[s] = static_cast<int64_t>(best_k); // argmax over classes for this superpixel
+        }
+
+        return y; // [S], labels in [0..K-1]
+    }
+    struct SuperpixelDataset {
+        torch::Tensor X; // features
+        torch::Tensor y; // labels (int64)
+    };
+
+    inline SuperpixelDataset BuildSuperpixelDataset(
+        const torch::Tensor& inputs,   // [N,3,H,W]
+        const torch::Tensor& targets,  // [N,K,H,W]
+        const SuperpixelParams& params)
+    {
+        TORCH_CHECK(inputs.dim()  == 4, "inputs must be [N,3,H,W]");
+        TORCH_CHECK(targets.dim() == 4, "targets must be [N,K,H,W]");
+        TORCH_CHECK(inputs.size(0) == targets.size(0), "inputs and targets must have same N");
+        TORCH_CHECK(inputs.size(2) == targets.size(2) &&
+                    inputs.size(3) == targets.size(3),
+                    "inputs and targets must have same H,W");
+        TORCH_CHECK(inputs.size(1) == 3, "inputs must have 3 channels");
+
+        const int64_t N = inputs.size(0);
+        const int64_t K = targets.size(1);
+
+        std::vector<torch::Tensor> feats_list;
+        std::vector<torch::Tensor> labels_list;
+
+        feats_list.reserve(static_cast<std::size_t>(N));
+        labels_list.reserve(static_cast<std::size_t>(N));
+
+        for (int64_t n = 0; n < N; ++n) {
+            // Extract single sample [3,H,W] and [K,H,W]
+            torch::Tensor x_chw = inputs[n];   // [3,H,W]
+            torch::Tensor t_chw = targets[n];  // [K,H,W]
+
+            // Run superpixel segmentation on input image
+            cv::Mat bgr_img = TensorCHWToBGRMat(x_chw);
+            SuperpixelSegmentationResult seg = RunSuperpixelSegmentation(bgr_img, params);
+
+            const int num_superpixels = static_cast<int>(seg.centers.size());
+
+            // 1) Features: MIN/MAX/AVG/STD/SKEW over R,G,B
+            torch::Tensor X_i = ComputeSuperpixelRGBStats(x_chw, seg.labels, num_superpixels); // [S,15]
+
+            // 2) Target: for each superpixel, argmax over 6 classes
+            torch::Tensor y_i = ComputeSuperpixelTargets(t_chw, seg.labels, num_superpixels);  // [S]
+
+            feats_list.push_back(X_i);
+            labels_list.push_back(y_i);
+        }
+
+        torch::Tensor X = torch::cat(feats_list, 0);      // [total_S, 15]
+        torch::Tensor y = torch::cat(labels_list, 0);     // [total_S]
+
+        return SuperpixelDataset{X, y};
+    }
 
 
     void savePic(torch::Tensor inp, const std::string path, const std::string kind) {
@@ -327,12 +1182,17 @@ int main() {
     std::tie(X, Y) = Nott::Data::Manipulation::Fraction(X, Y, 0.1f); // 10%
     std::tie(X, Y) = Nott::Data::Manipulation::CLAHE(X, Y, {256, 2.f, {4,4}, 1.f, true});
 
+    SuperpixelParams params = {};
+    params.desired_superpixels = 400;
+    SuperpixelDataset ds = BuildSuperpixelDataset(X, Y, params);
+    X = ds.X;
+    Y = ds.y;
     Nott::Data::Check::Size(X, "10% X Train");
     model.train(X, Y,
         {.epoch = E,
         .batch_size = B,
         .restore_best_state = true,
-        .test = std::vector<at::Tensor>{Xt, Yt},
+        //.test = std::vector<at::Tensor>{Xt, Yt},
         .graph_mode = Nott::GraphMode::Capture,
         .enable_amp = true,
         // .memory_format = torch::MemoryFormat::ChannelsLast
