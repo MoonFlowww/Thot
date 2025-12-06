@@ -305,21 +305,21 @@ namespace LatencyUtils {
 }
 
 inline Nott::Loss::Details::CrossEntropyDescriptor set(Nott::Model& model, const bool&device) { // Used to reset learnable parameters between Nott PreBuild and Nott Custom
-    model.add(Nott::Layer::Conv2d({.in_channels = 1,  .out_channels = 32,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Nott::Activation::ReLU, Nott::Initialization::HeUniform));
-    model.add(Nott::Layer::Conv2d({.in_channels = 32, .out_channels = 32,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Nott::Activation::ReLU, Nott::Initialization::HeUniform));
+    model.add(Nott::Layer::Conv2d({.in_channels = 1, .out_channels = 32, .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Nott::Activation::ReLU, Nott::Initialization::HeUniform));
+    model.add(Nott::Layer::Conv2d({.in_channels = 32, .out_channels = 32, .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Nott::Activation::ReLU, Nott::Initialization::HeUniform));
     model.add(Nott::Layer::MaxPool2d({.kernel_size={2,2}, .stride={2,2}, .padding={0,0}}));
 
-    model.add(Nott::Layer::Conv2d({.in_channels = 32, .out_channels = 64,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Nott::Activation::ReLU, Nott::Initialization::HeUniform));
-    model.add(Nott::Layer::Conv2d({.in_channels = 64, .out_channels = 64,  .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Nott::Activation::ReLU, Nott::Initialization::HeUniform));
+    model.add(Nott::Layer::Conv2d({.in_channels = 32, .out_channels = 64, .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Nott::Activation::ReLU, Nott::Initialization::HeUniform));
+    model.add(Nott::Layer::Conv2d({.in_channels = 64, .out_channels = 64, .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Nott::Activation::ReLU, Nott::Initialization::HeUniform));
     model.add(Nott::Layer::MaxPool2d({.kernel_size={2,2}, .stride={2,2}, .padding={0,0}}));
 
     model.add(Nott::Layer::Conv2d({.in_channels = 64, .out_channels = 128, .kernel_size = {3,3}, .stride={1,1}, .padding={1,1}, .dilation={1,1}}, Nott::Activation::ReLU, Nott::Initialization::HeUniform));
     model.add(Nott::Layer::MaxPool2d({.kernel_size={2,2}, .stride={2,2}, .padding={0,0}}));
 
     model.add(Nott::Layer::Flatten());
-    model.add(Nott::Layer::FC({1152, 524}, Nott::Activation::ReLU,  Nott::Initialization::HeUniform));
-    model.add(Nott::Layer::FC({524, 126},  Nott::Activation::ReLU,  Nott::Initialization::HeUniform));
-    model.add(Nott::Layer::FC({126, 10},   Nott::Activation::Identity, Nott::Initialization::HeUniform));
+    model.add(Nott::Layer::FC({1152, 524}, Nott::Activation::ReLU, Nott::Initialization::HeUniform));
+    model.add(Nott::Layer::FC({524, 126}, Nott::Activation::ReLU, Nott::Initialization::HeUniform));
+    model.add(Nott::Layer::FC({126, 10}, Nott::Activation::Identity, Nott::Initialization::HeUniform));
 
     model.set_optimizer(Nott::Optimizer::SGD({.learning_rate = 1e-3f, .momentum = 0.9, .nesterov = true}));
     const auto ce = Nott::Loss::CrossEntropy({.label_smoothing = 0.02f});

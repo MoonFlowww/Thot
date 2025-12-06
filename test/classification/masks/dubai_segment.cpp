@@ -1025,7 +1025,7 @@ int main() {
     std::vector<torch::Tensor> xs;
     std::vector<torch::Tensor> ys;
 
-    for (int tile = 1; tile < 1; ++tile) { // 9
+    for (int tile = 1; tile <= 1; ++tile) { // 9
         std::string path = "/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile " + std::to_string(tile);
         // cuts(3*3) -> Tile -> cuts(X*Y)
         auto [x1, y1, x2, y2] =
@@ -1145,7 +1145,7 @@ int main() {
     Y = ConvertRgbMasksToOneHot(Y);
     X= X.to(torch::kFloat32) / 255.0f;
 
-    Nott::Plot::Data::Image(X, {0, 100, 1000, 2000, 5000, 11734});
+    //Nott::Plot::Data::Image(X, {0, 100, 1000, 2000, 5000, 11734});
 
     const auto total_training_samples = X.size(0);
     const auto B = 32;

@@ -1,10 +1,10 @@
-# Welcome to Nott
-Nott is a modern C++ deep-learning framework that layers a strongly-typed API over LibTorch. It is built for practitioners who enjoy the ergonomics of high-level frameworks but need deterministic control over kernels, data layout, and optimization steps. Nott lets you compose reusable blocks, stream large datasets, and run telemetry-grade training loops from a single, cohesive interface.
+# Nott
+Nott is a modern C++ deep-learning framework that layers a strongly typed API over LibTorch. It prioritizes reproducibility, predictable latency, and explicit control over kernels, memory, and optimizer state.
 ## Why Nott?
 * **First-class graph authoring.** Layers and higher-order blocks can be connected as a DAG, letting you express anything from small CNNs to large transformer stacks without wrestling with manual tensor plumbing.
 * **Consistent systems model.** Data loaders, augmentations, optimizers, regularizers, and metrics share the same descriptor-driven style so you can mix-and-match building blocks safely.
 * **Native performance.** Nott keeps you close to the metal through LibTorch while still providing ergonomic abstractions. Benchmarks at the end of this document detail the runtime overhead compared to pure LibTorch.
-
+* **Not just LibTorch wrappers.** The API covers extensive layer catalogs, attention descriptors, data loaders, and training utilities rather than exposing only a handful of LibTorch layers.
 ## Quick Start
 ```cpp
 #include <Nott>
