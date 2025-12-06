@@ -138,24 +138,22 @@ namespace {
         }
 
         cv::Mat grad = ComputeColorGradientMagnitude(img32f);
-
+        const double sigma = params.sigma > 0.0 ? params.sigma : 1.0;
         cv::Mat grad_smooth;
-        cv::GaussianBlur(grad, grad_smooth, cv::Size(), params.sigma);
+        cv::GaussianBlur(grad, grad_smooth, cv::Size(), sigma);
 
-        cv::Mat edge_measure = grad / (grad_smooth + params.gamma);
+        const double nu    = params.nu    > 0.0 ? params.nu    : 1.0;
+        const double gamma = params.gamma > 0.0 ? params.gamma : 1e-6;
+        cv::Mat edge_measure = grad / (grad_smooth + gamma);
 
-        cv::exp(edge_measure / params.nu, density);   // D(x) = exp(E/nu)
+        cv::exp(edge_measure / nu, density);   // D(x) = exp(E/nu)
         base_speed = 1.0 / density;                  // V(x) = 1 / D(x)
 
         total_density = cv::sum(density)[0];
     }
 
 
-    std::vector<cv::Point2f> InitializeCenters(
-        const cv::Mat& image,
-        int desired_superpixels,
-        std::mt19937& rng
-    ) {
+    std::vector<cv::Point2f> InitializeCenters(const cv::Mat& image, int desired_superpixels, std::mt19937& rng) {
         const int rows = image.rows;
         const int cols = image.cols;
         const int total_pixels = rows * cols;
@@ -1027,7 +1025,7 @@ int main() {
     std::vector<torch::Tensor> xs;
     std::vector<torch::Tensor> ys;
 
-    for (int tile = 1; tile < 9; ++tile) {
+    for (int tile = 1; tile < 1; ++tile) { // 9
         std::string path = "/home/moonfloww/Projects/DATASETS/Image/Satellite/DubaiSegmentationImages/Tile " + std::to_string(tile);
         // cuts(3*3) -> Tile -> cuts(X*Y)
         auto [x1, y1, x2, y2] =
@@ -1176,18 +1174,18 @@ int main() {
 
     model.use_cuda(torch::cuda::is_available());
 
-    auto [Xt, Yt] = Nott::Data::Manipulation::Fraction(X, Y, 0.1f); // Test
-    std::tie(X, Y) = Nott::Data::Manipulation::Shuffle(X, Y);
-
-    std::tie(X, Y) = Nott::Data::Manipulation::Fraction(X, Y, 0.1f); // 10%
-    std::tie(X, Y) = Nott::Data::Manipulation::CLAHE(X, Y, {256, 2.f, {4,4}, 1.f, true});
+    // auto [Xt, Yt] = Nott::Data::Manipulation::Fraction(X, Y, 0.1f); // Test
+    // std::tie(X, Y) = Nott::Data::Manipulation::Shuffle(X, Y);
+    //
+    // std::tie(X, Y) = Nott::Data::Manipulation::Fraction(X, Y, 0.1f); // 10%
+    // std::tie(X, Y) = Nott::Data::Manipulation::CLAHE(X, Y, {256, 2.f, {4,4}, 1.f, true});
 
     SuperpixelParams params = {};
     params.desired_superpixels = 400;
     SuperpixelDataset ds = BuildSuperpixelDataset(X, Y, params);
     X = ds.X;
     Y = ds.y;
-    Nott::Data::Check::Size(X, "10% X Train");
+    Nott::Data::Check::Size(X, "X Train-ready");
     model.train(X, Y,
         {.epoch = E,
         .batch_size = B,
